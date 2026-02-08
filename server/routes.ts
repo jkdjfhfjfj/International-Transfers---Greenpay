@@ -2202,9 +2202,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "You have already claimed your airtime bonus" });
       }
 
-      // Add KES 15 to user's KES balance
+      // Get bonus settings from system settings
+      const bonusAmountSetting = await storage.getSystemSetting("general", "airtime_bonus_amount");
+      const bonusEnabledSetting = await storage.getSystemSetting("general", "enable_airtime_bonus");
+      
+      const bonusAmount = parseFloat(bonusAmountSetting?.value || "15");
+      const isEnabled = bonusEnabledSetting?.value !== "false";
+
+      if (!isEnabled) {
+        return res.status(400).json({ message: "Bonus claiming is currently disabled" });
+      }
+
+      // Add bonus to user's KES balance
       const currentKesBalance = parseFloat(user.kesBalance || "0");
-      const bonusAmount = 15;
       const newKesBalance = currentKesBalance + bonusAmount;
 
       await storage.updateUser(userId, { 
@@ -2222,7 +2232,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: "KES",
         status: "completed",
         fee: "0.00",
-        description: "One-time airtime bonus - KES 15"
+        description: `Welcome Airtime Bonus - KES ${bonusAmount}`
       });
 
       console.log(`💾 Bonus transaction created: ${transaction.id}`);
@@ -2230,7 +2240,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: "Airtime bonus claimed successfully! KES 15 has been added to your balance.",
+        message: `Airtime bonus claimed successfully! KES ${bonusAmount} has been added to your balance.`,
         newBalance: newKesBalance.toFixed(2),
         bonusAmount,
         transaction

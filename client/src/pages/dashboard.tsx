@@ -190,7 +190,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background pb-20">
       <div className="max-w-md mx-auto px-4 pt-6">
         {/* Dynamic Announcements & Offers */}
-        {announcementsList.length > 0 && (
+        {Array.isArray(announcementsList) && announcementsList.length > 0 && (
           <div className="space-y-4 mb-6">
             {announcementsList.map((announcement: any) => (
               <motion.div

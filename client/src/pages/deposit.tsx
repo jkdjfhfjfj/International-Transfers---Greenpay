@@ -286,37 +286,24 @@ export default function DepositPage() {
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-card p-4 rounded-xl border border-border elevation-1"
               >
-                <h3 className="font-semibold mb-4">NCBA Loop Transfer Details</h3>
+                <h3 className="font-semibold mb-4">Manual Payment Details</h3>
                 <div className="space-y-3 text-sm">
                   <div className="p-4 bg-muted rounded-lg space-y-2">
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Bank:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold">NCBA Loop</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-6 w-6" 
-                          onClick={() => {
-                            navigator.clipboard.writeText("NCBA Loop");
-                            toast({ title: "Copied", description: "Bank name copied to clipboard" });
-                          }}
-                        >
-                          <span className="material-icons text-xs">content_copy</span>
-                        </Button>
-                      </div>
+                      <span className="text-muted-foreground">Type:</span>
+                      <span className="font-bold">Paybill</span>
                     </div>
                     <div className="flex justify-between items-center">
-                      <span className="text-muted-foreground">Account Name:</span>
+                      <span className="text-muted-foreground">Business Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold">Greenpay LTD</span>
+                        <span className="font-bold font-mono">714777</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("Greenpay LTD");
-                            toast({ title: "Copied", description: "Account name copied to clipboard" });
+                            navigator.clipboard.writeText("714777");
+                            toast({ title: "Copied", description: "Business number copied" });
                           }}
                         >
                           <span className="material-icons text-xs">content_copy</span>
@@ -326,14 +313,14 @@ export default function DepositPage() {
                     <div className="flex justify-between items-center">
                       <span className="text-muted-foreground">Account Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-bold font-mono">1006123456</span>
+                        <span className="font-bold font-mono">420200413098</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("1006123456");
-                            toast({ title: "Copied", description: "Account number copied to clipboard" });
+                            navigator.clipboard.writeText("420200413098");
+                            toast({ title: "Copied", description: "Account number copied" });
                           }}
                         >
                           <span className="material-icons text-xs">content_copy</span>
@@ -350,7 +337,7 @@ export default function DepositPage() {
                           className="h-6 w-6" 
                           onClick={() => {
                             navigator.clipboard.writeText(`GP-${user?.id?.slice(-8).toUpperCase()}`);
-                            toast({ title: "Copied", description: "Reference copied to clipboard" });
+                            toast({ title: "Copied", description: "Reference copied" });
                           }}
                         >
                           <span className="material-icons text-xs">content_copy</span>
@@ -360,7 +347,7 @@ export default function DepositPage() {
                   </div>
                   <div className="flex flex-col gap-3">
                     <p className="text-xs text-muted-foreground italic text-center">
-                      * After transfer, please contact support to confirm your payment.
+                      * After transfer, please contact support with your receipt to confirm your deposit.
                     </p>
                     <Button
                       type="button"
