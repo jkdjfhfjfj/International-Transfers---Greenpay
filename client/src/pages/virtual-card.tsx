@@ -322,13 +322,13 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Paybill Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{manualPaymentSettings?.paybill || "247"}</span>
+                        <span className="font-mono font-semibold">714777</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText(manualPaymentSettings?.paybill || "247");
+                            navigator.clipboard.writeText("714777");
                             toast({ title: "Copied", description: "Paybill number copied" });
                           }}
                         >
@@ -339,13 +339,13 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Account Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{manualPaymentSettings?.account || "4664"}</span>
+                        <span className="font-mono font-semibold">420200413098</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText(manualPaymentSettings?.account || "4664");
+                            navigator.clipboard.writeText("420200413098");
                             toast({ title: "Copied", description: "Account number copied" });
                           }}
                         >
