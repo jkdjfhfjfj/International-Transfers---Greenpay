@@ -339,13 +339,13 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Account Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">420200413098</span>
+                        <span className="font-mono font-semibold">440200009905</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("420200413098");
+                            navigator.clipboard.writeText("440200009905");
                             toast({ title: "Copied", description: "Account number copied" });
                           }}
                         >
