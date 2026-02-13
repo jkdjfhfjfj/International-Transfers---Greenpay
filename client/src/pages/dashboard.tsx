@@ -188,7 +188,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      <div className="max-w-md mx-auto px-4 pt-6">
+      <div className="max-w-md mx-auto px-4">
         {/* Dynamic Announcements & Offers */}
         {Array.isArray(announcementsList) && announcementsList.length > 0 && (
           <div className="space-y-4 mb-6">
