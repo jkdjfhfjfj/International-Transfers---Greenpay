@@ -141,34 +141,40 @@ export function AnnouncementManagement() {
       )}
 
       <div className="grid gap-4">
-        {announcements.map((item: any) => (
-          <Card key={item.id} className={item.isActive ? "" : "opacity-60"}>
-            <CardContent className="p-4 flex items-start justify-between">
-              <div className="flex gap-3">
-                <div className="mt-1">
-                  {item.type === 'offer' ? <Tag className="text-orange-500" /> : <Megaphone className="text-primary" />}
-                </div>
-                <div>
-                  <h3 className="font-bold">{item.title}</h3>
-                  <p className="text-sm text-muted-foreground">{item.content}</p>
-                  <div className="flex gap-2 mt-2">
-                    <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase">{item.type}</span>
-                    {item.actionUrl && <span className="text-xs text-primary">{item.actionUrl}</span>}
+        {Array.isArray(announcements) && announcements.length > 0 ? (
+          announcements.map((item: any) => (
+            <Card key={item.id} className={item.isActive ? "" : "opacity-60"}>
+              <CardContent className="p-4 flex items-start justify-between">
+                <div className="flex gap-3">
+                  <div className="mt-1">
+                    {item.type === 'offer' ? <Tag className="text-orange-500" /> : <Megaphone className="text-primary" />}
+                  </div>
+                  <div>
+                    <h3 className="font-bold">{item.title}</h3>
+                    <p className="text-sm text-muted-foreground">{item.content}</p>
+                    <div className="flex gap-2 mt-2">
+                      <span className="text-xs bg-muted px-2 py-0.5 rounded uppercase">{item.type}</span>
+                      {item.actionUrl && <span className="text-xs text-primary">{item.actionUrl}</span>}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <Switch 
-                  checked={item.isActive} 
-                  onCheckedChange={(checked) => toggleMutation.mutate({ id: item.id, isActive: checked })}
-                />
-                <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(item.id)}>
-                  <Trash2 className="w-4 h-4 text-destructive" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                <div className="flex items-center gap-4">
+                  <Switch 
+                    checked={item.isActive} 
+                    onCheckedChange={(checked) => toggleMutation.mutate({ id: item.id, isActive: checked })}
+                  />
+                  <Button variant="ghost" size="icon" onClick={() => deleteMutation.mutate(item.id)}>
+                    <Trash2 className="w-4 h-4 text-destructive" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          <div className="text-center p-8 bg-muted/20 rounded-xl border border-dashed">
+            <p className="text-muted-foreground">No announcements found</p>
+          </div>
+        )}
       </div>
     </div>
   );
