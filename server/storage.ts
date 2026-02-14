@@ -2159,6 +2159,38 @@ export class DatabaseStorage implements IStorage {
     }).returning();
     return config;
   }
+
+  // Announcement operations
+  async getAnnouncements(): Promise<Announcement[]> {
+    return await db.select().from(announcements).orderBy(desc(announcements.priority));
+  }
+
+  async getActiveAnnouncements(): Promise<Announcement[]> {
+    const now = new Date();
+    return await db.select().from(announcements)
+      .where(
+        and(
+          eq(announcements.isActive, true),
+          or(isNull(announcements.startsAt), sql`${announcements.startsAt} <= ${now}`),
+          or(isNull(announcements.expiresAt), sql`${announcements.expiresAt} >= ${now}`)
+        )
+      )
+      .orderBy(desc(announcements.priority));
+  }
+
+  async createAnnouncement(insertAnnouncement: InsertAnnouncement): Promise<Announcement> {
+    const [announcement] = await db.insert(announcements).values(insertAnnouncement).returning();
+    return announcement;
+  }
+
+  async updateAnnouncement(id: string, updates: Partial<Announcement>): Promise<Announcement | undefined> {
+    const [announcement] = await db.update(announcements).set(updates).where(eq(announcements.id, id)).returning();
+    return announcement;
+  }
+
+  async deleteAnnouncement(id: string): Promise<void> {
+    await db.delete(announcements).where(eq(announcements.id, id));
+  }
 }
 
 // Use DatabaseStorage instead of MemStorage
