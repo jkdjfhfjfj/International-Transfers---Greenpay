@@ -75,6 +75,7 @@ import {
   whatsappConfig,
   userActivityLog,
   billPayments,
+  announcements,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
