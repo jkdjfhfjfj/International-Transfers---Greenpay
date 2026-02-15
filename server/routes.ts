@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations } from "@shared/schema";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -8805,7 +8805,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  app.get("/api/admin/announcements", async (req, res) => {
+  app.get("/api/admin/announcements", requireAdminAuth, async (req, res) => {
     try {
       const announcements = await storage.getAnnouncements();
       res.json({ announcements });
@@ -8815,7 +8815,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  app.post("/api/admin/announcements", async (req, res) => {
+  app.post("/api/admin/announcements", requireAdminAuth, async (req, res) => {
     try {
       const announcementData = insertAnnouncementSchema.parse(req.body);
       const announcement = await storage.createAnnouncement(announcementData);
@@ -8826,7 +8826,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  app.put("/api/admin/announcements/:id", async (req, res) => {
+  app.put("/api/admin/announcements/:id", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const announcement = await storage.updateAnnouncement(id, req.body);
@@ -8841,7 +8841,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  app.delete("/api/admin/announcements/:id", async (req, res) => {
+  app.delete("/api/admin/announcements/:id", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       await storage.deleteAnnouncement(id);
