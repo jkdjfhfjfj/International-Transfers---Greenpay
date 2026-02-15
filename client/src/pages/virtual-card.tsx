@@ -345,7 +345,7 @@ export default function VirtualCardPage() {
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("440200009905");
+                            navigator.clipboard.writeText("420200413098");
                             toast({ title: "Copied", description: "Account number copied" });
                           }}
                         >
