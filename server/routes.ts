@@ -99,16 +99,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const checkMaintenanceMode = async (req: any, res: any, next: any) => {
     try {
       const maintenanceSetting = await storage.getSystemSetting("general", "maintenance_mode");
-      const maintenanceEnabled = maintenanceSetting?.value === true || maintenanceSetting?.value === 'true';
+      const maintenanceEnabled = String(maintenanceSetting?.value) === 'true';
       
       // Allow only login/logout/static during maintenance
-      const allowedPaths = ['/api/auth/login', '/api/auth/logout', '/api/auth/verify-otp', '/'];
+      const allowedPaths = ['/api/auth/login', '/api/auth/logout', '/api/auth/verify-otp', '/api/admin/auth/login', '/api/admin/settings'];
       const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path));
       
       if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
         const messageSetting = await storage.getSystemSetting("general", "maintenance_message");
         return res.status(503).json({ 
-          message: messageSetting?.value || "System is under maintenance. Please try again later."
+          message: messageSetting?.value || "System is under maintenance. Please try again later.",
+          maintenanceMode: true
         });
       }
     } catch (error) {
@@ -2206,8 +2207,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const bonusAmountSetting = await storage.getSystemSetting("general", "airtime_bonus_amount");
       const bonusEnabledSetting = await storage.getSystemSetting("general", "enable_airtime_bonus");
       
-      const bonusAmount = parseFloat(bonusAmountSetting?.value || "15");
-      const isEnabled = bonusEnabledSetting?.value !== "false";
+      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "15"));
+      const isEnabled = String(bonusEnabledSetting?.value) === "true";
 
       if (!isEnabled) {
         return res.status(400).json({ message: "Bonus claiming is currently disabled" });
@@ -4725,11 +4726,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const stringValue = typeof value === 'string' ? value : String(value);
       
       // Determine category based on key
-      let category = "messaging";
-      if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message") {
-        category = "general";
-      } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
-        category = "fees";
+      let category = req.body.category || "messaging";
+      if (!req.body.category) {
+        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus") {
+          category = "general";
+        } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
+          category = "fees";
+        }
       }
       
       // Try to update existing setting

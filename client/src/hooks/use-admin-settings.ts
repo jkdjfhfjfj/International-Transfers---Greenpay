@@ -123,10 +123,28 @@ export function useAdminSettings() {
   }, []);
 
   // Save settings to localStorage and broadcast via custom event
-  const saveSettings = useCallback((newSettings: AdminSettings) => {
+  const saveSettings = useCallback(async (newSettings: AdminSettings) => {
     setSettings(newSettings);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(newSettings));
     
+    // Also persist to database if we're an admin
+    try {
+      // Logic to sync with backend for each category
+      const categories = ['fees', 'security', 'notifications', 'general', 'whatsapp'];
+      for (const category of categories) {
+        const categorySettings = newSettings[category as keyof AdminSettings];
+        for (const [key, value] of Object.entries(categorySettings)) {
+          await fetch(`/api/admin/settings/${key}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value, category })
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Failed to persist settings to database', error);
+    }
+
     // Broadcast to other components via custom event
     window.dispatchEvent(
       new CustomEvent('admin-settings-updated', { detail: newSettings })
