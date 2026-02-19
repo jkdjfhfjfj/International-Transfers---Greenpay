@@ -1,20 +1,17 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from "openai";
 
 export class OpenAIService {
-  private genAI: GoogleGenerativeAI;
-  private model: any;
+  private openai: OpenAI;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      console.warn('⚠️ Google AI API key not configured');
+      console.warn('⚠️ Groq API key not configured');
     }
 
-    this.genAI = new GoogleGenerativeAI(apiKey || '');
-
-    // ✅ gemini-1.5-flash works ONLY on v1
-    this.model = this.genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+    this.openai = new OpenAI({
+      apiKey: apiKey || '',
+      baseURL: 'https://api.groq.com/openai/v1',
     });
   }
 
@@ -40,27 +37,20 @@ You MUST only answer questions related to GreenPay's features and services:
 If asked about unrelated topics, politely redirect the user.
 `;
 
-      // ✅ Gemini-compatible conversation format
-      const contents = [
-        {
-          role: 'user',
-          parts: [{ text: systemPrompt }],
-        },
-        {
-          role: 'model',
-          parts: [{ text: 'Understood.' }],
-        },
-        ...messages.map((msg) => ({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.content }],
-        })),
-      ];
+      const response = await this.openai.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages.map(msg => ({
+            role: msg.role === 'assistant' ? 'assistant' : 'user' as const,
+            content: msg.content
+          }))
+        ],
+      });
 
-      const result = await this.model.generateContent({ contents });
-
-      return result.response.text() || 'Unable to generate response';
+      return response.choices[0]?.message?.content || 'Unable to generate response';
     } catch (error) {
-      console.error('Google AI API error:', error);
+      console.error('Groq AI API error:', error);
       throw error;
     }
   }

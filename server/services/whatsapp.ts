@@ -153,12 +153,16 @@ export class WhatsAppService {
       const url = `${this.graphApiUrl}/${this.apiVersion}/${this.phoneNumberId}/messages`;
 
       // Send custom text message (not template)
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('en-KE', { day: '2-digit', month: 'short', year: 'numeric' });
+      const timeStr = now.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+      
       const payload = {
         messaging_product: 'whatsapp',
         to: formattedPhone,
         type: 'text',
         text: {
-          body: message
+          body: `${message}\n\nSent on: ${dateStr} at ${timeStr}\n(This message is within 24 hours of your last interaction)`
         }
       };
 
