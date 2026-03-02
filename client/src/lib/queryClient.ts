@@ -39,8 +39,10 @@ export const getQueryFn: <T>(options: {
       const isAdminLogin = window.location.pathname === '/admin/login';
       
       if (isAdminRoute && !isAdminLogin) {
-        console.warn('Admin 401 detected, redirecting to admin login');
-        // Clear admin auth from localStorage on 401
+        if (queryKey.some(key => typeof key === 'string' && key.startsWith('/api/admin/'))) {
+          return null;
+        }
+
         localStorage.removeItem("adminAuth");
         window.location.href = '/admin/login';
         return null;
