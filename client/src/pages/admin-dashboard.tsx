@@ -300,12 +300,14 @@ export default function AdminDashboard() {
           {activeTab === "transactions" && <AdminTransactionsTab />}
           {activeTab === "cards" && <AdminCardsTab />}
           {activeTab === "whatsapp" && <AdminWhatsAppTab />}
-          {activeTab === "messaging" && <MessagingSettings />}
+          {activeTab === "messaging" && <AdminMessagingTab />}
           {activeTab === "templates" && <WhatsAppTemplates />}
           {activeTab === "activity" && <UserActivityLogs />}
           {activeTab === "database" && <DatabaseManagementTab />}
           {activeTab === "logs" && <AdminLogsTab />}
           {activeTab === "settings" && <AdminSettingsTab />}
+          {activeTab === "payhero" && <AdminSettings tab="payhero" />}
+          {activeTab === "manual-payment" && <AdminSettings tab="manual-payment" />}
         </div>
       </div>
     </div>
@@ -327,6 +329,10 @@ function AdminTransactionsTab() {
 
 function AdminCardsTab() {
   return <VirtualCardManagement />;
+}
+
+function AdminMessagingTab() {
+  return <MessagingSettings />;
 }
 
 function AdminWhatsAppTab() {

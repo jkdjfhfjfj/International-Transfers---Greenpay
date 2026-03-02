@@ -33,8 +33,22 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      // Check if we are on an admin route
+      const isAdminRoute = window.location.pathname.startsWith('/admin');
+      const isAdminLogin = window.location.pathname === '/admin/login';
+      
+      if (isAdminRoute && !isAdminLogin) {
+        console.warn('Admin 401 detected, redirecting to admin login');
+        // Clear admin auth from localStorage on 401
+        localStorage.removeItem("adminAuth");
+        window.location.href = '/admin/login';
+        return null;
+      }
+      
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      }
     }
 
     await throwIfResNotOk(res);

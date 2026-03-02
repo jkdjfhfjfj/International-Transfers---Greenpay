@@ -42,7 +42,7 @@ interface SystemSettingsResponse {
   settings: SystemSetting[];
 }
 
-export default function AdminSettings() {
+export default function AdminSettings({ tab }: { tab?: string }) {
   const { 
     settings, 
     saveSettings, 
@@ -63,7 +63,13 @@ export default function AdminSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Sync local state with hook settings
+  const [activeTab, setActiveTab] = useState(tab || "fees");
+
+  useEffect(() => {
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [tab]);
   useEffect(() => {
     if (isLoaded) {
       setFees(settings.fees);
@@ -226,13 +232,15 @@ export default function AdminSettings() {
         </CardHeader>
       </Card>
 
-      <Tabs defaultValue="fees" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <ScrollArea className="w-full whitespace-nowrap rounded-lg border">
           <TabsList className="inline-flex h-10 w-full justify-start rounded-none bg-transparent p-1">
             <TabsTrigger value="fees" className="rounded-md px-3">Fees & Pricing</TabsTrigger>
             <TabsTrigger value="security" className="rounded-md px-3">Security</TabsTrigger>
             <TabsTrigger value="notifications" className="rounded-md px-3">Notifications</TabsTrigger>
             <TabsTrigger value="whatsapp" className="rounded-md px-3">WhatsApp</TabsTrigger>
+            <TabsTrigger value="payhero" className="rounded-md px-3">PayHero</TabsTrigger>
+            <TabsTrigger value="manual-payment" className="rounded-md px-3">Manual Payment</TabsTrigger>
             <TabsTrigger value="announcements" className="rounded-md px-3">Announcements</TabsTrigger>
             <TabsTrigger value="general" className="rounded-md px-3">General</TabsTrigger>
           </TabsList>
@@ -586,6 +594,96 @@ export default function AdminSettings() {
         </TabsContent>
 
         {/* Announcements Tab */}
+        <TabsContent value="payhero">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="w-5 h-5" />
+                PayHero M-Pesa Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure PayHero credentials for automated M-Pesa STK Push payments
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="payhero_username">API Username</Label>
+                  <Input
+                    id="payhero_username"
+                    placeholder="PayHero Username"
+                    value={general.payhero_username || ""}
+                    onChange={(e) => setGeneral({ ...general, payhero_username: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="payhero_password">API Password</Label>
+                  <Input
+                    id="payhero_password"
+                    type="password"
+                    placeholder="PayHero Password"
+                    value={general.payhero_password || ""}
+                    onChange={(e) => setGeneral({ ...general, payhero_password: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="payhero_channel_id">Channel ID</Label>
+                <Input
+                  id="payhero_channel_id"
+                  placeholder="e.g. 3407"
+                  value={general.payhero_channel_id || ""}
+                  onChange={(e) => setGeneral({ ...general, payhero_channel_id: e.target.value })}
+                />
+              </div>
+              <Button onClick={handleSaveGeneral}>
+                <Save className="w-4 h-4 mr-2" />
+                Save PayHero Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="manual-payment">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5" />
+                Manual Payment Configuration
+              </CardTitle>
+              <CardDescription>
+                Configure Paybill and Bank details for manual payment instructions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="paybill_number">Paybill Number</Label>
+                  <Input
+                    id="paybill_number"
+                    placeholder="e.g. 714777"
+                    value={general.paybill_number || ""}
+                    onChange={(e) => setGeneral({ ...general, paybill_number: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="paybill_account">Paybill Account</Label>
+                  <Input
+                    id="paybill_account"
+                    placeholder="Default account name"
+                    value={general.paybill_account || ""}
+                    onChange={(e) => setGeneral({ ...general, paybill_account: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Button onClick={handleSaveGeneral}>
+                <Save className="w-4 h-4 mr-2" />
+                Save Manual Payment Settings
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="announcements">
           <Card>
             <CardHeader>
