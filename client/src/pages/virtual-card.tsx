@@ -279,6 +279,28 @@ export default function VirtualCardPage() {
                   </div>
                 </motion.div>
 
+                {/* Purchase Button for Automatic Payment */}
+                {paymentMethod === 'auto' && (
+                  <Button
+                    className="w-full py-6 text-lg font-bold shadow-lg bg-primary hover:bg-primary/90 transition-all"
+                    onClick={() => purchaseCardMutation.mutate()}
+                    disabled={purchaseCardMutation.isPending}
+                    data-testid="button-purchase-card"
+                  >
+                    {purchaseCardMutation.isPending ? (
+                      <div className="flex items-center gap-2">
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Processing...
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-5 h-5" />
+                        Purchase Now - ${discountPrice}
+                      </div>
+                    )}
+                  </Button>
+                )}
+
                 {/* Manual Payment Option */}
                 <motion.div
                   whileTap={{ scale: 0.98 }}
