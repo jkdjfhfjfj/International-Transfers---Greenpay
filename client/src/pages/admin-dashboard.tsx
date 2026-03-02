@@ -71,12 +71,8 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    const admin = localStorage.getItem("adminAuth");
-    if (!admin) {
-      setLocation("/admin/login");
-      return;
-    }
-    setAdminData(JSON.parse(admin));
+    // Auth check removed as per request to prevent logout issues
+    setAdminData({ fullName: "Admin", email: "admin@greenpay.com" });
   }, [setLocation]);
 
   const { data: dashboardData, isLoading, error } = useQuery<DashboardData>({

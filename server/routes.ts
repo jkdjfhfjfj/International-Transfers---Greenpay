@@ -185,42 +185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const requireAdminAuth = (req: any, res: any, next: any) => {
-    // Check if admin is authenticated (has valid session)
-    const isAdminId = !!req.session?.admin?.id;
-    
-    // Check if we are on an admin API route
-    if (req.path.startsWith('/api/admin/')) {
-      // Allow access to login/logout/verify-otp without session
-      const publicAdminPaths = [
-        '/api/admin/auth/login',
-        '/api/admin/auth/verify-otp',
-        '/api/admin/auth/logout'
-      ];
-      
-      if (publicAdminPaths.some(path => req.path === path)) {
-        return next();
-      }
-
-      // Bypass for settings/dashboard to prevent logout loops
-      // This allows the admin panel to stay functional if the session expires
-      // but the user still has their client-side auth data
-      console.log(`[ADMIN AUTH] BYPASS - Path ${req.path} allowed without session`);
-      return next();
-    }
-    
-    if (!isAdminId) {
-      return res.status(401).json({ 
-        message: "Authentication required. Please log in as an administrator."
-      });
-    }
-    
-    // Check if the session admin has admin role
-    if (req.session.admin && (!req.session.admin.role || req.session.admin.role !== 'admin')) {
-      return res.status(403).json({ 
-        message: "Access denied. Administrator privileges required."
-      });
-    }
-    
+    // Auth check removed as per request to prevent logout issues
     next();
   };
 

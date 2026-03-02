@@ -34,17 +34,7 @@ export const getQueryFn: <T>(options: {
     });
 
     if (res.status === 401) {
-      // Check if we are on an admin route
-      const isAdminRoute = window.location.pathname.startsWith('/admin');
-      const isAdminLogin = window.location.pathname === '/admin/login';
-      
-      if (isAdminRoute && !isAdminLogin) {
-        if (queryKey.some(key => typeof key === 'string' && key.startsWith('/api/admin/'))) {
-          return null;
-        }
-
-        localStorage.removeItem("adminAuth");
-        window.location.href = '/admin/login';
+      if (window.location.pathname.startsWith('/admin')) {
         return null;
       }
       
