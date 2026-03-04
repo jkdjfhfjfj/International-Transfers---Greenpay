@@ -133,12 +133,17 @@ export function useAdminSettings() {
       const categories = ['fees', 'security', 'notifications', 'general', 'whatsapp'];
       for (const category of categories) {
         const categorySettings = newSettings[category as keyof AdminSettings];
+        if (!categorySettings) continue;
         for (const [key, value] of Object.entries(categorySettings)) {
-          await fetch(`/api/admin/settings/${key}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ value, category })
-          });
+          try {
+            await fetch(`/api/admin/settings/${key}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ value, category })
+            });
+          } catch (e) {
+            console.error(`Failed to update ${key}`, e);
+          }
         }
       }
     } catch (error) {

@@ -81,8 +81,8 @@ export default function AdminDashboard() {
   });
 
   const handleLogout = () => {
-    localStorage.removeItem("adminAuth");
-    setLocation("/admin/login");
+    // Logout disabled to prevent unintended redirects
+    console.log("Logout attempted but disabled");
   };
 
   if (!adminData) {

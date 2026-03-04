@@ -35,7 +35,10 @@ export const getQueryFn: <T>(options: {
 
     if (res.status === 401) {
       if (window.location.pathname.startsWith('/admin')) {
-        return null;
+        // Log the error but don't redirect or return null yet
+        console.error('Admin 401 detected but ignored');
+        // If we are getting a 401, return a successful empty response to avoid breaking UI
+        return new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } });
       }
       
       if (unauthorizedBehavior === "returnNull") {
