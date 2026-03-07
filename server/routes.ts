@@ -387,14 +387,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const pinRequired = pinRequiredSetting?.value === 'true';
       
       // Check if messaging credentials are configured (SMS or WhatsApp)
-      const apiKeySetting = await storage.getSystemSetting("messaging", "api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "account_email");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
+      const appIdSetting = await storage.getSystemSetting("messaging", "sms_app_id");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
       const whatsappTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       
-      // SMS is configured if we have api_key, account_email, and sender_id
-      const smsConfigured = !!(apiKeySetting?.value && emailSetting?.value && senderIdSetting?.value);
+      // SMS is configured if we have sms_api_key, sms_app_id, and sms_sender_id (Umeskia API)
+      const smsConfigured = !!(apiKeySetting?.value && appIdSetting?.value && senderIdSetting?.value);
       
       // WhatsApp is configured if we have access_token and phone_number_id (from db or env)
       const whatsappConfigured = !!(
@@ -5564,9 +5564,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Messaging settings endpoints
   app.get("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const apiKeySetting = await storage.getSystemSetting("messaging", "api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "account_email");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
+      const emailSetting = await storage.getSystemSetting("messaging", "sms_app_id");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
       const whatsappAccessTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneNumberIdSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       const whatsappWabaIdSetting = await storage.getSystemSetting("messaging", "whatsapp_business_account_id");
@@ -5595,29 +5595,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const { apiKey, accountEmail, senderId, whatsappAccessToken, whatsappPhoneNumberId, whatsappBusinessAccountId } = req.body;
+      const { sms_api_key, sms_app_id, sms_sender_id, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
       
-      console.log('Admin updated messaging settings (SMS via TalkNTalk, WhatsApp via Meta)');
+      console.log('Admin updated messaging settings (SMS via Umeskia Software, WhatsApp via Meta)');
       
-      // SMS Settings (TalkNTalk)
+      // SMS Settings (Umeskia Software API)
       await storage.setSystemSetting({
         category: "messaging",
-        key: "api_key",
-        value: (apiKey || '').trim(),
-        description: "TalkNTalk API key for SMS"
+        key: "sms_api_key",
+        value: (sms_api_key || '').trim(),
+        description: "Umeskia Software API key for SMS"
       });
       
       await storage.setSystemSetting({
         category: "messaging",
-        key: "account_email",
-        value: (accountEmail || '').trim(),
-        description: "TalkNTalk account email"
+        key: "sms_app_id",
+        value: (sms_app_id || '').trim(),
+        description: "Umeskia Software App ID"
       });
       
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sender_id",
-        value: (senderId || '').trim(),
+        key: "sms_sender_id",
+        value: (sms_sender_id || '').trim(),
         description: "SMS sender ID"
       });
       
@@ -5625,33 +5625,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_access_token",
-        value: (whatsappAccessToken || '').trim(),
+        value: (whatsapp_access_token || '').trim(),
         description: "Meta WhatsApp Business API access token"
       });
       
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_phone_number_id",
-        value: String(whatsappPhoneNumberId || '').trim(),
+        value: String(whatsapp_phone_number_id || '').trim(),
         description: "Meta WhatsApp Business phone number ID"
       });
 
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_business_account_id",
-        value: String(whatsappBusinessAccountId || '').trim(),
+        value: String(whatsapp_business_account_id || '').trim(),
         description: "Meta WhatsApp Business Account ID (WABA ID)"
       });
       
       // Update WhatsApp service with new credentials
-      process.env.WHATSAPP_ACCESS_TOKEN = (whatsappAccessToken || '').trim();
-      process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsappPhoneNumberId || '').trim();
-      process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsappBusinessAccountId || '').trim();
+      process.env.WHATSAPP_ACCESS_TOKEN = (whatsapp_access_token || '').trim();
+      process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsapp_phone_number_id || '').trim();
+      process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsapp_business_account_id || '').trim();
       
       console.log('[Messaging Settings] Updated:', {
-        sms: !!apiKey && !!accountEmail && !!senderId,
-        whatsapp: !!whatsappAccessToken && !!whatsappPhoneNumberId,
-        wabaId: !!whatsappBusinessAccountId
+        sms: !!sms_api_key && !!sms_app_id && !!sms_sender_id,
+        whatsapp: !!whatsapp_access_token && !!whatsapp_phone_number_id,
+        wabaId: !!whatsapp_business_account_id
       });
       
       // Refresh WhatsApp service credentials after update

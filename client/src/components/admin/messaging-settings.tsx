@@ -159,7 +159,17 @@ export default function MessagingSettings() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const response = await apiRequest('PUT', '/api/admin/messaging-settings', settings);
+      // Map frontend field names to backend system settings keys
+      const payload = {
+        sms_api_key: settings.apiKey,
+        sms_app_id: settings.appId,
+        sms_sender_id: settings.senderId,
+        whatsapp_access_token: settings.whatsappAccessToken,
+        whatsapp_phone_number_id: settings.whatsappPhoneNumberId,
+        whatsapp_business_account_id: settings.whatsappBusinessAccountId
+      };
+      
+      const response = await apiRequest('PUT', '/api/admin/messaging-settings', payload);
       
       if (response.ok) {
         await loadSettings();
