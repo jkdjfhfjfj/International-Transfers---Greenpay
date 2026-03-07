@@ -118,3 +118,12 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
 - **Settings Storage**: `sms_api_key`, `sms_app_id`, `sms_sender_id` in messaging category of system_settings table
 - **Admin UI**: Updated Messaging Settings panel with new field names and placeholders
 - **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID`
+
+### Admin Panel Authentication & Management
+- **Fixed authentication**: Restored proper session validation with `requireAdminAuth` middleware
+- **Added session check endpoint**: `GET /api/admin/session` - verifies admin is logged in
+- **Added logout endpoint**: `POST /api/admin/logout` - properly destroys session
+- **Admin dashboard**: Now checks session on load and redirects to login if not authenticated
+- **Admin creation feature**: `POST /api/admin/create-admin` (requireAdminAuth) - allows admins to create new admin accounts
+- **Session persistence**: Uses Express sessions (cookies) for secure, stateless authentication
+- **Admin logs**: Tracks admin creation and login actions with IP and user agent

@@ -71,8 +71,21 @@ export default function AdminDashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
-    // Auth check removed as per request to prevent logout issues
-    setAdminData({ fullName: "Admin", email: "admin@greenpay.com" });
+    const checkAdminSession = async () => {
+      try {
+        const response = await apiRequest("GET", "/api/admin/session");
+        const data = await response.json();
+        if (response.ok && data.admin) {
+          setAdminData(data.admin);
+        } else {
+          localStorage.removeItem("adminAuth");
+          setLocation("/admin/login");
+        }
+      } catch {
+        setLocation("/admin/login");
+      }
+    };
+    checkAdminSession();
   }, [setLocation]);
 
   const { data: dashboardData, isLoading, error } = useQuery<DashboardData>({
@@ -80,9 +93,15 @@ export default function AdminDashboard() {
     enabled: !!adminData,
   });
 
-  const handleLogout = () => {
-    // Logout disabled to prevent unintended redirects
-    console.log("Logout attempted but disabled");
+  const handleLogout = async () => {
+    try {
+      await apiRequest("POST", "/api/admin/logout", {});
+      localStorage.removeItem("adminAuth");
+      setLocation("/admin/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+      setLocation("/admin/login");
+    }
   };
 
   if (!adminData) {

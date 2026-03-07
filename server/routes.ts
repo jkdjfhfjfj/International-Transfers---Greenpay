@@ -185,7 +185,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   const requireAdminAuth = (req: any, res: any, next: any) => {
-    // Auth check removed as per request to prevent logout issues
+    if (!req.session?.admin?.id) {
+      return res.status(401).json({ message: "Admin authentication required" });
+    }
     next();
   };
 
@@ -3211,6 +3213,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Admin login error:', error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  // Check admin session
+  app.get("/api/admin/session", (req, res) => {
+    if (req.session?.admin?.id) {
+      return res.json({ admin: req.session.admin });
+    }
+    res.status(401).json({ message: "Not authenticated" });
+  });
+
+  // Admin logout
+  app.post("/api/admin/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
+  // Create new admin (only existing admins can do this)
+  app.post("/api/admin/create-admin", requireAdminAuth, async (req, res) => {
+    try {
+      const { email, password, fullName, role } = req.body;
+      
+      if (!email || !password || !fullName) {
+        return res.status(400).json({ message: "Email, password, and fullName are required" });
+      }
+
+      const existingAdmin = await storage.getAdminByEmail(email);
+      if (existingAdmin) {
+        return res.status(409).json({ message: "Admin with this email already exists" });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const newAdmin = await storage.createAdmin({
+        email,
+        password: hashedPassword,
+        fullName,
+        role: role || "admin",
+      });
+
+      storage.createAdminLog({
+        adminId: (req.session as any).admin.id,
+        action: "CREATE_ADMIN",
+        details: `Created admin: ${email}`,
+        ipAddress: req.ip,
+      }).catch(err => console.error('Admin log error:', err));
+
+      res.json({ admin: newAdmin, message: "Admin created successfully" });
+    } catch (error) {
+      console.error('Create admin error:', error);
+      res.status(500).json({ message: "Failed to create admin" });
     }
   });
 
