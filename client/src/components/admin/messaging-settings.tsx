@@ -14,9 +14,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import WhatsAppTemplates from './whatsapp-templates';
 
 interface MessagingSettings {
-  // SMS Settings (TalkNTalk)
+  // SMS Settings (UmeskiaSoftware SMS API)
   apiKey: string;
-  accountEmail: string;
+  appId: string;
   senderId: string;
   // WhatsApp Settings (Meta)
   whatsappAccessToken: string;
@@ -44,7 +44,7 @@ export default function MessagingSettings() {
   const [activeTab, setActiveTab] = useState('settings');
   const [settings, setSettings] = useState<MessagingSettings>({
     apiKey: "",
-    accountEmail: "",
+    appId: "",
     senderId: "",
     whatsappAccessToken: "",
     whatsappPhoneNumberId: "",
@@ -233,7 +233,7 @@ export default function MessagingSettings() {
     return 160 - total;
   };
 
-  const isSmsConfigured = !!(settings.apiKey?.trim() && settings.accountEmail?.trim() && settings.senderId?.trim());
+  const isSmsConfigured = !!(settings.apiKey?.trim() && settings.appId?.trim() && settings.senderId?.trim());
   const isWhatsAppConfigured = !!(settings.whatsappAccessToken?.trim() && settings.whatsappPhoneNumberId?.trim());
   const isAnyChannelConfigured = isSmsConfigured || isWhatsAppConfigured;
 
@@ -300,7 +300,7 @@ export default function MessagingSettings() {
                   SMS Configuration
                 </CardTitle>
                 <CardDescription>
-                  Configure SMS delivery via TalkNTalk API
+                  Configure SMS delivery via Umeskia Software SMS API
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -312,30 +312,29 @@ export default function MessagingSettings() {
                 ) : (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="apiKey">API Key (X-API-Key)</Label>
+                      <Label htmlFor="apiKey">API Key</Label>
                       <Input
                         id="apiKey"
                         type="password"
                         value={settings.apiKey}
                         onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
-                        placeholder="Enter your TalkNTalk API key"
+                        placeholder="e.g. 40bb6ff5d248cd5c51d1a35dbf630751"
                       />
                       <p className="text-sm text-gray-500">
-                        Your TalkNTalk API key for SMS authentication
+                        Your Umeskia Software SMS API key
                       </p>
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="accountEmail">Account Email (X-Account-Email)</Label>
+                      <Label htmlFor="appId">App ID</Label>
                       <Input
-                        id="accountEmail"
-                        type="email"
-                        value={settings.accountEmail}
-                        onChange={(e) => setSettings({ ...settings, accountEmail: e.target.value })}
-                        placeholder="support@greenpay.world"
+                        id="appId"
+                        value={settings.appId}
+                        onChange={(e) => setSettings({ ...settings, appId: e.target.value })}
+                        placeholder="e.g. UMSC653721"
                       />
                       <p className="text-sm text-gray-500">
-                        Your TalkNTalk account email address
+                        Your Umeskia Software application ID
                       </p>
                     </div>
 
@@ -345,7 +344,7 @@ export default function MessagingSettings() {
                         id="senderId"
                         value={settings.senderId}
                         onChange={(e) => setSettings({ ...settings, senderId: e.target.value })}
-                        placeholder="Greenpay"
+                        placeholder="e.g. UMS_SMS"
                       />
                       <p className="text-sm text-gray-500">
                         SMS sender ID (alphanumeric, max 11 characters)

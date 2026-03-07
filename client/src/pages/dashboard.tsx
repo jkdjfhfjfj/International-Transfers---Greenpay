@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
@@ -19,6 +19,7 @@ export default function DashboardPage() {
   const [showDiscountModal] = useState(false); // Modal disabled - kept for future use
   const [activeWallet, setActiveWallet] = useState<'USD' | 'KES'>('USD');
   const [maintenanceAlertShown, setMaintenanceAlertShown] = useState(false);
+  const [copiedAccountNumber, setCopiedAccountNumber] = useState(false);
   const { user, logout, refreshUser } = useAuth();
   const { toast } = useToast();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
@@ -171,6 +172,19 @@ export default function DashboardPage() {
       return;
     }
     setLocation(action.path);
+  };
+
+  const handleCopyAccountNumber = async () => {
+    if (user?.id) {
+      await navigator.clipboard.writeText(user.id);
+      setCopiedAccountNumber(true);
+      toast({
+        title: "Copied!",
+        description: "Account number copied to clipboard",
+        variant: "default",
+      });
+      setTimeout(() => setCopiedAccountNumber(false), 2000);
+    }
   };
 
   const { data: announcementsData } = useQuery({
@@ -380,8 +394,8 @@ export default function DashboardPage() {
                     : `KSh ${formatNumber(activeBalance)}`
                   : "••••••"}
               </p>
-              {/* Show other wallet balance and exchange button */}
-              <div className="flex items-center justify-between">
+              {/* Show other wallet balance and action buttons */}
+              <div className="flex items-center justify-between gap-2 flex-wrap">
                 <p className="text-white/60 text-xs">
                   {activeWallet === 'USD' ? (
                     <>Other: KSh {showBalance ? formatNumber(kesBalance) : '••••'}</>
@@ -389,14 +403,38 @@ export default function DashboardPage() {
                     <>Other: ${showBalance ? formatNumber(usdBalance) : '••••'}</>
                   )}
                 </p>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setLocation("/exchange")}
-                  className="flex items-center bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-lg transition-colors"
-                >
-                  <span className="material-icons text-white text-sm mr-1">currency_exchange</span>
-                  <span className="text-white text-xs font-medium">Exchange</span>
-                </motion.button>
+                <div className="flex items-center gap-2">
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleCopyAccountNumber}
+                    className={`flex items-center px-2.5 py-1.5 rounded-lg transition-colors ${
+                      copiedAccountNumber 
+                        ? 'bg-green-500/20 text-green-300' 
+                        : 'bg-white/10 hover:bg-white/20 text-white'
+                    }`}
+                    title="Copy Account Number"
+                  >
+                    {copiedAccountNumber ? (
+                      <>
+                        <Check className="w-3 h-3 mr-1" />
+                        <span className="text-white text-xs font-medium">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3 h-3 mr-1" />
+                        <span className="text-white text-xs font-medium">Copy</span>
+                      </>
+                    )}
+                  </motion.button>
+                  <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setLocation("/exchange")}
+                    className="flex items-center bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-lg transition-colors"
+                  >
+                    <span className="material-icons text-white text-sm mr-1">currency_exchange</span>
+                    <span className="text-white text-xs font-medium">Exchange</span>
+                  </motion.button>
+                </div>
               </div>
             </div>
           </div>

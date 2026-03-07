@@ -10,12 +10,12 @@ interface MessageResponse {
 
 interface MessagingCredentials {
   apiKey: string;
-  accountEmail: string;
+  appId: string;
   senderId: string;
 }
 
 export class MessagingService {
-  private readonly SMS_URL = 'https://talkntalk.africa/api/v1/sms/send';
+  private readonly SMS_URL = 'https://comms.umeskiasoftwares.com/api/v1/sms/send';
   private readonly MAX_MESSAGE_LENGTH = 160;
   private readonly MESSAGE_PREFIX = '[Greenpay] ';
 
@@ -26,21 +26,21 @@ export class MessagingService {
     try {
       const settings = await storage.getSystemSettingsByCategory('messaging');
       
-      let apiKey = settings.find((s: any) => s.key === 'api_key')?.value as string;
-      let accountEmail = settings.find((s: any) => s.key === 'account_email')?.value as string;
-      let senderId = settings.find((s: any) => s.key === 'sender_id')?.value as string;
+      let apiKey = settings.find((s: any) => s.key === 'sms_api_key')?.value as string;
+      let appId = settings.find((s: any) => s.key === 'sms_app_id')?.value as string;
+      let senderId = settings.find((s: any) => s.key === 'sms_sender_id')?.value as string;
 
       // Fallback to environment variables if not in settings
-      apiKey = apiKey || process.env.TALKNTALK_API_KEY || '';
-      accountEmail = accountEmail || process.env.TALKNTALK_EMAIL || '';
-      senderId = senderId || process.env.TALKNTALK_SENDER_ID || '';
+      apiKey = apiKey || process.env.SMS_API_KEY || '';
+      appId = appId || process.env.SMS_APP_ID || '';
+      senderId = senderId || process.env.SMS_SENDER_ID || '';
 
-      if (!apiKey || !accountEmail || !senderId) {
+      if (!apiKey || !appId || !senderId) {
         console.warn('SMS messaging credentials not fully configured (settings or env)');
         return null;
       }
 
-      return { apiKey, accountEmail, senderId };
+      return { apiKey, appId, senderId };
     } catch (error) {
       console.error('Error fetching messaging credentials:', error);
       return null;
@@ -48,9 +48,9 @@ export class MessagingService {
   }
 
   /**
-   * Format phone number to Kenya format (+254XXXXXXXXX)
+   * Format phone number to Kenya format without + (254XXXXXXXXX)
    * Handles: +254xxx, 00254xxx, 0xxx, 254xxx, 7xxx, 1xxx
-   * Always returns phone with + prefix for database consistency
+   * Returns phone without + prefix for SMS API compatibility
    */
   formatPhoneNumber(phone: string): string {
     // Remove any whitespace and special characters except +
@@ -61,25 +61,25 @@ export class MessagingService {
       cleaned = cleaned.substring(2);
     }
     
-    // Remove leading + if present temporarily
+    // Remove leading + if present
     if (cleaned.startsWith('+')) {
       cleaned = cleaned.substring(1);
     }
     
     // Handle different formats
     if (cleaned.startsWith('254')) {
-      // Already in correct format, just add +
-      return '+' + cleaned;
+      // Already in correct format
+      return cleaned;
     } else if (cleaned.startsWith('0')) {
       // Replace leading 0 with 254
-      return '+254' + cleaned.substring(1);
+      return '254' + cleaned.substring(1);
     } else if (cleaned.length === 9 && (cleaned.startsWith('7') || cleaned.startsWith('1'))) {
       // Add 254 prefix for local numbers
-      return '+254' + cleaned;
+      return '254' + cleaned;
     }
     
-    // Return with + prefix even if format is unclear
-    return '+' + cleaned;
+    // Return without + prefix
+    return cleaned.startsWith('254') ? cleaned : '254' + cleaned;
   }
 
   /**
@@ -108,19 +108,19 @@ export class MessagingService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'X-API-Key': credentials.apiKey,
-          'X-Account-Email': credentials.accountEmail,
         },
         body: JSON.stringify({
+          api_key: credentials.apiKey,
+          app_id: credentials.appId,
           sender_id: credentials.senderId,
-          recipient: formattedPhone,
+          phone: formattedPhone,
           message: formattedMessage,
         }),
       });
 
       const result = await response.json() as MessageResponse;
       
-      if (result.status_code === 200) {
+      if (result.status_code === 200 || result.status_code === 0) {
         console.log(`SMS sent successfully to ${formattedPhone}`);
         return true;
       } else {

@@ -52,7 +52,7 @@ Preferred communication style: Simple, everyday language.
 - **Airtime**: Statum API for airtime purchases
 
 ### Messaging Services
-- **SMS**: TalkNTalk Africa API
+- **SMS**: Umeskia Software SMS API (`https://comms.umeskiasoftwares.com/api/v1/sms/send`) with format `{api_key, app_id, sender_id, phone, message}`, phone format: 254XXXXXXXXX (without + prefix)
 - **WhatsApp**: Meta WhatsApp Business API (Graph API v24.0)
 - **Email**: Mailtrap for transactional emails with HTML templates
 
@@ -73,13 +73,14 @@ CLOUDINARY_API_SECRET # Cloudinary API secret
 
 ### Optional API Integrations
 ```
-PAYHERO_USERNAME / PAYHERO_PASSWORD    # M-Pesa payments
-PAYSTACK_SECRET_KEY                    # Card payments
-STATUM_CONSUMER_KEY / SECRET           # Airtime purchases
-WHATSAPP_ACCESS_TOKEN / PHONE_NUMBER_ID # WhatsApp messaging
-MAILTRAP_API_KEY                       # Email delivery
-GOOGLE_AI_API_KEY                      # AI chat support
-EXCHANGERATE_API_KEY                   # Currency exchange rates
+SMS_API_KEY / SMS_APP_ID / SMS_SENDER_ID       # Umeskia Software SMS
+PAYHERO_USERNAME / PAYHERO_PASSWORD            # M-Pesa payments
+PAYSTACK_SECRET_KEY                            # Card payments
+STATUM_CONSUMER_KEY / SECRET                   # Airtime purchases
+WHATSAPP_ACCESS_TOKEN / PHONE_NUMBER_ID        # WhatsApp messaging
+MAILTRAP_API_KEY                               # Email delivery
+GOOGLE_AI_API_KEY                              # AI chat support
+EXCHANGERATE_API_KEY                           # Currency exchange rates
 ```
 
 ### Deployment Platforms
@@ -91,6 +92,29 @@ EXCHANGERATE_API_KEY                   # Currency exchange rates
 - **Database**: Neon PostgreSQL (serverless, connection pooling)
 - **File Storage**: Cloudinary (25GB free tier)
 - **Payments**: PayHero (M-Pesa), Paystack (cards)
-- **Messaging**: TalkNTalk (SMS), Meta (WhatsApp), Mailtrap (Email)
+- **Messaging**: Umeskia Software (SMS), Meta (WhatsApp), Mailtrap (Email)
 - **AI**: Google Gemini
 - **Currency Rates**: ExchangeRate-API
+
+## Recent Updates
+
+### Session & Admin Panel
+- Fixed admin logout-on-navigation bug: admin sessions now stay active when switching between PayHero settings, manual payment configuration, and messaging tabs
+- Added dedicated "PayHero Settings" and "Manual Payment" sidebar menu items for direct access
+- Admin auth cleared from localStorage on 401 responses for proper re-authentication
+
+### Dashboard & User Interface
+- Added visual **TransactionStatusBadge** component for transaction status indicators across dashboard and transaction lists
+- Enhanced user profile settings with "Account Details" section showing Member Since date and Daily Limit ($1,000 Standard tier with Badge)
+- Added **"Copy Account Number"** shortcut button to main dashboard balance card for quick account number copying to clipboard
+  - Visual feedback with animated state change (Copy → Copied with green checkmark)
+  - Toast notification confirms successful copy
+
+### SMS Service Migration
+- Migrated SMS from TalkNTalk to Umeskia Software SMS API
+- **Endpoint**: `https://comms.umeskiasoftwares.com/api/v1/sms/send`
+- **Request Format**: `{api_key, app_id, sender_id, phone, message}`
+- **Phone Format**: 254XXXXXXXXX (without + prefix for API compatibility)
+- **Settings Storage**: `sms_api_key`, `sms_app_id`, `sms_sender_id` in messaging category of system_settings table
+- **Admin UI**: Updated Messaging Settings panel with new field names and placeholders
+- **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID`
