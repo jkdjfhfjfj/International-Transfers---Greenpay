@@ -239,16 +239,28 @@ export default function AdminDashboard() {
             <nav className="space-y-2 px-3">
               {sidebarItems.map((item) => {
                 const Icon = item.icon;
+                const isExternalPage = ['payhero', 'manual-payment', 'messaging', 'settings'].includes(item.id);
+                
                 return (
                   <button
                     key={item.id}
                     onClick={() => {
-                      setActiveTab(item.id);
+                      if (isExternalPage) {
+                        const routeMap: Record<string, string> = {
+                          'payhero': '/admin/payhero-settings',
+                          'manual-payment': '/admin/manual-payment',
+                          'messaging': '/admin/messaging-settings',
+                          'settings': '/admin/settings'
+                        };
+                        setLocation(routeMap[item.id]);
+                      } else {
+                        setActiveTab(item.id);
+                      }
                       setSidebarOpen(false);
                     }}
                     className={`
                       w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                      ${activeTab === item.id 
+                      ${activeTab === item.id && !isExternalPage
                         ? 'bg-green-100 text-green-700 border border-green-200' 
                         : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                       }

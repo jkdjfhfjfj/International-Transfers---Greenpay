@@ -42,6 +42,10 @@ import PaymentFailedPage from "@/pages/payment-failed";
 import PaymentProcessingPage from "@/pages/payment-processing";
 import AdminLogin from "@/pages/admin-login";
 import AdminDashboard from "@/pages/admin-dashboard-new";
+import AdminPayHeroSettingsPage from "@/pages/admin-payhero-settings";
+import AdminMessagingSettingsPage from "@/pages/admin-messaging-settings";
+import AdminGeneralSettingsPage from "@/pages/admin-general-settings";
+import AdminManualPaymentPage from "@/pages/admin-manual-payment";
 import SendMoneyLanding from "@/pages/landing/send-money";
 import VirtualCardsLanding from "@/pages/landing/virtual-cards";
 import ExchangeLanding from "@/pages/landing/exchange";
@@ -156,6 +160,18 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/dashboard">
         <AdminRoute component={AdminDashboard} />
+      </Route>
+      <Route path="/admin/payhero-settings">
+        <AdminRoute component={AdminPayHeroSettingsPage} />
+      </Route>
+      <Route path="/admin/messaging-settings">
+        <AdminRoute component={AdminMessagingSettingsPage} />
+      </Route>
+      <Route path="/admin/settings">
+        <AdminRoute component={AdminGeneralSettingsPage} />
+      </Route>
+      <Route path="/admin/manual-payment">
+        <AdminRoute component={AdminManualPaymentPage} />
       </Route>
       <Route component={NotFound} />
     </Switch>

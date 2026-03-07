@@ -110,14 +110,18 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
   - Visual feedback with animated state change (Copy → Copied with green checkmark)
   - Toast notification confirms successful copy
 
-### SMS Service Migration
+### SMS Service Migration & Configuration
 - Migrated SMS from TalkNTalk to Umeskia Software SMS API
 - **Endpoint**: `https://comms.umeskiasoftwares.com/api/v1/sms/send`
 - **Request Format**: `{api_key, app_id, sender_id, phone, message}`
 - **Phone Format**: 254XXXXXXXXX (without + prefix for API compatibility)
 - **Settings Storage**: `sms_api_key`, `sms_app_id`, `sms_sender_id` in messaging category of system_settings table
-- **Admin UI**: Updated Messaging Settings panel with new field names and placeholders
-- **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID`
+- **Admin UI**: Updated Messaging Settings panel at `/admin/messaging-settings` with new field names
+- **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID` (set defaults in production via environment variables)
+- **Default Credentials**: Can be set via:
+  1. Admin panel at /admin/messaging-settings
+  2. Environment variables: SMS_API_KEY, SMS_APP_ID, SMS_SENDER_ID
+  3. system_settings table in database
 
 ### Admin Panel Authentication & Management
 - **Fixed authentication**: Restored proper session validation with `requireAdminAuth` middleware
@@ -127,3 +131,11 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
 - **Admin creation feature**: `POST /api/admin/create-admin` (requireAdminAuth) - allows admins to create new admin accounts
 - **Session persistence**: Uses Express sessions (cookies) for secure, stateless authentication
 - **Admin logs**: Tracks admin creation and login actions with IP and user agent
+- **Separate Admin Pages** (Fixed deauth nav issue):
+  - `/admin/payhero-settings` - PayHero Settings page with full screen layout
+  - `/admin/messaging-settings` - Messaging Settings page (SMS/WhatsApp config)
+  - `/admin/settings` - General Settings page (system configurations)
+  - `/admin/manual-payment` - Manual Payment configuration page
+  - Sidebar now routes to dedicated pages for these 4 items instead of dashboard tabs
+  - Prevents session loss when navigating between settings pages
+  - Each page has back button to return to main dashboard
