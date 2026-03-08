@@ -45,7 +45,7 @@ export default function MessagingSettings() {
   const [settings, setSettings] = useState<MessagingSettings>({
     apiKey: "",
     appId: "",
-    senderId: "",
+    senderId: "UMS_TX",
     whatsappAccessToken: "",
     whatsappPhoneNumberId: "",
     whatsappBusinessAccountId: ""

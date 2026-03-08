@@ -42,6 +42,23 @@ import PaymentFailedPage from "@/pages/payment-failed";
 import PaymentProcessingPage from "@/pages/payment-processing";
 import AdminLogin from "@/pages/admin-login";
 import AdminDashboard from "@/pages/admin-dashboard-new";
+import AdminDashboardPage from "@/pages/admin-dashboard";
+import AdminUsersPage from "@/pages/admin-users";
+import AdminKycPage from "@/pages/admin-kyc";
+import AdminTransactionsPage from "@/pages/admin-transactions";
+import AdminWithdrawalsPage from "@/pages/admin-withdrawals";
+import AdminCardsPage from "@/pages/admin-cards";
+import AdminPricingPage from "@/pages/admin-pricing";
+import AdminNotificationsPage from "@/pages/admin-notifications";
+import AdminMailPage from "@/pages/admin-mail";
+import AdminWhatsAppPage from "@/pages/admin-whatsapp";
+import AdminSupportPage from "@/pages/admin-support";
+import AdminTicketsPage from "@/pages/admin-tickets";
+import AdminLogsPage from "@/pages/admin-logs";
+import AdminTemplatesPage from "@/pages/admin-templates";
+import AdminActivityPage from "@/pages/admin-activity";
+import AdminDatabasePage from "@/pages/admin-database";
+import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminPayHeroSettingsPage from "@/pages/admin-payhero-settings";
 import AdminMessagingSettingsPage from "@/pages/admin-messaging-settings";
 import AdminGeneralSettingsPage from "@/pages/admin-general-settings";
@@ -160,6 +177,57 @@ function Router() {
       <Route path="/admin/login" component={AdminLogin} />
       <Route path="/admin/dashboard">
         <AdminRoute component={AdminDashboard} />
+      </Route>
+      <Route path="/admin/home">
+        <AdminRoute component={AdminDashboardPage} />
+      </Route>
+      <Route path="/admin/users">
+        <AdminRoute component={AdminUsersPage} />
+      </Route>
+      <Route path="/admin/kyc">
+        <AdminRoute component={AdminKycPage} />
+      </Route>
+      <Route path="/admin/transactions">
+        <AdminRoute component={AdminTransactionsPage} />
+      </Route>
+      <Route path="/admin/withdrawals">
+        <AdminRoute component={AdminWithdrawalsPage} />
+      </Route>
+      <Route path="/admin/cards">
+        <AdminRoute component={AdminCardsPage} />
+      </Route>
+      <Route path="/admin/pricing">
+        <AdminRoute component={AdminPricingPage} />
+      </Route>
+      <Route path="/admin/notifications">
+        <AdminRoute component={AdminNotificationsPage} />
+      </Route>
+      <Route path="/admin/mail">
+        <AdminRoute component={AdminMailPage} />
+      </Route>
+      <Route path="/admin/whatsapp">
+        <AdminRoute component={AdminWhatsAppPage} />
+      </Route>
+      <Route path="/admin/support">
+        <AdminRoute component={AdminSupportPage} />
+      </Route>
+      <Route path="/admin/tickets">
+        <AdminRoute component={AdminTicketsPage} />
+      </Route>
+      <Route path="/admin/logs">
+        <AdminRoute component={AdminLogsPage} />
+      </Route>
+      <Route path="/admin/templates">
+        <AdminRoute component={AdminTemplatesPage} />
+      </Route>
+      <Route path="/admin/activity">
+        <AdminRoute component={AdminActivityPage} />
+      </Route>
+      <Route path="/admin/database">
+        <AdminRoute component={AdminDatabasePage} />
+      </Route>
+      <Route path="/admin/analytics">
+        <AdminRoute component={AdminAnalyticsPage} />
       </Route>
       <Route path="/admin/payhero-settings">
         <AdminRoute component={AdminPayHeroSettingsPage} />

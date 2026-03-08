@@ -115,15 +115,16 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
 - **Endpoint**: `https://comms.umeskiasoftwares.com/api/v1/sms/send`
 - **Request Format**: `{api_key, app_id, sender_id, phone, message}`
 - **Phone Format**: 254XXXXXXXXX (without + prefix for API compatibility)
+- **Default Sender ID**: `UMS_TX` (can be overridden in admin panel)
 - **Settings Storage**: `sms_api_key`, `sms_app_id`, `sms_sender_id` in messaging category of system_settings table
 - **Admin UI**: Updated Messaging Settings panel at `/admin/messaging-settings` with new field names
-- **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID` (set defaults in production via environment variables)
+- **Environment Fallback**: `SMS_API_KEY`, `SMS_APP_ID`, `SMS_SENDER_ID` (with UMS_TX as default sender)
 - **Default Credentials**: Can be set via:
   1. Admin panel at /admin/messaging-settings
   2. Environment variables: SMS_API_KEY, SMS_APP_ID, SMS_SENDER_ID
   3. system_settings table in database
 
-### Admin Panel Authentication & Management
+### Admin Panel Architecture (Complete Refactor)
 - **Fixed authentication**: Restored proper session validation with `requireAdminAuth` middleware
 - **Added session check endpoint**: `GET /api/admin/session` - verifies admin is logged in
 - **Added logout endpoint**: `POST /api/admin/logout` - properly destroys session
@@ -131,11 +132,32 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
 - **Admin creation feature**: `POST /api/admin/create-admin` (requireAdminAuth) - allows admins to create new admin accounts
 - **Session persistence**: Uses Express sessions (cookies) for secure, stateless authentication
 - **Admin logs**: Tracks admin creation and login actions with IP and user agent
-- **Separate Admin Pages** (Fixed deauth nav issue):
-  - `/admin/payhero-settings` - PayHero Settings page with full screen layout
-  - `/admin/messaging-settings` - Messaging Settings page (SMS/WhatsApp config)
-  - `/admin/settings` - General Settings page (system configurations)
-  - `/admin/manual-payment` - Manual Payment configuration page
-  - Sidebar now routes to dedicated pages for these 4 items instead of dashboard tabs
-  - Prevents session loss when navigating between settings pages
-  - Each page has back button to return to main dashboard
+
+### Admin Page Structure (All Routes)
+Each nav item is now a dedicated, independent page with AdminRoute protection:
+- **Dashboard** → `/admin/home` - System overview & metrics
+- **User Management** → `/admin/users` - User management, blocking, verification
+- **KYC Review** → `/admin/kyc` - KYC document verification
+- **Transactions** → `/admin/transactions` - Transaction monitoring
+- **Withdrawals** → `/admin/withdrawals` - Withdrawal management
+- **Virtual Cards** → `/admin/cards` - Card management
+- **Card Pricing** → `/admin/pricing` - Virtual card price configuration
+- **Notifications** → `/admin/notifications` - Notification management
+- **Mail Management** → `/admin/mail` - Email configuration
+- **WhatsApp Messaging** → `/admin/whatsapp` - WhatsApp messaging interface
+- **Live Support** → `/admin/support` - Real-time support chat
+- **Support Tickets** → `/admin/tickets` - Support ticket management
+- **System Logs** → `/admin/logs` - System activity logging
+- **WhatsApp Templates** → `/admin/templates` - WhatsApp message templates
+- **Activity Logs** → `/admin/activity` - User/admin activity tracking
+- **Database Management** → `/admin/database` - Database backup/restore
+- **Analytics** → `/admin/analytics` - Advanced analytics & reporting
+- **PayHero Settings** → `/admin/payhero-settings` - M-Pesa payment configuration
+- **Manual Payment** → `/admin/manual-payment` - Manual payment setup
+- **Messaging Settings** → `/admin/messaging-settings` - SMS/WhatsApp configuration
+- **General Settings** → `/admin/settings` - System configuration
+
+Each page has:
+- AdminRoute guard (checks session before loading)
+- Back button to return to main navigation
+- Full-screen layout (prevents tab switching issues)

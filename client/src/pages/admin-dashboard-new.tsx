@@ -239,31 +239,43 @@ export default function AdminDashboard() {
             <nav className="space-y-2 px-3">
               {sidebarItems.map((item) => {
                 const Icon = item.icon;
-                const isExternalPage = ['payhero', 'manual-payment', 'messaging', 'settings'].includes(item.id);
+                const routeMap: Record<string, string> = {
+                  'dashboard': '/admin/home',
+                  'users': '/admin/users',
+                  'kyc': '/admin/kyc',
+                  'transactions': '/admin/transactions',
+                  'withdrawals': '/admin/withdrawals',
+                  'cards': '/admin/cards',
+                  'pricing': '/admin/pricing',
+                  'notifications': '/admin/notifications',
+                  'mail': '/admin/mail',
+                  'whatsapp': '/admin/whatsapp',
+                  'support': '/admin/support',
+                  'tickets': '/admin/tickets',
+                  'logs': '/admin/logs',
+                  'payhero': '/admin/payhero-settings',
+                  'manual-payment': '/admin/manual-payment',
+                  'messaging': '/admin/messaging-settings',
+                  'templates': '/admin/templates',
+                  'activity': '/admin/activity',
+                  'database': '/admin/database',
+                  'analytics': '/admin/analytics',
+                  'settings': '/admin/settings'
+                };
                 
                 return (
                   <button
                     key={item.id}
                     onClick={() => {
-                      if (isExternalPage) {
-                        const routeMap: Record<string, string> = {
-                          'payhero': '/admin/payhero-settings',
-                          'manual-payment': '/admin/manual-payment',
-                          'messaging': '/admin/messaging-settings',
-                          'settings': '/admin/settings'
-                        };
-                        setLocation(routeMap[item.id]);
-                      } else {
-                        setActiveTab(item.id);
+                      const route = routeMap[item.id];
+                      if (route) {
+                        setLocation(route);
                       }
                       setSidebarOpen(false);
                     }}
                     className={`
                       w-full flex items-center px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                      ${activeTab === item.id && !isExternalPage
-                        ? 'bg-green-100 text-green-700 border border-green-200' 
-                        : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                      }
+                      text-gray-600 hover:bg-gray-100 hover:text-gray-900
                     `}
                   >
                     <Icon className="w-5 h-5 mr-3" />

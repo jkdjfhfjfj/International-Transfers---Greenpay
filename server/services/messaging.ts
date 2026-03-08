@@ -33,7 +33,7 @@ export class MessagingService {
       // Fallback to environment variables if not in settings
       apiKey = apiKey || process.env.SMS_API_KEY || '';
       appId = appId || process.env.SMS_APP_ID || '';
-      senderId = senderId || process.env.SMS_SENDER_ID || '';
+      senderId = senderId || process.env.SMS_SENDER_ID || 'UMS_TX';
 
       if (!apiKey || !appId || !senderId) {
         console.warn('SMS messaging credentials not fully configured (settings or env)');
