@@ -1,19 +1,23 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
-import { getStorageSafe } from "@/lib/safe-storage";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import AdminSettings from "@/components/admin/admin-settings";
 import { Button } from "@/components/ui/button";
 import { ChevronLeft } from "lucide-react";
 
 export default function AdminGeneralSettingsPage() {
   const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAdminAuth();
 
   useEffect(() => {
-    const admin = getStorageSafe<any>("adminAuth", null);
-    if (!admin) {
+    if (!isLoading && !isAuthenticated) {
       setLocation("/admin/login");
     }
-  }, [setLocation]);
+  }, [isLoading, isAuthenticated, setLocation]);
+
+  if (isLoading) {
+    return <div className="p-8 text-center">Loading...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">

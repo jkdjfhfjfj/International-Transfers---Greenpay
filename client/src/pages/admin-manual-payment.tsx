@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { getStorageSafe } from "@/lib/safe-storage";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +16,7 @@ interface ManualPaymentSettings {
 
 export default function AdminManualPaymentPage() {
   const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading: authLoading } = useAdminAuth();
   const [settings, setSettings] = useState<ManualPaymentSettings>({
     paybill: "",
     account: ""
@@ -25,13 +26,14 @@ export default function AdminManualPaymentPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    const admin = getStorageSafe<any>("adminAuth", null);
-    if (!admin) {
+    if (!authLoading && !isAuthenticated) {
       setLocation("/admin/login");
       return;
     }
-    loadSettings();
-  }, [setLocation]);
+    if (!authLoading && isAuthenticated) {
+      loadSettings();
+    }
+  }, [authLoading, isAuthenticated, setLocation]);
 
   const loadSettings = async () => {
     try {

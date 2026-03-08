@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -101,22 +102,30 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 // Admin Route Guard Component
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const [, setLocation] = useLocation();
-  
-  // Check if admin is authenticated
   const adminAuth = getStorageSafe<any>("adminAuth", null);
-  
-  if (!adminAuth) {
-    // Redirect to admin login if not authenticated
-    setLocation("/admin/login");
+  const [isValidated, setIsValidated] = useState(false);
+
+  useEffect(() => {
+    if (!adminAuth) {
+      console.log("[AdminRoute] No admin auth in localStorage, redirecting to login");
+      setLocation("/admin/login");
+      return;
+    }
+
+    if (!adminAuth.role || adminAuth.role !== 'admin') {
+      console.log("[AdminRoute] Invalid admin role, clearing auth");
+      localStorage.removeItem("adminAuth");
+      setLocation("/admin/login");
+      return;
+    }
+
+    setIsValidated(true);
+  }, [adminAuth, setLocation]);
+
+  if (!isValidated) {
     return null;
   }
-  
-  if (!adminAuth.role || adminAuth.role !== 'admin') {
-    setLocation("/admin/login");
-    localStorage.removeItem("adminAuth");
-    return null;
-  }
-  
+
   return <Component />;
 }
 

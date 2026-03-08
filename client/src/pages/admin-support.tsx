@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { useAdminAuth } from "@/hooks/use-admin-auth";
 import { useLocation } from "wouter";
 import { getStorageSafe } from "@/lib/safe-storage";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import AdminSupportTab from "@/components/admin/admin-support-tab";
 
 export default function AdminSupportPage() {
   const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading } = useAdminAuth();
 
   useEffect(() => {
     const admin = getStorageSafe<any>("adminAuth", null);

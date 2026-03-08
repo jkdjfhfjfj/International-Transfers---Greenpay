@@ -124,6 +124,15 @@ EXCHANGERATE_API_KEY                           # Currency exchange rates
   2. Environment variables: SMS_API_KEY, SMS_APP_ID, SMS_SENDER_ID
   3. system_settings table in database
 
+### Admin Authentication (Restructured)
+- **Created `useAdminAuth` hook** - Centralized admin auth logic with server-side validation
+- **Server validation**: Each page validates session with `/api/admin/session` endpoint
+- **Session persistence**: Checks both localStorage and server session validity
+- **Session expiry handling**: Automatically logs out if session expires on server
+- **Logging**: All auth events logged with [Admin Auth] prefix for debugging
+- **Error recovery**: Graceful fallback to login page on auth failure
+- **No logouts on navigation**: Fixed issue where switching pages caused deauth
+
 ### Admin Panel Architecture (Complete Refactor)
 - **Fixed authentication**: Restored proper session validation with `requireAdminAuth` middleware
 - **Added session check endpoint**: `GET /api/admin/session` - verifies admin is logged in
