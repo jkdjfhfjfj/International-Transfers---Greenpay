@@ -27,7 +27,7 @@ export function useAdminAuth() {
         }
 
         // Then validate with server
-        const response = await apiRequest("/api/admin/session", "GET");
+        const response = await apiRequest("GET", "/api/admin/session");
         if (response.ok) {
           const data = await response.json();
           setAdmin(data.admin);
@@ -53,7 +53,7 @@ export function useAdminAuth() {
 
   const logout = async () => {
     try {
-      await apiRequest("/api/admin/logout", "POST");
+      await apiRequest("POST", "/api/admin/logout");
     } catch (error) {
       console.error("[Admin Auth] Logout error:", error);
     } finally {
