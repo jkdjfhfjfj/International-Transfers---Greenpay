@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { useAdminAuth } from "@/hooks/use-admin-auth";
+import { getStorageSafe } from "@/lib/safe-storage";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,6 @@ interface ManualPaymentSettings {
 
 export default function AdminManualPaymentPage() {
   const [, setLocation] = useLocation();
-  const { isAuthenticated, isLoading: authLoading } = useAdminAuth();
   const [settings, setSettings] = useState<ManualPaymentSettings>({
     paybill: "",
     account: ""
@@ -26,23 +25,21 @@ export default function AdminManualPaymentPage() {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
+    const admin = getStorageSafe<any>("adminAuth", null);
+    if (!admin) {
       setLocation("/admin/login");
       return;
     }
-    if (!authLoading && isAuthenticated) {
-      loadSettings();
-    }
-  }, [authLoading, isAuthenticated, setLocation]);
+    loadSettings();
+  }, [setLocation]);
 
   const loadSettings = async () => {
     try {
-      const response = await apiRequest("/api/admin/settings", "GET");
-      const payBill = response.find((s: any) => s.key === "manual_payment_paybill");
-      const account = response.find((s: any) => s.key === "manual_payment_account");
+      const response = await apiRequest("GET", "/api/admin/manual-payment-settings");
+      const data = await response.json();
       setSettings({
-        paybill: payBill?.value || "",
-        account: account?.value || ""
+        paybill: String(data.paybill || ""),
+        account: String(data.account || "")
       });
     } catch (error) {
       toast({
@@ -58,11 +55,9 @@ export default function AdminManualPaymentPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await apiRequest("/api/admin/settings", "POST", {
-        settings: [
-          { key: "manual_payment_paybill", value: settings.paybill, category: "payments" },
-          { key: "manual_payment_account", value: settings.account, category: "payments" }
-        ]
+      await apiRequest("PUT", "/api/admin/manual-payment-settings", {
+        paybill: settings.paybill,
+        account: settings.account
       });
       toast({
         title: "Success",
