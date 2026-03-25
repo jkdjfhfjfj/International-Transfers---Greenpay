@@ -59,10 +59,9 @@ import AdminActivityPage from "@/pages/admin-activity";
 import AdminDatabasePage from "@/pages/admin-database";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSystemSettingsPage from "@/pages/admin-system-settings";
-import AdminPayHeroPage from "@/pages/admin-payhero";
-import AdminMessagingPage from "@/pages/admin-messaging";
-import AdminAnnouncementsPage from "@/pages/admin-announcements";
-import AdminManualPaymentPage from "@/pages/admin-manual-payment";
+import AdminManualPaymentSettingsPage from "@/pages/admin-manual-payment-settings";
+import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
+import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
 import AdminProfilePage from "@/pages/admin-profile";
 import SendMoneyLanding from "@/pages/landing/send-money";
 import VirtualCardsLanding from "@/pages/landing/virtual-cards";
@@ -174,10 +173,9 @@ function Router() {
       <Route path="/admin/database" component={AdminDatabasePage} />
       <Route path="/admin/analytics" component={AdminAnalyticsPage} />
       <Route path="/admin/settings" component={AdminSystemSettingsPage} />
-      <Route path="/admin/payhero" component={AdminPayHeroPage} />
-      <Route path="/admin/messaging" component={AdminMessagingPage} />
-      <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
-      <Route path="/admin/manual-payment" component={AdminManualPaymentPage} />
+      <Route path="/admin/manual-payment" component={AdminManualPaymentSettingsPage} />
+      <Route path="/admin/messaging" component={AdminMessagingSMSPage} />
+      <Route path="/admin/announcements" component={AdminAnnouncementsDBPage} />
       <Route path="/admin/profile" component={AdminProfilePage} />
       <Route component={NotFound} />
     </Switch>

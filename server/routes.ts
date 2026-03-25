@@ -8986,5 +8986,47 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
+  app.post("/api/admin/send-bulk-messages", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, message } = req.body;
+      
+      if (!userIds || !Array.isArray(userIds) || userIds.length === 0 || !message) {
+        return res.status(400).json({ message: "User IDs array and message are required" });
+      }
+      
+      const { messagingService } = await import('./services/messaging');
+      let sentCount = 0;
+      const errors: string[] = [];
+      
+      for (const userId of userIds) {
+        try {
+          const user = await storage.getUser(userId);
+          if (!user) {
+            errors.push(`User ${userId} not found`);
+            continue;
+          }
+          
+          await messagingService.sendMessage(user.phone, message);
+          sentCount++;
+        } catch (error) {
+          errors.push(`Failed to send to ${userId}: ${String(error)}`);
+        }
+      }
+      
+      console.log(`Admin sent bulk messages to ${sentCount}/${userIds.length} users`);
+      
+      res.json({
+        success: true,
+        sentCount,
+        totalRequested: userIds.length,
+        errors: errors.length > 0 ? errors : undefined,
+        message: `Message sent to ${sentCount} user(s)`
+      });
+    } catch (error) {
+      console.error('Bulk message error:', error);
+      res.status(500).json({ message: "Error sending bulk messages" });
+    }
+  });
+
   return httpServer;
 }
