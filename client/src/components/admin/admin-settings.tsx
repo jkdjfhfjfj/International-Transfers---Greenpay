@@ -43,16 +43,7 @@ interface SystemSettingsResponse {
 }
 
 export default function AdminSettings({ tab }: { tab?: string }) {
-  const { 
-    settings, 
-    saveSettings, 
-    updateFees, 
-    updateSecurity, 
-    updateNotifications,
-    updateGeneral,
-    updateWhatsApp,
-    isLoaded 
-  } = useAdminSettings();
+  const { settings, isLoaded } = useAdminSettings();
 
   const [fees, setFees] = useState(settings.fees);
   const [security, setSecurity] = useState(settings.security);
@@ -70,6 +61,8 @@ export default function AdminSettings({ tab }: { tab?: string }) {
       setActiveTab(tab);
     }
   }, [tab]);
+
+  // Only run once when settings first load from localStorage — never on subsequent updates
   useEffect(() => {
     if (isLoaded) {
       setFees(settings.fees);
@@ -86,7 +79,8 @@ export default function AdminSettings({ tab }: { tab?: string }) {
         show_announcement: settings.general.show_announcement !== undefined ? settings.general.show_announcement : false
       });
     }
-  }, [settings, isLoaded]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded]);
 
   const { data: settingsData, isLoading } = useQuery<SystemSettingsResponse>({
     queryKey: ["/api/admin/settings"],
@@ -118,16 +112,12 @@ export default function AdminSettings({ tab }: { tab?: string }) {
   });
 
   const handleSaveFees = () => {
-    updateFees(fees);
-    saveSettings({ ...settings, fees });
     Object.entries(fees).forEach(([key, value]) => {
       updateSettingMutation.mutate({ key, value });
     });
   };
 
-  const handleSaveSecurity = async () => {
-    updateSecurity(security);
-    saveSettings({ ...settings, security });
+  const handleSaveSecurity = () => {
     Object.entries(security).forEach(([key, value]) => {
       let backendKey = key;
       let finalValue = value.toString();
@@ -152,16 +142,12 @@ export default function AdminSettings({ tab }: { tab?: string }) {
   };
 
   const handleSaveNotifications = () => {
-    updateNotifications(notifications);
-    saveSettings({ ...settings, notifications });
     Object.entries(notifications).forEach(([key, value]) => {
       updateSettingMutation.mutate({ key, value: value.toString() });
     });
   };
 
   const handleSaveGeneral = () => {
-    updateGeneral(general);
-    saveSettings({ ...settings, general });
     Object.entries(general).forEach(([key, value]) => {
       updateSettingMutation.mutate({ key, value: value.toString() });
     });
@@ -176,9 +162,6 @@ export default function AdminSettings({ tab }: { tab?: string }) {
       });
       return;
     }
-
-    updateWhatsApp(whatsapp);
-    saveSettings({ ...settings, whatsapp });
 
     try {
       const response = await apiRequest("POST", "/api/admin/whatsapp/config", {
