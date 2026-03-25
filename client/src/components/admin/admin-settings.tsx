@@ -82,10 +82,30 @@ export default function AdminSettings({ tab }: { tab?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
 
+  // Load PayHero credentials into general settings
+  useEffect(() => {
+    if (payheroData) {
+      setGeneral(prev => ({
+        ...prev,
+        username: payheroData.username || "",
+        password: payheroData.password || "",
+        channel_id: payheroData.channelId || payheroData.channel_id || ""
+      }));
+    }
+  }, [payheroData]);
+
   const { data: settingsData, isLoading } = useQuery<SystemSettingsResponse>({
     queryKey: ["/api/admin/settings"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/admin/settings");
+      return response.json();
+    },
+  });
+
+  const { data: payheroData } = useQuery({
+    queryKey: ["/api/admin/payhero-settings"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/payhero-settings");
       return response.json();
     },
   });
@@ -147,9 +167,30 @@ export default function AdminSettings({ tab }: { tab?: string }) {
     });
   };
 
+  const handleSavePayHeroCredentials = () => {
+    const payheroKeys = ['username', 'password', 'channel_id'];
+    payheroKeys.forEach((key) => {
+      const value = general[key as keyof typeof general];
+      if (value) {
+        updateSettingMutation.mutate({ 
+          key, 
+          value: value.toString(),
+          category: 'payhero'
+        } as any);
+      }
+    });
+    toast({
+      title: "PayHero Settings Saved",
+      description: "Your PayHero credentials have been updated securely.",
+    });
+  };
+
   const handleSaveGeneral = () => {
+    const excludeKeys = ['username', 'password', 'channel_id'];
     Object.entries(general).forEach(([key, value]) => {
-      updateSettingMutation.mutate({ key, value: value.toString() });
+      if (!excludeKeys.includes(key)) {
+        updateSettingMutation.mutate({ key, value: value.toString() });
+      }
     });
   };
 
@@ -583,35 +624,35 @@ export default function AdminSettings({ tab }: { tab?: string }) {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="payhero_username">API Username</Label>
+                  <Label htmlFor="username">API Username</Label>
                   <Input
-                    id="payhero_username"
+                    id="username"
                     placeholder="PayHero Username"
-                    value={general.payhero_username || ""}
-                    onChange={(e) => setGeneral({ ...general, payhero_username: e.target.value })}
+                    value={general.username || ""}
+                    onChange={(e) => setGeneral({ ...general, username: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="payhero_password">API Password</Label>
+                  <Label htmlFor="password">API Password</Label>
                   <Input
-                    id="payhero_password"
+                    id="password"
                     type="password"
                     placeholder="PayHero Password"
-                    value={general.payhero_password || ""}
-                    onChange={(e) => setGeneral({ ...general, payhero_password: e.target.value })}
+                    value={general.password || ""}
+                    onChange={(e) => setGeneral({ ...general, password: e.target.value })}
                   />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="payhero_channel_id">Channel ID</Label>
+                <Label htmlFor="channel_id">Channel ID</Label>
                 <Input
-                  id="payhero_channel_id"
+                  id="channel_id"
                   placeholder="e.g. 3407"
-                  value={general.payhero_channel_id || ""}
-                  onChange={(e) => setGeneral({ ...general, payhero_channel_id: e.target.value })}
+                  value={general.channel_id || ""}
+                  onChange={(e) => setGeneral({ ...general, channel_id: e.target.value })}
                 />
               </div>
-              <Button onClick={handleSaveGeneral}>
+              <Button onClick={handleSavePayHeroCredentials}>
                 <Save className="w-4 h-4 mr-2" />
                 Save PayHero Settings
               </Button>
