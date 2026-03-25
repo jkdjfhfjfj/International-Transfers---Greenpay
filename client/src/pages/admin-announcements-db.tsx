@@ -10,12 +10,14 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, Megaphone, Eye, EyeOff, Calendar, Trash2, Plus } from "lucide-react";
+import { Save, Megaphone, Eye, EyeOff, Calendar, Trash2, Plus, Upload, X, Link as LinkIcon, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 
 interface Announcement {
   id: string;
   title: string;
   content: string;
+  imageUrl?: string;
+  actionUrl?: string;
   isActive: boolean;
   priority: number;
   createdAt: string;
@@ -28,9 +30,12 @@ export default function AdminAnnouncementsDBPage() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [actionUrl, setActionUrl] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [priority, setPriority] = useState("1");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const { data: announcements, isLoading } = useQuery<{ announcements: Announcement[] }>({
     queryKey: ["/api/admin/announcements"],
@@ -40,11 +45,66 @@ export default function AdminAnnouncementsDBPage() {
     },
   });
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "greenpay");
+
+    try {
+      const response = await fetch("https://api.cloudinary.com/v1_1/dyzalgxnu/image/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.secure_url) {
+        setImageUrl(data.secure_url);
+        toast({ title: "Uploaded", description: "Image uploaded successfully." });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to upload image.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", "greenpay");
+    formData.append("resource_type", "video");
+
+    try {
+      const response = await fetch("https://api.cloudinary.com/v1_1/dyzalgxnu/video/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await response.json();
+      if (data.secure_url) {
+        setImageUrl(data.secure_url);
+        toast({ title: "Uploaded", description: "Video uploaded successfully." });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to upload video.", variant: "destructive" });
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const createMutation = useMutation({
     mutationFn: async () => {
       const r = await apiRequest("POST", "/api/admin/announcements", {
         title,
         content,
+        imageUrl: imageUrl || undefined,
+        actionUrl: actionUrl || undefined,
         isActive,
         priority: parseInt(priority),
       });
@@ -54,6 +114,8 @@ export default function AdminAnnouncementsDBPage() {
       toast({ title: "Created", description: "Announcement created successfully." });
       setTitle("");
       setContent("");
+      setImageUrl("");
+      setActionUrl("");
       setIsActive(true);
       setPriority("1");
       qc.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
@@ -66,6 +128,8 @@ export default function AdminAnnouncementsDBPage() {
       const r = await apiRequest("PUT", `/api/admin/announcements/${id}`, {
         title,
         content,
+        imageUrl: imageUrl || undefined,
+        actionUrl: actionUrl || undefined,
         isActive,
         priority: parseInt(priority),
       });
@@ -75,6 +139,8 @@ export default function AdminAnnouncementsDBPage() {
       toast({ title: "Updated", description: "Announcement updated successfully." });
       setTitle("");
       setContent("");
+      setImageUrl("");
+      setActionUrl("");
       setIsActive(true);
       setPriority("1");
       setEditingId(null);
@@ -98,9 +164,21 @@ export default function AdminAnnouncementsDBPage() {
   const handleEdit = (announcement: Announcement) => {
     setTitle(announcement.title);
     setContent(announcement.content);
+    setImageUrl(announcement.imageUrl || "");
+    setActionUrl(announcement.actionUrl || "");
     setIsActive(announcement.isActive);
     setPriority(String(announcement.priority));
     setEditingId(announcement.id);
+  };
+
+  const handleCancel = () => {
+    setTitle("");
+    setContent("");
+    setImageUrl("");
+    setActionUrl("");
+    setIsActive(true);
+    setPriority("1");
+    setEditingId(null);
   };
 
   const handleSave = () => {
@@ -116,18 +194,10 @@ export default function AdminAnnouncementsDBPage() {
     }
   };
 
-  const handleCancel = () => {
-    setTitle("");
-    setContent("");
-    setIsActive(true);
-    setPriority("1");
-    setEditingId(null);
-  };
-
   if (isLoading) {
     return (
       <AdminShell title="Announcements">
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="h-40 rounded-2xl bg-gray-200 animate-pulse" />
           <div className="h-40 rounded-2xl bg-gray-200 animate-pulse" />
         </div>
@@ -152,7 +222,7 @@ export default function AdminAnnouncementsDBPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label className="text-sm">Title</Label>
+              <Label className="text-sm font-medium">Title</Label>
               <Input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -162,13 +232,81 @@ export default function AdminAnnouncementsDBPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm">Message</Label>
+              <Label className="text-sm font-medium">Message</Label>
               <Textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Enter announcement message..."
                 className="rounded-xl min-h-24 resize-none"
               />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <ImageIcon className="w-4 h-4" />
+                  Image / Video (Optional)
+                </Label>
+                <div className="space-y-2">
+                  {imageUrl && (
+                    <div className="relative w-full h-32 rounded-xl overflow-hidden bg-gray-100">
+                      {imageUrl.includes("video") ? (
+                        <video src={imageUrl} className="w-full h-full object-cover" />
+                      ) : (
+                        <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                      )}
+                      <button
+                        onClick={() => setImageUrl("")}
+                        className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <label className="flex-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                      <Button as="span" variant="outline" className="w-full rounded-xl cursor-pointer" disabled={uploading}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? "Uploading..." : "Image"}
+                      </Button>
+                    </label>
+                    <label className="flex-1">
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        disabled={uploading}
+                        className="hidden"
+                      />
+                      <Button as="span" variant="outline" className="w-full rounded-xl cursor-pointer" disabled={uploading}>
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? "Uploading..." : "Video"}
+                      </Button>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <LinkIcon className="w-4 h-4" />
+                  Action Link (Optional)
+                </Label>
+                <Input
+                  value={actionUrl}
+                  onChange={(e) => setActionUrl(e.target.value)}
+                  placeholder="e.g., https://example.com or /deposit"
+                  className="rounded-xl"
+                />
+                <p className="text-xs text-gray-500">Users can click "Learn More" to open this link</p>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -213,11 +351,20 @@ export default function AdminAnnouncementsDBPage() {
           {announcements?.announcements && announcements.announcements.length > 0 ? (
             <div className="space-y-3">
               {announcements.announcements.map((ann) => (
-                <Card key={ann.id} className="rounded-xl border-0 shadow-sm">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
+                <Card key={ann.id} className="rounded-xl border-0 shadow-sm overflow-hidden">
+                  <CardContent className="p-0">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                      {ann.imageUrl && (
+                        <div className="w-full sm:w-32 h-32 flex-shrink-0 bg-gray-100 overflow-hidden">
+                          {ann.imageUrl.includes("video") ? (
+                            <video src={ann.imageUrl} className="w-full h-full object-cover" />
+                          ) : (
+                            <img src={ann.imageUrl} alt={ann.title} className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                      )}
+                      <div className="flex-1 p-4">
+                        <div className="flex items-center gap-2 mb-2">
                           <h4 className="font-semibold text-sm">{ann.title}</h4>
                           {ann.isActive ? (
                             <Badge className="bg-green-100 text-green-700 text-xs">Active</Badge>
@@ -226,25 +373,37 @@ export default function AdminAnnouncementsDBPage() {
                           )}
                           <Badge variant="outline" className="text-xs">Priority {ann.priority}</Badge>
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">{ann.content}</p>
-                        <p className="text-xs text-gray-400">
-                          <Calendar className="w-3 h-3 inline mr-1" />
-                          {new Date(ann.createdAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" onClick={() => handleEdit(ann)} className="rounded-lg">
-                          Edit
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => deleteMutation.mutate(ann.id)}
-                          disabled={deleteMutation.isPending}
-                          className="rounded-lg text-red-600"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </Button>
+                        <p className="text-sm text-gray-600 mb-3 line-clamp-2">{ann.content}</p>
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <p className="text-xs text-gray-400">
+                            <Calendar className="w-3 h-3 inline mr-1" />
+                            {new Date(ann.createdAt).toLocaleString()}
+                          </p>
+                          <div className="flex gap-2">
+                            {ann.actionUrl && (
+                              <a
+                                href={ann.actionUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 hover:bg-amber-200"
+                              >
+                                Visit Link →
+                              </a>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => handleEdit(ann)} className="rounded-lg text-xs">
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => deleteMutation.mutate(ann.id)}
+                              disabled={deleteMutation.isPending}
+                              className="rounded-lg text-red-600"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
