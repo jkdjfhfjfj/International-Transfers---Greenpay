@@ -35,9 +35,6 @@ interface AdminSettings {
     maintenance_mode: boolean;
     api_rate_limit: string;
     max_upload_size: string;
-    username?: string;
-    password?: string;
-    channel_id?: string;
   };
   whatsapp: {
     phone_number_id: string;
@@ -81,10 +78,7 @@ const DEFAULT_SETTINGS: AdminSettings = {
     maintenance_message: '',
     maintenance_mode: false,
     api_rate_limit: '1000',
-    max_upload_size: '10',
-    username: '',
-    password: '',
-    channel_id: ''
+    max_upload_size: '10'
   },
   whatsapp: {
     phone_number_id: '',

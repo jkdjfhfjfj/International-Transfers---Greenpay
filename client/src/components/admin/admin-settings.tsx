@@ -82,17 +82,6 @@ export default function AdminSettings({ tab }: { tab?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
 
-  // Load PayHero credentials into general settings
-  useEffect(() => {
-    if (payheroData) {
-      setGeneral(prev => ({
-        ...prev,
-        username: payheroData.username || "",
-        password: payheroData.password || "",
-        channel_id: payheroData.channelId || payheroData.channel_id || ""
-      }));
-    }
-  }, [payheroData]);
 
   const { data: settingsData, isLoading } = useQuery<SystemSettingsResponse>({
     queryKey: ["/api/admin/settings"],
@@ -102,13 +91,6 @@ export default function AdminSettings({ tab }: { tab?: string }) {
     },
   });
 
-  const { data: payheroData } = useQuery({
-    queryKey: ["/api/admin/payhero-settings"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/admin/payhero-settings");
-      return response.json();
-    },
-  });
 
   const updateSettingMutation = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
@@ -167,30 +149,9 @@ export default function AdminSettings({ tab }: { tab?: string }) {
     });
   };
 
-  const handleSavePayHeroCredentials = () => {
-    const payheroKeys = ['username', 'password', 'channel_id'];
-    payheroKeys.forEach((key) => {
-      const value = general[key as keyof typeof general];
-      if (value) {
-        updateSettingMutation.mutate({ 
-          key, 
-          value: value.toString(),
-          category: 'payhero'
-        } as any);
-      }
-    });
-    toast({
-      title: "PayHero Settings Saved",
-      description: "Your PayHero credentials have been updated securely.",
-    });
-  };
-
   const handleSaveGeneral = () => {
-    const excludeKeys = ['username', 'password', 'channel_id'];
     Object.entries(general).forEach(([key, value]) => {
-      if (!excludeKeys.includes(key)) {
-        updateSettingMutation.mutate({ key, value: value.toString() });
-      }
+      updateSettingMutation.mutate({ key, value: value.toString() });
     });
   };
 
@@ -622,40 +583,11 @@ export default function AdminSettings({ tab }: { tab?: string }) {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="username">API Username</Label>
-                  <Input
-                    id="username"
-                    placeholder="PayHero Username"
-                    value={general.username || ""}
-                    onChange={(e) => setGeneral({ ...general, username: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">API Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="PayHero Password"
-                    value={general.password || ""}
-                    onChange={(e) => setGeneral({ ...general, password: e.target.value })}
-                  />
-                </div>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  PayHero credentials are managed in the separate PayHero Settings page.
+                </p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="channel_id">Channel ID</Label>
-                <Input
-                  id="channel_id"
-                  placeholder="e.g. 3407"
-                  value={general.channel_id || ""}
-                  onChange={(e) => setGeneral({ ...general, channel_id: e.target.value })}
-                />
-              </div>
-              <Button onClick={handleSavePayHeroCredentials}>
-                <Save className="w-4 h-4 mr-2" />
-                Save PayHero Settings
-              </Button>
             </CardContent>
           </Card>
         </TabsContent>

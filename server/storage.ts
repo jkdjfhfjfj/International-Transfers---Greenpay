@@ -132,6 +132,7 @@ export interface IStorage {
 
   // Admin operations
   getAdminByEmail(email: string): Promise<Admin | undefined>;
+  getAdminById(id: number): Promise<Admin | undefined>;
   createAdmin(admin: InsertAdmin): Promise<Admin>;
   getAllUsers(filters?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{ users: User[]; total: number; page: number; totalPages: number }>;
   getAllKycDocuments(): Promise<KycDocument[]>;
@@ -932,6 +933,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.admins.values()).find(admin => admin.email === email);
   }
 
+  async getAdminById(id: number): Promise<Admin | undefined> {
+    return this.admins.get(String(id));
+  }
+
   async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {
     const id = randomUUID();
     const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
@@ -1464,6 +1469,11 @@ export class DatabaseStorage implements IStorage {
   // Admin operations
   async getAdminByEmail(email: string): Promise<Admin | undefined> {
     const [admin] = await db.select().from(admins).where(eq(admins.email, email));
+    return admin || undefined;
+  }
+
+  async getAdminById(id: number): Promise<Admin | undefined> {
+    const [admin] = await db.select().from(admins).where(eq(admins.id, id));
     return admin || undefined;
   }
 

@@ -3234,6 +3234,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Get admin profile
+  app.get("/api/admin/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const admin = req.session?.admin;
+      if (!admin) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      res.json({ 
+        id: admin.id,
+        email: admin.email,
+        fullName: admin.fullName,
+        role: admin.role
+      });
+    } catch (error) {
+      console.error('Error fetching admin profile:', error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  // Update admin profile
+  app.put("/api/admin/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const { email, currentPassword, newPassword } = req.body;
+      const admin = req.session?.admin;
+      
+      if (!admin) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Get current admin from database
+      const dbAdmin = await storage.getAdminById(admin.id);
+      if (!dbAdmin) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+
+      // If changing password, verify current password
+      if (newPassword) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: "Current password required to set new password" });
+        }
+        
+        const isPasswordValid = await bcrypt.compare(currentPassword, dbAdmin.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Current password is incorrect" });
+        }
+
+        if (newPassword.length < 8) {
+          return res.status(400).json({ message: "New password must be at least 8 characters" });
+        }
+      }
+
+      // Update admin
+      const updates: any = {};
+      if (email && email !== dbAdmin.email) {
+        const existingAdmin = await storage.getAdminByEmail(email);
+        if (existingAdmin && existingAdmin.id !== admin.id) {
+          return res.status(409).json({ message: "Email already in use" });
+        }
+        updates.email = email;
+      }
+
+      if (newPassword) {
+        updates.password = await bcrypt.hash(newPassword, 10);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return res.json({ message: "No changes made" });
+      }
+
+      // Update in database
+      const updatedAdmin = await storage.updateAdmin(admin.id, updates);
+      
+      // Update session
+      req.session.admin = {
+        id: updatedAdmin.id,
+        email: updatedAdmin.email,
+        fullName: updatedAdmin.fullName,
+        role: updatedAdmin.role
+      };
+
+      res.json({ 
+        message: "Profile updated successfully",
+        admin: {
+          id: updatedAdmin.id,
+          email: updatedAdmin.email,
+          fullName: updatedAdmin.fullName,
+          role: updatedAdmin.role
+        }
+      });
+    } catch (error) {
+      console.error('Error updating admin profile:', error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
   // Create new admin (only existing admins can do this)
   app.post("/api/admin/create-admin", requireAdminAuth, async (req, res) => {
     try {

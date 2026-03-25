@@ -62,6 +62,7 @@ import AdminPayHeroSettingsPage from "@/pages/admin-payhero-settings";
 import AdminMessagingSettingsPage from "@/pages/admin-messaging-settings";
 import AdminGeneralSettingsPage from "@/pages/admin-general-settings";
 import AdminManualPaymentPage from "@/pages/admin-manual-payment";
+import AdminProfilePage from "@/pages/admin-profile";
 import SendMoneyLanding from "@/pages/landing/send-money";
 import VirtualCardsLanding from "@/pages/landing/virtual-cards";
 import ExchangeLanding from "@/pages/landing/exchange";
@@ -175,6 +176,7 @@ function Router() {
       <Route path="/admin/messaging-settings" component={AdminMessagingSettingsPage} />
       <Route path="/admin/settings" component={AdminGeneralSettingsPage} />
       <Route path="/admin/manual-payment" component={AdminManualPaymentPage} />
+      <Route path="/admin/profile" component={AdminProfilePage} />
       <Route component={NotFound} />
     </Switch>
   );

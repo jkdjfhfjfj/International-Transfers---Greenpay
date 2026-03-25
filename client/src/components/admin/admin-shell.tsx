@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, FileCheck, DollarSign, Banknote, CreditCard,
   Bell, Mail, MessageCircle, Headphones, FileText, Activity, Smartphone,
   Settings, MessageSquare, History, Database, BarChart3, LogOut, Menu, X,
-  Shield, ChevronRight
+  Shield, ChevronRight, User
 } from "lucide-react";
 
 interface AdminUser {
@@ -73,6 +73,12 @@ const navSections = [
       { href: "/admin/payhero-settings", label: "PayHero Settings", icon: Smartphone },
       { href: "/admin/manual-payment", label: "Manual Payment", icon: Banknote },
       { href: "/admin/messaging-settings", label: "Messaging Config", icon: Bell },
+    ],
+  },
+  {
+    title: "Account",
+    items: [
+      { href: "/admin/profile", label: "Admin Profile", icon: User },
     ],
   },
 ];
