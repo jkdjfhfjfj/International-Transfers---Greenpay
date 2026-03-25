@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
   Select,
   SelectContent,
@@ -56,7 +57,14 @@ import {
   Settings,
   Activity,
   Download,
-  Clock
+  Clock,
+  Copy,
+  Check,
+  Ban,
+  RefreshCw,
+  ArrowUpRight,
+  ArrowDownLeft,
+  ChevronDown,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -74,14 +82,18 @@ interface User {
   isPhoneVerified: boolean;
   hasVirtualCard: boolean;
   balance: string;
+  kesBalance?: string;
   createdAt: string;
   twoFactorEnabled: boolean;
   pushNotificationsEnabled: boolean;
   defaultCurrency: string;
-  cardStatus?: string; // Virtual card status if user has one
-  isBlocked?: boolean; // Account suspension status
-  lastLoginAt?: string; // Last login timestamp
-  totalTransactions?: number; // Total transaction count
+  cardStatus?: string;
+  isBlocked?: boolean;
+  isSuspended?: boolean;
+  suspensionReason?: string;
+  suspendedAt?: string;
+  lastLoginAt?: string;
+  totalTransactions?: number;
 }
 
 interface UsersResponse {
@@ -524,8 +536,48 @@ function UserDetailsDialog({ user }: { user: User }) {
   const [updateType, setUpdateType] = useState<"add" | "subtract" | "set">("add");
   const [transactionDetails, setTransactionDetails] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState(false);
+  const [showCardDetails, setShowCardDetails] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [suspendReason, setSuspendReason] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: userTransactions, isLoading: txLoading } = useQuery({
+    queryKey: ["/api/admin/users", user.id, "transactions"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/users/${user.id}/transactions`);
+      return r.json();
+    },
+  });
+
+  const { data: userCard, isLoading: cardLoading } = useQuery({
+    queryKey: ["/api/admin/users", user.id, "card"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/users/${user.id}/card`);
+      return r.json();
+    },
+  });
+
+  const txList = (userTransactions as any)?.transactions || [];
+  const card = (userCard as any)?.card || null;
+
+  const copyUserId = async () => {
+    await navigator.clipboard.writeText(user.id);
+    setCopiedId(true);
+    setTimeout(() => setCopiedId(false), 2000);
+    toast({ title: "Copied", description: "User ID copied to clipboard" });
+  };
+
+  const updateTxStatus = async (txId: string, status: string) => {
+    try {
+      await apiRequest("PUT", `/api/admin/transactions/${txId}/status`, { status });
+      toast({ title: "Updated", description: `Transaction status set to ${status}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "transactions"] });
+    } catch {
+      toast({ title: "Error", description: "Failed to update transaction", variant: "destructive" });
+    }
+  };
 
   const onUpdateBalance = async (user: User) => {
     const amountStr = selectedCurrency === "USD" ? balanceUpdate : kesBalanceUpdate;
@@ -609,21 +661,24 @@ function UserDetailsDialog({ user }: { user: User }) {
     }
   };
 
-  const handleAccountAction = async (userId: string, action: string) => {
+  const handleAccountAction = async (userId: string, action: string, extra?: Record<string, any>) => {
     setIsLoading(true);
     try {
-      const response = await apiRequest("PUT", `/api/admin/users/${userId}/account`, { action });
+      const response = await apiRequest("PUT", `/api/admin/users/${userId}/account`, { action, ...extra });
       
       if (response.ok) {
         const actionMessages: Record<string, string> = {
-          block: "Account suspended successfully",
-          unblock: "Account activated successfully", 
+          block: "Account blocked successfully",
+          unblock: "Account unblocked successfully", 
+          suspend: "Account suspended successfully",
+          unsuspend: "Account suspension lifted",
           force_logout: "User logged out successfully",
-          reset_password: "Password reset email sent to user"
+          reset_password: "Password reset to 12345678",
+          change_password: "Password changed successfully",
         };
 
         toast({
-          title: "Account Action Completed",
+          title: "Done",
           description: actionMessages[action] || "Action completed successfully",
         });
         queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
@@ -776,104 +831,106 @@ function UserDetailsDialog({ user }: { user: User }) {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Basic Information */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <Users className="w-4 h-4" />
-              Personal Information
-            </h4>
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Full Name:</span>
-                <span className="text-sm font-medium">{user.fullName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Email:</span>
-                <span className="text-sm font-medium break-all">{user.email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Phone:</span>
-                <span className="text-sm font-medium">{user.phone}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Country:</span>
-                <span className="text-sm font-medium">{user.country}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Member Since:</span>
-                <span className="text-sm font-medium">
-                  {format(new Date(user.createdAt), "MMM dd, yyyy")}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+  const txStatusColor = (status: string) => {
+    const map: Record<string, string> = {
+      completed: "bg-green-100 text-green-700",
+      pending: "bg-yellow-100 text-yellow-700",
+      processing: "bg-blue-100 text-blue-700",
+      failed: "bg-red-100 text-red-700",
+      cancelled: "bg-gray-100 text-gray-600",
+    };
+    return map[status] || "bg-gray-100 text-gray-600";
+  };
 
-        <div className="space-y-4">
-          <div>
-            <h4 className="font-medium text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-              <Shield className="w-4 h-4" />
-              Account Status
-            </h4>
-            <div className="space-y-3 bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Email Status:</span>
-                <Badge variant={user.isEmailVerified ? "default" : "secondary"}>
-                  {user.isEmailVerified ? "Verified" : "Unverified"}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Phone Status:</span>
-                <Badge variant={user.isPhoneVerified ? "default" : "secondary"}>
-                  {user.isPhoneVerified ? "Verified" : "Unverified"}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">KYC Status:</span>
-                <Badge variant={user.kycStatus === "verified" ? "default" : user.kycStatus === "pending" ? "secondary" : "destructive"}>
-                  {user.kycStatus}
-                </Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-gray-600 dark:text-gray-400">Virtual Card:</span>
-                <Badge variant={user.hasVirtualCard ? "default" : "outline"}>
-                  {user.hasVirtualCard ? "Active" : "None"}
-                </Badge>
-              </div>
-            </div>
-          </div>
+  return (
+    <div className="space-y-4">
+      {/* User ID + Status header */}
+      <div className="flex items-start justify-between gap-3 p-3 bg-muted/50 rounded-xl">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs text-muted-foreground mb-1">User ID</p>
+          <p className="font-mono text-xs truncate">{user.id}</p>
+          {user.lastLoginAt && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Last login: {format(new Date(user.lastLoginAt), "MMM dd, yyyy HH:mm")}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {user.isSuspended && (
+            <Badge variant="destructive" className="text-xs">Suspended</Badge>
+          )}
+          {user.isBlocked && !user.isSuspended && (
+            <Badge variant="destructive" className="text-xs">Blocked</Badge>
+          )}
+          <Button size="sm" variant="outline" onClick={copyUserId} className="h-8 text-xs">
+            {copiedId ? <Check className="w-3 h-3 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
+            {copiedId ? "Copied" : "Copy ID"}
+          </Button>
         </div>
       </div>
 
-      {/* Balance Management */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <DollarSign className="w-4 h-4" />
-          Balance Management
-        </h4>
-        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-          <div className="mb-4">
-            <Label>Current Balance</Label>
-            <div className="flex flex-col">
-              <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-                ${user.balance || "0.00"}
+      <Tabs defaultValue="overview">
+        <TabsList className="w-full grid grid-cols-4 h-9">
+          <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
+          <TabsTrigger value="transactions" className="text-xs">Transactions</TabsTrigger>
+          <TabsTrigger value="card" className="text-xs">Card</TabsTrigger>
+          <TabsTrigger value="account" className="text-xs">Account</TabsTrigger>
+        </TabsList>
+
+        {/* ─── OVERVIEW TAB ─── */}
+        <TabsContent value="overview" className="space-y-4 mt-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2 bg-muted/40 p-3 rounded-xl">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Profile</p>
+              {[
+                { label: "Name", value: user.fullName },
+                { label: "Email", value: user.email },
+                { label: "Phone", value: user.phone },
+                { label: "Country", value: user.country },
+                { label: "Joined", value: format(new Date(user.createdAt), "MMM dd, yyyy") },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                  <p className="text-xs font-medium break-all">{value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-2 bg-muted/40 p-3 rounded-xl">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
+              {[
+                { label: "Email", ok: user.isEmailVerified },
+                { label: "Phone", ok: user.isPhoneVerified },
+              ].map(({ label, ok }) => (
+                <div key={label} className="flex justify-between items-center">
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <Badge variant={ok ? "default" : "secondary"} className="text-[10px]">{ok ? "Verified" : "Unverified"}</Badge>
+                </div>
+              ))}
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-muted-foreground">KYC</p>
+                <Badge variant={user.kycStatus === "verified" ? "default" : "secondary"} className="text-[10px] capitalize">{user.kycStatus}</Badge>
               </div>
-              <div className="text-xl font-semibold text-gray-500">
-                KES {(user as any).kesBalance || "0.00"}
+              <div className="flex justify-between items-center">
+                <p className="text-xs text-muted-foreground">2FA</p>
+                <Badge variant={user.twoFactorEnabled ? "default" : "outline"} className="text-[10px]">{user.twoFactorEnabled ? "On" : "Off"}</Badge>
+              </div>
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground mb-1">Balances</p>
+                <p className="text-sm font-bold text-primary">${user.balance || "0.00"} USD</p>
+                <p className="text-xs font-semibold text-muted-foreground">KSh {user.kesBalance || "0.00"} KES</p>
               </div>
             </div>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <div>
-              <Label htmlFor="update-type">Action</Label>
-              <Select value={updateType} onValueChange={(value: "add" | "subtract" | "set") => setUpdateType(value)}>
-                <SelectTrigger data-testid="select-balance-action">
-                  <SelectValue placeholder="Select action" />
+
+          {/* Balance Management */}
+          <div className="bg-muted/40 p-4 rounded-xl space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <DollarSign className="w-3 h-3" /> Balance Adjustment
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              <Select value={updateType} onValueChange={(v: "add" | "subtract" | "set") => setUpdateType(v)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="add">Add</SelectItem>
@@ -881,298 +938,322 @@ function UserDetailsDialog({ user }: { user: User }) {
                   <SelectItem value="set">Set</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="currency-type">Currency</Label>
-              <Select value={selectedCurrency} onValueChange={(value: "USD" | "KES") => setSelectedCurrency(value)}>
-                <SelectTrigger data-testid="select-currency-type">
-                  <SelectValue placeholder="Currency" />
+              <Select value={selectedCurrency} onValueChange={(v: "USD" | "KES") => setSelectedCurrency(v)}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USD">USD ($)</SelectItem>
-                  <SelectItem value="KES">KES (KSh)</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="KES">KES</SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-            
-            <div className="md:col-span-2">
-              <Label htmlFor="balance-amount">Amount</Label>
               <Input
-                id="balance-amount"
                 type="number"
                 step="0.01"
+                className="h-8 text-xs"
                 value={selectedCurrency === "USD" ? balanceUpdate : kesBalanceUpdate}
-                onChange={(e) => {
-                  if (selectedCurrency === "USD") setBalanceUpdate(e.target.value);
-                  else setKesBalanceUpdate(e.target.value);
-                }}
-                placeholder="0.00"
-                data-testid="input-balance-amount"
+                onChange={(e) => selectedCurrency === "USD" ? setBalanceUpdate(e.target.value) : setKesBalanceUpdate(e.target.value)}
+                placeholder="Amount"
               />
             </div>
-          </div>
-          
-          <div className="mb-4">
-            <Label htmlFor="transaction-details">Transaction Details</Label>
             <Input
-              id="transaction-details"
-              type="text"
+              className="h-8 text-xs"
               value={transactionDetails}
               onChange={(e) => setTransactionDetails(e.target.value)}
-              placeholder="Enter description for transaction history (e.g., Admin adjustment, Bonus payment, Refund)"
-              data-testid="input-transaction-details"
+              placeholder="Description (e.g., Admin adjustment, Bonus)"
             />
-          </div>
-          
-          <div className="flex justify-end">
             <Button
               onClick={() => onUpdateBalance(user)}
               disabled={isLoading || (!balanceUpdate && !kesBalanceUpdate)}
-              className="w-full"
-              data-testid="button-update-balance"
+              size="sm"
+              className="w-full h-8 text-xs"
             >
               {isLoading ? "Updating..." : "Update Balance"}
             </Button>
           </div>
-        </div>
-      </div>
+        </TabsContent>
 
-      {/* Virtual Card Management */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4">Virtual Card Management</h4>
-        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-5 h-5 text-blue-600" />
-              <span>Card Status: </span>
-              {user.hasVirtualCard ? (
-                <Badge variant={user.cardStatus === "active" ? "default" : user.cardStatus === "frozen" ? "destructive" : "secondary"}>
-                  {user.cardStatus || "active"}
-                </Badge>
-              ) : (
-                <Badge variant="outline">No Card</Badge>
-              )}
+        {/* ─── TRANSACTIONS TAB ─── */}
+        <TabsContent value="transactions" className="mt-4">
+          {txLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-          </div>
-          
-          <div className="flex gap-2">
-            {!user.hasVirtualCard ? (
-              <Button
-                onClick={() => onUpdateCard("issue")}
-                disabled={isLoading}
-                variant="default"
-                data-testid="button-issue-card"
-              >
-                <CreditCard className="w-4 h-4 mr-2" />
-                Issue Virtual Card
-              </Button>
-            ) : (
-              <>
-                {user.cardStatus === "inactive" ? (
-                  <div className="text-red-600 text-sm mb-2">
-                    Card is inactive. User must purchase a new card to reactivate.
+          ) : txList.length === 0 ? (
+            <div className="text-center py-10 text-muted-foreground text-sm">No transactions found</div>
+          ) : (
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+              {txList.map((tx: any) => (
+                <div key={tx.id} className="bg-muted/40 rounded-xl p-3 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      tx.type === "receive" || tx.type === "deposit" ? "bg-primary/10" : "bg-muted"
+                    }`}>
+                      {tx.type === "receive" || tx.type === "deposit"
+                        ? <ArrowDownLeft className="w-4 h-4 text-primary" />
+                        : <ArrowUpRight className="w-4 h-4 text-muted-foreground" />}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold capitalize truncate">{tx.type?.replace("_", " ")}</p>
+                      <p className="text-[10px] text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), "MMM dd, HH:mm") : ""}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${txStatusColor(tx.status)}`}>
+                        {tx.status}
+                      </span>
+                    </div>
                   </div>
-                ) : null}
-                
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-bold">
+                      {tx.currency === "KES" ? "KSh" : "$"}{parseFloat(tx.amount || "0").toFixed(2)}
+                    </span>
+                    <Select
+                      value={tx.status}
+                      onValueChange={(s) => updateTxStatus(tx.id, s)}
+                    >
+                      <SelectTrigger className="h-7 w-28 text-[10px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["pending", "processing", "completed", "failed", "cancelled"].map(s => (
+                          <SelectItem key={s} value={s} className="text-xs capitalize">{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ─── CARD TAB ─── */}
+        <TabsContent value="card" className="mt-4 space-y-4">
+          {cardLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : !card ? (
+            <div className="text-center py-6 space-y-3">
+              <CreditCard className="w-10 h-10 text-muted-foreground mx-auto" />
+              <p className="text-sm text-muted-foreground">No virtual card found for this user</p>
+              <Button size="sm" onClick={() => onUpdateCard("issue")} disabled={isLoading}>
+                <CreditCard className="w-3 h-3 mr-2" /> Issue Card
+              </Button>
+            </div>
+          ) : (
+            <>
+              {/* Card Visual */}
+              <div className="relative rounded-2xl bg-gradient-to-br from-primary to-secondary p-5 text-white shadow-lg overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full translate-y-12 -translate-x-12" />
+                <div className="relative z-10">
+                  <div className="flex justify-between items-start mb-6">
+                    <p className="text-xs text-white/70 font-medium">GreenPay Virtual</p>
+                    <Badge className={`text-[10px] ${
+                      card.status === "active" ? "bg-green-400/30 text-white border-green-400/30" :
+                      card.status === "frozen" ? "bg-blue-400/30 text-white border-blue-400/30" :
+                      "bg-red-400/30 text-white border-red-400/30"
+                    }`}>
+                      {card.status}
+                    </Badge>
+                  </div>
+                  <p className="font-mono text-sm tracking-widest mb-4">
+                    {showCardDetails ? card.cardNumber : card.cardNumber?.replace(/\d(?=\d{4})/g, "•")}
+                  </p>
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-[10px] text-white/60">Expires</p>
+                      <p className="font-mono text-sm">{card.expiryDate}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-white/60">CVV</p>
+                      <p className="font-mono text-sm">{showCardDetails ? card.cvv : "•••"}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] text-white/60">Balance</p>
+                      <p className="font-mono text-sm font-bold">${parseFloat(card.balance || "0").toFixed(2)}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-xs"
+                onClick={() => setShowCardDetails(!showCardDetails)}
+              >
+                <Eye className="w-3 h-3 mr-2" />
+                {showCardDetails ? "Hide" : "Show"} Full Details
+              </Button>
+
+              <div className="grid grid-cols-3 gap-2">
                 <Button
-                  onClick={() => onUpdateCard(user.cardStatus === "active" ? "freeze" : "activate")}
-                  disabled={isLoading || user.cardStatus === "inactive"}
-                  variant={user.cardStatus === "active" ? "destructive" : "default"}
-                  data-testid="button-toggle-card"
+                  size="sm"
+                  variant={card.status === "active" ? "outline" : "default"}
+                  className="text-xs h-9"
+                  onClick={() => onUpdateCard("activate")}
+                  disabled={isLoading || card.status === "active" || card.status === "inactive"}
                 >
-                  {user.cardStatus === "active" ? "Freeze Card" : "Activate Card"}
+                  Activate
                 </Button>
-                
-                {user.cardStatus !== "inactive" && (
-                  <Button
-                    onClick={() => onUpdateCard("inactive")}
-                    disabled={isLoading}
-                    variant="destructive"
-                    data-testid="button-set-card-inactive"
-                  >
-                    Set Inactive
-                  </Button>
-                )}
-              </>
+                <Button
+                  size="sm"
+                  variant={card.status === "frozen" ? "default" : "outline"}
+                  className="text-xs h-9"
+                  onClick={() => onUpdateCard(card.status === "frozen" ? "activate" : "freeze")}
+                  disabled={isLoading || card.status === "inactive"}
+                >
+                  {card.status === "frozen" ? "Unfreeze" : "Freeze"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="text-xs h-9"
+                  onClick={() => onUpdateCard("inactive")}
+                  disabled={isLoading || card.status === "inactive"}
+                >
+                  Block
+                </Button>
+              </div>
+              {card.status === "inactive" && (
+                <p className="text-xs text-destructive text-center">Card is blocked. User must purchase a new card.</p>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ─── ACCOUNT TAB ─── */}
+        <TabsContent value="account" className="mt-4 space-y-4">
+          {/* Suspend / Unsuspend */}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Ban className="w-3 h-3" /> Account Suspension
+            </p>
+            {user.isSuspended ? (
+              <div className="space-y-2">
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-xs">
+                  <p className="font-semibold text-destructive">Account is suspended</p>
+                  {user.suspensionReason && <p className="text-muted-foreground mt-1">Reason: {user.suspensionReason}</p>}
+                  {user.suspendedAt && <p className="text-muted-foreground">Since: {format(new Date(user.suspendedAt), "MMM dd, yyyy HH:mm")}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs border-green-500 text-green-600 hover:bg-green-50"
+                  onClick={() => handleAccountAction(user.id, "unsuspend")}
+                  disabled={isLoading}
+                >
+                  <Unlock className="w-3 h-3 mr-2" /> Lift Suspension
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="Suspension reason (optional)"
+                  value={suspendReason}
+                  onChange={(e) => setSuspendReason(e.target.value)}
+                />
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  className="w-full text-xs"
+                  onClick={() => handleAccountAction(user.id, "suspend", { reason: suspendReason })}
+                  disabled={isLoading}
+                >
+                  <Ban className="w-3 h-3 mr-2" /> Suspend Account
+                </Button>
+              </div>
             )}
           </div>
-        </div>
-      </div>
 
-      {/* Account Management */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Settings className="w-4 h-4" />
-          Account Management
-        </h4>
-        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {/* Password Management */}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Key className="w-3 h-3" /> Password Management
+            </p>
+            <div className="flex gap-2">
+              <Input
+                type="password"
+                className="h-8 text-xs flex-1"
+                placeholder="New password (min 6 chars)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 text-xs shrink-0"
+                disabled={isLoading || newPassword.length < 6}
+                onClick={() => handleAccountAction(user.id, "change_password", { newPassword })}
+              >
+                Set
+              </Button>
+            </div>
             <Button
+              size="sm"
               variant="outline"
-              size="sm"
-              onClick={() => handleAccountAction(user.id, user.isBlocked ? "unblock" : "block")}
-              disabled={isLoading}
-              data-testid="button-suspend-account"
-            >
-              {user.isBlocked ? <Unlock className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
-              {user.isBlocked ? "Unblock Account" : "Suspend Account"}
-            </Button>
-
-            <Button
-              variant="outline" 
-              size="sm"
-              onClick={() => handleAccountAction(user.id, "force_logout")}
-              disabled={isLoading}
-              data-testid="button-force-logout"
-            >
-              <LogOut className="w-4 h-4 mr-2" />
-              Force Logout
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
+              className="w-full text-xs"
               onClick={() => handleAccountAction(user.id, "reset_password")}
               disabled={isLoading}
-              data-testid="button-reset-password"
             >
-              <Key className="w-4 h-4 mr-2" />
-              Reset Password
+              <RefreshCw className="w-3 h-3 mr-2" /> Reset to Default (12345678)
             </Button>
           </div>
-        </div>
-      </div>
 
-      {/* Security Actions */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Shield className="w-4 h-4" />
-          Security Actions
-        </h4>
-        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleSecurityAction(user.id, "reset_2fa")}
-              disabled={isLoading}
-              data-testid="button-reset-2fa"
-            >
-              <Shield className="w-4 h-4 mr-2" />
-              Reset 2FA
-            </Button>
+          {/* Quick Actions */}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Settings className="w-3 h-3" /> Quick Actions
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleAccountAction(user.id, user.isBlocked ? "unblock" : "block")} disabled={isLoading}>
+                {user.isBlocked ? <Unlock className="w-3 h-3 mr-1" /> : <Lock className="w-3 h-3 mr-1" />}
+                {user.isBlocked ? "Unblock" : "Block"}
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleAccountAction(user.id, "force_logout")} disabled={isLoading}>
+                <LogOut className="w-3 h-3 mr-1" /> Force Logout
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleSecurityAction(user.id, "reset_2fa")} disabled={isLoading}>
+                <Shield className="w-3 h-3 mr-1" /> Reset 2FA
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleSecurityAction(user.id, "verify_email")} disabled={isLoading}>
+                <Mail className="w-3 h-3 mr-1" /> Verify Email
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleSecurityAction(user.id, "verify_phone")} disabled={isLoading}>
+                <Phone className="w-3 h-3 mr-1" /> Verify Phone
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleNotificationAction(user.id, user.pushNotificationsEnabled ? "disable_notifications" : "enable_notifications")} disabled={isLoading}>
+                {user.pushNotificationsEnabled ? <BellOff className="w-3 h-3 mr-1" /> : <Bell className="w-3 h-3 mr-1" />}
+                {user.pushNotificationsEnabled ? "Mute" : "Unmute"}
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-8"
+                onClick={() => handleDataAction(user.id, "export_data")} disabled={isLoading}>
+                <Download className="w-3 h-3 mr-1" /> Export Data
+              </Button>
+            </div>
+          </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleSecurityAction(user.id, "verify_email")}
-              disabled={isLoading}
-              data-testid="button-verify-email"
-            >
-              <Mail className="w-4 h-4 mr-2" />
-              Verify Email
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleSecurityAction(user.id, "verify_phone")}
-              disabled={isLoading}
-              data-testid="button-verify-phone"
-            >
-              <Phone className="w-4 h-4 mr-2" />
-              Verify Phone
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleNotificationAction(user.id, user.pushNotificationsEnabled ? "disable_notifications" : "enable_notifications")}
-              disabled={isLoading}
-              data-testid="button-toggle-notifications"
-            >
-              {user.pushNotificationsEnabled ? <BellOff className="w-4 h-4 mr-2" /> : <Bell className="w-4 h-4 mr-2" />}
-              {user.pushNotificationsEnabled ? "Disable Notifications" : "Enable Notifications"}
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDataAction(user.id, "view_activity")}
-              disabled={isLoading}
-              data-testid="button-view-activity"
-            >
-              <Activity className="w-4 h-4 mr-2" />
-              View Activity
-            </Button>
-
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDataAction(user.id, "export_data")}
-              disabled={isLoading}
-              data-testid="button-export-data"
-            >
-              <Download className="w-4 h-4 mr-2" />
-              Export Data
+          {/* Send Notification */}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Bell className="w-3 h-3" /> Send Notification
+            </p>
+            <Input id="notification-title" className="h-8 text-xs" placeholder="Title" />
+            <Input id="notification-message" className="h-8 text-xs" placeholder="Message" />
+            <Button size="sm" className="w-full text-xs h-8"
+              onClick={() => handleSendNotification(user.id)} disabled={isLoading}>
+              <Bell className="w-3 h-3 mr-2" /> Send
             </Button>
           </div>
-        </div>
-      </div>
-
-      {/* Send Custom Notification */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Bell className="w-4 h-4" />
-          Send Custom Notification
-        </h4>
-        <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="notification-title">Notification Title</Label>
-              <Input
-                id="notification-title"
-                type="text"
-                placeholder="Enter notification title"
-                data-testid="input-notification-title"
-              />
-            </div>
-            <div>
-              <Label htmlFor="notification-message">Message</Label>
-              <Input
-                id="notification-message"
-                type="text"
-                placeholder="Enter notification message"
-                data-testid="input-notification-message"
-              />
-            </div>
-            <div>
-              <Label htmlFor="notification-type">Type</Label>
-              <Select>
-                <SelectTrigger data-testid="select-notification-type">
-                  <SelectValue placeholder="Select notification type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                  <SelectItem value="security">Security Alert</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <Button
-              onClick={() => handleSendNotification(user.id)}
-              disabled={isLoading}
-              className="w-full"
-              data-testid="button-send-notification"
-            >
-              <Bell className="w-4 h-4 mr-2" />
-              Send Notification
-            </Button>
-          </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

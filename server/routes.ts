@@ -362,6 +362,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
+      // Check if account is suspended
+      if ((user as any).isSuspended) {
+        return res.status(403).json({
+          message: "Your account has been suspended. Please contact support for assistance.",
+          accountSuspended: true,
+          suspensionReason: (user as any).suspensionReason || null,
+        });
+      }
+
+      // Update last login timestamp
+      await storage.updateUser(user.id, { lastLoginAt: new Date() } as any);
+
       // Check admin-enforced security requirements
       const twoFactorRequiredSetting = await storage.getSystemSetting("security", "two_factor_required");
       const twoFactorRequired = twoFactorRequiredSetting?.value === 'true';
@@ -3663,14 +3675,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updateData = { isEmailVerified: true, isPhoneVerified: true };
           logMessage = `Admin unblocked user account: ${user.email}`;
           break;
+        case "suspend": {
+          const { reason } = req.body;
+          updateData = { isSuspended: true, suspendedAt: new Date(), suspensionReason: reason || "Account suspended by administrator" };
+          logMessage = `Admin suspended user account: ${user.email}. Reason: ${reason || "No reason provided"}`;
+          break;
+        }
+        case "unsuspend":
+          updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          logMessage = `Admin unsuspended user account: ${user.email}`;
+          break;
         case "force_logout":
-          // In a real app, you'd invalidate all user sessions
           logMessage = `Admin forced logout for user: ${user.email}`;
           break;
-        case "reset_password":
-          // In a real app, you'd generate and send a reset token
-          logMessage = `Admin initiated password reset for user: ${user.email}`;
+        case "reset_password": {
+          const defaultPassword = "12345678";
+          const hashedDefault = await bcrypt.hash(defaultPassword, 10);
+          updateData = { password: hashedDefault };
+          logMessage = `Admin reset password to default for user: ${user.email}`;
           break;
+        }
+        case "change_password": {
+          const { newPassword } = req.body;
+          if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ message: "Password must be at least 6 characters" });
+          }
+          const hashedNew = await bcrypt.hash(newPassword, 10);
+          updateData = { password: hashedNew };
+          logMessage = `Admin changed password for user: ${user.email}`;
+          break;
+        }
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
@@ -3783,6 +3817,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Admin notification action error:', error);
       res.status(500).json({ message: "Failed to update notification settings" });
+    }
+  });
+
+  // Admin: Get user-specific transactions
+  app.get("/api/admin/users/:id/transactions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const transactions = await storage.getTransactionsByUserId(id);
+      res.json({ transactions });
+    } catch (error) {
+      console.error('Admin user transactions error:', error);
+      res.status(500).json({ message: "Failed to fetch user transactions" });
+    }
+  });
+
+  // Admin: Update a specific transaction status
+  app.put("/api/admin/transactions/:txId/status", async (req, res) => {
+    try {
+      const { txId } = req.params;
+      const { status } = req.body;
+      const validStatuses = ["pending", "processing", "completed", "failed", "cancelled"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const updated = await storage.updateTransaction(txId, { status });
+      if (!updated) return res.status(404).json({ message: "Transaction not found" });
+      res.json({ transaction: updated });
+    } catch (error) {
+      console.error('Admin update transaction status error:', error);
+      res.status(500).json({ message: "Failed to update transaction status" });
+    }
+  });
+
+  // Admin: Get user card details
+  app.get("/api/admin/users/:id/card", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const card = await storage.getVirtualCardByUserId(id);
+      res.json({ card: card || null });
+    } catch (error) {
+      console.error('Admin user card error:', error);
+      res.status(500).json({ message: "Failed to fetch user card" });
     }
   });
 

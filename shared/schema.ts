@@ -32,6 +32,10 @@ export const users = pgTable("users", {
   defaultCurrency: text("default_currency").default("KES"),
   pinEnabled: boolean("pin_enabled").default(false),
   pinCode: text("pin_code"),
+  isSuspended: boolean("is_suspended").default(false),
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

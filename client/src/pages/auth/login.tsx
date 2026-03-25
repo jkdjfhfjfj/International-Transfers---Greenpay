@@ -89,9 +89,16 @@ export default function LoginPage() {
       }
     },
     onError: (error: any) => {
+      const raw = error.message || "";
+      let description = "Invalid email or password. Please try again.";
+      if (raw.includes("accountSuspended") || raw.includes("suspended")) {
+        description = "Your account has been suspended. Please contact support for assistance.";
+      } else if (raw.includes("maintenance")) {
+        description = "The platform is under maintenance. Please try again later.";
+      }
       toast({
         title: "Login failed",
-        description: error.message || "Invalid email or password. Please try again.",
+        description,
         variant: "destructive",
       });
     },

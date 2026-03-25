@@ -109,9 +109,8 @@ export default function DashboardPage() {
       icon: Send, 
       label: "Send Money", 
       path: "/send-money", 
-      color: "from-blue-500 to-blue-600",
-      iconColor: "text-blue-600",
-      bgColor: "bg-blue-50 dark:bg-blue-950/20",
+      color: "from-primary to-primary/80",
+      bgColor: "bg-primary/5 dark:bg-primary/10",
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -120,9 +119,8 @@ export default function DashboardPage() {
       icon: Download, 
       label: "Receive", 
       path: "/receive-money", 
-      color: "from-green-500 to-green-600",
-      iconColor: "text-green-600",
-      bgColor: "bg-green-50 dark:bg-green-950/20",
+      color: "from-secondary to-secondary/80",
+      bgColor: "bg-secondary/5 dark:bg-secondary/10",
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -131,9 +129,8 @@ export default function DashboardPage() {
       icon: Smartphone, 
       label: "Buy Airtime", 
       path: "/airtime", 
-      color: "from-purple-500 to-purple-600",
-      iconColor: "text-purple-600",
-      bgColor: "bg-purple-50 dark:bg-purple-950/20",
+      color: "from-primary/80 to-secondary",
+      bgColor: "bg-primary/5 dark:bg-primary/10",
       disabled: false,
       requiresCard: false
     },
@@ -142,9 +139,8 @@ export default function DashboardPage() {
       icon: Receipt, 
       label: "Pay Bills", 
       path: "/bills", 
-      color: "from-red-500 to-red-600",
-      iconColor: "text-red-600",
-      bgColor: "bg-red-50 dark:bg-red-950/20",
+      color: "from-secondary/90 to-primary/70",
+      bgColor: "bg-secondary/5 dark:bg-secondary/10",
       disabled: false,
       requiresCard: false
     },
@@ -153,9 +149,8 @@ export default function DashboardPage() {
       icon: TrendingUp, 
       label: "Add Money", 
       path: "/deposit", 
-      color: "from-orange-500 to-orange-600",
-      iconColor: "text-orange-600",
-      bgColor: "bg-orange-50 dark:bg-orange-950/20",
+      color: "from-primary to-secondary",
+      bgColor: "bg-primary/5 dark:bg-primary/10",
       disabled: false,
       requiresCard: false
     },
@@ -522,19 +517,19 @@ export default function DashboardPage() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl flex items-center justify-between"
+            className="bg-primary/5 dark:bg-primary/10 border border-primary/20 p-4 rounded-xl flex items-center justify-between"
           >
             <div className="flex items-center">
-              <CreditCard className="w-5 h-5 text-blue-600 mr-3" />
+              <CreditCard className="w-5 h-5 text-primary mr-3" />
               <div>
-                <p className="font-medium text-blue-900 dark:text-blue-200 text-sm">Get Virtual Card</p>
-                <p className="text-xs text-blue-700 dark:text-blue-300">Start making transactions</p>
+                <p className="font-medium text-foreground text-sm">Get Virtual Card</p>
+                <p className="text-xs text-muted-foreground">Start making transactions</p>
               </div>
             </div>
             <Button
               onClick={() => setLocation("/virtual-card")}
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-xs"
+              className="bg-primary hover:bg-primary/90 text-white text-xs"
               data-testid="button-activate-card"
             >
               Get Card
@@ -548,14 +543,14 @@ export default function DashboardPage() {
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.15 }}
-            className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/20 dark:to-pink-950/20 border border-purple-200 dark:border-purple-800 p-4 rounded-xl"
+            className="bg-gradient-to-r from-primary/5 to-secondary/5 dark:from-primary/10 dark:to-secondary/10 border border-primary/20 p-4 rounded-xl"
           >
             <div className="flex items-center justify-between">
               <div className="flex items-center">
-                <Sparkles className="w-6 h-6 text-purple-600 mr-3 flex-shrink-0 animate-pulse" />
+                <Sparkles className="w-6 h-6 text-primary mr-3 flex-shrink-0 animate-pulse" />
                 <div className="flex-1">
-                  <p className="font-bold text-purple-900 dark:text-purple-200 text-sm mb-1">🎁 Free Airtime Bonus!</p>
-                  <p className="text-xs text-purple-700 dark:text-purple-300">
+                  <p className="font-bold text-foreground text-sm mb-1">Free Airtime Bonus!</p>
+                  <p className="text-xs text-muted-foreground">
                     Claim your one-time KES {airtimeBonusAmount} airtime bonus now!
                   </p>
                 </div>
@@ -573,7 +568,6 @@ export default function DashboardPage() {
                         description: data.message,
                       });
                       await refreshUser();
-                      // Redirect to airtime page to use the bonus
                       setLocation("/airtime");
                     } else {
                       toast({
@@ -591,7 +585,7 @@ export default function DashboardPage() {
                   }
                 }}
                 size="sm"
-                className="bg-purple-600 hover:bg-purple-700 text-white text-xs"
+                className="bg-primary hover:bg-primary/90 text-white text-xs"
               >
                 Claim Now
               </Button>
@@ -650,12 +644,12 @@ export default function DashboardPage() {
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
               data-testid="button-virtual-card"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">credit_card</span>
               </div>
               <div className="text-left">
                 <p className="font-semibold text-sm mb-1">Virtual Card</p>
-                <p className={`text-xs ${cardStatus === 'active' ? 'text-green-600' : 'text-amber-600'}`}>
+                <p className={`text-xs font-medium ${cardStatus === 'active' ? 'text-primary' : 'text-muted-foreground'}`}>
                   {cardStatus === 'active' ? '● Active' : '● Inactive'}
                 </p>
               </div>
@@ -667,7 +661,7 @@ export default function DashboardPage() {
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
               data-testid="button-transactions"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-pink-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary to-primary flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">receipt_long</span>
               </div>
               <div className="text-left">
@@ -681,7 +675,7 @@ export default function DashboardPage() {
               onClick={() => setLocation("/exchange")}
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-teal-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/90 to-primary flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">currency_exchange</span>
               </div>
               <div className="text-left">
@@ -696,7 +690,7 @@ export default function DashboardPage() {
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
               data-testid="button-support"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-rose-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary/90 to-secondary flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">support_agent</span>
               </div>
               <div className="text-left">
@@ -710,7 +704,7 @@ export default function DashboardPage() {
               onClick={() => setLocation("/status")}
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">health_and_safety</span>
               </div>
               <div className="text-left">
@@ -725,7 +719,7 @@ export default function DashboardPage() {
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
               data-testid="button-settings"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary to-secondary/70 flex items-center justify-center mb-3 shadow-md">
                 <span className="material-icons text-white text-2xl leading-none">settings</span>
               </div>
               <div className="text-left">
@@ -739,7 +733,7 @@ export default function DashboardPage() {
               onClick={() => setLocation("/loans")}
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary/80 to-secondary/80 flex items-center justify-center mb-3 shadow-md">
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
               <div className="text-left">
@@ -753,7 +747,7 @@ export default function DashboardPage() {
               onClick={() => setLocation("/api-service")}
               className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
             >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center mb-3 shadow-md">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-secondary to-primary/80 flex items-center justify-center mb-3 shadow-md">
                 <Zap className="w-6 h-6 text-white" />
               </div>
               <div className="text-left">
