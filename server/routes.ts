@@ -393,8 +393,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const whatsappTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       
-      // SMS is configured if we have sms_api_key, sms_app_id, and sms_sender_id (Umeskia API)
-      const smsConfigured = !!(apiKeySetting?.value && appIdSetting?.value && senderIdSetting?.value);
+      // SMS is configured if we have sms_api_key, sms_app_id, and sms_sender_id (from db or env)
+      const smsConfigured = !!(
+        (apiKeySetting?.value || process.env.SMS_API_KEY) && 
+        (appIdSetting?.value || process.env.SMS_APP_ID) && 
+        (senderIdSetting?.value || process.env.SMS_SENDER_ID)
+      );
       
       // WhatsApp is configured if we have access_token and phone_number_id (from db or env)
       const whatsappConfigured = !!(
