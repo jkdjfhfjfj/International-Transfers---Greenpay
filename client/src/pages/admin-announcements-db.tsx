@@ -15,7 +15,7 @@ import { Save, Megaphone, Eye, EyeOff, Calendar, Trash2, Plus } from "lucide-rea
 interface Announcement {
   id: string;
   title: string;
-  message: string;
+  content: string;
   isActive: boolean;
   priority: number;
   createdAt: string;
@@ -27,7 +27,7 @@ export default function AdminAnnouncementsDBPage() {
   const qc = useQueryClient();
 
   const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
+  const [content, setContent] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [priority, setPriority] = useState("1");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -44,7 +44,7 @@ export default function AdminAnnouncementsDBPage() {
     mutationFn: async () => {
       const r = await apiRequest("POST", "/api/admin/announcements", {
         title,
-        message,
+        content,
         isActive,
         priority: parseInt(priority),
       });
@@ -53,7 +53,7 @@ export default function AdminAnnouncementsDBPage() {
     onSuccess: () => {
       toast({ title: "Created", description: "Announcement created successfully." });
       setTitle("");
-      setMessage("");
+      setContent("");
       setIsActive(true);
       setPriority("1");
       qc.invalidateQueries({ queryKey: ["/api/admin/announcements"] });
@@ -65,7 +65,7 @@ export default function AdminAnnouncementsDBPage() {
     mutationFn: async (id: string) => {
       const r = await apiRequest("PUT", `/api/admin/announcements/${id}`, {
         title,
-        message,
+        content,
         isActive,
         priority: parseInt(priority),
       });
@@ -74,7 +74,7 @@ export default function AdminAnnouncementsDBPage() {
     onSuccess: () => {
       toast({ title: "Updated", description: "Announcement updated successfully." });
       setTitle("");
-      setMessage("");
+      setContent("");
       setIsActive(true);
       setPriority("1");
       setEditingId(null);
@@ -97,7 +97,7 @@ export default function AdminAnnouncementsDBPage() {
 
   const handleEdit = (announcement: Announcement) => {
     setTitle(announcement.title);
-    setMessage(announcement.message);
+    setContent(announcement.content);
     setIsActive(announcement.isActive);
     setPriority(String(announcement.priority));
     setEditingId(announcement.id);
@@ -118,7 +118,7 @@ export default function AdminAnnouncementsDBPage() {
 
   const handleCancel = () => {
     setTitle("");
-    setMessage("");
+    setContent("");
     setIsActive(true);
     setPriority("1");
     setEditingId(null);
@@ -164,8 +164,8 @@ export default function AdminAnnouncementsDBPage() {
             <div className="space-y-2">
               <Label className="text-sm">Message</Label>
               <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
                 placeholder="Enter announcement message..."
                 className="rounded-xl min-h-24 resize-none"
               />
@@ -226,7 +226,7 @@ export default function AdminAnnouncementsDBPage() {
                           )}
                           <Badge variant="outline" className="text-xs">Priority {ann.priority}</Badge>
                         </div>
-                        <p className="text-sm text-gray-600 mb-2">{ann.message}</p>
+                        <p className="text-sm text-gray-600 mb-2">{ann.content}</p>
                         <p className="text-xs text-gray-400">
                           <Calendar className="w-3 h-3 inline mr-1" />
                           {new Date(ann.createdAt).toLocaleString()}
