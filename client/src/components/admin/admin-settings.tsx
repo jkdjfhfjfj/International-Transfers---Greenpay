@@ -96,11 +96,11 @@ export default function AdminSettings({ tab }: { tab?: string }) {
       return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       toast({
         title: "Settings Updated",
         description: "System settings have been saved successfully",
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/settings"] });
     },
     onError: () => {
       toast({

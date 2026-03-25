@@ -103,11 +103,10 @@ export default function MessagingSettings() {
       return r.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/message-toggles"] });
       toast({ title: "Toggles Updated", description: "Message types have been updated successfully." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/message-toggles"] });
     },
     onError: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/message-toggles"] });
       toast({ title: "Update Failed", description: "Failed to update message toggles. Please try again.", variant: "destructive" });
     },
   });
@@ -153,8 +152,8 @@ export default function MessagingSettings() {
       return r.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/messaging-settings"] });
       toast({ title: "Settings Updated", description: "Messaging configuration has been saved successfully." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/messaging-settings"] });
     },
     onError: () => toast({ title: "Update Failed", description: "Failed to update messaging settings. Please try again.", variant: "destructive" }),
   });

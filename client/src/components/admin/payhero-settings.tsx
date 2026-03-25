@@ -80,8 +80,8 @@ export default function PayHeroSettings() {
       return r.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
       toast({ title: "Settings Updated", description: "PayHero configuration has been saved successfully." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
     onError: () => toast({ title: "Update Failed", description: "Failed to update PayHero settings.", variant: "destructive" }),
   });
@@ -92,8 +92,8 @@ export default function PayHeroSettings() {
       return r.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/admin/manual-payment-settings"] });
       toast({ title: "Settings Updated", description: "Manual payment configuration has been saved. Users will see these new payment details immediately." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/manual-payment-settings"] });
     },
     onError: () => toast({ title: "Update Failed", description: "Failed to update manual payment settings.", variant: "destructive" }),
   });
