@@ -5,6 +5,7 @@ import { Pool } from "pg";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { systemLogger } from "./services/system-logger";
+import { ensureSchema } from "./db";
 
 // Ensure NODE_ENV is set for deployment
 if (!process.env.NODE_ENV) {
@@ -185,6 +186,9 @@ app.use((req, res, next) => {
     // Initialize system logger to capture console output
     systemLogger.init();
     console.log('✅ System logger initialized - capturing console output to database');
+
+    // Run schema migrations to ensure all columns exist
+    await ensureSchema();
     
     const server = await registerRoutes(app);
 

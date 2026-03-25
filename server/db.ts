@@ -17,3 +17,22 @@ if (!process.env.DATABASE_URL && !fallbackDatabaseUrl) {
 const connectionString = (process.env.DATABASE_URL || fallbackDatabaseUrl).replace(/^"(.*)"$/, '$1').trim();
 export const pool = new Pool({ connectionString });
 export const db = drizzle({ client: pool, schema });
+
+// Auto-migration: ensure all required columns exist in the database
+export async function ensureSchema() {
+  try {
+    await pool.query(`
+      ALTER TABLE users 
+      ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS suspension_reason TEXT,
+      ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP
+    `);
+    await pool.query(`
+      ALTER TABLE announcements 
+      ADD COLUMN IF NOT EXISTS image_url TEXT
+    `);
+    console.log('✅ Database schema ensured (auto-migration complete)');
+  } catch (err: any) {
+    console.warn('⚠️ Auto-migration warning:', err.message);
+  }
+}

@@ -213,16 +213,55 @@ export default function SendMoneyPage() {
   // Check if user has virtual card requirement
   if (!user?.hasVirtualCard) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-6">
-        <div className="text-center max-w-sm">
-          <div className="w-16 h-16 bg-destructive/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="material-icons text-destructive">block</span>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="w-full max-w-sm">
+          {/* Icon */}
+          <div className="flex justify-center mb-6">
+            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
+              <span className="material-icons text-white text-5xl">credit_card</span>
+            </div>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Virtual Card Required</h2>
-          <p className="text-muted-foreground mb-4">You need to purchase a virtual card before you can send money.</p>
-          <Button onClick={() => setLocation("/virtual-card")}>
+
+          {/* Info card */}
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm text-center space-y-3 mb-4">
+            <h2 className="text-xl font-bold">Virtual Card Required</h2>
+            <p className="text-muted-foreground text-sm leading-relaxed">
+              To send money to other GreenPay users, you first need an active virtual card.
+              Get yours in seconds and unlock full access.
+            </p>
+
+            {/* Benefits */}
+            <div className="space-y-2 text-left mt-2">
+              {[
+                { icon: "send", label: "Send money instantly" },
+                { icon: "payments", label: "Pay bills & buy airtime" },
+                { icon: "currency_exchange", label: "Exchange currencies" },
+              ].map((item) => (
+                <div key={item.icon} className="flex items-center gap-3 text-sm">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                    <span className="material-icons text-primary text-sm">{item.icon}</span>
+                  </div>
+                  <span className="text-foreground">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* CTA */}
+          <Button
+            className="w-full h-12 text-base font-semibold rounded-xl shadow-md"
+            onClick={() => setLocation("/virtual-card")}
+          >
+            <span className="material-icons mr-2 text-xl">add_card</span>
             Get Virtual Card
           </Button>
+
+          <button
+            onClick={() => setLocation("/")}
+            className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+          >
+            Go back to dashboard
+          </button>
         </div>
       </div>
     );
