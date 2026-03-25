@@ -481,71 +481,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // OTP is required - check if at least one messaging channel is configured
-      if (!messagesConfigured) {
-        console.error('OTP is required but no messaging channels configured (SMS or WhatsApp)');
-        return res.status(500).json({ 
-          message: "Verification service not configured. Please contact support." 
-        });
-      }
+      // OTP is required - attempt to send if messaging is configured
+      if (messagesConfigured) {
+        // OTP is required and messaging is configured - send OTP
+        const { messagingService } = await import('./services/messaging');
+        const { mailtrapService } = await import('./services/mailtrap');
+        const otpCode = messagingService.generateOTP();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-      // OTP is required and messaging is configured - send OTP
-      const { messagingService } = await import('./services/messaging');
-      const { mailtrapService } = await import('./services/mailtrap');
-      const otpCode = messagingService.generateOTP();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+        // Store OTP in user record
+        await storage.updateUserOtp(user.id, otpCode, otpExpiry);
 
-      // Store OTP in user record
-      await storage.updateUserOtp(user.id, otpCode, otpExpiry);
+        // Send OTP via SMS, WhatsApp, and Email concurrently
+        const [smsWhatsappResult, emailResult] = await Promise.all([
+          messagingService.sendOTP(user.phone, otpCode),
+          user.email ? mailtrapService.sendOTP(user.email, user.firstName || 'User', user.lastName || '', otpCode) : Promise.resolve(false)
+        ]);
+        
+        const result = { ...smsWhatsappResult, email: emailResult };
 
-      // Send OTP via SMS, WhatsApp, and Email concurrently
-      const [smsWhatsappResult, emailResult] = await Promise.all([
-        messagingService.sendOTP(user.phone, otpCode),
-        user.email ? mailtrapService.sendOTP(user.email, user.firstName || 'User', user.lastName || '', otpCode) : Promise.resolve(false)
-      ]);
-      
-      const result = { ...smsWhatsappResult, email: emailResult };
-
-      // When messaging is configured, OTP delivery failure is an error (don't bypass)
-      if (!result.sms && !result.whatsapp && !result.email) {
-        console.error('OTP delivery failed - messaging configured but delivery failed');
-        return res.status(500).json({ 
-          message: "Failed to send verification code. Please try again or contact support." 
-        });
-      }
-
-      // OTP was sent successfully - require verification
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Session regeneration error:', err);
-          return res.status(500).json({ message: "Session error" });
+        // When messaging is configured, OTP delivery failure is an error (don't bypass)
+        if (!result.sms && !result.whatsapp && !result.email) {
+          console.error('OTP delivery failed - messaging configured but delivery failed');
+          return res.status(500).json({ 
+            message: "Failed to send verification code. Please try again or contact support." 
+          });
         }
 
-        // Store pending login data (user not authenticated yet)
-        (req.session as any).pendingLoginUserId = user.id;
-        (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-        (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
-
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error('Session save error:', saveErr);
-            return res.status(500).json({ message: "Session save error" });
+        // OTP was sent successfully - require verification
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error('Session regeneration error:', err);
+            return res.status(500).json({ message: "Session error" });
           }
 
-          const sentMethods = [];
-          if (result.sms) sentMethods.push('SMS');
-          if (result.whatsapp) sentMethods.push('WhatsApp');
-          if (result.email) sentMethods.push('Email');
+          // Store pending login data (user not authenticated yet)
+          (req.session as any).pendingLoginUserId = user.id;
+          (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+          (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
 
-          res.json({ 
-            requiresOtp: true,
-            userId: user.id,
-            phone: user.phone,
-            sentVia: sentMethods.length > 0 ? sentMethods.join(' and ') : 'SMS, WhatsApp or Email',
-            message: `Verification code sent to ${sentMethods.length > 0 ? sentMethods.join(', ') : 'SMS, WhatsApp or Email'}`
+          req.session.save((saveErr) => {
+            if (saveErr) {
+              console.error('Session save error:', saveErr);
+              return res.status(500).json({ message: "Session save error" });
+            }
+
+            const sentMethods = [];
+            if (result.sms) sentMethods.push('SMS');
+            if (result.whatsapp) sentMethods.push('WhatsApp');
+            if (result.email) sentMethods.push('Email');
+
+            res.json({ 
+              requiresOtp: true,
+              userId: user.id,
+              phone: user.phone,
+              sentVia: sentMethods.length > 0 ? sentMethods.join(' and ') : 'SMS, WhatsApp or Email',
+              message: `Verification code sent to ${sentMethods.length > 0 ? sentMethods.join(', ') : 'SMS, WhatsApp or Email'}`
+            });
           });
         });
-      });
+      } else {
+        // Messaging not configured - allow login without OTP
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error('Session regeneration error:', err);
+            return res.status(500).json({ message: "Session error" });
+          }
+
+          const userResponse = {
+            id: user.id,
+            firstName: user.firstName || '',
+            lastName: user.lastName || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            avatar: user.avatar || '',
+            kycStatus: user.kycStatus || 'pending',
+            balance: user.balance || 0
+          };
+
+          (req.session as any).userId = user.id;
+          (req.session as any).userRole = user.role || 'user';
+
+          req.session.save((err) => {
+            if (err) {
+              console.error('Session save error:', err);
+              return res.status(500).json({ message: "Session error" });
+            }
+            res.json({ user: userResponse });
+          });
+        });
+      }
     } catch (error) {
       console.error('Login error:', error);
       res.status(400).json({ message: "Invalid login data" });

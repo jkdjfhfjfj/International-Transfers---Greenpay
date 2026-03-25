@@ -157,14 +157,14 @@ export default function AdminSystemSettingsPage() {
   const securityMutation = useMutation({
     mutationFn: async () => {
       const requests = [
-        apiRequest("PUT", "/api/admin/settings/two_factor_required", { value: twoFactorRequired, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/kyc_auto_approval", { value: kycAutoApproval, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/pin_required", { value: pinRequired, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/enable_otp_feature", { value: enableOtp, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_email_enabled", { value: otpEmail, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_sms_enabled", { value: otpSms, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_whatsapp_enabled", { value: otpWhatsapp, category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/max_daily_limit", { value: maxDailyLimit, category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/two_factor_required", { value: String(twoFactorRequired), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/kyc_auto_approval", { value: String(kycAutoApproval), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/pin_required", { value: String(pinRequired), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/enable_otp_feature", { value: String(enableOtp), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_email_enabled", { value: String(otpEmail), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_sms_enabled", { value: String(otpSms), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_whatsapp_enabled", { value: String(otpWhatsapp), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/max_daily_limit", { value: String(maxDailyLimit), category: "security" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -179,10 +179,10 @@ export default function AdminSystemSettingsPage() {
   const notificationsMutation = useMutation({
     mutationFn: async () => {
       const requests = [
-        apiRequest("PUT", "/api/admin/settings/email_notifications", { value: emailNotif, category: "notifications" }),
-        apiRequest("PUT", "/api/admin/settings/sms_notifications", { value: smsNotif, category: "notifications" }),
-        apiRequest("PUT", "/api/admin/settings/push_notifications", { value: pushNotif, category: "notifications" }),
-        apiRequest("PUT", "/api/admin/settings/admin_alerts", { value: adminAlerts, category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/email_notifications", { value: String(emailNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/sms_notifications", { value: String(smsNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/push_notifications", { value: String(pushNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/admin_alerts", { value: String(adminAlerts), category: "notifications" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -197,13 +197,13 @@ export default function AdminSystemSettingsPage() {
   const generalMutation = useMutation({
     mutationFn: async () => {
       const requests = [
-        apiRequest("PUT", "/api/admin/settings/platform_name", { value: platformName, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/support_email", { value: supportEmail, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/default_currency", { value: currency, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/session_timeout", { value: sessionTimeout, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/terms_url", { value: termsUrl, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/maintenance_message", { value: maintenanceMsg, category: "general" }),
-        apiRequest("PUT", "/api/admin/settings/maintenance_mode", { value: maintenance, category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/platform_name", { value: String(platformName), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/support_email", { value: String(supportEmail), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/default_currency", { value: String(currency), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/session_timeout", { value: String(sessionTimeout), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/terms_url", { value: String(termsUrl), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_message", { value: String(maintenanceMsg), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_mode", { value: String(maintenance), category: "general" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -218,10 +218,10 @@ export default function AdminSystemSettingsPage() {
   const whatsappMutation = useMutation({
     mutationFn: async () => {
       const requests = [
-        apiRequest("PUT", "/api/admin/settings/whatsapp_phone_number_id", { value: waPhoneId, category: "whatsapp" }),
-        apiRequest("PUT", "/api/admin/settings/whatsapp_business_account_id", { value: waBusinessId, category: "whatsapp" }),
-        apiRequest("PUT", "/api/admin/settings/whatsapp_access_token", { value: waToken, category: "whatsapp" }),
-        apiRequest("PUT", "/api/admin/settings/whatsapp_is_active", { value: waActive, category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_phone_number_id", { value: String(waPhoneId), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_business_account_id", { value: String(waBusinessId), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_access_token", { value: String(waToken), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_is_active", { value: String(waActive), category: "whatsapp" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };

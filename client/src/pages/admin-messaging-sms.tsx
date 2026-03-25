@@ -229,16 +229,35 @@ export default function AdminMessagingSMSPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-sm">API Key</Label>
-                  <Input value={apiKey} onChange={(e) => setApiKey(e.target.value)} type="password" placeholder="Enter API key" className="rounded-xl" />
+                  <Label className="text-sm font-medium">API Key</Label>
+                  <Input 
+                    value={apiKey} 
+                    onChange={(e) => setApiKey(e.target.value)} 
+                    type="password" 
+                    placeholder="Enter your Umeska API key" 
+                    className="rounded-xl" 
+                  />
+                  <p className="text-xs text-gray-500">Your Umeska SMS gateway API key</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Account Email / App ID</Label>
-                  <Input value={accountEmail} onChange={(e) => setAccountEmail(e.target.value)} placeholder="your-email@umeska.com" className="rounded-xl" />
+                  <Label className="text-sm font-medium">App ID</Label>
+                  <Input 
+                    value={accountEmail} 
+                    onChange={(e) => setAccountEmail(e.target.value)} 
+                    placeholder="Enter your app ID or email" 
+                    className="rounded-xl" 
+                  />
+                  <p className="text-xs text-gray-500">Your Umeska application ID or registered email</p>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Sender ID</Label>
-                  <Input value={senderId} onChange={(e) => setSenderId(e.target.value)} placeholder="e.g., UMS_TX" className="rounded-xl" />
+                  <Label className="text-sm font-medium">Sender ID</Label>
+                  <Input 
+                    value={senderId} 
+                    onChange={(e) => setSenderId(e.target.value)} 
+                    placeholder="e.g., UMS_TX" 
+                    className="rounded-xl" 
+                  />
+                  <p className="text-xs text-gray-500">The sender ID displayed on user SMS messages</p>
                 </div>
                 <Button onClick={() => settingsMutation.mutate()} disabled={settingsMutation.isPending} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">
                   <Save className="w-4 h-4 mr-2" />
