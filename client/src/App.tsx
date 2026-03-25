@@ -59,7 +59,8 @@ import AdminActivityPage from "@/pages/admin-activity";
 import AdminDatabasePage from "@/pages/admin-database";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
 import AdminSystemSettingsPage from "@/pages/admin-system-settings";
-import AdminPaymentMethodsPage from "@/pages/admin-manual-payment-settings";
+import AdminManualPaymentSettingsPage from "@/pages/admin-manual-payment-settings";
+import AdminPayHeroSettingsPage from "@/pages/admin-payhero-fresh";
 import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
 import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
 import AdminProfilePage from "@/pages/admin-profile";
@@ -173,7 +174,8 @@ function Router() {
       <Route path="/admin/database" component={AdminDatabasePage} />
       <Route path="/admin/analytics" component={AdminAnalyticsPage} />
       <Route path="/admin/settings" component={AdminSystemSettingsPage} />
-      <Route path="/admin/payment-methods" component={AdminPaymentMethodsPage} />
+      <Route path="/admin/manual-payment" component={AdminManualPaymentSettingsPage} />
+      <Route path="/admin/payhero-settings" component={AdminPayHeroSettingsPage} />
       <Route path="/admin/messaging" component={AdminMessagingSMSPage} />
       <Route path="/admin/announcements" component={AdminAnnouncementsDBPage} />
       <Route path="/admin/profile" component={AdminProfilePage} />

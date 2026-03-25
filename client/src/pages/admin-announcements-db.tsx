@@ -104,7 +104,7 @@ export default function AdminAnnouncementsDBPage() {
   };
 
   const handleSave = () => {
-    if (!title || !message) {
+    if (!title || !content) {
       toast({ title: "Error", description: "Title and message are required.", variant: "destructive" });
       return;
     }

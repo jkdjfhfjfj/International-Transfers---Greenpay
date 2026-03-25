@@ -241,23 +241,31 @@ export class MessagingService {
    * Send OTP verification code via SMS, WhatsApp (template), and Email (CONCURRENT)
    */
   async sendOTP(phone: string, otpCode: string, email?: string, userName?: string): Promise<{ sms: boolean; whatsapp: boolean; email: boolean }> {
+    console.log(`[OTP] Starting OTP send for phone: ${phone}`);
+    
     const enableSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
+    console.log(`[OTP] enable_otp_messages setting:`, enableSetting?.value || 'not set (will allow)');
+    
     if (enableSetting?.value === 'false') {
+      console.log('[OTP] OTP messages disabled, skipping send');
       return { sms: false, whatsapp: false, email: false };
     }
 
     const { mailtrapService } = await import('./mailtrap');
     const credentials = await this.getCredentials();
+    console.log(`[OTP] SMS credentials available: ${!!credentials}`);
+    
     const firstName = userName?.split(' ')[0] || 'User';
     const lastName = userName?.split(' ').slice(1).join(' ') || '';
 
     // Send all channels concurrently
     const [smsResult, whatsappResult, emailResult] = await Promise.all([
-      credentials ? this.sendSMS(phone, `Your verification code is ${otpCode}. Valid for 10 minutes.`, credentials) : (console.log('SMS not sent: credentials missing'), Promise.resolve(false)),
-      whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : (console.log('WhatsApp not sent: not configured'), Promise.resolve(false)),
-      email ? mailtrapService.sendOTP(email, firstName, lastName, otpCode) : (console.log('Email not sent: missing or service down'), Promise.resolve(false))
+      credentials ? this.sendSMS(phone, `Your verification code is ${otpCode}. Valid for 10 minutes.`, credentials) : (console.log('[OTP] SMS skipped: credentials missing'), Promise.resolve(false)),
+      whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : (console.log('[OTP] WhatsApp skipped: not configured'), Promise.resolve(false)),
+      email ? mailtrapService.sendOTP(email, firstName, lastName, otpCode) : (console.log('[OTP] Email skipped: no email or service down'), Promise.resolve(false))
     ]);
     
+    console.log(`[OTP] Send results - SMS: ${smsResult}, WhatsApp: ${whatsappResult}, Email: ${emailResult}`);
     return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
   }
 

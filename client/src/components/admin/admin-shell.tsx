@@ -70,7 +70,8 @@ const navSections = [
     title: "Settings",
     items: [
       { href: "/admin/settings", label: "System Settings", icon: Settings },
-      { href: "/admin/payment-methods", label: "Payment Methods", icon: Smartphone },
+      { href: "/admin/manual-payment", label: "Manual Payment", icon: Smartphone },
+      { href: "/admin/payhero-settings", label: "PayHero Settings", icon: Smartphone },
       { href: "/admin/messaging", label: "Messaging & SMS", icon: MessageCircle },
       { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
     ],
