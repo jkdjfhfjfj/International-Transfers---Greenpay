@@ -68,7 +68,12 @@ export default function MessagingSettings() {
   // Load users for messaging
   const { data: usersData } = useQuery({
     queryKey: ["/api/admin/users"],
-    select: (data: any) => data.users || []
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/users");
+      return r.json();
+    },
+    select: (data: any) => data.users || [],
+    staleTime: Infinity,
   });
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery<MessagingSettings>({
