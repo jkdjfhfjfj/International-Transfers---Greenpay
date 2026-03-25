@@ -200,6 +200,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
   }, [isVisible, currentIndex, announcements.length, mediaOpen]);
 
   const handleNext = () => {
+    setMediaOpen(false);
     if (currentIndex < announcements.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setProgress(0);
@@ -209,6 +210,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
   };
 
   const handlePrev = () => {
+    setMediaOpen(false);
     if (currentIndex > 0) {
       setCurrentIndex((prev) => prev - 1);
       setProgress(0);
@@ -252,11 +254,11 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed top-4 left-4 right-4 z-[100] max-w-md mx-auto"
           >
-            <div className="bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl border border-primary/10 overflow-hidden">
+            <div className="relative bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl border border-primary/10 overflow-hidden">
               {hasMedia && (
                 <div
-                  className="relative w-full cursor-pointer group overflow-hidden"
-                  style={{ height: mediaIsVideo ? 180 : 140 }}
+                  className="relative w-full cursor-pointer overflow-hidden"
+                  style={{ height: mediaIsVideo ? 180 : 150 }}
                   onClick={() => setMediaOpen(true)}
                 >
                   {mediaIsVideo ? (
@@ -273,30 +275,30 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
                       className="w-full h-full object-cover"
                     />
                   )}
-                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                    <div className="w-10 h-10 rounded-full bg-white/30 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
+                    <div className="w-12 h-12 rounded-full bg-white/25 backdrop-blur-sm border border-white/40 flex items-center justify-center shadow-lg">
                       {mediaIsVideo ? (
-                        <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                        <Play className="w-6 h-6 text-white fill-white ml-0.5" />
                       ) : (
-                        <Maximize2 className="w-4 h-4 text-white" />
+                        <Maximize2 className="w-5 h-5 text-white" />
                       )}
                     </div>
-                    <div className="absolute top-2 left-2">
-                      <span className="flex items-center gap-1 text-[10px] text-white bg-black/40 backdrop-blur-sm rounded-full px-2 py-0.5">
-                        {mediaIsVideo ? (
-                          <><VideoIcon className="w-3 h-3" /> Video</>
-                        ) : (
-                          <><ImageIcon className="w-3 h-3" /> Image</>
-                        )}
-                      </span>
-                    </div>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 py-2">
+                    <span className="flex items-center gap-1 text-[10px] text-white/90 font-medium">
+                      {mediaIsVideo ? (
+                        <><VideoIcon className="w-3 h-3" /> Tap to play video</>
+                      ) : (
+                        <><ImageIcon className="w-3 h-3" /> Tap to view full image</>
+                      )}
+                    </span>
                   </div>
                 </div>
               )}
 
-              <div className="p-4 flex gap-3">
+              <div className="relative p-4 flex gap-3">
                 <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${
+                  className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
                     current.type === "offer"
                       ? "bg-orange-100 text-orange-600"
                       : "bg-primary/10 text-primary"
@@ -305,7 +307,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
                   <Icon className="w-4 h-4" />
                 </div>
 
-                <div className="flex-1 min-w-0 pr-6">
+                <div className="flex-1 min-w-0 pr-8">
                   <h4 className="font-bold text-sm text-foreground leading-tight">{current.title}</h4>
                   <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{current.content}</p>
 
@@ -338,7 +340,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
 
                 <button
                   onClick={handleClose}
-                  className="absolute top-2 right-2 p-1 rounded-full hover:bg-muted transition-colors text-muted-foreground"
+                  className="absolute top-3 right-3 p-1 rounded-full hover:bg-muted transition-colors text-muted-foreground"
                 >
                   <X className="w-4 h-4" />
                 </button>

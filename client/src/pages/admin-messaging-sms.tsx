@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, MessageCircle, Send, CheckCircle, AlertCircle, Phone } from "lucide-react";
+import { Save, MessageCircle, Send, CheckCircle, AlertCircle, Phone, Search } from "lucide-react";
 
 interface MessagingSettings {
   apiKey: string;
@@ -62,6 +62,7 @@ export default function AdminMessagingSMSPage() {
   const [testMessage, setTestMessage] = useState("");
   const [testSending, setTestSending] = useState(false);
   const [templateCreating, setTemplateCreating] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery<MessagingSettings>({
     queryKey: ["/api/admin/messaging-settings"],
@@ -80,9 +81,9 @@ export default function AdminMessagingSMSPage() {
   });
 
   const { data: usersData } = useQuery<{ users: User[] }>({
-    queryKey: ["/api/admin/users"],
+    queryKey: ["/api/admin/users/all"],
     queryFn: async () => {
-      const r = await apiRequest("GET", "/api/admin/users");
+      const r = await apiRequest("GET", "/api/admin/users?limit=10000&page=1");
       return r.json();
     },
   });
@@ -358,28 +359,67 @@ export default function AdminMessagingSMSPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label className="text-sm">Select Users</Label>
-                  <div className="max-h-48 overflow-y-auto border rounded-xl p-3 space-y-2 bg-gray-50">
-                    {usersData?.users?.map((user) => (
-                      <label key={user.id} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedUserIds.includes(user.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedUserIds([...selectedUserIds, user.id]);
-                            } else {
-                              setSelectedUserIds(selectedUserIds.filter((id) => id !== user.id));
-                            }
-                          }}
-                          className="w-4 h-4 rounded accent-blue-600"
-                        />
-                        <span className="text-sm text-gray-700">{user.fullName} ({user.phone})</span>
-                      </label>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Select Users ({usersData?.users?.length || 0} total)</Label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserIds((usersData?.users || []).map(u => u.id))}
+                        className="text-xs text-blue-600 hover:underline font-medium"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-xs text-gray-400">·</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedUserIds([])}
+                        className="text-xs text-gray-500 hover:underline"
+                      >
+                        Deselect All
+                      </button>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                    <Input
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Search by name, email or phone..."
+                      className="rounded-xl pl-8 text-sm h-9"
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto border rounded-xl p-3 space-y-1.5 bg-gray-50">
+                    {(usersData?.users || [])
+                      .filter(u => {
+                        const q = userSearch.toLowerCase();
+                        return !q || u.fullName?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q) || u.phone?.includes(q);
+                      })
+                      .map((user) => (
+                        <label key={user.id} className="flex items-center gap-2.5 cursor-pointer py-0.5 hover:bg-white rounded-lg px-1 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={selectedUserIds.includes(user.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedUserIds(prev => [...prev, user.id]);
+                              } else {
+                                setSelectedUserIds(prev => prev.filter(id => id !== user.id));
+                              }
+                            }}
+                            className="w-4 h-4 rounded accent-blue-600 shrink-0"
+                          />
+                          <span className="text-sm text-gray-700 truncate">
+                            <span className="font-medium">{user.fullName}</span>
+                            <span className="text-gray-400 text-xs ml-1">· {user.phone || user.email}</span>
+                          </span>
+                        </label>
+                      ))}
+                    {(usersData?.users || []).length === 0 && (
+                      <p className="text-xs text-gray-400 text-center py-4">No users found</p>
+                    )}
                   </div>
                   {selectedUserIds.length > 0 && (
-                    <p className="text-xs text-blue-600">{selectedUserIds.length} user(s) selected</p>
+                    <p className="text-xs text-blue-600 font-medium">{selectedUserIds.length} user(s) selected</p>
                   )}
                 </div>
                 <div className="space-y-2">
@@ -388,7 +428,7 @@ export default function AdminMessagingSMSPage() {
                 </div>
                 <Button onClick={handleSendBulkMessages} disabled={testSending || selectedUserIds.length === 0} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">
                   <Send className="w-4 h-4 mr-2" />
-                  {testSending ? "Sending..." : "Send to Selected Users"}
+                  {testSending ? "Sending..." : `Send to ${selectedUserIds.length || "Selected"} User(s)`}
                 </Button>
               </CardContent>
             </Card>
