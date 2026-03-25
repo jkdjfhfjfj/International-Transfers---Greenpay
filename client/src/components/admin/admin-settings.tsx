@@ -89,6 +89,7 @@ export default function AdminSettings({ tab }: { tab?: string }) {
       const response = await apiRequest("GET", "/api/admin/settings");
       return response.json();
     },
+    staleTime: Infinity,
   });
 
 

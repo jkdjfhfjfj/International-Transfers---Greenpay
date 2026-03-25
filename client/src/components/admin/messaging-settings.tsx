@@ -77,6 +77,7 @@ export default function MessagingSettings() {
       const r = await apiRequest("GET", "/api/admin/messaging-settings");
       return r.json();
     },
+    staleTime: Infinity,
   });
 
   const { data: togglesData, isLoading: togglesLoading } = useQuery<MessageToggles>({
@@ -85,6 +86,7 @@ export default function MessagingSettings() {
       const r = await apiRequest("GET", "/api/admin/message-toggles");
       return r.json();
     },
+    staleTime: Infinity,
   });
 
   const initialLoading = settingsLoading || togglesLoading;

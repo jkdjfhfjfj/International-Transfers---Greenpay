@@ -14,8 +14,6 @@ interface PayHeroSettingsData {
   channelId: string;
   provider: string;
   cardPrice: string;
-  username?: string;
-  password?: string;
 }
 
 interface ManualPaymentData {
@@ -27,15 +25,11 @@ export default function PayHeroSettings() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  const [settings, setSettings] = useState<PayHeroSettingsData>({
-    channelId: "",
-    provider: "m-pesa",
-    cardPrice: ""
-  });
-  const [manualPayment, setManualPayment] = useState<ManualPaymentData>({
-    paybill: "",
-    account: ""
-  });
+  const [channelId, setChannelId] = useState("");
+  const [provider, setProvider] = useState("m-pesa");
+  const [cardPrice, setCardPrice] = useState("");
+  const [paybill, setPaybill] = useState("");
+  const [account, setAccount] = useState("");
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -45,6 +39,7 @@ export default function PayHeroSettings() {
       const r = await apiRequest("GET", "/api/admin/payhero-settings");
       return r.json();
     },
+    staleTime: Infinity,
   });
 
   const { data: manualData, isLoading: manualLoading } = useQuery<ManualPaymentData>({
@@ -53,30 +48,27 @@ export default function PayHeroSettings() {
       const r = await apiRequest("GET", "/api/admin/manual-payment-settings");
       return r.json();
     },
+    staleTime: Infinity,
   });
 
   useEffect(() => {
     if (payheroData) {
-      setSettings({
-        channelId: String(payheroData.channelId || ""),
-        provider: payheroData.provider || "m-pesa",
-        cardPrice: String(payheroData.cardPrice || ""),
-      });
+      setChannelId(String(payheroData.channelId || ""));
+      setProvider(payheroData.provider || "m-pesa");
+      setCardPrice(String(payheroData.cardPrice || ""));
     }
   }, [payheroData]);
 
   useEffect(() => {
     if (manualData) {
-      setManualPayment({
-        paybill: String(manualData.paybill || ""),
-        account: String(manualData.account || ""),
-      });
+      setPaybill(String(manualData.paybill || ""));
+      setAccount(String(manualData.account || ""));
     }
   }, [manualData]);
 
   const savePayheroMutation = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("PUT", "/api/admin/payhero-settings", settings);
+      const r = await apiRequest("PUT", "/api/admin/payhero-settings", { channelId, provider, cardPrice });
       return r.json();
     },
     onSuccess: () => {
@@ -88,7 +80,7 @@ export default function PayHeroSettings() {
 
   const saveManualMutation = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("PUT", "/api/admin/manual-payment-settings", manualPayment);
+      const r = await apiRequest("PUT", "/api/admin/manual-payment-settings", { paybill, account });
       return r.json();
     },
     onSuccess: () => {
@@ -158,8 +150,8 @@ export default function PayHeroSettings() {
                   <Input
                     id="channelId"
                     type="number"
-                    value={settings.channelId}
-                    onChange={(e) => setSettings({ ...settings, channelId: e.target.value })}
+                    value={channelId}
+                    onChange={(e) => setChannelId(e.target.value)}
                     placeholder="e.g., 608"
                     data-testid="input-channel-id"
                   />
@@ -169,8 +161,8 @@ export default function PayHeroSettings() {
                 <div className="space-y-2">
                   <Label htmlFor="provider">Provider</Label>
                   <Select
-                    value={settings.provider}
-                    onValueChange={(value) => setSettings({ ...settings, provider: value })}
+                    value={provider}
+                    onValueChange={setProvider}
                   >
                     <SelectTrigger data-testid="select-provider">
                       <SelectValue placeholder="Select provider" />
@@ -189,8 +181,8 @@ export default function PayHeroSettings() {
                     id="cardPrice"
                     type="number"
                     step="0.01"
-                    value={settings.cardPrice}
-                    onChange={(e) => setSettings({ ...settings, cardPrice: e.target.value })}
+                    value={cardPrice}
+                    onChange={(e) => setCardPrice(e.target.value)}
                     placeholder="60.00"
                     data-testid="input-card-price"
                   />
@@ -257,15 +249,15 @@ export default function PayHeroSettings() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Current Channel ID:</span>
-                <Badge variant="outline">{settings.channelId || "—"}</Badge>
+                <Badge variant="outline">{channelId || "—"}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Provider:</span>
-                <Badge variant="outline" className="capitalize">{settings.provider}</Badge>
+                <Badge variant="outline" className="capitalize">{provider}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Card Price:</span>
-                <Badge variant="outline">${settings.cardPrice || "—"}</Badge>
+                <Badge variant="outline">${cardPrice || "—"}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">API Endpoint:</span>
@@ -310,8 +302,8 @@ export default function PayHeroSettings() {
                   <Label htmlFor="paybill">Paybill Number</Label>
                   <Input
                     id="paybill"
-                    value={manualPayment.paybill}
-                    onChange={(e) => setManualPayment({ ...manualPayment, paybill: e.target.value })}
+                    value={paybill}
+                    onChange={(e) => setPaybill(e.target.value)}
                     placeholder="e.g., 247"
                     data-testid="input-paybill"
                   />
@@ -322,8 +314,8 @@ export default function PayHeroSettings() {
                   <Label htmlFor="account">Account Number</Label>
                   <Input
                     id="account"
-                    value={manualPayment.account}
-                    onChange={(e) => setManualPayment({ ...manualPayment, account: e.target.value })}
+                    value={account}
+                    onChange={(e) => setAccount(e.target.value)}
                     placeholder="e.g., 4664"
                     data-testid="input-account"
                   />
