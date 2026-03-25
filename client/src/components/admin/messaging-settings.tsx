@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { MessageSquare, Save, Send, CheckCircle, Settings, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import WhatsAppTemplates from './whatsapp-templates';
@@ -58,13 +58,12 @@ export default function MessagingSettings() {
     enableCardActivationMessages: true,
     enableLoginAlertMessages: true
   });
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<string>("");
   const [customMessage, setCustomMessage] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const [creatingTemplates, setCreatingTemplates] = useState(false);
   const { toast } = useToast();
+  const qc = useQueryClient();
 
   // Load users for messaging
   const { data: usersData } = useQuery({
@@ -72,64 +71,48 @@ export default function MessagingSettings() {
     select: (data: any) => data.users || []
   });
 
-  // Load current settings
+  const { data: settingsData, isLoading: settingsLoading } = useQuery<MessagingSettings>({
+    queryKey: ["/api/admin/messaging-settings"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/messaging-settings");
+      return r.json();
+    },
+  });
+
+  const { data: togglesData, isLoading: togglesLoading } = useQuery<MessageToggles>({
+    queryKey: ["/api/admin/message-toggles"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/message-toggles");
+      return r.json();
+    },
+  });
+
+  const initialLoading = settingsLoading || togglesLoading;
+
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (settingsData) setSettings(settingsData);
+  }, [settingsData]);
 
-  const loadSettings = async () => {
-    setInitialLoading(true);
-    try {
-      const [settingsResponse, togglesResponse] = await Promise.all([
-        apiRequest('GET', '/api/admin/messaging-settings'),
-        apiRequest('GET', '/api/admin/message-toggles')
-      ]);
-      
-      if (settingsResponse.ok) {
-        const data = await settingsResponse.json();
-        setSettings(data);
-      }
-      
-      if (togglesResponse.ok) {
-        const data = await togglesResponse.json();
-        setToggles(data);
-      }
-    } catch (error) {
-      console.error('Error loading settings:', error);
-      toast({
-        title: "Loading Failed",
-        description: "Failed to load settings. Using default values.",
-        variant: "destructive",
-      });
-    } finally {
-      setInitialLoading(false);
-    }
-  };
+  useEffect(() => {
+    if (togglesData) setToggles(togglesData);
+  }, [togglesData]);
 
-  const handleSaveToggles = async () => {
-    setLoading(true);
-    try {
-      const response = await apiRequest('PUT', '/api/admin/message-toggles', toggles);
-      if (response.ok) {
-        toast({
-          title: "Toggles Updated",
-          description: "Message types have been updated successfully.",
-        });
-      } else {
-        throw new Error('Failed to update toggles');
-      }
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update message toggles. Please try again.",
-        variant: "destructive",
-      });
-      // Reload settings on error to restore previous state
-      await loadSettings();
-    } finally {
-      setLoading(false);
-    }
-  };
+  const saveTogglesMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", "/api/admin/message-toggles", toggles);
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/message-toggles"] });
+      toast({ title: "Toggles Updated", description: "Message types have been updated successfully." });
+    },
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/message-toggles"] });
+      toast({ title: "Update Failed", description: "Failed to update message toggles. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const handleSaveToggles = () => saveTogglesMutation.mutate();
 
   const handleCreateTemplates = async () => {
     setCreatingTemplates(true);
@@ -156,10 +139,8 @@ export default function MessagingSettings() {
     }
   };
 
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      // Map frontend field names to backend system settings keys
+  const saveSettingsMutation = useMutation({
+    mutationFn: async () => {
       const payload = {
         sms_api_key: settings.apiKey,
         sms_app_id: settings.appId,
@@ -168,28 +149,17 @@ export default function MessagingSettings() {
         whatsapp_phone_number_id: settings.whatsappPhoneNumberId,
         whatsapp_business_account_id: settings.whatsappBusinessAccountId
       };
-      
-      const response = await apiRequest('PUT', '/api/admin/messaging-settings', payload);
-      
-      if (response.ok) {
-        await loadSettings();
-        toast({
-          title: "Settings Updated",
-          description: "Messaging configuration has been saved successfully.",
-        });
-      } else {
-        throw new Error('Failed to update settings');
-      }
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update messaging settings. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+      const r = await apiRequest("PUT", "/api/admin/messaging-settings", payload);
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/messaging-settings"] });
+      toast({ title: "Settings Updated", description: "Messaging configuration has been saved successfully." });
+    },
+    onError: () => toast({ title: "Update Failed", description: "Failed to update messaging settings. Please try again.", variant: "destructive" }),
+  });
+
+  const handleSave = () => saveSettingsMutation.mutate();
 
   const handleSendMessage = async () => {
     if (!selectedUser || !customMessage.trim()) {
@@ -438,12 +408,12 @@ export default function MessagingSettings() {
 
           <Button 
             onClick={handleSave} 
-            disabled={loading}
+            disabled={saveSettingsMutation.isPending}
             className="w-full"
             size="lg"
           >
             <Save className="w-4 h-4 mr-2" />
-            {loading ? 'Saving...' : 'Save All Settings'}
+            {saveSettingsMutation.isPending ? 'Saving...' : 'Save All Settings'}
           </Button>
 
           {/* Send Individual Message */}
@@ -554,9 +524,9 @@ export default function MessagingSettings() {
                     </div>
                   ))}
                 </div>
-                <Button onClick={handleSaveToggles} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleSaveToggles} disabled={saveTogglesMutation.isPending} className="w-full bg-blue-600 hover:bg-blue-700">
                   <Save className="w-4 h-4 mr-2" />
-                  {loading ? 'Saving...' : 'Save Message Toggles'}
+                  {saveTogglesMutation.isPending ? 'Saving...' : 'Save Message Toggles'}
                 </Button>
               </div>
             </CardContent>

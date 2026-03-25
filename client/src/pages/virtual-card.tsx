@@ -344,14 +344,16 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Paybill Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">714777</span>
+                        <span className="font-mono font-semibold">{manualPaymentSettings?.paybill || "—"}</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("714777");
-                            toast({ title: "Copied", description: "Paybill number copied" });
+                            if (manualPaymentSettings?.paybill) {
+                              navigator.clipboard.writeText(manualPaymentSettings.paybill);
+                              toast({ title: "Copied", description: "Paybill number copied" });
+                            }
                           }}
                         >
                           <span className="material-icons text-xs">content_copy</span>
@@ -361,14 +363,16 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Account Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">440200009905</span>
+                        <span className="font-mono font-semibold">{manualPaymentSettings?.account || "—"}</span>
                         <Button 
                           variant="ghost" 
                           size="icon" 
                           className="h-6 w-6" 
                           onClick={() => {
-                            navigator.clipboard.writeText("440200009905");
-                            toast({ title: "Copied", description: "Account number copied" });
+                            if (manualPaymentSettings?.account) {
+                              navigator.clipboard.writeText(manualPaymentSettings.account);
+                              toast({ title: "Copied", description: "Account number copied" });
+                            }
                           }}
                         >
                           <span className="material-icons text-xs">content_copy</span>

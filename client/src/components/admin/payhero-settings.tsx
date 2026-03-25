@@ -7,9 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Settings, Save, TestTube, CheckCircle, XCircle } from "lucide-react";
 
-interface PayHeroSettings {
+interface PayHeroSettingsData {
   channelId: string;
   provider: string;
   cardPrice: string;
@@ -17,145 +18,104 @@ interface PayHeroSettings {
   password?: string;
 }
 
-interface ManualPaymentSettings {
+interface ManualPaymentData {
   paybill: string;
   account: string;
 }
 
 export default function PayHeroSettings() {
-  const [settings, setSettings] = useState<PayHeroSettings>({
-    channelId: "3407",
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const [settings, setSettings] = useState<PayHeroSettingsData>({
+    channelId: "",
     provider: "m-pesa",
-    cardPrice: "60.00"
+    cardPrice: ""
   });
-  const [manualPayment, setManualPayment] = useState<ManualPaymentSettings>({
-    paybill: "247",
-    account: "4664"
+  const [manualPayment, setManualPayment] = useState<ManualPaymentData>({
+    paybill: "",
+    account: ""
   });
-  const [loading, setLoading] = useState(false);
-  const [manualLoading, setManualLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  const { toast } = useToast();
 
-  // Load current settings
+  const { data: payheroData, isLoading: payheroLoading } = useQuery<PayHeroSettingsData>({
+    queryKey: ["/api/admin/payhero-settings"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/payhero-settings");
+      return r.json();
+    },
+  });
+
+  const { data: manualData, isLoading: manualLoading } = useQuery<ManualPaymentData>({
+    queryKey: ["/api/admin/manual-payment-settings"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/manual-payment-settings");
+      return r.json();
+    },
+  });
+
   useEffect(() => {
-    loadSettings();
-    loadManualPaymentSettings();
-  }, []);
-
-  const loadSettings = async () => {
-    setInitialLoading(true);
-    try {
-      const response = await apiRequest('GET', '/api/admin/payhero-settings');
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data);
-      } else {
-        throw new Error('Failed to load settings');
-      }
-    } catch (error) {
-      console.error('Error loading PayHero settings:', error);
-      toast({
-        title: "Loading Failed",
-        description: "Failed to load PayHero settings. Using default values.",
-        variant: "destructive",
+    if (payheroData) {
+      setSettings({
+        channelId: String(payheroData.channelId || ""),
+        provider: payheroData.provider || "m-pesa",
+        cardPrice: String(payheroData.cardPrice || ""),
       });
-    } finally {
-      setInitialLoading(false);
     }
-  };
+  }, [payheroData]);
 
-  const handleSave = async () => {
-    setLoading(true);
-    try {
-      const response = await apiRequest('PUT', '/api/admin/payhero-settings', settings);
-      
-      if (response.ok) {
-        // Reload settings to ensure UI reflects what's actually saved
-        await loadSettings();
-        toast({
-          title: "Settings Updated",
-          description: "PayHero configuration has been saved successfully.",
-        });
-      } else {
-        throw new Error('Failed to update settings');
-      }
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update PayHero settings. Please try again.",
-        variant: "destructive",
+  useEffect(() => {
+    if (manualData) {
+      setManualPayment({
+        paybill: String(manualData.paybill || ""),
+        account: String(manualData.account || ""),
       });
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [manualData]);
+
+  const savePayheroMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", "/api/admin/payhero-settings", settings);
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
+      toast({ title: "Settings Updated", description: "PayHero configuration has been saved successfully." });
+    },
+    onError: () => toast({ title: "Update Failed", description: "Failed to update PayHero settings.", variant: "destructive" }),
+  });
+
+  const saveManualMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("PUT", "/api/admin/manual-payment-settings", manualPayment);
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/manual-payment-settings"] });
+      toast({ title: "Settings Updated", description: "Manual payment configuration has been saved. Users will see these new payment details immediately." });
+    },
+    onError: () => toast({ title: "Update Failed", description: "Failed to update manual payment settings.", variant: "destructive" }),
+  });
 
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
-    
     try {
-      const response = await apiRequest('POST', '/api/admin/test-payhero', {
+      const response = await apiRequest("POST", "/api/admin/test-payhero", {
         amount: 1,
-        phone: '0700000000',
-        reference: 'TEST-' + Date.now()
+        phone: "0700000000",
+        reference: "TEST-" + Date.now()
       });
-      
       const result = await response.json();
-      
       setTestResult({
         success: result.success,
-        message: result.success ? 
-          'PayHero connection successful!' : 
-          result.message || 'Connection test failed'
+        message: result.success ? "PayHero connection successful!" : result.message || "Connection test failed"
       });
-    } catch (error) {
-      setTestResult({
-        success: false,
-        message: 'Failed to test connection'
-      });
+    } catch {
+      setTestResult({ success: false, message: "Failed to test connection" });
     } finally {
       setTesting(false);
-    }
-  };
-
-  const loadManualPaymentSettings = async () => {
-    try {
-      const response = await apiRequest('GET', '/api/admin/manual-payment-settings');
-      if (response.ok) {
-        const data = await response.json();
-        setManualPayment(data);
-      }
-    } catch (error) {
-      console.error('Error loading manual payment settings:', error);
-    }
-  };
-
-  const handleSaveManualPayment = async () => {
-    setManualLoading(true);
-    try {
-      const response = await apiRequest('PUT', '/api/admin/manual-payment-settings', manualPayment);
-      
-      if (response.ok) {
-        await loadManualPaymentSettings();
-        toast({
-          title: "Settings Updated",
-          description: "Manual payment configuration has been saved. Users will see these new payment details immediately.",
-        });
-      } else {
-        throw new Error('Failed to update settings');
-      }
-    } catch (error) {
-      toast({
-        title: "Update Failed",
-        description: "Failed to update manual payment settings. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setManualLoading(false);
     }
   };
 
@@ -185,10 +145,11 @@ export default function PayHeroSettings() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {initialLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin mr-3" />
-                <span className="text-sm text-muted-foreground">Loading settings...</span>
+            {payheroLoading ? (
+              <div className="space-y-3">
+                <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+                <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+                <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
               </div>
             ) : (
               <>
@@ -202,66 +163,60 @@ export default function PayHeroSettings() {
                     placeholder="e.g., 608"
                     data-testid="input-channel-id"
                   />
-              <p className="text-sm text-gray-500">
-                Your PayHero payment channel ID from dashboard
-              </p>
-            </div>
+                  <p className="text-sm text-gray-500">Your PayHero payment channel ID from dashboard</p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="provider">Provider</Label>
-              <Select 
-                value={settings.provider} 
-                onValueChange={(value) => setSettings({ ...settings, provider: value })}
-              >
-                <SelectTrigger data-testid="select-provider">
-                  <SelectValue placeholder="Select provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="m-pesa">M-Pesa</SelectItem>
-                  <SelectItem value="sasapay">SasaPay</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-sm text-gray-500">
-                Payment provider for processing transactions
-              </p>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="provider">Provider</Label>
+                  <Select
+                    value={settings.provider}
+                    onValueChange={(value) => setSettings({ ...settings, provider: value })}
+                  >
+                    <SelectTrigger data-testid="select-provider">
+                      <SelectValue placeholder="Select provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="m-pesa">M-Pesa</SelectItem>
+                      <SelectItem value="sasapay">SasaPay</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-sm text-gray-500">Payment provider for processing transactions</p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="cardPrice">Virtual Card Price (USD)</Label>
-              <Input
-                id="cardPrice"
-                type="number"
-                step="0.01"
-                value={settings.cardPrice}
-                onChange={(e) => setSettings({ ...settings, cardPrice: e.target.value })}
-                placeholder="60.00"
-                data-testid="input-card-price"
-              />
-              <p className="text-sm text-gray-500">
-                Price for purchasing virtual cards (automatically synced to user side)
-              </p>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cardPrice">Virtual Card Price (USD)</Label>
+                  <Input
+                    id="cardPrice"
+                    type="number"
+                    step="0.01"
+                    value={settings.cardPrice}
+                    onChange={(e) => setSettings({ ...settings, cardPrice: e.target.value })}
+                    placeholder="60.00"
+                    data-testid="input-card-price"
+                  />
+                  <p className="text-sm text-gray-500">Price for purchasing virtual cards (automatically synced to user side)</p>
+                </div>
 
                 <div className="flex gap-3 pt-4">
-                  <Button 
-                    onClick={handleSave} 
-                    disabled={loading}
+                  <Button
+                    onClick={() => savePayheroMutation.mutate()}
+                    disabled={savePayheroMutation.isPending}
                     className="flex-1"
                     data-testid="button-save-settings"
                   >
                     <Save className="w-4 h-4 mr-2" />
-                    {loading ? 'Saving...' : 'Save Settings'}
+                    {savePayheroMutation.isPending ? "Saving..." : "Save Settings"}
                   </Button>
-                  
-                  <Button 
-                    onClick={handleTest} 
+
+                  <Button
+                    onClick={handleTest}
                     variant="outline"
                     disabled={testing}
                     className="flex-1"
                     data-testid="button-test-connection"
                   >
                     <TestTube className="w-4 h-4 mr-2" />
-                    {testing ? 'Testing...' : 'Test Connection'}
+                    {testing ? "Testing..." : "Test Connection"}
                   </Button>
                 </div>
               </>
@@ -282,26 +237,18 @@ export default function PayHeroSettings() {
           </CardHeader>
           <CardContent className="space-y-4">
             {testResult && (
-              <div className={`p-4 rounded-lg border ${
-                testResult.success 
-                  ? 'bg-green-50 border-green-200' 
-                  : 'bg-red-50 border-red-200'
-              }`}>
+              <div className={`p-4 rounded-lg border ${testResult.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}>
                 <div className="flex items-center gap-2 mb-2">
                   {testResult.success ? (
                     <CheckCircle className="w-5 h-5 text-green-600" />
                   ) : (
                     <XCircle className="w-5 h-5 text-red-600" />
                   )}
-                  <span className={`font-medium ${
-                    testResult.success ? 'text-green-800' : 'text-red-800'
-                  }`}>
-                    {testResult.success ? 'Connection Successful' : 'Connection Failed'}
+                  <span className={`font-medium ${testResult.success ? "text-green-800" : "text-red-800"}`}>
+                    {testResult.success ? "Connection Successful" : "Connection Failed"}
                   </span>
                 </div>
-                <p className={`text-sm ${
-                  testResult.success ? 'text-green-700' : 'text-red-700'
-                }`}>
+                <p className={`text-sm ${testResult.success ? "text-green-700" : "text-red-700"}`}>
                   {testResult.message}
                 </p>
               </div>
@@ -310,19 +257,16 @@ export default function PayHeroSettings() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Current Channel ID:</span>
-                <Badge variant="outline">{settings.channelId}</Badge>
+                <Badge variant="outline">{settings.channelId || "—"}</Badge>
               </div>
-              
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Provider:</span>
                 <Badge variant="outline" className="capitalize">{settings.provider}</Badge>
               </div>
-              
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">Card Price:</span>
-                <Badge variant="outline">${settings.cardPrice}</Badge>
+                <Badge variant="outline">${settings.cardPrice || "—"}</Badge>
               </div>
-              
               <div className="flex justify-between items-center">
                 <span className="text-sm text-gray-600">API Endpoint:</span>
                 <Badge variant="secondary">backend.payhero.co.ke</Badge>
@@ -354,54 +298,59 @@ export default function PayHeroSettings() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="paybill">Paybill Number</Label>
-              <Input
-                id="paybill"
-                value={manualPayment.paybill}
-                onChange={(e) => setManualPayment({ ...manualPayment, paybill: e.target.value })}
-                placeholder="e.g., 247"
-                data-testid="input-paybill"
-              />
-              <p className="text-sm text-gray-500">
-                M-Pesa paybill number for manual payments
-              </p>
+          {manualLoading ? (
+            <div className="space-y-3">
+              <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
+              <div className="h-10 rounded-lg bg-gray-100 animate-pulse" />
             </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="paybill">Paybill Number</Label>
+                  <Input
+                    id="paybill"
+                    value={manualPayment.paybill}
+                    onChange={(e) => setManualPayment({ ...manualPayment, paybill: e.target.value })}
+                    placeholder="e.g., 247"
+                    data-testid="input-paybill"
+                  />
+                  <p className="text-sm text-gray-500">M-Pesa paybill number for manual payments</p>
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="account">Account Number</Label>
-              <Input
-                id="account"
-                value={manualPayment.account}
-                onChange={(e) => setManualPayment({ ...manualPayment, account: e.target.value })}
-                placeholder="e.g., 4664"
-                data-testid="input-account"
-              />
-              <p className="text-sm text-gray-500">
-                Account number for manual M-Pesa payments
-              </p>
-            </div>
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="account">Account Number</Label>
+                  <Input
+                    id="account"
+                    value={manualPayment.account}
+                    onChange={(e) => setManualPayment({ ...manualPayment, account: e.target.value })}
+                    placeholder="e.g., 4664"
+                    data-testid="input-account"
+                  />
+                  <p className="text-sm text-gray-500">Account number for manual M-Pesa payments</p>
+                </div>
+              </div>
 
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <p className="text-sm text-blue-800 flex items-start gap-2">
-              <span className="material-icons text-sm mt-0.5">info</span>
-              <span>
-                These settings are displayed to users as an alternative payment method on the virtual card purchase page. 
-                Changes take effect immediately for all users.
-              </span>
-            </p>
-          </div>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm text-blue-800 flex items-start gap-2">
+                  <span className="material-icons text-sm mt-0.5">info</span>
+                  <span>
+                    These settings are displayed to users as an alternative payment method on the virtual card purchase page.
+                    Changes take effect immediately for all users.
+                  </span>
+                </p>
+              </div>
 
-          <Button 
-            onClick={handleSaveManualPayment} 
-            disabled={manualLoading}
-            data-testid="button-save-manual-payment"
-          >
-            <Save className="w-4 h-4 mr-2" />
-            {manualLoading ? 'Saving...' : 'Save Manual Payment Settings'}
-          </Button>
+              <Button
+                onClick={() => saveManualMutation.mutate()}
+                disabled={saveManualMutation.isPending}
+                data-testid="button-save-manual-payment"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                {saveManualMutation.isPending ? "Saving..." : "Save Manual Payment Settings"}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 
