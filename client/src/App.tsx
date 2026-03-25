@@ -58,9 +58,10 @@ import AdminTemplatesPage from "@/pages/admin-templates";
 import AdminActivityPage from "@/pages/admin-activity";
 import AdminDatabasePage from "@/pages/admin-database";
 import AdminAnalyticsPage from "@/pages/admin-analytics";
-import AdminPayHeroSettingsPage from "@/pages/admin-payhero-settings";
-import AdminMessagingSettingsPage from "@/pages/admin-messaging-settings";
-import AdminGeneralSettingsPage from "@/pages/admin-general-settings";
+import AdminSystemSettingsPage from "@/pages/admin-system-settings";
+import AdminPayHeroPage from "@/pages/admin-payhero";
+import AdminMessagingPage from "@/pages/admin-messaging";
+import AdminAnnouncementsPage from "@/pages/admin-announcements";
 import AdminManualPaymentPage from "@/pages/admin-manual-payment";
 import AdminProfilePage from "@/pages/admin-profile";
 import SendMoneyLanding from "@/pages/landing/send-money";
@@ -172,9 +173,10 @@ function Router() {
       <Route path="/admin/activity" component={AdminActivityPage} />
       <Route path="/admin/database" component={AdminDatabasePage} />
       <Route path="/admin/analytics" component={AdminAnalyticsPage} />
-      <Route path="/admin/payhero-settings" component={AdminPayHeroSettingsPage} />
-      <Route path="/admin/messaging-settings" component={AdminMessagingSettingsPage} />
-      <Route path="/admin/settings" component={AdminGeneralSettingsPage} />
+      <Route path="/admin/settings" component={AdminSystemSettingsPage} />
+      <Route path="/admin/payhero" component={AdminPayHeroPage} />
+      <Route path="/admin/messaging" component={AdminMessagingPage} />
+      <Route path="/admin/announcements" component={AdminAnnouncementsPage} />
       <Route path="/admin/manual-payment" component={AdminManualPaymentPage} />
       <Route path="/admin/profile" component={AdminProfilePage} />
       <Route component={NotFound} />
