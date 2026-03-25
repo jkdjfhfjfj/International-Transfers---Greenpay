@@ -4,107 +4,95 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
-import { Shield, Lock, Key } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { Shield, Lock, Eye, EyeOff, Key } from "lucide-react";
 import { useLocation } from "wouter";
 
-const adminLoginSchema = z.object({
+const schema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
   twoFactorCode: z.string().optional(),
 });
 
-type AdminLoginForm = z.infer<typeof adminLoginSchema>;
+type FormData = z.infer<typeof schema>;
 
 export default function AdminLogin() {
   const [, setLocation] = useLocation();
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { toast } = useToast();
 
-  const form = useForm<AdminLoginForm>({
-    resolver: zodResolver(adminLoginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-      twoFactorCode: "",
-    },
+  const form = useForm<FormData>({
+    resolver: zodResolver(schema),
+    defaultValues: { email: "", password: "", twoFactorCode: "" },
   });
 
-  const onSubmit = async (data: AdminLoginForm) => {
+  const onSubmit = async (data: FormData) => {
     setIsLoading(true);
     try {
-      const response = await apiRequest("POST", "/api/admin/login", data);
-      const result = await response.json();
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(data),
+      });
+      const result = await res.json();
 
       if (result.requiresTwoFactor) {
         setRequiresTwoFactor(true);
-        toast({
-          title: "2FA Required",
-          description: "Please enter your 2FA code",
-        });
+        toast({ title: "2FA Required", description: "Enter your two-factor authentication code." });
         return;
       }
 
-      if (response.ok) {
-        localStorage.setItem("adminAuth", JSON.stringify(result.admin));
-        toast({
-          title: "Login Successful",
-          description: "Welcome to GreenPay Admin Panel",
-        });
+      if (res.ok) {
+        toast({ title: "Welcome back!", description: "Signed in to GreenPay Admin." });
         setLocation("/admin/dashboard");
       } else {
         toast({
-          title: "Login Failed",
-          description: result.message || "Invalid credentials",
+          title: "Sign In Failed",
+          description: result.message || "Invalid credentials. Please try again.",
           variant: "destructive",
         });
       }
-    } catch (error) {
-      toast({
-        title: "Login Error",
-        description: "An error occurred during login",
-        variant: "destructive",
-      });
+    } catch {
+      toast({ title: "Connection Error", description: "Could not reach the server.", variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto w-12 h-12 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
-            <Shield className="w-6 h-6 text-green-600 dark:text-green-400" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-green-950 to-slate-900 flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-500/20 border border-green-500/30 mb-4">
+            <Shield className="w-8 h-8 text-green-400" />
           </div>
-          <CardTitle className="text-2xl font-bold">GreenPay Admin</CardTitle>
-          <CardDescription>
-            Secure administrative access to GreenPay platform
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          <h1 className="text-3xl font-bold text-white mb-1">GreenPay Admin</h1>
+          <p className="text-slate-400 text-sm">Secure administrative access</p>
+        </div>
+
+        <div className="bg-white/5 backdrop-blur border border-white/10 rounded-2xl p-8 shadow-2xl">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
               <FormField
                 control={form.control}
                 name="email"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email Address</FormLabel>
+                    <FormLabel className="text-slate-300 text-sm">Email Address</FormLabel>
                     <FormControl>
                       <Input
                         {...field}
                         type="email"
                         placeholder="admin@greenpay.com"
                         disabled={isLoading}
-                        data-testid="input-admin-email"
+                        className="bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-green-500 focus:ring-green-500/20"
                       />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-400 text-xs" />
                   </FormItem>
                 )}
               />
@@ -114,17 +102,26 @@ export default function AdminLogin() {
                 name="password"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Password</FormLabel>
+                    <FormLabel className="text-slate-300 text-sm">Password</FormLabel>
                     <FormControl>
-                      <Input
-                        {...field}
-                        type="password"
-                        placeholder="Enter your password"
-                        disabled={isLoading}
-                        data-testid="input-admin-password"
-                      />
+                      <div className="relative">
+                        <Input
+                          {...field}
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Enter your password"
+                          disabled={isLoading}
+                          className="bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-green-500 focus:ring-green-500/20 pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-red-400 text-xs" />
                   </FormItem>
                 )}
               />
@@ -135,20 +132,19 @@ export default function AdminLogin() {
                   name="twoFactorCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-2">
-                        <Key className="w-4 h-4" />
-                        2FA Code
+                      <FormLabel className="text-slate-300 text-sm flex items-center gap-2">
+                        <Key className="w-3 h-3" /> Two-Factor Code
                       </FormLabel>
                       <FormControl>
                         <Input
                           {...field}
-                          placeholder="Enter 6-digit code"
+                          placeholder="000000"
                           maxLength={6}
                           disabled={isLoading}
-                          data-testid="input-2fa-code"
+                          className="bg-white/10 border-white/20 text-white placeholder:text-slate-500 focus:border-green-500 tracking-widest text-center text-lg"
                         />
                       </FormControl>
-                      <FormMessage />
+                      <FormMessage className="text-red-400 text-xs" />
                     </FormItem>
                   )}
                 />
@@ -156,34 +152,33 @@ export default function AdminLogin() {
 
               <Button
                 type="submit"
-                className="w-full"
                 disabled={isLoading}
-                data-testid="button-admin-login"
+                className="w-full bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 rounded-xl transition-all"
               >
                 {isLoading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Signing In...
-                  </div>
+                  <span className="flex items-center gap-2">
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    Signing in...
+                  </span>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <span className="flex items-center justify-center gap-2">
                     <Lock className="w-4 h-4" />
                     Sign In to Admin Panel
-                  </div>
+                  </span>
                 )}
               </Button>
             </form>
           </Form>
 
-          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-            <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Test Credentials:</p>
-            <p className="text-xs text-blue-500 dark:text-blue-300">
-              Email: admin@greenpay.com<br />
-              Password: Admin123!@#
+          <div className="mt-6 p-4 rounded-xl bg-green-500/10 border border-green-500/20">
+            <p className="text-xs text-green-400 font-semibold mb-1">Test Credentials</p>
+            <p className="text-xs text-slate-400 font-mono">
+              admin@greenpay.com<br />
+              Admin123!@#
             </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
