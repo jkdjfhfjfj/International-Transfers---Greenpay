@@ -24,7 +24,6 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { useAdminSettings } from "@/hooks/use-admin-settings";
 
 import { AnnouncementManagement } from "./announcement-management";
 
@@ -43,13 +42,49 @@ interface SystemSettingsResponse {
 }
 
 export default function AdminSettings({ tab }: { tab?: string }) {
-  const { settings, isLoaded } = useAdminSettings();
-
-  const [fees, setFees] = useState(settings.fees);
-  const [security, setSecurity] = useState(settings.security);
-  const [notifications, setNotifications] = useState(settings.notifications);
-  const [whatsapp, setWhatsapp] = useState(settings.whatsapp);
-  const [general, setGeneral] = useState(settings.general);
+  const [fees, setFees] = useState({
+    transfer_fee: '2.50',
+    exchange_rate_margin: '0.05',
+    virtual_card_fee: '1.00',
+    withdrawal_fee: '0.50',
+  });
+  const [security, setSecurity] = useState({
+    two_factor_required: false,
+    kyc_auto_approval: true,
+    pin_required: false,
+    enable_otp_feature: true,
+    otp_email_enabled: true,
+    otp_sms_enabled: true,
+    otp_whatsapp_enabled: false,
+    max_daily_limit: '50000',
+    min_transaction_amount: '1',
+  });
+  const [notifications, setNotifications] = useState({
+    email_notifications: true,
+    sms_notifications: true,
+    push_notifications: true,
+    admin_alerts: true,
+  });
+  const [whatsapp, setWhatsapp] = useState({
+    phone_number_id: '',
+    business_account_id: '',
+    access_token: '',
+    is_active: false,
+  });
+  const [general, setGeneral] = useState({
+    platform_name: 'GreenPay',
+    support_email: 'support@example.com',
+    default_currency: 'KES',
+    session_timeout: '3600',
+    terms_url: '',
+    maintenance_message: '',
+    maintenance_mode: false,
+    api_rate_limit: '1000',
+    max_upload_size: '10485760',
+    welcome_bonus_amount: '5.00',
+    dashboard_announcement: '',
+    show_announcement: false,
+  });
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -61,27 +96,6 @@ export default function AdminSettings({ tab }: { tab?: string }) {
       setActiveTab(tab);
     }
   }, [tab]);
-
-  // Only run once when settings first load from localStorage — never on subsequent updates
-  useEffect(() => {
-    if (isLoaded) {
-      setFees(settings.fees);
-      setSecurity({
-        ...settings.security,
-        enable_otp_feature: settings.security.enable_otp_feature !== undefined ? settings.security.enable_otp_feature : true
-      });
-      setNotifications(settings.notifications);
-      setWhatsapp(settings.whatsapp);
-      setGeneral({
-        ...settings.general,
-        welcome_bonus_amount: settings.general.welcome_bonus_amount || "5.00",
-        dashboard_announcement: settings.general.dashboard_announcement || "",
-        show_announcement: settings.general.show_announcement !== undefined ? settings.general.show_announcement : false
-      });
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoaded]);
-
 
   const { data: settingsData, isLoading } = useQuery<SystemSettingsResponse>({
     queryKey: ["/api/admin/settings"],
