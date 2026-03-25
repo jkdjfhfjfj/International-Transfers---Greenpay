@@ -26,7 +26,9 @@ export default function AdminManualPaymentPage() {
 
   useEffect(() => {
     const admin = getStorageSafe<any>("adminAuth", null);
+    console.log("[ManualPayment] getStorageSafe result:", admin ? `role=${admin.role}` : "NULL");
     if (!admin) {
+      console.error("[ManualPayment] REDIRECT: adminAuth is null in localStorage");
       setLocation("/admin/login");
       return;
     }

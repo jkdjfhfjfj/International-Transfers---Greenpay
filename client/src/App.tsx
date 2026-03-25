@@ -102,25 +102,39 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 // Admin Route Guard Component
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const [, setLocation] = useLocation();
-  const adminAuth = getStorageSafe<any>("adminAuth", null);
   const [isValidated, setIsValidated] = useState(false);
 
   useEffect(() => {
-    if (!adminAuth) {
-      console.log("[AdminRoute] No admin auth in localStorage, redirecting to login");
+    const rawAuth = localStorage.getItem("adminAuth");
+    console.log("[AdminRoute] checking auth, raw localStorage:", rawAuth ? "EXISTS" : "NULL");
+
+    if (!rawAuth) {
+      console.error("[AdminRoute] REDIRECT: No admin auth in localStorage");
       setLocation("/admin/login");
       return;
     }
 
-    if (!adminAuth.role || adminAuth.role !== 'admin') {
-      console.log("[AdminRoute] Invalid admin role, clearing auth");
+    let adminAuth: any = null;
+    try {
+      adminAuth = JSON.parse(rawAuth);
+    } catch (e) {
+      console.error("[AdminRoute] REDIRECT: adminAuth JSON parse failed:", e);
       localStorage.removeItem("adminAuth");
       setLocation("/admin/login");
       return;
     }
 
+    if (!adminAuth || !adminAuth.role || adminAuth.role.toLowerCase() !== 'admin') {
+      console.error("[AdminRoute] REDIRECT: Invalid admin role =", adminAuth?.role);
+      localStorage.removeItem("adminAuth");
+      setLocation("/admin/login");
+      return;
+    }
+
+    console.log("[AdminRoute] auth valid, role =", adminAuth.role);
     setIsValidated(true);
-  }, [adminAuth, setLocation]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!isValidated) {
     return null;

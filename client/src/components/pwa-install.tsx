@@ -42,11 +42,19 @@ export function PWAInstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Register service worker
+    // Register service worker with auto-update on new version
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
         .then((registration) => {
           console.log('SW registered: ', registration);
+          // Force check for updates on every page load
+          registration.update().catch(() => {});
+
+          // When a new SW takes control, reload to get fresh assets
+          navigator.serviceWorker.addEventListener('controllerchange', () => {
+            console.log('SW updated, reloading for fresh assets...');
+            window.location.reload();
+          });
         })
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError);

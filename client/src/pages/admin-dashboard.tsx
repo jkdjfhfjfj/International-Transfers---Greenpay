@@ -76,12 +76,14 @@ export default function AdminDashboard() {
         const response = await apiRequest("GET", "/api/admin/session");
         const data = await response.json();
         if (response.ok && data.admin) {
+          console.log("[OldDashboard] session valid, role:", data.admin.role);
           setAdminData(data.admin);
         } else {
-          localStorage.removeItem("adminAuth");
+          console.error("[OldDashboard] REDIRECT: session invalid (else branch)");
           setLocation("/admin/login");
         }
-      } catch {
+      } catch (err) {
+        console.error("[OldDashboard] REDIRECT: session check threw:", err);
         setLocation("/admin/login");
       }
     };

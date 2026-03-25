@@ -10,7 +10,9 @@ export default function AdminPayHeroSettingsPage() {
 
   useEffect(() => {
     const admin = getStorageSafe<any>("adminAuth", null);
+    console.log("[PayHero] getStorageSafe result:", admin ? `role=${admin.role}` : "NULL");
     if (!admin) {
+      console.error("[PayHero] REDIRECT: adminAuth is null in localStorage");
       setLocation("/admin/login");
     }
   }, [setLocation]);

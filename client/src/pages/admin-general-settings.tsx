@@ -10,7 +10,9 @@ export default function AdminGeneralSettingsPage() {
 
   useEffect(() => {
     const admin = getStorageSafe<any>("adminAuth", null);
+    console.log("[Settings] getStorageSafe result:", admin ? `role=${admin.role}` : "NULL");
     if (!admin) {
+      console.error("[Settings] REDIRECT: adminAuth is null in localStorage");
       setLocation("/admin/login");
     }
   }, [setLocation]);

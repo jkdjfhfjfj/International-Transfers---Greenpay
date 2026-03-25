@@ -10,7 +10,9 @@ export default function AdminMessagingSettingsPage() {
 
   useEffect(() => {
     const admin = getStorageSafe<any>("adminAuth", null);
+    console.log("[Messaging] getStorageSafe result:", admin ? `role=${admin.role}` : "NULL");
     if (!admin) {
+      console.error("[Messaging] REDIRECT: adminAuth is null in localStorage");
       setLocation("/admin/login");
     }
   }, [setLocation]);
