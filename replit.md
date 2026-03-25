@@ -34,6 +34,14 @@ Preferred communication style: Simple, everyday language.
 - **Type Generation**: Drizzle-Zod for automatic TypeScript types and runtime validation
 - **Key Tables**: users, kyc_documents, virtual_cards, transactions, recipients, payment_requests, conversations, messages, system_settings, api_configurations
 
+### Admin Panel Architecture (Rebuilt)
+- **Auth**: Pure server-session based — `GET /api/admin/session` called by `AdminShell` on every page mount
+- **No localStorage** used for admin auth — eliminates all redirect bugs
+- **AdminShell** (`client/src/components/admin/admin-shell.tsx`): Central layout that handles session verification, sidebar navigation, and logout. All admin pages wrap their content in `<AdminShell>`.
+- **Login**: `/admin/login` — dark-themed page, posts to `/api/admin/login`, redirects to `/admin/dashboard` on success
+- **Routes**: All `/admin/*` routes are plain Wouter `<Route>` components — no route guard wrapper needed
+- **Pages**: 22 individual admin pages, each isolated — no tabs in the main navigation
+
 ### Authentication & Security
 - **Auth Method**: Custom session-based authentication with email/phone verification
 - **OTP Delivery**: Multi-channel (SMS via TalkNTalk, WhatsApp via Meta Business API, Email via Mailtrap/SMTP)

@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -6,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { WhatsAppSupportFAB } from "@/components/whatsapp-support-fab";
-import { getStorageSafe } from "@/lib/safe-storage";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/splash";
 import LoginPage from "@/pages/auth/login";
@@ -99,49 +97,6 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
   return <Component />;
 }
 
-// Admin Route Guard Component
-function AdminRoute({ component: Component }: { component: React.ComponentType }) {
-  const [, setLocation] = useLocation();
-  const [isValidated, setIsValidated] = useState(false);
-
-  useEffect(() => {
-    const rawAuth = localStorage.getItem("adminAuth");
-    console.log("[AdminRoute] checking auth, raw localStorage:", rawAuth ? "EXISTS" : "NULL");
-
-    if (!rawAuth) {
-      console.error("[AdminRoute] REDIRECT: No admin auth in localStorage");
-      setLocation("/admin/login");
-      return;
-    }
-
-    let adminAuth: any = null;
-    try {
-      adminAuth = JSON.parse(rawAuth);
-    } catch (e) {
-      console.error("[AdminRoute] REDIRECT: adminAuth JSON parse failed:", e);
-      localStorage.removeItem("adminAuth");
-      setLocation("/admin/login");
-      return;
-    }
-
-    if (!adminAuth || !adminAuth.role || adminAuth.role.toLowerCase() !== 'admin') {
-      console.error("[AdminRoute] REDIRECT: Invalid admin role =", adminAuth?.role);
-      localStorage.removeItem("adminAuth");
-      setLocation("/admin/login");
-      return;
-    }
-
-    console.log("[AdminRoute] auth valid, role =", adminAuth.role);
-    setIsValidated(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (!isValidated) {
-    return null;
-  }
-
-  return <Component />;
-}
 
 function Router() {
   return (
@@ -195,75 +150,31 @@ function Router() {
       <Route path="/loans" component={LoansPage} />
       <Route path="/api-service" component={APIServicePage} />
       <Route path="/api-documentation" component={ApiDocumentationPage} />
-      {/* Admin routes - protected by AdminRoute guard */}
+      {/* Admin routes — auth handled inside each page via AdminShell */}
       <Route path="/admin-login" component={AdminLogin} />
       <Route path="/admin/login" component={AdminLogin} />
-      <Route path="/admin/dashboard">
-        <AdminRoute component={AdminDashboard} />
-      </Route>
-      <Route path="/admin/home">
-        <AdminRoute component={AdminDashboardPage} />
-      </Route>
-      <Route path="/admin/users">
-        <AdminRoute component={AdminUsersPage} />
-      </Route>
-      <Route path="/admin/kyc">
-        <AdminRoute component={AdminKycPage} />
-      </Route>
-      <Route path="/admin/transactions">
-        <AdminRoute component={AdminTransactionsPage} />
-      </Route>
-      <Route path="/admin/withdrawals">
-        <AdminRoute component={AdminWithdrawalsPage} />
-      </Route>
-      <Route path="/admin/cards">
-        <AdminRoute component={AdminCardsPage} />
-      </Route>
-      <Route path="/admin/pricing">
-        <AdminRoute component={AdminPricingPage} />
-      </Route>
-      <Route path="/admin/notifications">
-        <AdminRoute component={AdminNotificationsPage} />
-      </Route>
-      <Route path="/admin/mail">
-        <AdminRoute component={AdminMailPage} />
-      </Route>
-      <Route path="/admin/whatsapp">
-        <AdminRoute component={AdminWhatsAppPage} />
-      </Route>
-      <Route path="/admin/support">
-        <AdminRoute component={AdminSupportPage} />
-      </Route>
-      <Route path="/admin/tickets">
-        <AdminRoute component={AdminTicketsPage} />
-      </Route>
-      <Route path="/admin/logs">
-        <AdminRoute component={AdminLogsPage} />
-      </Route>
-      <Route path="/admin/templates">
-        <AdminRoute component={AdminTemplatesPage} />
-      </Route>
-      <Route path="/admin/activity">
-        <AdminRoute component={AdminActivityPage} />
-      </Route>
-      <Route path="/admin/database">
-        <AdminRoute component={AdminDatabasePage} />
-      </Route>
-      <Route path="/admin/analytics">
-        <AdminRoute component={AdminAnalyticsPage} />
-      </Route>
-      <Route path="/admin/payhero-settings">
-        <AdminRoute component={AdminPayHeroSettingsPage} />
-      </Route>
-      <Route path="/admin/messaging-settings">
-        <AdminRoute component={AdminMessagingSettingsPage} />
-      </Route>
-      <Route path="/admin/settings">
-        <AdminRoute component={AdminGeneralSettingsPage} />
-      </Route>
-      <Route path="/admin/manual-payment">
-        <AdminRoute component={AdminManualPaymentPage} />
-      </Route>
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/home" component={AdminDashboardPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/kyc" component={AdminKycPage} />
+      <Route path="/admin/transactions" component={AdminTransactionsPage} />
+      <Route path="/admin/withdrawals" component={AdminWithdrawalsPage} />
+      <Route path="/admin/cards" component={AdminCardsPage} />
+      <Route path="/admin/pricing" component={AdminPricingPage} />
+      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+      <Route path="/admin/mail" component={AdminMailPage} />
+      <Route path="/admin/whatsapp" component={AdminWhatsAppPage} />
+      <Route path="/admin/support" component={AdminSupportPage} />
+      <Route path="/admin/tickets" component={AdminTicketsPage} />
+      <Route path="/admin/logs" component={AdminLogsPage} />
+      <Route path="/admin/templates" component={AdminTemplatesPage} />
+      <Route path="/admin/activity" component={AdminActivityPage} />
+      <Route path="/admin/database" component={AdminDatabasePage} />
+      <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+      <Route path="/admin/payhero-settings" component={AdminPayHeroSettingsPage} />
+      <Route path="/admin/messaging-settings" component={AdminMessagingSettingsPage} />
+      <Route path="/admin/settings" component={AdminGeneralSettingsPage} />
+      <Route path="/admin/manual-payment" component={AdminManualPaymentPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -273,19 +184,20 @@ function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated } = useAuth();
   
-  // Landing/public pages that should not show widgets
+  // Landing/public pages and admin pages that should not show user widgets
   const landingPages = ['/', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
-  
-  // Only show widgets on authenticated pages (not landing/public pages)
-  const shouldShowWidgets = isAuthenticated && !isLandingPage;
+  const isAdminPage = location.startsWith('/admin');
+
+  // Only show user widgets on authenticated non-admin pages
+  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage;
 
   return (
     <TooltipProvider>
       <Toaster />
       <Router />
-      <BottomNavigation />
-      <PWAInstallPrompt />
+      {!isAdminPage && <BottomNavigation />}
+      {!isAdminPage && <PWAInstallPrompt />}
       {shouldShowWidgets && (
         <>
           <WhatsAppSupportFAB />
