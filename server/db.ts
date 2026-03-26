@@ -5,10 +5,26 @@ import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-const fallbackDatabaseUrl = "postgresql://neondb_owner:npg_IiOAUPltu3d8@ep-wild-union-abir03rk-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require";
+// Resolve the connection string — prefer DATABASE_URL, fall back to individual PG* vars
+function resolveConnectionString(): string {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
+  }
 
-// Resolve and expose the connection string early so all tools (drizzle-kit, session store, etc.) can find it
-const connectionString = (process.env.DATABASE_URL || fallbackDatabaseUrl).replace(/^"(.*)"$/, '$1').trim();
+  const { PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT } = process.env;
+  if (PGHOST && PGUSER && PGPASSWORD && PGDATABASE) {
+    const port = PGPORT || '5432';
+    return `postgresql://${PGUSER}:${encodeURIComponent(PGPASSWORD)}@${PGHOST}:${port}/${PGDATABASE}?sslmode=require`;
+  }
+
+  throw new Error(
+    "No database connection configured. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE environment variables."
+  );
+}
+
+const connectionString = resolveConnectionString();
+
+// Ensure DATABASE_URL is set so drizzle-kit and other tools can find it
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = connectionString;
 }
@@ -51,17 +67,10 @@ export async function ensureSchema() {
   const exists = await tablesExist();
 
   if (!exists) {
-    // Fresh database — safe to push the schema once to create all tables
-    try {
-      const { execSync } = await import("child_process");
-      execSync('npx drizzle-kit push', {
-        env: { ...process.env, DATABASE_URL: connectionString },
-        stdio: 'pipe',
-      });
-      console.log('✅ Schema created for fresh database');
-    } catch (err: any) {
-      console.warn('⚠️ Schema creation warning:', err.stderr?.toString() || err.message);
-    }
+    // Tables do not exist — log a warning but do NOT auto-run drizzle-kit push.
+    // Running drizzle-kit push automatically can drop and recreate tables, destroying all data.
+    // To initialize a fresh database, run: npm run db:push  (manually, once, as a developer)
+    console.warn('⚠️  Database tables not found. If this is a fresh database, run "npm run db:push" manually to create the schema.');
   } else {
     // Existing database — only add missing columns, never drop or recreate anything
     await alterMissingColumns();
