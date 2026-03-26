@@ -7004,6 +7004,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Discount enabled setting
+  app.get("/api/system-settings/discount-enabled", async (req, res) => {
+    try {
+      const setting = await storage.getSystemSetting("virtual_card", "discount_enabled");
+      const enabled = setting?.value !== "false";
+      res.json({ enabled });
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching discount setting" });
+    }
+  });
+
+  app.put("/api/system-settings/discount-enabled", async (req, res) => {
+    try {
+      const { enabled } = req.body;
+      await storage.setSystemSetting({
+        category: "virtual_card",
+        key: "discount_enabled",
+        value: String(!!enabled),
+        description: "Whether to show the discount badge on the virtual card purchase page"
+      });
+      res.json({ success: true, enabled: !!enabled });
+    } catch (error) {
+      res.status(500).json({ message: "Error updating discount setting" });
+    }
+  });
+
   // Convert USD to KES endpoint
   app.post("/api/convert-to-kes", async (req, res) => {
     try {

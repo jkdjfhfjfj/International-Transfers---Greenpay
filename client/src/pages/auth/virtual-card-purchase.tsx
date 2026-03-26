@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import { SiVisa, SiMastercard } from "react-icons/si";
 
 export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
@@ -44,12 +45,22 @@ export default function VirtualCardPurchasePage() {
     },
   });
 
+  const { data: discountData } = useQuery({
+    queryKey: ["/api/system-settings/discount-enabled"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/system-settings/discount-enabled");
+      return r.json();
+    },
+  });
+
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const hasDiscount = parseFloat(currentCardPrice) < parseFloat(originalPrice);
+  const discountEnabled = (discountData as any)?.enabled !== false;
   const discountPct = hasDiscount
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
-    : 75;
+    : 0;
+  const showDiscount = discountEnabled && hasDiscount;
 
   // Listen for payment completion (in real app, use webhooks)
   useState(() => {
@@ -167,11 +178,15 @@ export default function VirtualCardPurchasePage() {
             <div className="flex items-center justify-between mb-3">
               <span className="font-medium">Virtual Card (Annual)</span>
               <div className="flex items-center gap-2">
-                <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
+                {showDiscount && (
+                  <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
+                )}
                 <span className="text-xl font-bold text-primary">${currentCardPrice}</span>
-                <div className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                  {discountPct}% OFF
-                </div>
+                {showDiscount && (
+                  <div className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                    {discountPct}% OFF
+                  </div>
+                )}
               </div>
             </div>
             <div className="text-left space-y-2 text-sm text-muted-foreground">
@@ -202,24 +217,21 @@ export default function VirtualCardPurchasePage() {
             className="bg-card p-4 rounded-xl border border-border mb-6 elevation-1"
           >
             <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-widest">Powered By</p>
-            <div className="flex items-center justify-center gap-5 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="material-icons text-green-600 text-base">phone_iphone</span>
-                <span className="text-sm font-bold text-foreground">M-Pesa</span>
+            <div className="flex items-center justify-center gap-4 flex-wrap">
+              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                <span className="font-extrabold text-sm tracking-tight">
+                  <span className="text-[#4caf50]">M</span>
+                  <span className="text-[#e03a3e]">-Pesa</span>
+                </span>
               </div>
-              <div className="w-px h-4 bg-border" />
-              <div className="flex items-center gap-1.5">
-                <span className="material-icons text-blue-500 text-base">credit_card</span>
-                <span className="text-sm font-bold text-foreground">Visa</span>
+              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                <SiVisa className="w-8 h-5 text-blue-600" />
               </div>
-              <div className="w-px h-4 bg-border" />
-              <div className="flex items-center gap-1.5">
-                <span className="material-icons text-orange-500 text-base">payment</span>
-                <span className="text-sm font-bold text-foreground">Mastercard</span>
+              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                <SiMastercard className="w-6 h-6 text-orange-500" />
               </div>
-              <div className="w-px h-4 bg-border" />
-              <div className="flex items-center gap-1.5">
-                <span className="material-icons text-primary text-base">security</span>
+              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                <span className="material-icons text-primary text-sm">security</span>
                 <span className="text-sm font-bold text-foreground">PayHero</span>
               </div>
             </div>

@@ -8,13 +8,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff } from "lucide-react";
+import { SiVisa, SiMastercard } from "react-icons/si";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function VirtualCardPage() {
   const [, setLocation] = useLocation();
   const [showCardDetails, setShowCardDetails] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
   const { user } = useAuth();
@@ -48,19 +49,32 @@ export default function VirtualCardPage() {
     },
   });
 
+  const { data: discountData } = useQuery({
+    queryKey: ["/api/system-settings/discount-enabled"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/system-settings/discount-enabled");
+      return r.json();
+    },
+  });
+
   const card = (cardData as any)?.card;
   const hasCard = (user?.hasVirtualCard || !!card) && !forceRepurchase;
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
+  const discountEnabled = (discountData as any)?.enabled !== false;
+  const discountPct = parseFloat(currentCardPrice) < parseFloat(originalPrice)
+    ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
+    : 0;
+  const showDiscount = discountEnabled && discountPct > 0;
   const realTimeBalance = parseFloat(user?.balance || '0');
   const isBlocked = card?.status === 'blocked';
   const isFrozen = card?.status === 'frozen';
   const isExpired = card?.status === 'expired';
 
-  const copyToClipboard = (text: string) => {
+  const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopied(field);
+      setTimeout(() => setCopied(null), 2000);
     });
   };
 
@@ -198,33 +212,84 @@ export default function VirtualCardPage() {
                 </p>
               </div>
 
+              {/* Price row */}
               <div className="bg-muted p-4 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between">
                   <span className="font-medium">Virtual Card</span>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
+                  <div className="flex items-center gap-2">
+                    {showDiscount && (
+                      <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
+                    )}
                     <span className="text-xl font-bold text-green-600">${currentCardPrice}</span>
-                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">75% OFF</div>
+                    {showDiscount && (
+                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
+                        {discountPct}% OFF
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Payment method */}
-              <div className="flex rounded-xl overflow-hidden border border-border">
-                {['auto', 'manual'].map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setPaymentMethod(m as 'auto' | 'manual')}
-                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                      paymentMethod === m
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-background text-muted-foreground hover:bg-muted'
-                    }`}
-                    data-testid={`button-payment-${m}`}
-                  >
-                    {m === 'auto' ? 'M-Pesa (Auto)' : 'Manual Payment'}
-                  </button>
+              {/* Card notes */}
+              <div className="text-left space-y-2 py-1">
+                {[
+                  "Works for international online payments & subscriptions",
+                  "Accepted wherever Visa is supported worldwide",
+                  "Reload your card balance any time via M-Pesa",
+                ].map((note, i) => (
+                  <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <span className="text-green-500 mt-0.5">✓</span>
+                    <span>{note}</span>
+                  </div>
                 ))}
+              </div>
+
+              {/* Partner logos */}
+              <div className="flex items-center justify-center gap-5 py-2">
+                <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                  <SiVisa className="w-8 h-5 text-blue-600" />
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                  <SiMastercard className="w-6 h-6 text-orange-500" />
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                  <span className="font-extrabold text-sm tracking-tight">
+                    <span className="text-[#4caf50]">M</span>
+                    <span className="text-[#e03a3e]">-Pesa</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment method tabs */}
+              <div className="flex rounded-xl overflow-hidden border border-border">
+                <button
+                  onClick={() => setPaymentMethod('auto')}
+                  className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                    paymentMethod === 'auto'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                  data-testid="button-payment-auto"
+                >
+                  M-Pesa (Auto)
+                  {paymentMethod !== 'auto' && (
+                    <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>
+                  )}
+                  {paymentMethod === 'auto' && (
+                    <span className="text-[10px] bg-white/20 text-primary-foreground px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setPaymentMethod('manual')}
+                  className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                    paymentMethod === 'manual'
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`}
+                  data-testid="button-payment-manual"
+                >
+                  Manual Payment
+                </button>
               </div>
 
               {paymentMethod === 'auto' ? (
@@ -240,22 +305,25 @@ export default function VirtualCardPage() {
               ) : (
                 <div className="space-y-3 text-left">
                   <div className="bg-muted p-4 rounded-xl space-y-2">
-                    <p className="text-sm font-medium">Manual Payment Details</p>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Paybill</span>
-                      <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybill || "Loading..."}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Account No.</span>
-                      <span className="font-mono font-semibold">{user?.phone || "Your Phone"}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Amount (KES)</span>
-                      <span className="font-mono font-semibold">{(kesAmountData as any)?.kesAmount || "..."}</span>
-                    </div>
+                    <p className="text-sm font-semibold mb-3">How to pay via Paybill</p>
+                    {[
+                      { step: 1, text: "Open M-Pesa on your phone and select Lipa na M-Pesa" },
+                      { step: 2, text: "Select Pay Bill" },
+                      { step: 3, text: `Enter Business No: ${(manualPaymentSettings as any)?.paybill || "—"}` },
+                      { step: 4, text: `Enter Account No: ${(manualPaymentSettings as any)?.account || "—"}` },
+                      { step: 5, text: `Enter Amount: KES ${(kesAmountData as any)?.kesAmount || "..."}` },
+                      { step: 6, text: "Enter your M-Pesa PIN and confirm" },
+                    ].map(({ step, text }) => (
+                      <div key={step} className="flex items-start gap-3 text-sm">
+                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">
+                          {step}
+                        </span>
+                        <span className="text-foreground">{text}</span>
+                      </div>
+                    ))}
                   </div>
                   <p className="text-xs text-muted-foreground text-center">
-                    After payment, contact support with your reference number.
+                    After payment, contact support with your M-Pesa reference number.
                   </p>
                 </div>
               )}
@@ -350,17 +418,49 @@ export default function VirtualCardPage() {
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 whileTap={{ scale: 0.95 }}
-                onClick={() => copyToClipboard(card.cardNumber)}
+                onClick={() => copyToClipboard(card.cardNumber, "number")}
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
                 data-testid="button-copy-card-number"
               >
-                {copied
+                {copied === "number"
                   ? <><Check className="w-4 h-4 text-green-500" /> Copied!</>
                   : <><Copy className="w-4 h-4 text-muted-foreground" /> Copy Number</>
                 }
               </motion.button>
             )}
           </div>
+
+          {/* CVV + Expiry copy row */}
+          {card && showCardDetails && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 mt-2 px-1"
+            >
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => copyToClipboard(card.cvv || "", "cvv")}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-medium shadow-sm hover:bg-muted transition-colors"
+                data-testid="button-copy-cvv"
+              >
+                {copied === "cvv"
+                  ? <><Check className="w-3 h-3 text-green-500" /> CVV Copied</>
+                  : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy CVV</>
+                }
+              </motion.button>
+              <motion.button
+                whileTap={{ scale: 0.95 }}
+                onClick={() => copyToClipboard(card.expiryDate || "", "expiry")}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-medium shadow-sm hover:bg-muted transition-colors"
+                data-testid="button-copy-expiry"
+              >
+                {copied === "expiry"
+                  ? <><Check className="w-3 h-3 text-green-500" /> Expiry Copied</>
+                  : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy Expiry</>
+                }
+              </motion.button>
+            </motion.div>
+          )}
         </motion.div>
 
         {/* ── BALANCE ────────────────────────────────────────────────────── */}

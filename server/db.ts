@@ -40,6 +40,7 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
   ];
 
   for (const sql of migrations) {
