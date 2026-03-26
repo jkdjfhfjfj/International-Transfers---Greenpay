@@ -243,7 +243,7 @@ export default function VirtualCardPage() {
                     <p className="text-sm font-medium">Manual Payment Details</p>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Paybill</span>
-                      <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybillNumber || "Loading..."}</span>
+                      <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybill || "Loading..."}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Account No.</span>
