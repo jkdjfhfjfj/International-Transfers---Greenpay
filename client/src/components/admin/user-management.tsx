@@ -689,15 +689,6 @@ function UserDetailsDialog({ user }: { user: User }) {
           description: actionMessages[action] || "Action completed successfully",
         });
 
-        // Immediately update selectedUser state so the dialog reflects the change
-        if (selectedUser?.id === userId) {
-          if (action === "unsuspend") {
-            setSelectedUser(prev => prev ? { ...prev, isSuspended: false, suspendedAt: undefined, suspensionReason: undefined } : null);
-          } else if (action === "suspend") {
-            setSelectedUser(prev => prev ? { ...prev, isSuspended: true, suspensionReason: extra?.reason || "Suspended by administrator", suspendedAt: new Date().toISOString() } : null);
-          }
-        }
-
         queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       }
     } catch (error) {

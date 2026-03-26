@@ -12,9 +12,9 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: "dashboard", icon: "home", label: "Home", path: "/dashboard" },
-  { id: "transactions", icon: "receipt_long", label: "History", path: "/transactions" },
-  { id: "send", icon: "swap_horiz", label: "Transfer", path: "/send-money", isCenter: true },
   { id: "virtual-card", icon: "credit_card", label: "Card", path: "/virtual-card" },
+  { id: "send", icon: "swap_horiz", label: "Transfer", path: "/send-money", isCenter: true },
+  { id: "transactions", icon: "receipt_long", label: "History", path: "/transactions" },
   { id: "settings", icon: "person", label: "Profile", path: "/settings" },
 ];
 

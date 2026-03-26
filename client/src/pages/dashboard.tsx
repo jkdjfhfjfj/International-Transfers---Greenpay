@@ -220,7 +220,7 @@ export default function DashboardPage() {
         )}
       </div>
       {/* Top Navigation with Wavy Background */}
-      <div className="relative overflow-hidden rounded-b-3xl">
+      <div className="relative overflow-hidden rounded-b-3xl sticky top-0 z-50">
         {/* Layered Wavy Background SVG - Green top, Dark bottom */}
         <svg
           className="absolute inset-0 w-full h-full"
