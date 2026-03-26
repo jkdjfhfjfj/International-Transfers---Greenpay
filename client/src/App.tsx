@@ -119,7 +119,9 @@ function Router() {
       <Route path="/send-confirm" component={SendConfirmPage} />
       <Route path="/receive-money" component={ReceiveMoneyPage} />
       <Route path="/transactions" component={TransactionsPage} />
-      <Route path="/virtual-card" component={VirtualCardPage} />
+      <Route path="/virtual-card">
+        <ProtectedRoute component={VirtualCardPage} />
+      </Route>
       <Route path="/settings" component={SettingsPage} />
       <Route path="/support" component={SupportPage} />
       <Route path="/support/tickets">
