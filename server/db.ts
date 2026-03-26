@@ -1,7 +1,6 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
 import ws from "ws";
-import { execSync } from "child_process";
 import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -17,20 +16,7 @@ if (!process.env.DATABASE_URL) {
 export const pool = new Pool({ connectionString });
 export const db = drizzle({ client: pool, schema });
 
-// Run drizzle-kit push to create/sync ALL tables and columns on any fresh or existing DB
-async function pushSchema() {
-  try {
-    execSync('npx drizzle-kit push --force', {
-      env: { ...process.env, DATABASE_URL: connectionString },
-      stdio: 'pipe',
-    });
-    console.log('✅ Schema push complete (all tables and columns are up to date)');
-  } catch (err: any) {
-    console.warn('⚠️ Schema push warning:', err.stderr?.toString() || err.message);
-  }
-}
-
-// Safety net: individual ALTER TABLE statements in case push is skipped or partially fails
+// Safely add new columns to existing tables — never drops or recreates anything
 async function alterMissingColumns() {
   const migrations = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
@@ -49,7 +35,36 @@ async function alterMissingColumns() {
   }
 }
 
+// Check whether the core tables already exist in this database
+async function tablesExist(): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'`
+    );
+    return parseInt(result.rows[0].count, 10) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function ensureSchema() {
-  await pushSchema();
-  await alterMissingColumns();
+  const exists = await tablesExist();
+
+  if (!exists) {
+    // Fresh database — safe to push the schema once to create all tables
+    try {
+      const { execSync } = await import("child_process");
+      execSync('npx drizzle-kit push', {
+        env: { ...process.env, DATABASE_URL: connectionString },
+        stdio: 'pipe',
+      });
+      console.log('✅ Schema created for fresh database');
+    } catch (err: any) {
+      console.warn('⚠️ Schema creation warning:', err.stderr?.toString() || err.message);
+    }
+  } else {
+    // Existing database — only add missing columns, never drop or recreate anything
+    await alterMissingColumns();
+    console.log('✅ Schema up to date (existing database — no destructive changes)');
+  }
 }
