@@ -1195,52 +1195,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // File upload for chat messages
+  // File upload — tries Cloudinary first, falls back to base64 data URL
   app.post("/api/upload", upload.single('file'), async (req, res) => {
     try {
       const userId = (req.session as any)?.userId;
       const adminId = (req.session as any)?.admin?.id;
-      
-      console.log('[Upload] Request received:', { hasFile: !!req.file, userId, adminId });
       
       if (!userId && !adminId) {
         return res.status(401).json({ message: "Authentication required" });
       }
 
       if (!req.file) {
-        console.error('[Upload] No file in request');
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      console.log('[Upload] File details:', { 
-        filename: req.file.originalname, 
-        size: req.file.size, 
-        mimetype: req.file.mimetype,
-        hasBuffer: !!req.file.buffer
-      });
+      const cloudinaryReady = !!(
+        process.env.CLOUDINARY_CLOUD_NAME &&
+        process.env.CLOUDINARY_API_KEY &&
+        process.env.CLOUDINARY_API_SECRET
+      );
 
-      // Upload to Cloudinary
-      try {
-        const url = await cloudinaryStorage.uploadChatFile(
-          req.file.buffer,
-          req.file.originalname,
-          req.file.mimetype
-        );
-        
-        console.log('[Upload] Successfully uploaded to Cloudinary:', { url });
-        
-        res.json({ 
-          url,
-          fileUrl: url,
-          fileName: req.file.originalname,
-          fileSize: req.file.size,
-          mimeType: req.file.mimetype,
-          message: "File uploaded successfully"
-        });
-      } catch (uploadError) {
-        console.error('[Upload] Cloudinary upload error:', uploadError);
-        return res.status(500).json({ message: "Failed to upload file to storage", error: String(uploadError) });
+      if (cloudinaryReady) {
+        try {
+          const url = await cloudinaryStorage.uploadChatFile(
+            req.file.buffer,
+            req.file.originalname,
+            req.file.mimetype
+          );
+          return res.json({ 
+            url, fileUrl: url,
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            message: "File uploaded successfully"
+          });
+        } catch (uploadError) {
+          console.error('[Upload] Cloudinary upload error:', uploadError);
+          // Fall through to base64 fallback
+        }
       }
+
+      // Base64 fallback — always works, no external service needed
+      const base64 = req.file.buffer.toString('base64');
+      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+      console.log('[Upload] Returning base64 data URL (Cloudinary not configured or failed)');
+      return res.json({
+        url: dataUrl,
+        fileUrl: dataUrl,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        message: "File stored as base64 (no cloud storage)"
+      });
     } catch (error) {
       console.error('[Upload] Request error:', error);
       res.status(500).json({ message: "Failed to upload file", error: String(error) });
