@@ -31,6 +31,10 @@ export async function ensureSchema() {
       ALTER TABLE announcements 
       ADD COLUMN IF NOT EXISTS image_url TEXT
     `);
+    await pool.query(`
+      ALTER TABLE virtual_cards 
+      ADD COLUMN IF NOT EXISTS freeze_reason TEXT
+    `);
     console.log('✅ Database schema ensured (auto-migration complete)');
   } catch (err: any) {
     console.warn('⚠️ Auto-migration warning:', err.message);

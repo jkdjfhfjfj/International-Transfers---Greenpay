@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -42,6 +44,7 @@ interface VirtualCard {
   cvv: string;
   cardHolderName: string;
   status: string; // "active", "frozen", "expired"
+  freezeReason?: string | null;
   balance: string;
   currency: string;
   purchaseDate: string;
@@ -55,6 +58,8 @@ interface VirtualCardsResponse {
 export default function VirtualCardManagement() {
   const [search, setSearch] = useState("");
   const [selectedCard, setSelectedCard] = useState<VirtualCard | null>(null);
+  const [freezeDialogCard, setFreezeDialogCard] = useState<VirtualCard | null>(null);
+  const [freezeReason, setFreezeReason] = useState("");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -108,7 +113,6 @@ export default function VirtualCardManagement() {
   };
 
   const handleToggleStatus = (card: VirtualCard) => {
-    // Prevent toggling expired cards - they cannot be reactivated
     if (card.status === "expired") {
       toast({
         title: "Cannot Modify Expired Card",
@@ -117,13 +121,27 @@ export default function VirtualCardManagement() {
       });
       return;
     }
-    
-    // Toggle between active and frozen (avoid setting to expired automatically)
-    const newStatus = card.status === "active" ? "frozen" : "active";
+
+    if (card.status === "active") {
+      setFreezeReason("");
+      setFreezeDialogCard(card);
+      return;
+    }
+
     updateCardMutation.mutate({
       id: card.id,
-      updates: { status: newStatus }
+      updates: { status: "active", freezeReason: null }
     });
+  };
+
+  const handleConfirmFreeze = () => {
+    if (!freezeDialogCard) return;
+    updateCardMutation.mutate({
+      id: freezeDialogCard.id,
+      updates: { status: "frozen", freezeReason: freezeReason.trim() || "Frozen by administrator" }
+    });
+    setFreezeDialogCard(null);
+    setFreezeReason("");
   };
 
   const maskCardNumber = (cardNumber: string) => {
@@ -454,6 +472,55 @@ function CardDetailsDialog({
           </Button>
         </div>
       </div>
+
+      {/* Freeze Reason Dialog */}
+      <Dialog open={!!freezeDialogCard} onOpenChange={(open) => { if (!open) setFreezeDialogCard(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="w-5 h-5 text-orange-500" />
+              Freeze Card
+            </DialogTitle>
+            <DialogDescription>
+              Provide a reason for freezing this card. The reason will be shown to the cardholder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            {freezeDialogCard && (
+              <div className="p-3 bg-muted rounded-lg text-sm">
+                <span className="text-muted-foreground">Card: </span>
+                <span className="font-mono font-medium">{maskCardNumber(freezeDialogCard.cardNumber)}</span>
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="freeze-reason">Reason for freezing</Label>
+              <Textarea
+                id="freeze-reason"
+                placeholder="e.g. Suspicious activity detected, compliance review..."
+                value={freezeReason}
+                onChange={(e) => setFreezeReason(e.target.value)}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                If left blank, "Frozen by administrator" will be used.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => setFreezeDialogCard(null)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleConfirmFreeze} disabled={updateCardMutation.isPending}>
+                {updateCardMutation.isPending ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                ) : (
+                  <Lock className="w-4 h-4 mr-2" />
+                )}
+                Freeze Card
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

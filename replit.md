@@ -178,3 +178,25 @@ Each page has:
 - AdminRoute guard (checks session before loading)
 - Back button to return to main navigation
 - Full-screen layout (prevents tab switching issues)
+
+## Recent Improvements
+
+### Auto Schema Migration (`server/db.ts`)
+`ensureSchema()` runs on every startup and safely adds missing columns:
+- `users`: `suspended_at`, `suspension_reason`, `last_login_at`
+- `announcements`: `image_url`
+- `virtual_cards`: `freeze_reason`
+
+### Dashboard UI
+- All Quick Actions and Services icons unified to `from-emerald-500 to-green-600` gradient (solid, no opacity fade).
+
+### Card Freeze Feature
+- Admin card management now shows a reason dialog before freezing any card.
+- `freeze_reason` stored in DB and shown to the user on the virtual card page: "Your virtual card has been blocked. Reason: {{reason}}."
+
+### Announcement Image Upload
+- Falls back to client-side base64 embedding when Cloudinary is not configured.
+- Videos still require a URL since base64 encoding is too large for video files.
+
+### Send Money Screen
+- Removed "Go back to dashboard" button from the "Virtual Card Required" screen (it was logging users out).

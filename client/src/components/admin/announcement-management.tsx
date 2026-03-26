@@ -35,6 +35,15 @@ export function AnnouncementManagement() {
 
   const announcements = announcementsData?.announcements || [];
 
+  const toBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleFileUpload = async (file: File) => {
     if (!file) return;
 
@@ -48,29 +57,39 @@ export function AnnouncementManagement() {
 
     setIsUploading(true);
     try {
-      const formDataObj = new FormData();
-      formDataObj.append("file", file);
-
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: formDataObj,
-        credentials: "include",
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: "Upload failed" }));
-        throw new Error(err.message || "Upload failed");
+      // Try server upload first
+      let serverUploadSuccess = false;
+      try {
+        const formDataObj = new FormData();
+        formDataObj.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: formDataObj, credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          const url = data.url || data.fileUrl;
+          setFormData(prev => ({ ...prev, imageUrl: url }));
+          setMediaPreview(url);
+          setMediaType(isVideo ? "video" : "image");
+          toast({ title: "Uploaded", description: `${isVideo ? "Video" : "Image"} uploaded successfully` });
+          serverUploadSuccess = true;
+        }
+      } catch {
+        // Fall through to base64 fallback
       }
 
-      const data = await res.json();
-      const url = data.url || data.fileUrl;
-
-      setFormData(prev => ({ ...prev, imageUrl: url }));
-      setMediaPreview(url);
-      setMediaType(isVideo ? "video" : "image");
-      toast({ title: "Uploaded", description: `${isVideo ? "Video" : "Image"} uploaded successfully` });
+      if (!serverUploadSuccess) {
+        // Base64 fallback for images (videos are too large for base64)
+        if (isImage) {
+          const base64 = await toBase64(file);
+          setFormData(prev => ({ ...prev, imageUrl: base64 }));
+          setMediaPreview(base64);
+          setMediaType("image");
+          toast({ title: "Image ready", description: "Image embedded directly (no cloud storage needed)" });
+        } else {
+          toast({ title: "Upload failed", description: "Video upload requires cloud storage. Please enter a video URL instead.", variant: "destructive" });
+        }
+      }
     } catch (err: any) {
-      toast({ title: "Upload failed", description: err.message || "Could not upload file. Try entering a URL instead.", variant: "destructive" });
+      toast({ title: "Upload failed", description: err.message || "Could not process file.", variant: "destructive" });
     } finally {
       setIsUploading(false);
     }

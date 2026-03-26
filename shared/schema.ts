@@ -64,6 +64,7 @@ export const virtualCards = pgTable("virtual_cards", {
   cvv: text("cvv").notNull(),
   balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
   status: text("status").default("active"), // active, frozen, expired
+  freezeReason: text("freeze_reason"),
   purchaseAmount: decimal("purchase_amount", { precision: 10, scale: 2 }).default("60.00"),
   paystackReference: text("paystack_reference"),
   purchaseDate: timestamp("purchase_date").defaultNow(),

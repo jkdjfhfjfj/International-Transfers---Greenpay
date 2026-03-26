@@ -562,7 +562,7 @@ export default function VirtualCardPage() {
                   card.status === 'frozen' ? 'text-orange-600' : card.status === 'expired' ? 'text-gray-600' : 'text-red-600'
                 }`}>{
                   card.status === 'frozen' 
-                    ? 'Your virtual card has been frozen by an administrator. Please contact support for assistance.'
+                    ? `Your virtual card has been blocked. Reason: ${(card as any).freezeReason || 'Frozen by administrator'}. Please contact support for assistance.`
                     : card.status === 'expired'
                     ? 'Your virtual card has expired and can no longer be used. Purchase a new card to continue making transactions.'
                     : 'Your virtual card has been blocked by an administrator. Please contact support for assistance.'

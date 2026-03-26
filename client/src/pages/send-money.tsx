@@ -256,12 +256,6 @@ export default function SendMoneyPage() {
             Get Virtual Card
           </Button>
 
-          <button
-            onClick={() => setLocation("/")}
-            className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-          >
-            Go back to dashboard
-          </button>
         </div>
       </div>
     );
