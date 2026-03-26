@@ -18,42 +18,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user data on app load
-    const userData = getStorageSafe<User | null>("greenpay_user", null);
-    if (userData) {
-      setUser(userData);
-      // Load stored settings
-      if (userData?.darkMode) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
+    // On boot, verify the stored user against the server session.
+    // /api/auth/me uses the HTTP session cookie — never trusts the URL param.
+    // If the server says 401 (no session / user deleted from DB), clear local state.
+    const verifySession = async () => {
+      try {
+        const res = await fetch("/api/auth/me", { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          const freshUser = data.user as User;
+          setUser(freshUser);
+          setStorageSafe("greenpay_user", freshUser);
+          if (freshUser?.darkMode) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        } else {
+          // Server says no valid session — clear any stale local data
+          setUser(null);
+          localStorage.removeItem("greenpay_user");
+        }
+      } catch {
+        // Network error — fall back to locally stored data so the app still renders
+        const stored = getStorageSafe<User | null>("greenpay_user", null);
+        if (stored) {
+          setUser(stored);
+          if (stored.darkMode) document.documentElement.classList.add("dark");
+          else document.documentElement.classList.remove("dark");
+        }
+      } finally {
+        setIsLoading(false);
       }
-    }
-    setIsLoading(false);
+    };
+
+    verifySession();
   }, []);
 
   const login = (userData: User) => {
     setUser(userData);
     setStorageSafe("greenpay_user", userData);
+    if (userData?.darkMode) document.documentElement.classList.add("dark");
+    else document.documentElement.classList.remove("dark");
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem("greenpay_user");
+    // Also tell the server to clear the session
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
   };
 
   const refreshUser = async () => {
     if (!user?.id) return;
-    
     try {
-      const response = await fetch(`/api/users/${user.id}`);
-      if (response.ok) {
-        const userData = await response.json();
-        setUser(userData.user);
-        setStorageSafe("greenpay_user", userData.user);
+      const res = await fetch("/api/auth/me", { credentials: "include" });
+      if (res.ok) {
+        const data = await res.json();
+        const freshUser = data.user as User;
+        setUser(freshUser);
+        setStorageSafe("greenpay_user", freshUser);
+      } else if (res.status === 401) {
+        // Session expired or user removed from DB — log out cleanly
+        setUser(null);
+        localStorage.removeItem("greenpay_user");
       }
-    } catch (error) {
-      console.error("Failed to refresh user data:", error);
+    } catch {
+      // Network error — keep current state, don't log out
     }
   };
 

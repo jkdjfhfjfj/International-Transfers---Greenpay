@@ -131,6 +131,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
 
+  // Session-based "who am I?" endpoint — uses session not URL param, auto-clears stale sessions
+  app.get("/api/auth/me", async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const user = await storage.getUser(userId);
+      if (!user) {
+        // Session has a userId but no matching DB record — clear the broken session
+        req.session.destroy(() => {});
+        return res.status(401).json({ message: "Session expired — user not found" });
+      }
+
+      const { password, ...userResponse } = user as any;
+      res.json({ user: userResponse });
+    } catch (error) {
+      console.error("Auth me error:", error);
+      res.status(500).json({ message: "Failed to retrieve session user" });
+    }
+  });
+
+  // User logout — destroy session
+  app.post("/api/auth/logout", (req: any, res) => {
+    req.session.destroy((err: any) => {
+      if (err) console.error("Logout session destroy error:", err);
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+
   // Handle manual deposit proof upload
   app.post("/api/deposit/manual-proof", requireAuth, upload.single('proof'), async (req, res) => {
     try {
