@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -128,6 +128,13 @@ export default function UserManagement() {
       return response.json();
     },
   });
+
+  useEffect(() => {
+    if (selectedUser && usersData?.users) {
+      const updated = usersData.users.find((u) => u.id === selectedUser.id);
+      if (updated) setSelectedUser(updated);
+    }
+  }, [usersData]);
 
   const blockUserMutation = useMutation({
     mutationFn: async (userId: string) => {

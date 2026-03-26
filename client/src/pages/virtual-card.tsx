@@ -536,52 +536,93 @@ export default function VirtualCardPage() {
           </div>
         </motion.div>
 
-        {/* Card Blocked Warning - only show when card data is loaded and card is inactive */}
+        {/* Card Status Warning - only show when card data is loaded and card is not active */}
         {card && card.status !== 'active' && (
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className={`p-4 rounded-xl ${
-              card.status === 'frozen' 
-                ? 'bg-orange-50 border border-orange-200' 
+            className={`p-4 rounded-xl space-y-3 ${
+              card.status === 'frozen'
+                ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800'
                 : card.status === 'expired'
-                ? 'bg-gray-50 border border-gray-200'
-                : 'bg-red-50 border border-red-200'
+                ? 'bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700'
+                : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
             }`}
           >
-            <div className="flex items-center">
-              <span className={`material-icons mr-3 ${
+            <div className="flex items-start gap-3">
+              <span className={`material-icons mt-0.5 ${
                 card.status === 'frozen' ? 'text-orange-500' : card.status === 'expired' ? 'text-gray-500' : 'text-red-500'
               }`}>{card.status === 'frozen' ? 'pause_circle_filled' : card.status === 'expired' ? 'schedule' : 'block'}</span>
-              <div>
+              <div className="flex-1">
                 <h3 className={`font-semibold ${
-                  card.status === 'frozen' ? 'text-orange-700' : card.status === 'expired' ? 'text-gray-700' : 'text-red-700'
-                }`}>{card.status === 'frozen' ? 'Card Frozen' : card.status === 'expired' ? 'Card Expired' : 'Card Blocked'}</h3>
-                <p className={`text-sm ${
-                  card.status === 'frozen' ? 'text-orange-600' : card.status === 'expired' ? 'text-gray-600' : 'text-red-600'
-                }`}>{
-                  card.status === 'frozen' 
-                    ? `Your virtual card has been blocked. Reason: ${(card as any).freezeReason || 'Frozen by administrator'}. Please contact support for assistance.`
-                    : card.status === 'expired'
-                    ? 'Your virtual card has expired and can no longer be used. Purchase a new card to continue making transactions.'
-                    : 'Your virtual card has been blocked by an administrator. Please contact support for assistance.'
-                }</p>
+                  card.status === 'frozen' ? 'text-orange-700 dark:text-orange-400' : card.status === 'expired' ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-400'
+                }`}>
+                  {card.status === 'frozen' ? 'Card Frozen' : card.status === 'expired' ? 'Card Expired' : 'Card Blocked'}
+                </h3>
+
+                {card.status === 'frozen' && (
+                  <>
+                    <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
+                      Your virtual card has been frozen by an administrator.
+                    </p>
+                    <div className="mt-2 p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
+                      <p className="text-xs font-medium text-orange-700 dark:text-orange-300 uppercase tracking-wide">Reason</p>
+                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                        {(card as any).freezeReason || 'Frozen by administrator'}
+                      </p>
+                    </div>
+                    <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
+                      Contact support to resolve this issue or purchase a new card.
+                    </p>
+                  </>
+                )}
+
+                {card.status === 'expired' && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Your virtual card has expired and can no longer be used. Purchase a new card to continue making transactions.
+                  </p>
+                )}
+
+                {card.status !== 'frozen' && card.status !== 'expired' && (
+                  <>
+                    <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                      Your virtual card has been blocked by an administrator.
+                    </p>
+                    {(card as any).freezeReason && (
+                      <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
+                        <p className="text-xs font-medium text-red-700 dark:text-red-300 uppercase tracking-wide">Reason</p>
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">{(card as any).freezeReason}</p>
+                      </div>
+                    )}
+                    <p className="text-xs text-red-500 dark:text-red-400 mt-2">
+                      Contact support to resolve this issue or purchase a new card.
+                    </p>
+                  </>
+                )}
               </div>
             </div>
-            {card.status === 'expired' && (
-              <div className="mt-3">
-                <Button
-                  onClick={() => purchaseCardMutation.mutate()}
-                  disabled={purchaseCardMutation.isPending}
-                  variant="outline"
-                  className="bg-green-600 hover:bg-green-700 text-white border-green-600"
-                  data-testid="button-purchase-new-card"
-                >
-                  {purchaseCardMutation.isPending ? "Processing..." : "Purchase New Card"}
-                </Button>
-              </div>
-            )}
+
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                onClick={() => purchaseCardMutation.mutate()}
+                disabled={purchaseCardMutation.isPending}
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                data-testid="button-purchase-new-card"
+              >
+                <Sparkles className="w-4 h-4 mr-1" />
+                {purchaseCardMutation.isPending ? "Processing..." : "Get New Card"}
+              </Button>
+              <Button
+                onClick={() => setLocation('/support')}
+                variant="outline"
+                size="sm"
+              >
+                <span className="material-icons text-sm mr-1">support_agent</span>
+                Contact Support
+              </Button>
+            </div>
           </motion.div>
         )}
 

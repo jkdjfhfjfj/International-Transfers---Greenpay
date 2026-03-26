@@ -32,7 +32,7 @@ const cloudinaryStorage = new CloudinaryStorageService();
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory buffer for cloud upload
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit (supports video announcements)
   },
   fileFilter: (req, file, cb) => {
     // Allow common file types including videos
