@@ -5211,11 +5211,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get user by ID (for refreshing user data)
   app.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
+      const requestedId = req.params.id;
+      const sessionUserId = (req as any).session?.userId;
+
+      // Security: users can only fetch their own profile
+      if (sessionUserId && requestedId !== sessionUserId) {
+        return res.status(403).json({ error: "Access denied" });
       }
-      res.json({ user });
+
+      const user = await storage.getUser(requestedId);
+      if (!user) {
+        // Session has a userId but no matching DB record — clear stale session
+        console.warn(`[GET /api/users/:id] User ${requestedId} not found in database. Destroying stale session.`);
+        if ((req as any).session) {
+          (req as any).session.destroy(() => {});
+        }
+        return res.status(401).json({ error: "Session expired — user not found. Please log in again." });
+      }
+
+      const { password, ...userWithoutPassword } = user as any;
+      res.json({ user: userWithoutPassword });
     } catch (error) {
       console.error("Error retrieving user:", error);
       res.status(500).json({ error: "Failed to retrieve user data" });
