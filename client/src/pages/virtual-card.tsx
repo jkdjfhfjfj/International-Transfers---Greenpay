@@ -1,19 +1,21 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { X, Sparkles } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff } from "lucide-react";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function VirtualCardPage() {
   const [, setLocation] = useLocation();
   const [showCardDetails, setShowCardDetails] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [forceRepurchase, setForceRepurchase] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
   const { user } = useAuth();
   const { toast } = useToast();
@@ -24,18 +26,10 @@ export default function VirtualCardPage() {
     enabled: !!user?.id,
   });
 
-  // Get transactions for real-time balance calculation
-  const { data: transactionData } = useQuery({
-    queryKey: ["/api/transactions", user?.id],
-    enabled: !!user?.id,
-  });
-
-  // Get current card price from system settings
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
   });
 
-  // Get KES amount for manual payment
   const { data: kesAmountData } = useQuery({
     queryKey: ["/api/convert-to-kes", settingsData],
     queryFn: async () => {
@@ -46,7 +40,6 @@ export default function VirtualCardPage() {
     enabled: !!settingsData,
   });
 
-  // Fetch manual payment settings
   const { data: manualPaymentSettings } = useQuery({
     queryKey: ["/api/manual-payment-settings"],
     queryFn: async () => {
@@ -56,38 +49,37 @@ export default function VirtualCardPage() {
   });
 
   const card = (cardData as any)?.card;
-  const hasCard = user?.hasVirtualCard || !!card;
-  const transactions = (transactionData as any)?.transactions || [];
-  
-  // Get current card price (fallback to $60.00)
+  const hasCard = (user?.hasVirtualCard || !!card) && !forceRepurchase;
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
-  const discountPrice = currentCardPrice;
-  
-  // Use the actual stored balance from server (already includes all completed transactions)  
-  // Server maintains balance accuracy by updating it directly when transactions complete
   const realTimeBalance = parseFloat(user?.balance || '0');
+  const isBlocked = card?.status === 'blocked';
+  const isFrozen = card?.status === 'frozen';
+  const isExpired = card?.status === 'expired';
 
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const purchaseCardMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", {
-        userId: user?.id
+        userId: user?.id,
       });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
-        // PayHero STK Push initiated successfully
         toast({
           title: "STK Push Sent!",
           description: data.message || "Check your phone and enter your M-Pesa PIN to complete the payment.",
         });
-        
-        // Redirect to processing page for status tracking
         setTimeout(() => {
           setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`);
-        }, 2000); // Brief delay to show success message
+        }, 2000);
       } else {
         throw new Error(data.message || "Unable to initialize M-Pesa payment");
       }
@@ -102,14 +94,16 @@ export default function VirtualCardPage() {
   });
 
   const maskCardNumber = (number: string) => {
-    return showCardDetails ? number : "•••• •••• •••• " + number.slice(-4);
+    if (showCardDetails) {
+      return number.replace(/(.{4})/g, "$1 ").trim();
+    }
+    return `•••• •••• •••• ${number.slice(-4)}`;
   };
 
-  // If user doesn't have a card, show purchase screen
+  // ─── PURCHASE SCREEN ────────────────────────────────────────────────────────
   if (!hasCard) {
     return (
       <div className="min-h-screen bg-background pb-20">
-        {/* Top Navigation */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -117,7 +111,7 @@ export default function VirtualCardPage() {
         >
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={() => setLocation("/dashboard")}
+            onClick={() => forceRepurchase ? setForceRepurchase(false) : setLocation("/dashboard")}
             className="material-icons text-muted-foreground mr-3 p-2 rounded-full hover:bg-muted transition-colors"
             data-testid="button-back"
           >
@@ -132,42 +126,61 @@ export default function VirtualCardPage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-gradient-to-br from-primary to-secondary p-6 rounded-2xl text-white elevation-3"
           >
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <p className="text-green-200 text-sm">GreenPay Card</p>
-                <p className="text-xs text-green-200">Virtual</p>
-              </div>
-              <div className="flex space-x-2">
-                <div className="w-8 h-5 bg-white/30 rounded"></div>
-                <div className="w-5 h-5 bg-white/50 rounded-full"></div>
-              </div>
-            </div>
-            
-            <div className="mb-6">
-              <p className="text-2xl font-mono tracking-wider text-green-200">
-                •••• •••• •••• ••••
-              </p>
-            </div>
-            
-            <div className="flex justify-between items-end">
-              <div>
-                <p className="text-green-200 text-xs">CARDHOLDER</p>
-                <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "YOUR NAME"}</p>
-              </div>
-              <div>
-                <p className="text-green-200 text-xs">EXPIRES</p>
-                <p className="text-sm font-semibold">••/••</p>
-              </div>
-              <div>
-                <p className="text-green-200 text-xs">CVV</p>
-                <p className="text-sm font-semibold">•••</p>
+            <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-900 p-6 rounded-2xl text-white elevation-3 relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16" />
+              <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8" />
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <p className="text-green-200 text-sm font-medium">GreenPay Card</p>
+                    <p className="text-white/50 text-xs">Virtual</p>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <div className="w-8 h-5 rounded bg-white/25" />
+                    <div className="w-5 h-5 rounded-full bg-white/40" />
+                  </div>
+                </div>
+                <p className="text-xl font-mono tracking-widest text-green-100 mb-6">
+                  •••• •••• •••• ••••
+                </p>
+                <div className="flex justify-between items-end">
+                  <div>
+                    <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
+                    <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "YOUR NAME"}</p>
+                  </div>
+                  <div>
+                    <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Expires</p>
+                    <p className="text-sm font-semibold">••/••</p>
+                  </div>
+                  <div>
+                    <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">CVV</p>
+                    <p className="text-sm font-semibold">•••</p>
+                  </div>
+                </div>
               </div>
             </div>
           </motion.div>
 
-          {/* Purchase Information */}
+          {/* Repurchase notice if coming from blocked card */}
+          {forceRepurchase && card?.blockReason && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl p-4"
+            >
+              <div className="flex items-start gap-3">
+                <ShieldOff className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Your previous card was blocked</p>
+                  <p className="text-xs text-red-600 dark:text-red-300 mt-0.5">{card.blockReason}</p>
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">Purchase a new card below to continue transacting.</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Purchase Info */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -178,10 +191,9 @@ export default function VirtualCardPage() {
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
                 <span className="material-icons text-primary text-2xl">credit_card</span>
               </div>
-              
               <div>
                 <h2 className="text-xl font-semibold mb-2">Get Your Virtual Card</h2>
-                <p className="text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   Purchase a virtual card to unlock international transactions and online payments.
                 </p>
               </div>
@@ -191,245 +203,62 @@ export default function VirtualCardPage() {
                   <span className="font-medium">Virtual Card</span>
                   <div className="flex items-center space-x-2">
                     <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
-                    <span className="text-xl font-bold text-green-600">${discountPrice}</span>
-                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
-                      75% OFF
-                    </div>
+                    <span className="text-xl font-bold text-green-600">${currentCardPrice}</span>
+                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">75% OFF</div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground text-left">
-                  One-time purchase • No monthly fees • Valid for 3 years
-                </p>
               </div>
 
-              <div className="space-y-2 text-sm text-muted-foreground text-left">
-                <div className="flex items-center">
-                  <span className="material-icons text-green-500 text-sm mr-2">check</span>
-                  International online payments
-                </div>
-                <div className="flex items-center">
-                  <span className="material-icons text-green-500 text-sm mr-2">check</span>
-                  Secure transactions worldwide
-                </div>
-                <div className="flex items-center">
-                  <span className="material-icons text-green-500 text-sm mr-2">check</span>
-                  Real-time spending controls
-                </div>
-                <div className="flex items-center">
-                  <span className="material-icons text-green-500 text-sm mr-2">check</span>
-                  Instant card generation
-                </div>
-              </div>
-
-              {/* Available Payment Methods Info */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ delay: 0.3 }}
-                className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4"
-              >
-                <div className="flex items-center gap-3">
-                  <motion.span 
-                    initial={{ rotate: -10 }}
-                    animate={{ rotate: 0 }}
-                    transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
-                    className="material-icons text-blue-600 dark:text-blue-400 text-2xl"
+              {/* Payment method */}
+              <div className="flex rounded-xl overflow-hidden border border-border">
+                {['auto', 'manual'].map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setPaymentMethod(m as 'auto' | 'manual')}
+                    className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                      paymentMethod === m
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                    data-testid={`button-payment-${m}`}
                   >
-                    payment
-                  </motion.span>
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                    Available Payment Methods in Your Country
+                    {m === 'auto' ? 'M-Pesa (Auto)' : 'Manual Payment'}
+                  </button>
+                ))}
+              </div>
+
+              {paymentMethod === 'auto' ? (
+                <Button
+                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
+                  onClick={() => purchaseCardMutation.mutate()}
+                  disabled={purchaseCardMutation.isPending}
+                  data-testid="button-purchase-card-auto"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {purchaseCardMutation.isPending ? "Processing..." : `Pay via M-Pesa · $${currentCardPrice}`}
+                </Button>
+              ) : (
+                <div className="space-y-3 text-left">
+                  <div className="bg-muted p-4 rounded-xl space-y-2">
+                    <p className="text-sm font-medium">Manual Payment Details</p>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Paybill</span>
+                      <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybillNumber || "Loading..."}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Account No.</span>
+                      <span className="font-mono font-semibold">{user?.phone || "Your Phone"}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Amount (KES)</span>
+                      <span className="font-mono font-semibold">{(kesAmountData as any)?.kesAmount || "..."}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center">
+                    After payment, contact support with your reference number.
                   </p>
                 </div>
-              </motion.div>
-
-              {/* Payment Method Selection */}
-              <div className="space-y-3 mt-4">
-                <h3 className="font-semibold text-sm">Choose Payment Method</h3>
-                
-                {/* Auto Payment Option (Recommended) */}
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setPaymentMethod('auto')}
-                  className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'auto' 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-border bg-muted/50 hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
-                      paymentMethod === 'auto' ? 'border-primary bg-primary' : 'border-border'
-                    }`}>
-                      {paymentMethod === 'auto' && (
-                        <span className="material-icons text-white text-xs">check</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold text-sm">Automatic Payment</h4>
-                        <span className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs px-2 py-0.5 rounded-full font-medium">
-                          Recommended
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Instant activation via PayHero M-Pesa STK Push
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-
-                {/* Purchase Button for Automatic Payment */}
-                {paymentMethod === 'auto' && (
-                  <Button
-                    className="w-full py-6 text-lg font-bold shadow-lg bg-primary hover:bg-primary/90 transition-all"
-                    onClick={() => purchaseCardMutation.mutate()}
-                    disabled={purchaseCardMutation.isPending}
-                    data-testid="button-purchase-card"
-                  >
-                    {purchaseCardMutation.isPending ? (
-                      <div className="flex items-center gap-2">
-                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Processing...
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <Sparkles className="w-5 h-5" />
-                        Purchase Now - ${discountPrice}
-                      </div>
-                    )}
-                  </Button>
-                )}
-
-                {/* Manual Payment Option */}
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setPaymentMethod('manual')}
-                  className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'manual' 
-                      ? 'border-primary bg-primary/5' 
-                      : 'border-border bg-muted/50 hover:border-primary/50'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
-                      paymentMethod === 'manual' ? 'border-primary bg-primary' : 'border-border'
-                    }`}>
-                      {paymentMethod === 'manual' && (
-                        <span className="material-icons text-white text-xs">check</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-sm mb-1">Manual M-Pesa Payment</h4>
-                      <p className="text-xs text-muted-foreground">
-                        Pay via paybill and contact support
-                      </p>
-                    </div>
-                  </div>
-                </motion.div>
-              </div>
-
-              {/* Manual Payment Instructions */}
-              {paymentMethod === 'manual' && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="bg-muted/50 p-4 rounded-xl border border-border space-y-3"
-                >
-                  <h4 className="font-semibold text-sm flex items-center">
-                    <span className="material-icons text-primary mr-2 text-sm">payments</span>
-                    Payment Instructions
-                  </h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between items-center py-2 border-b border-border">
-                      <span className="text-muted-foreground">Paybill Number:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{manualPaymentSettings?.paybill || "—"}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-6 w-6" 
-                          onClick={() => {
-                            if (manualPaymentSettings?.paybill) {
-                              navigator.clipboard.writeText(manualPaymentSettings.paybill);
-                              toast({ title: "Copied", description: "Paybill number copied" });
-                            }
-                          }}
-                        >
-                          <span className="material-icons text-xs">content_copy</span>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center py-2 border-b border-border">
-                      <span className="text-muted-foreground">Account Number:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{manualPaymentSettings?.account || "—"}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-6 w-6" 
-                          onClick={() => {
-                            if (manualPaymentSettings?.account) {
-                              navigator.clipboard.writeText(manualPaymentSettings.account);
-                              toast({ title: "Copied", description: "Account number copied" });
-                            }
-                          }}
-                        >
-                          <span className="material-icons text-xs">content_copy</span>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="flex justify-between items-center py-2">
-                      <span className="text-muted-foreground">Amount:</span>
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">KES {kesAmountData?.kesAmount ? Math.round(kesAmountData.kesAmount).toLocaleString() : '...'}</span>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-6 w-6" 
-                          onClick={() => {
-                            if (kesAmountData?.kesAmount) {
-                              navigator.clipboard.writeText(Math.round(kesAmountData.kesAmount).toString());
-                              toast({ title: "Copied", description: "Amount copied" });
-                            }
-                          }}
-                        >
-                          <span className="material-icons text-xs">content_copy</span>
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                    <p className="text-xs text-amber-700 dark:text-amber-400">
-                      <span className="material-icons text-xs mr-1 align-middle">info</span>
-                      After payment, contact support with your M-Pesa confirmation to activate your card.
-                    </p>
-                  </div>
-                  <Button
-                    onClick={() => setLocation('/support')}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <span className="material-icons text-sm mr-2">support_agent</span>
-                    Contact Support
-                  </Button>
-                </motion.div>
               )}
-
-              {/* Partner Logos and Info */}
-              <div className="mt-6 pt-6 border-t border-border">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Our Trusted Partners In Kenya</p>
-                <div className="flex items-center justify-center gap-6 transition-all duration-300">
-                  <img src="https://res.cloudinary.com/dyzalgxnu/image/upload/v1766714659/images_6_jdajcc.png" alt="M-Pesa" className="h-6 w-auto object-contain" />
-                  <img src="https://res.cloudinary.com/dyzalgxnu/image/upload/v1766714659/images_7_gglpsr.png" alt="Visa" className="h-4 w-auto object-contain" />
-                  <img src="https://res.cloudinary.com/dyzalgxnu/image/upload/v1766714659/images_8_dqu9rs.png" alt="Mastercard" className="h-6 w-auto object-contain" />
-                  <img src="https://res.cloudinary.com/dyzalgxnu/image/upload/v1766714659/images_5_oo3tuy.png" alt="NCBA" className="h-5 w-auto object-contain" />
-                </div>
-                <p className="mt-4 text-[10px] text-muted-foreground leading-relaxed">
-                  We partner with industry leaders to ensure your transactions are safe, 
-                  encrypted, and processed instantly across 200+ countries.
-                </p>
-              </div>
             </div>
           </motion.div>
         </div>
@@ -437,187 +266,160 @@ export default function VirtualCardPage() {
     );
   }
 
+  // ─── ACTIVE CARD SCREEN ──────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
-      <WavyHeader
-        
-        
-        size="sm"
-      />
+      <WavyHeader size="sm" />
 
-      <div className="p-6 space-y-6">
-        {/* Virtual Card Display */}
+      <div className="p-5 space-y-5">
+        {/* ── CARD VISUAL ──────────────────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 30, rotateY: -15 }}
+          initial={{ opacity: 0, y: 30, rotateY: -8 }}
           animate={{ opacity: 1, y: 0, rotateY: 0 }}
-          transition={{ delay: 0.1, duration: 0.6 }}
-          className="relative"
+          transition={{ delay: 0.1, duration: 0.5 }}
         >
-          <div className="bg-gradient-to-br from-primary to-secondary p-6 rounded-2xl text-white elevation-3">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <p className="text-green-200 text-sm">GreenPay Card</p>
-                <p className="text-xs text-green-200">Virtual</p>
-              </div>
-              <div className="flex space-x-2">
-                <div className="w-8 h-5 bg-white/30 rounded"></div>
-                <div className="w-5 h-5 bg-white/50 rounded-full"></div>
-              </div>
+          <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-900 p-6 rounded-2xl text-white elevation-3 relative overflow-hidden">
+            {/* Decorative circles */}
+            <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8 pointer-events-none" />
+
+            {/* Status badge */}
+            <div className="absolute top-4 left-4">
+              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
+                !card ? 'bg-gray-500/80' :
+                card.status === 'active' ? 'bg-green-400/30 text-green-100 border border-green-300/40' :
+                card.status === 'frozen' ? 'bg-orange-400/30 text-orange-100 border border-orange-300/40' :
+                card.status === 'blocked' ? 'bg-red-500/40 text-red-100 border border-red-400/40' :
+                'bg-gray-500/30 text-gray-100 border border-gray-400/40'
+              }`}>
+                {!card ? '...' : card.status === 'active' ? '● Active' : card.status === 'frozen' ? '⏸ Frozen' : card.status === 'blocked' ? '⊘ Blocked' : 'Expired'}
+              </span>
             </div>
-            
-            <div className="mb-6">
-              <p className="text-2xl font-mono tracking-wider" data-testid="text-card-number">
-                {maskCardNumber(card?.cardNumber || "4567123456784567")}
+
+            <div className="relative z-10 mt-2">
+              <div className="flex items-center justify-between mb-6">
+                <div className="pt-4">
+                  <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
+                  <p className="text-white/40 text-[10px]">Virtual Visa</p>
+                </div>
+                <div className="flex gap-1.5">
+                  <div className="w-8 h-5 rounded bg-white/25" />
+                  <div className="w-5 h-5 rounded-full bg-white/40" />
+                </div>
+              </div>
+
+              {/* Card Number */}
+              <p className="text-xl font-mono tracking-widest mb-6 text-green-50" data-testid="text-card-number">
+                {card ? maskCardNumber(card.cardNumber || "4567123456784567") : "•••• •••• •••• ••••"}
               </p>
-            </div>
-            
-            <div className="flex justify-between items-end">
-              <div>
-                <p className="text-green-200 text-xs">CARDHOLDER</p>
-                <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
-              </div>
-              <div>
-                <p className="text-green-200 text-xs">EXPIRES</p>
-                <p className="text-sm font-semibold">{card?.expiryDate || "12/27"}</p>
-              </div>
-              <div>
-                <p className="text-green-200 text-xs">CVV</p>
-                <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "123") : "•••"}</p>
+
+              {/* Bottom row */}
+              <div className="flex justify-between items-end">
+                <div>
+                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
+                  <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
+                </div>
+                <div>
+                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Expires</p>
+                  <p className="text-sm font-semibold">{showCardDetails ? (card?.expiryDate || "12/27") : "••/••"}</p>
+                </div>
+                <div>
+                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">CVV</p>
+                  <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "•••") : "•••"}</p>
+                </div>
               </div>
             </div>
           </div>
-          
-          {/* Card Actions */}
-          <div className="absolute top-4 right-4">
+
+          {/* See/Hide + Copy — OUTSIDE the card */}
+          <div className="flex items-center justify-between mt-3 px-1">
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.97 }}
               onClick={() => setShowCardDetails(!showCardDetails)}
-              className="bg-white/20 backdrop-blur-sm p-2 rounded-full"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
               data-testid="button-toggle-card-details"
             >
-              <span className="material-icons text-white text-sm">
-                {showCardDetails ? "visibility_off" : "visibility"}
-              </span>
+              {showCardDetails
+                ? <><EyeOff className="w-4 h-4 text-muted-foreground" /> Hide Details</>
+                : <><Eye className="w-4 h-4 text-primary" /> Show Details</>
+              }
             </motion.button>
-          </div>
 
-          {/* Card status badge - only show when card data is loaded */}
-          <div className="absolute top-4 left-4">
-            <div className={`px-2 py-1 rounded-full ${
-              !card ? 'bg-gray-500' : card.status === 'active'
-                ? 'bg-green-500' 
-                : card.status === 'frozen'
-                ? 'bg-orange-500'
-                : card.status === 'expired'
-                ? 'bg-gray-500'
-                : 'bg-red-500'
-            }`}>
-              <span className="text-xs font-semibold text-white">
-                {!card ? 'LOADING...' : card.status === 'active' ? 'ACTIVE' : card.status === 'frozen' ? 'FROZEN' : card.status === 'expired' ? 'EXPIRED' : 'BLOCKED'}
-              </span>
+            {card && showCardDetails && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => copyToClipboard(card.cardNumber)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
+                data-testid="button-copy-card-number"
+              >
+                {copied
+                  ? <><Check className="w-4 h-4 text-green-500" /> Copied!</>
+                  : <><Copy className="w-4 h-4 text-muted-foreground" /> Copy Number</>
+                }
+              </motion.button>
+            )}
+          </div>
+        </motion.div>
+
+        {/* ── BALANCE ────────────────────────────────────────────────────── */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-card rounded-2xl border border-border p-5 elevation-1"
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Available Balance</p>
+              <p className="text-3xl font-bold text-primary" data-testid="text-card-balance">
+                ${formatNumber(realTimeBalance)}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="material-icons text-primary">account_balance_wallet</span>
             </div>
           </div>
         </motion.div>
 
-        {/* Card Balance */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-card p-4 rounded-xl border border-border elevation-1"
-        >
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-1">Available Balance</p>
-            <p className="text-3xl font-bold text-primary" data-testid="text-card-balance">
-              ${formatNumber(realTimeBalance)}
-            </p>
-            <p className="text-sm text-muted-foreground">Last updated: Just now</p>
-          </div>
-        </motion.div>
-
-        {/* Card Status Warning - only show when card data is loaded and card is not active */}
-        {card && card.status !== 'active' && (
+        {/* ── BLOCKED CARD ALERT ──────────────────────────────────────────── */}
+        {card && isBlocked && (
           <motion.div
-            initial={{ opacity: 0, y: 30 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className={`p-4 rounded-xl space-y-3 ${
-              card.status === 'frozen'
-                ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800'
-                : card.status === 'expired'
-                ? 'bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700'
-                : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
-            }`}
+            transition={{ delay: 0.25 }}
+            className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl p-5"
           >
-            <div className="flex items-start gap-3">
-              <span className={`material-icons mt-0.5 ${
-                card.status === 'frozen' ? 'text-orange-500' : card.status === 'expired' ? 'text-gray-500' : 'text-red-500'
-              }`}>{card.status === 'frozen' ? 'pause_circle_filled' : card.status === 'expired' ? 'schedule' : 'block'}</span>
+            <div className="flex items-start gap-3 mb-4">
+              <ShieldOff className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
               <div className="flex-1">
-                <h3 className={`font-semibold ${
-                  card.status === 'frozen' ? 'text-orange-700 dark:text-orange-400' : card.status === 'expired' ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-400'
-                }`}>
-                  {card.status === 'frozen' ? 'Card Frozen' : card.status === 'expired' ? 'Card Expired' : 'Card Blocked'}
-                </h3>
-
-                {card.status === 'frozen' && (
-                  <>
-                    <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
-                      Your virtual card has been frozen by an administrator.
-                    </p>
-                    <div className="mt-2 p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
-                      <p className="text-xs font-medium text-orange-700 dark:text-orange-300 uppercase tracking-wide">Reason</p>
-                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
-                        {(card as any).freezeReason || 'Frozen by administrator'}
-                      </p>
-                    </div>
-                    <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
-                      Contact support to resolve this issue or purchase a new card.
-                    </p>
-                  </>
-                )}
-
-                {card.status === 'expired' && (
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    Your virtual card has expired and can no longer be used. Purchase a new card to continue making transactions.
-                  </p>
-                )}
-
-                {card.status !== 'frozen' && card.status !== 'expired' && (
-                  <>
-                    <p className="text-sm text-red-600 dark:text-red-300 mt-1">
-                      Your virtual card has been blocked by an administrator.
-                    </p>
-                    {(card as any).freezeReason && (
-                      <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
-                        <p className="text-xs font-medium text-red-700 dark:text-red-300 uppercase tracking-wide">Reason</p>
-                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">{(card as any).freezeReason}</p>
-                      </div>
-                    )}
-                    <p className="text-xs text-red-500 dark:text-red-400 mt-2">
-                      Contact support to resolve this issue or purchase a new card.
-                    </p>
-                  </>
+                <h3 className="font-semibold text-red-700 dark:text-red-400">Card Blocked</h3>
+                <p className="text-sm text-red-600 dark:text-red-300 mt-1">
+                  Your virtual card has been permanently blocked by an administrator.
+                </p>
+                {card.blockReason && (
+                  <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/40 rounded-xl">
+                    <p className="text-[10px] font-semibold text-red-700 dark:text-red-300 uppercase tracking-widest mb-1">Block Reason</p>
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">{card.blockReason}</p>
+                  </div>
                 )}
               </div>
             </div>
-
             <div className="flex gap-2 flex-wrap">
               <Button
-                onClick={() => purchaseCardMutation.mutate()}
-                disabled={purchaseCardMutation.isPending}
-                size="sm"
-                className="bg-green-600 hover:bg-green-700 text-white"
-                data-testid="button-purchase-new-card"
+                onClick={() => setForceRepurchase(true)}
+                className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
+                data-testid="button-buy-new-card"
               >
-                <Sparkles className="w-4 h-4 mr-1" />
-                {purchaseCardMutation.isPending ? "Processing..." : "Get New Card"}
+                <Sparkles className="w-4 h-4 mr-2" />
+                Buy New Card
               </Button>
               <Button
-                onClick={() => setLocation('/support')}
                 variant="outline"
-                size="sm"
+                onClick={() => setLocation('/support')}
+                className="rounded-xl"
+                data-testid="button-contact-support-blocked"
               >
                 <span className="material-icons text-sm mr-1">support_agent</span>
                 Contact Support
@@ -626,174 +428,177 @@ export default function VirtualCardPage() {
           </motion.div>
         )}
 
-        {/* Quick Actions */}
+        {/* ── FROZEN CARD ALERT ───────────────────────────────────────────── */}
+        {card && isFrozen && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-2xl p-5"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <span className="material-icons text-orange-500 mt-0.5">pause_circle_filled</span>
+              <div>
+                <h3 className="font-semibold text-orange-700 dark:text-orange-400">Card Frozen</h3>
+                <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
+                  Your card has been temporarily frozen by an administrator.
+                </p>
+                {card.freezeReason && (
+                  <div className="mt-3 p-3 bg-orange-100 dark:bg-orange-900/40 rounded-xl">
+                    <p className="text-[10px] font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-widest mb-1">Reason</p>
+                    <p className="text-sm font-medium text-orange-800 dark:text-orange-200">{card.freezeReason}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation('/support')}
+              className="rounded-xl border-orange-300 text-orange-600 hover:bg-orange-50"
+            >
+              <span className="material-icons text-sm mr-1">support_agent</span>
+              Contact Support
+            </Button>
+          </motion.div>
+        )}
+
+        {/* ── EXPIRED CARD ALERT ──────────────────────────────────────────── */}
+        {card && isExpired && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25 }}
+            className="bg-muted border border-border rounded-2xl p-5"
+          >
+            <div className="flex items-start gap-3 mb-4">
+              <span className="material-icons text-muted-foreground mt-0.5">schedule</span>
+              <div>
+                <h3 className="font-semibold">Card Expired</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Your card has expired. Purchase a new card to continue transacting.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={() => setForceRepurchase(true)}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
+              data-testid="button-buy-new-card-expired"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Buy New Card
+            </Button>
+          </motion.div>
+        )}
+
+        {/* ── QUICK ACTIONS (only when card is active) ─────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="grid grid-cols-2 gap-4"
+          className="grid grid-cols-3 gap-3"
         >
-          <motion.button
-            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
-            onClick={() => {
-              if (!card) return; // Still loading
-              if (card.status === 'active') {
+          {[
+            {
+              icon: "add",
+              label: "Top Up",
+              sublabel: "Add funds",
+              color: "text-primary",
+              action: () => {
+                if (!card || card.status !== 'active') {
+                  toast({ title: "Card Unavailable", description: "Your card must be active to top up.", variant: "destructive" });
+                  return;
+                }
                 setLocation("/deposit");
-              } else {
-                const statusMap = {
-                  frozen: { title: "Card Frozen", desc: "frozen" },
-                  expired: { title: "Card Expired", desc: "expired. Purchase a new card to continue" },
-                  default: { title: "Card Blocked", desc: "blocked" }
-                };
-                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
-                toast({
-                  title: status.title,
-                  description: `Cannot top up - your card has been ${status.desc}. Please contact support.`,
-                  variant: "destructive",
-                });
-              }
-            }}
-            className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
-                ? 'hover:bg-muted cursor-pointer' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-            data-testid="button-top-up"
-          >
-            <span className={`material-icons text-2xl mb-2 ${!card ? 'text-gray-400' : card.status === 'active' ? 'text-primary' : 'text-gray-400'}`}>add</span>
-            <p className="font-semibold">Top Up</p>
-            <p className="text-xs text-muted-foreground">Add money to card</p>
-          </motion.button>
-
-          <motion.button
-            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
-            onClick={() => {
-              if (!card) return; // Still loading
-              if (card.status === 'active') {
+              },
+            },
+            {
+              icon: "remove",
+              label: "Withdraw",
+              sublabel: "To bank",
+              color: "text-secondary",
+              action: () => {
+                if (!card || card.status !== 'active') {
+                  toast({ title: "Card Unavailable", description: "Your card must be active to withdraw.", variant: "destructive" });
+                  return;
+                }
                 setLocation("/withdraw");
-              } else {
-                const statusMap = {
-                  frozen: { title: "Card Frozen", desc: "frozen" },
-                  expired: { title: "Card Expired", desc: "expired. Purchase a new card to continue" },
-                  default: { title: "Card Blocked", desc: "blocked" }
-                };
-                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
-                toast({
-                  title: status.title,
-                  description: `Cannot withdraw - your card has been ${status.desc}. Please contact support.`,
-                  variant: "destructive",
-                });
-              }
-            }}
-            className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
-                ? 'hover:bg-muted cursor-pointer' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-            data-testid="button-withdraw"
-          >
-            <span className={`material-icons text-2xl mb-2 ${!card ? 'text-gray-400' : card.status === 'active' ? 'text-secondary' : 'text-gray-400'}`}>remove</span>
-            <p className="font-semibold">Withdraw</p>
-            <p className="text-xs text-muted-foreground">Transfer to bank</p>
-          </motion.button>
-
-          <motion.button
-            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
-            onClick={() => {
-              if (!card) return; // Still loading
-              if (card.status === 'active') {
-                // Show freeze confirmation
-                toast({
-                  title: "Freeze Card Feature",
-                  description: "Card freeze functionality will be implemented in a future update.",
-                });
-              } else if (card.status === 'expired') {
-                toast({
-                  title: "Cannot Freeze Expired Card",
-                  description: "Your card has expired. Purchase a new card to continue using our services.",
-                  variant: "destructive",
-                });
-              } else {
-                const statusMap = {
-                  frozen: { title: "Card Already Frozen", status: "frozen" },
-                  default: { title: "Card Already Blocked", status: "blocked" }
-                };
-                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
-                toast({
-                  title: status.title,
-                  description: `Your card is already ${status.status}. Please contact support for assistance.`,
-                  variant: "destructive",
-                });
-              }
-            }}
-            className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
-                ? 'hover:bg-muted cursor-pointer' 
-                : 'opacity-50 cursor-not-allowed'
-            }`}
-            data-testid="button-freeze-card"
-          >
-            <span className={`material-icons text-2xl mb-2 ${!card ? 'text-gray-400' : card.status === 'active' ? 'text-orange-500' : 'text-gray-400'}`}>lock</span>
-            <p className="font-semibold">Freeze Card</p>
-            <p className="text-xs text-muted-foreground">Temporarily disable</p>
-          </motion.button>
-
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="bg-card p-4 rounded-xl border border-border text-center hover:bg-muted transition-colors elevation-1"
-            data-testid="button-card-settings"
-          >
-            <span className="material-icons text-muted-foreground text-2xl mb-2">settings</span>
-            <p className="font-semibold">Settings</p>
-            <p className="text-xs text-muted-foreground">Manage card</p>
-          </motion.button>
+              },
+            },
+            {
+              icon: "lock",
+              label: "Freeze",
+              sublabel: "Temp. disable",
+              color: "text-orange-500",
+              action: () => {
+                if (!card) return;
+                if (card.status !== 'active') {
+                  toast({ title: "Cannot Freeze", description: "Card is not active.", variant: "destructive" });
+                  return;
+                }
+                toast({ title: "Contact Support", description: "Please contact support to freeze your card." });
+              },
+            },
+          ].map((item) => (
+            <motion.button
+              key={item.label}
+              whileHover={card?.status === 'active' ? { scale: 1.02 } : {}}
+              whileTap={card?.status === 'active' ? { scale: 0.97 } : {}}
+              onClick={item.action}
+              className={`bg-card p-4 rounded-2xl border border-border text-center transition-colors elevation-1 ${
+                card?.status === 'active' ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              }`}
+              data-testid={`button-${item.label.toLowerCase().replace(' ', '-')}`}
+            >
+              <span className={`material-icons text-2xl mb-1 block ${card?.status === 'active' ? item.color : 'text-muted-foreground'}`}>
+                {item.icon}
+              </span>
+              <p className="font-semibold text-sm">{item.label}</p>
+              <p className="text-[10px] text-muted-foreground">{item.sublabel}</p>
+            </motion.button>
+          ))}
         </motion.div>
 
-        {/* Card Details */}
+        {/* ── CARD INFO ─────────────────────────────────────────────────────── */}
         <motion.div
-          initial={{ opacity: 0, y: 30 }}
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="bg-card rounded-xl border border-border elevation-1"
+          className="bg-card rounded-2xl border border-border elevation-1 overflow-hidden"
         >
-          <div className="p-4 border-b border-border">
-            <h3 className="font-semibold">Card Information</h3>
+          <div className="p-4 border-b border-border flex items-center gap-2">
+            <span className="material-icons text-primary text-lg">info_outline</span>
+            <h3 className="font-semibold text-sm">Card Information</h3>
           </div>
-          <div className="p-4 space-y-4">
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Card Status</span>
-              <span className={`px-2 py-1 text-xs rounded-full ${
-                !card ? 'bg-gray-100 text-gray-600' : card.status === 'active'
-                  ? 'bg-green-100 text-green-600' 
-                  : card.status === 'frozen'
-                  ? 'bg-orange-100 text-orange-600'
-                  : card.status === 'expired'
-                  ? 'bg-gray-100 text-gray-600'
-                  : 'bg-red-100 text-red-600'
-              }`}>
-                {!card ? 'Loading...' : card.status === 'active' ? 'Active' : card.status === 'frozen' ? 'Frozen' : card.status === 'expired' ? 'Expired' : 'Blocked'}
-              </span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Daily Limit</span>
-              <span className="font-medium">$4,000</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Monthly Limit</span>
-              <span className="font-medium">$50,000</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Issue Date</span>
-              <span className="font-medium">{new Date().toLocaleDateString()}</span>
-            </div>
+          <div className="p-4 space-y-3">
+            {[
+              {
+                label: "Card Status",
+                value: (
+                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                    !card ? 'bg-muted text-muted-foreground' :
+                    card.status === 'active' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' :
+                    card.status === 'frozen' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400' :
+                    card.status === 'blocked' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
+                    'bg-muted text-muted-foreground'
+                  }`}>
+                    {!card ? 'Loading...' : card.status.charAt(0).toUpperCase() + card.status.slice(1)}
+                  </span>
+                ),
+              },
+              { label: "Card Number", value: <span className="font-mono text-sm">{card ? maskCardNumber(card.cardNumber) : "—"}</span> },
+              { label: "Expiry", value: <span className="font-medium text-sm">{card && showCardDetails ? card.expiryDate : "••/••"}</span> },
+              { label: "Daily Limit", value: <span className="font-medium text-sm">$4,000</span> },
+              { label: "Monthly Limit", value: <span className="font-medium text-sm">$50,000</span> },
+            ].map((row) => (
+              <div key={row.label} className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">{row.label}</span>
+                {row.value}
+              </div>
+            ))}
           </div>
         </motion.div>
       </div>
-
     </div>
   );
 }

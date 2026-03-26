@@ -9086,6 +9086,21 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     );
   }, 1000);
 
+  // Announcement Media Upload (images + videos via Cloudinary)
+  app.post("/api/admin/announcements/upload-media", requireAdminAuth, upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file provided" });
+      const isVideo = file.mimetype.startsWith("video/");
+      const folder = isVideo ? "announcements/video" : "announcements/image";
+      const url = await cloudinaryStorage.uploadFile(`${folder}/${Date.now()}-${file.originalname}`, file.buffer, file.mimetype);
+      res.json({ url, type: isVideo ? "video" : "image" });
+    } catch (error) {
+      console.error("Announcement media upload error:", error);
+      res.status(500).json({ message: "Failed to upload media" });
+    }
+  });
+
   // Announcements API
   app.get("/api/announcements", async (req, res) => {
     try {

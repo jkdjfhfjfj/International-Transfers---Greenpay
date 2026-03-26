@@ -33,6 +33,7 @@ Preferred communication style: Simple, everyday language.
 - **Schema Location**: `shared/schema.ts` - shared between frontend and backend
 - **Type Generation**: Drizzle-Zod for automatic TypeScript types and runtime validation
 - **Key Tables**: users, kyc_documents, virtual_cards, transactions, recipients, payment_requests, conversations, messages, system_settings, api_configurations
+- **virtual_cards** table has `block_reason` column (added) for permanent card block reason separate from `freeze_reason`
 
 ### Admin Panel Architecture (Rebuilt)
 - **Auth**: Pure server-session based — `GET /api/admin/session` called by `AdminShell` on every page mount

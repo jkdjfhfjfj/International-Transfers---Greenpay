@@ -185,49 +185,42 @@ export default function AdminAnnouncementsDBPage() {
     },
   });
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadMedia = async (file: File) => {
     setUploading(true);
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("upload_preset", "greenpay");
     try {
-      const response = await fetch("https://api.cloudinary.com/v1_1/dyzalgxnu/image/upload", { method: "POST", body: formData });
-      const data = await response.json();
-      if (data.secure_url) {
-        setImageUrl(data.secure_url);
-        toast({ title: "Uploaded", description: "Image uploaded successfully." });
+      const response = await fetch("/api/admin/announcements/upload-media", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.message || "Upload failed");
       }
-    } catch {
-      toast({ title: "Error", description: "Failed to upload image.", variant: "destructive" });
+      const data = await response.json();
+      if (data.url) {
+        setImageUrl(data.url);
+        toast({ title: "Uploaded", description: `${data.type === "video" ? "Video" : "Image"} uploaded successfully.` });
+      }
+    } catch (err: any) {
+      toast({ title: "Upload Failed", description: err.message || "Failed to upload media.", variant: "destructive" });
     } finally {
       setUploading(false);
       if (imageInputRef.current) imageInputRef.current.value = "";
+      if (videoInputRef.current) videoInputRef.current.value = "";
     }
   };
 
-  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", "greenpay");
-    formData.append("resource_type", "video");
-    try {
-      const response = await fetch("https://api.cloudinary.com/v1_1/dyzalgxnu/video/upload", { method: "POST", body: formData });
-      const data = await response.json();
-      if (data.secure_url) {
-        setImageUrl(data.secure_url);
-        toast({ title: "Uploaded", description: "Video uploaded successfully." });
-      }
-    } catch {
-      toast({ title: "Error", description: "Failed to upload video.", variant: "destructive" });
-    } finally {
-      setUploading(false);
-      if (videoInputRef.current) videoInputRef.current.value = "";
-    }
+    if (file) uploadMedia(file);
+  };
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) uploadMedia(file);
   };
 
   const createMutation = useMutation({
