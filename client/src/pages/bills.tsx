@@ -156,7 +156,7 @@ export default function BillsPage() {
   const idLabel = selectedProvider?.needsId === "meterNumber" ? "Meter Number" : "Account Number";
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <WavyHeader
         
@@ -453,40 +453,6 @@ export default function BillsPage() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 p-4 shadow-lg max-w-md mx-auto">
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-2">
-            <div>
-              <p className="text-xs text-gray-600 dark:text-gray-400">Available Balance</p>
-              <p className="text-lg font-bold text-gray-900 dark:text-white">KSh {kesBalance.toFixed(2)}</p>
-            </div>
-            <Button 
-              onClick={() => setLocation('/exchange')}
-              variant="ghost" 
-              size="sm"
-              className="text-xs text-blue-600 hover:text-blue-700"
-            >
-              Exchange USD
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              onClick={() => setShowModal(true)}
-              className="bg-green-600 hover:bg-green-700 text-white w-full"
-            >
-              Pay Bill
-            </Button>
-            <Button
-              onClick={() => setLocation('/send-money')}
-              className="bg-blue-600 hover:bg-blue-700 text-white w-full"
-            >
-              Transfer
-            </Button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -39,7 +39,11 @@ export default function BottomNavigation() {
     location.startsWith('/deposit') ||
     location.startsWith('/withdraw') ||
     location.startsWith('/exchange') ||
-    location.startsWith('/airtime')
+    location.startsWith('/airtime') ||
+    location.startsWith('/bills') ||
+    location.startsWith('/status') ||
+    location.startsWith('/loans') ||
+    location.startsWith('/api-documentation')
   );
 
   if (!showBottomNav) return null;

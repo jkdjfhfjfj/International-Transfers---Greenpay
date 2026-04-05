@@ -99,7 +99,7 @@ export default function LoansPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background pb-20">
       {/* Header */}
       <WavyHeader
         
@@ -373,33 +373,6 @@ export default function LoansPage() {
             </div>
           </motion.div>
         )}
-      </div>
-
-      {/* Bottom Action Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 p-4 shadow-lg max-w-md mx-auto">
-        <div className="space-y-3">
-          <div className="px-2">
-            <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">Available Balance</p>
-            <p className="text-lg font-bold text-gray-900 dark:text-white">${parseFloat(user?.balance || "0").toFixed(2)}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <Button
-              onClick={() => setShowApplicationForm(!showApplicationForm)}
-              disabled={!isAccountOldEnough || !isKYCVerified}
-              className="bg-green-600 hover:bg-green-700 text-white w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              title={!isAccountOldEnough ? "Account must be 30+ days old" : !isKYCVerified ? "KYC verification required" : ""}
-            >
-              <TrendingUp className="w-4 h-4 mr-2" />
-              Apply Loan
-            </Button>
-            <Button
-              onClick={() => setLocation('/dashboard')}
-              className="bg-blue-600 hover:bg-blue-700 text-white w-full"
-            >
-              Dashboard
-            </Button>
-          </div>
-        </div>
       </div>
     </div>
   );
