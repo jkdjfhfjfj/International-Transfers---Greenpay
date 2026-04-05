@@ -3986,7 +3986,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetId: id,
       });
 
-      res.json({ message: "Account action completed successfully" });
+      // Fetch and return updated user
+      const updatedUser = await storage.getUser(id);
+      const { password, ...userWithoutPassword } = updatedUser as any;
+
+      res.json({ 
+        message: "Account action completed successfully",
+        user: userWithoutPassword
+      });
     } catch (error) {
       console.error('Admin account action error:', error);
       res.status(500).json({ message: "Failed to perform account action" });
