@@ -236,6 +236,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // Demo API Keys endpoint - shows available demo keys for testing
+  app.get("/api/demo-keys", (_req, res) => {
+    res.status(200).json({ 
+      message: "Available demo API keys for testing (development only)",
+      keys: [
+        {
+          key: "gpay_demo_test",
+          name: "Full Test Key",
+          scope: ["read", "write", "*"],
+          description: "Full access for testing all API operations"
+        },
+        {
+          key: "gpay_demo_read",
+          name: "Read-Only Key",
+          scope: ["read"],
+          description: "Read-only access for testing GET endpoints"
+        },
+        {
+          key: "gpay_demo_write",
+          name: "Write-Only Key", 
+          scope: ["write"],
+          description: "Write-only access for testing POST/PUT endpoints"
+        },
+        {
+          key: "gpay_demo_all",
+          name: "Admin Key",
+          scope: ["*"],
+          description: "Full admin access (all scopes)"
+        }
+      ],
+      usage: {
+        example: "curl -H 'Authorization: Bearer gpay_demo_test' https://api.greenpay.app/api/endpoint",
+        header: "Authorization: Bearer YOUR_API_KEY"
+      },
+      note: "These demo keys are for development and testing only"
+    });
+  });
+
   // Serve private objects from object storage (profile photos, KYC documents, chat files)
   app.get("/objects/:objectPath(*)", async (req, res) => {
     try {
