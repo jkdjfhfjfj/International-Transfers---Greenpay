@@ -2148,13 +2148,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Airtime purchase endpoint - uses KES balance and Statum API
-  app.post("/api/airtime/purchase", optionalApiKey, async (req, res) => {
+  app.post("/api/airtime/purchase", requireAuth, async (req, res) => {
     try {
-      const { userId, phoneNumber, amount, currency, provider, pin } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      const { phoneNumber, amount, currency, provider, pin } = req.body;
+
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Security: users can only purchase airtime for themselves
+      const userId = sessionUserId;
 
       console.log(`📱 Airtime purchase request - User: ${userId}, Phone: ${phoneNumber}, Amount: ${amount} ${currency}, Provider: ${provider}`);
 
-      if (!userId || !phoneNumber || !amount || !currency || !provider) {
+      if (!phoneNumber || !amount || !currency || !provider) {
         console.warn(`⚠️ Missing required fields in airtime purchase request`);
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -2243,16 +2251,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Claim airtime bonus endpoint
-  app.post("/api/airtime/claim-bonus", optionalApiKey, async (req, res) => {
+  app.post("/api/airtime/claim-bonus", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Security: users can only claim bonus for themselves
+      const userId = sessionUserId;
 
       console.log(`🎁 Airtime bonus claim request - User: ${userId}`);
-
-      if (!userId) {
-        console.warn(`⚠️ Missing userId in bonus claim request`);
-        return res.status(400).json({ message: "Missing userId" });
-      }
 
       const user = await storage.getUser(userId);
       if (!user) {
@@ -2318,13 +2328,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Bill payment endpoint - KPLC, Zuku, StartimesTV, Nairobi Water, etc
-  app.post("/api/bills/pay", optionalApiKey, async (req, res) => {
+  app.post("/api/bills/pay", requireAuth, async (req, res) => {
     try {
-      const { userId, provider, meterNumber, accountNumber, amount } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      const { provider, meterNumber, accountNumber, amount } = req.body;
+
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Security: users can only pay bills from their own account
+      const userId = sessionUserId;
 
       console.log(`💳 Bill payment request - User: ${userId}, Provider: ${provider}, Amount: ${amount} KES`);
 
-      if (!userId || !provider || !amount || (!meterNumber && !accountNumber)) {
+      if (!provider || !amount || (!meterNumber && !accountNumber)) {
         console.warn(`⚠️ Missing required fields in bill payment request`);
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -2396,7 +2414,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get bill payments history
   app.get("/api/bills/history/:userId", requireAuth, async (req, res) => {
     try {
-      const payments = await storage.getBillPaymentsByUserId(req.params.userId);
+      const sessionUserId = (req as any).session?.userId;
+      const requestedUserId = req.params.userId;
+      
+      // Security: users can only view their own bill history
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const payments = await storage.getBillPaymentsByUserId(requestedUserId);
       res.json({ payments });
     } catch (error) {
       console.error('Error fetching bill payments:', error);
@@ -2406,7 +2432,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/virtual-card/:userId", requireAuth, async (req, res) => {
     try {
-      const card = await storage.getVirtualCardByUserId(req.params.userId);
+      const sessionUserId = (req as any).session?.userId;
+      const requestedUserId = req.params.userId;
+      
+      // Security: users can only view their own virtual card
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const card = await storage.getVirtualCardByUserId(requestedUserId);
       res.json({ card });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
@@ -2454,12 +2488,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
 
   // Real-time Transaction routes
-  app.post("/api/transactions/send", optionalApiKey, async (req, res) => {
+  app.post("/api/transactions/send", requireAuth, async (req, res) => {
     try {
-      const { userId, amount, currency, recipientDetails, targetCurrency } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      const { amount, currency, recipientDetails, targetCurrency } = req.body;
       
-      // Verify user has virtual card
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      // Security: users can only send from their own account
+      const userId = sessionUserId;
+      
+      // Verify user exists and has virtual card
       const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
       if (!user?.hasVirtualCard) {
         return res.status(400).json({ message: "Virtual card required for transactions" });
       }
@@ -2522,9 +2568,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/transactions/receive", optionalApiKey, async (req, res) => {
+  app.post("/api/transactions/receive", requireAuth, async (req, res) => {
     try {
-      const { userId, amount, currency, senderDetails } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const { amount, currency, senderDetails } = req.body;
+      
+      // Security: can only receive to own account
+      const userId = sessionUserId;
       
       const transaction = await storage.createTransaction({
         userId,
@@ -2566,19 +2621,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get("/api/transactions/:userId", requireAuth, async (req, res) => {
     try {
-      const transactions = await storage.getTransactionsByUserId(req.params.userId);
+      const sessionUserId = (req as any).session?.userId;
+      const requestedUserId = req.params.userId;
+      
+      // Security: users can only view their own transactions
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const transactions = await storage.getTransactionsByUserId(requestedUserId);
       res.json({ transactions });
     } catch (error) {
       res.status(500).json({ message: "Error fetching transactions" });
     }
   });
 
-  app.get("/api/transactions/status/:transactionId", optionalApiKey, async (req, res) => {
+  app.get("/api/transactions/status/:transactionId", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
       const transaction = await storage.getTransaction(req.params.transactionId);
       if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
       }
+      
+      // Security: users can only view their own transactions
+      if ((transaction as any).userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       res.json({ transaction });
     } catch (error) {
       res.status(500).json({ message: "Error fetching transaction status" });
@@ -2961,9 +3036,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Recipient management routes
-  app.post("/api/recipients", optionalApiKey, async (req, res) => {
+  app.post("/api/recipients", requireAuth, async (req, res) => {
     try {
-      const recipientData = insertRecipientSchema.parse(req.body);
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const recipientData = insertRecipientSchema.parse({
+        ...req.body,
+        userId: sessionUserId
+      });
       const recipient = await storage.createRecipient(recipientData);
       res.json({ recipient, message: "Recipient added successfully" });
     } catch (error) {
@@ -2972,17 +3056,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/recipients/:userId", optionalApiKey, async (req, res) => {
+  app.get("/api/recipients/:userId", requireAuth, async (req, res) => {
     try {
-      const recipients = await storage.getRecipientsByUserId(req.params.userId);
+      const sessionUserId = (req as any).session?.userId;
+      const requestedUserId = req.params.userId;
+      
+      // Security: users can only view their own recipients
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const recipients = await storage.getRecipientsByUserId(requestedUserId);
       res.json({ recipients });
     } catch (error) {
       res.status(500).json({ message: "Error fetching recipients" });
     }
   });
 
-  app.put("/api/recipients/:id", async (req, res) => {
+  app.put("/api/recipients/:id", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      // Verify recipient belongs to user
+      const recipientData = await storage.getRecipient(req.params.id);
+      if (!recipientData || (recipientData as any).userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       const recipient = await storage.updateRecipient(req.params.id, req.body);
       if (recipient) {
         res.json({ recipient, message: "Recipient updated successfully" });
@@ -2995,8 +3099,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/recipients/:id", async (req, res) => {
+  app.delete("/api/recipients/:id", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      // Verify recipient belongs to user
+      const recipientData = await storage.getRecipient(req.params.id);
+      if (!recipientData || (recipientData as any).userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
       await storage.deleteRecipient(req.params.id);
       res.json({ message: "Recipient deleted successfully" });
     } catch (error) {
@@ -3155,19 +3271,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/payment-requests/:userId", async (req, res) => {
+  app.get("/api/payment-requests/:userId", requireAuth, async (req, res) => {
     try {
-      const requests = await storage.getPaymentRequestsByUserId(req.params.userId);
+      const sessionUserId = (req as any).session?.userId;
+      const requestedUserId = req.params.userId;
+      
+      // Security: users can only view their own payment requests
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      
+      const requests = await storage.getPaymentRequestsByUserId(requestedUserId);
       res.json({ requests });
     } catch (error) {
       res.status(500).json({ message: "Error fetching payment requests" });
     }
   });
 
-  app.post("/api/payment-requests/:id/pay", async (req, res) => {
+  app.post("/api/payment-requests/:id/pay", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { payerUserId } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       
       const paymentRequest = await storage.getPaymentRequest(id);
       if (!paymentRequest) {
@@ -3177,6 +3305,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (paymentRequest.status !== 'pending') {
         return res.status(400).json({ message: "Payment request already processed" });
       }
+
+      // Security: use authenticated session user ID, not request body
+      const payerUserId = sessionUserId;
 
       // Process payment
       const transaction = await storage.createTransaction({
@@ -7313,9 +7444,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Withdrawal endpoint
-  app.post("/api/transactions", async (req, res) => {
+  app.post("/api/transactions", requireAuth, async (req, res) => {
     try {
-      const { userId, type, amount, currency, description, fee, recipientDetails } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      const { type, amount, currency, description, fee, recipientDetails } = req.body;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       
       if (type !== 'withdraw') {
         return res.status(400).json({ message: "This endpoint only handles withdrawal requests" });
@@ -7327,6 +7463,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (withdrawAmount <= 0) {
         return res.status(400).json({ message: "Invalid withdrawal amount" });
       }
+      
+      // Security: users can only create transactions for themselves
+      const userId = sessionUserId;
       
       // Get user
       const user = await storage.getUser(userId);
