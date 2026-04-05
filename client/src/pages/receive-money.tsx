@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useState, useEffect } from "react";
+import { useRoute } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -33,10 +34,19 @@ type PaymentRequestForm = z.infer<typeof paymentRequestSchema>;
 
 export default function ReceiveMoneyPage() {
   const [, setLocation] = useLocation();
+  const [match, params] = useRoute("/pay-to/:userId");
   const [activeTab, setActiveTab] = useState<"qr" | "request">("qr");
   const [receiveLink, setReceiveLink] = useState<string>("");
+  const [receiverUserId, setReceiverUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (match && params?.userId) {
+      setReceiverUserId(params.userId);
+      setActiveTab("request");
+    }
+  }, [match, params]);
 
   // Fetch unique receive link and received payment requests
   const { data: receiveLinkData } = useQuery({
@@ -76,6 +86,7 @@ export default function ReceiveMoneyPage() {
     mutationFn: async (data: PaymentRequestForm) => {
       const response = await apiRequest("POST", "/api/payment-requests", {
         fromUserId: user?.id,
+        toUserId: receiverUserId,
         ...data,
       });
       return response.json();

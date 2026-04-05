@@ -118,6 +118,7 @@ function Router() {
       <Route path="/send-amount" component={SendAmountPage} />
       <Route path="/send-confirm" component={SendConfirmPage} />
       <Route path="/receive-money" component={ReceiveMoneyPage} />
+      <Route path="/pay-to/:userId" component={ReceiveMoneyPage} />
       <Route path="/transactions" component={TransactionsPage} />
       <Route path="/virtual-card">
         <ProtectedRoute component={VirtualCardPage} />

@@ -674,6 +674,7 @@ function UserDetailsDialog({ user }: { user: User }) {
       const response = await apiRequest("PUT", `/api/admin/users/${userId}/account`, { action, ...extra });
       
       if (response.ok) {
+        const data = await response.json();
         const actionMessages: Record<string, string> = {
           block: "Account blocked successfully",
           unblock: "Account unblocked successfully", 
@@ -689,7 +690,9 @@ function UserDetailsDialog({ user }: { user: User }) {
           description: actionMessages[action] || "Action completed successfully",
         });
 
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+        // Invalidate and refetch to get updated user
+        await queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+        await queryClient.refetchQueries({ queryKey: ["/api/admin/users"] });
       }
     } catch (error) {
       toast({

@@ -6,13 +6,49 @@ import { WavyHeader } from "@/components/wavy-header";
 import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, ExternalLink, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE_URL = "https://api.greenpay.world";
+const API_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/api` : "https://api.greenpay.world";
 
 export default function APIDocumentationPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"overview" | "auth" | "endpoints" | "examples">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "auth" | "endpoints" | "examples" | "test">("overview");
+  const [testEndpoint, setTestEndpoint] = useState("");
+  const [testMethod, setTestMethod] = useState("GET");
+  const [testData, setTestData] = useState("");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState("");
+
+  const tryItNow = async () => {
+    if (!testEndpoint) {
+      toast({ title: "Enter endpoint", description: "Please enter an endpoint path", variant: "destructive" });
+      return;
+    }
+    
+    setTestLoading(true);
+    try {
+      const options: RequestInit = {
+        method: testMethod,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (testMethod !== "GET" && testData) {
+        options.body = testData;
+      }
+
+      const response = await fetch(`${API_BASE_URL}${testEndpoint}`, options);
+      const data = await response.json();
+      setTestResult(JSON.stringify(data, null, 2));
+      toast({ title: "Success", description: "API call completed" });
+    } catch (error) {
+      setTestResult(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      toast({ title: "Error", description: "Failed to call API", variant: "destructive" });
+    } finally {
+      setTestLoading(false);
+    }
+  };
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -76,7 +112,7 @@ export default function APIDocumentationPage() {
           animate={{ opacity: 1 }}
           className="flex flex-wrap gap-2 border-b border-border"
         >
-          {["overview", "auth", "endpoints", "examples"].map((tab) => (
+          {["overview", "auth", "endpoints", "examples", "test"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as any)}
@@ -449,6 +485,77 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
                 </div>
                 <p className="text-sm text-muted-foreground">Revoke an API key</p>
               </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* TRY IT NOW TAB */}
+        {activeTab === "test" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Try It Now</h2>
+              <p className="text-muted-foreground mb-6">Test API endpoints directly from your browser</p>
+            </div>
+
+            <div className="bg-card border border-border p-6 rounded-lg space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Method</label>
+                <select 
+                  value={testMethod} 
+                  onChange={(e) => setTestMethod(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                >
+                  <option>GET</option>
+                  <option>POST</option>
+                  <option>PUT</option>
+                  <option>DELETE</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Endpoint Path</label>
+                <input 
+                  type="text" 
+                  placeholder="/api/transactions"
+                  value={testEndpoint}
+                  onChange={(e) => setTestEndpoint(e.target.value)}
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-background"
+                />
+              </div>
+
+              {testMethod !== "GET" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Request Body (JSON)</label>
+                  <textarea 
+                    placeholder='{"key": "value"}'
+                    value={testData}
+                    onChange={(e) => setTestData(e.target.value)}
+                    className="w-full px-3 py-2 border border-border rounded-lg bg-background font-mono text-xs h-32"
+                  />
+                </div>
+              )}
+
+              <Button 
+                onClick={tryItNow}
+                disabled={testLoading}
+                className="w-full"
+              >
+                <Play className="mr-2 h-4 w-4" />
+                {testLoading ? "Testing..." : "Test Endpoint"}
+              </Button>
+
+              {testResult && (
+                <div className="bg-muted p-4 rounded-lg">
+                  <p className="text-xs font-medium mb-2">Response:</p>
+                  <pre className="text-xs overflow-x-auto max-h-64 text-muted-foreground">
+                    <code>{testResult}</code>
+                  </pre>
+                </div>
+              )}
             </div>
           </motion.div>
         )}

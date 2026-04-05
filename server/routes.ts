@@ -5214,6 +5214,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin reissue virtual card
+  app.post("/api/admin/virtual-cards/:id/reissue", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Get the old card
+      const oldCard = await storage.getVirtualCardById(id);
+      if (!oldCard) {
+        return res.status(404).json({ message: "Virtual card not found" });
+      }
+
+      const userId = oldCard.userId;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Deactivate old card
+      await storage.updateVirtualCard(id, { status: "inactive" });
+
+      // Create new card with same structure as original cards
+      const newCardNumber = `4567${Math.random().toString().slice(2, 14)}`;
+      const newCvv = Math.floor(100 + Math.random() * 900).toString();
+      const expiryDate = new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 3);
+      const newExpiryDate = (expiryDate.getMonth() + 1).toString().padStart(2, '0') + '/' + expiryDate.getFullYear().toString().slice(-2);
+
+      const newCard = await storage.createVirtualCard({
+        userId,
+        cardNumber: newCardNumber,
+        expiryDate: newExpiryDate,
+        cvv: newCvv,
+        cardHolderName: user.fullName || "Card User",
+        status: "active",
+        balance: "0.00",
+        currency: "USD",
+        purchaseDate: new Date()
+      });
+
+      // Log admin action
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: "card_reissued",
+        details: `Admin reissued virtual card for user: ${user.email}. Old card: ${id}, New card: ${newCard.id}`,
+        targetId: userId
+      });
+
+      // Send notification to user
+      await notificationService.sendNotification({
+        title: "New Virtual Card Issued",
+        body: "Your virtual card has been reissued. Please check the app for your new card details.",
+        userId,
+        type: "general"
+      });
+
+      res.json({ 
+        message: "Card reissued successfully",
+        newCard,
+        oldCardId: id
+      });
+    } catch (error) {
+      console.error('Card reissue error:', error);
+      res.status(500).json({ message: "Failed to reissue card" });
+    }
+  });
+
   // System Settings Management
   app.get("/api/admin/settings", async (req, res) => {
     try {

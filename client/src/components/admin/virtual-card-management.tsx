@@ -120,6 +120,18 @@ export default function VirtualCardManagement() {
     updateCardMutation.mutate({ id: card.id, updates: { status: "active", freezeReason: null } });
   };
 
+  const handleReissueCard = async (card: VirtualCard) => {
+    try {
+      const response = await apiRequest("POST", `/api/admin/virtual-cards/${card.id}/reissue`, {});
+      if (response.ok) {
+        toast({ title: "Card Reissued", description: "A new card has been issued to the user" });
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/virtual-cards"] });
+      }
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to reissue card", variant: "destructive" });
+    }
+  };
+
   const handleConfirmFreeze = () => {
     if (!freezeDialogCard) return;
     updateCardMutation.mutate({
@@ -300,6 +312,17 @@ export default function VirtualCardManagement() {
                           <Button
                             variant="ghost"
                             size="sm"
+                            onClick={() => handleReissueCard(card)}
+                            disabled={updateCardMutation.isPending}
+                            title="Reissue Card"
+                            className="text-blue-600 hover:text-blue-700"
+                            data-testid={`button-reissue-card-frozen-${card.id}`}
+                          >
+                            <CreditCard className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => { setBlockReason(""); setBlockDialogCard(card); }}
                             title="Block Card (Permanent)"
                             className="text-red-600 hover:text-red-700"
@@ -308,6 +331,20 @@ export default function VirtualCardManagement() {
                             <ShieldOff className="w-4 h-4" />
                           </Button>
                         </>
+                      )}
+
+                      {(card.status === "blocked" || card.status === "inactive") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReissueCard(card)}
+                          disabled={updateCardMutation.isPending}
+                          title="Reissue Card for User"
+                          className="text-blue-600 hover:text-blue-700"
+                          data-testid={`button-reissue-card-${card.id}`}
+                        >
+                          <CreditCard className="w-4 h-4" />
+                        </Button>
                       )}
                     </div>
                   </TableCell>
