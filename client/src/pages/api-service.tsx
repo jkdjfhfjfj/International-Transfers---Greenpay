@@ -52,7 +52,7 @@ export default function APIServicePage() {
   const fetchApiKeys = async () => {
     try {
       setLoading(true);
-      const response = await fetch("/api/admin/api-keys", {
+      const response = await fetch("/api/api-keys", {
         credentials: "include",
       });
 
@@ -70,7 +70,7 @@ export default function APIServicePage() {
           });
         } else if (response.status === 403) {
           toast({
-            description: "You need admin privileges to manage API keys",
+            description: "Access denied. You can only view your own API keys",
             variant: "destructive",
           });
         } else {
@@ -102,7 +102,7 @@ export default function APIServicePage() {
     }
 
     try {
-      const response = await fetch("/api/admin/api-keys/generate", {
+      const response = await fetch("/api/api-keys/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
@@ -138,7 +138,7 @@ export default function APIServicePage() {
 
   const revokeApiKey = async (keyId: string) => {
     try {
-      const response = await fetch(`/api/admin/api-keys/${keyId}/revoke`, {
+      const response = await fetch(`/api/api-keys/${keyId}/revoke`, {
         method: "POST",
         credentials: "include",
       });

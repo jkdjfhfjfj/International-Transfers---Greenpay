@@ -9,10 +9,11 @@ export interface ApiKeyData {
   lastUsedAt?: Date;
   rateLimit: number;
   scope: string[];
+  userId?: string;
 }
 
 export class ApiKeyService {
-  async generateApiKey(name: string, scope: string[] = ['read', 'write'], rateLimit: number = 1000): Promise<string> {
+  async generateApiKey(name: string, scope: string[] = ['read', 'write'], rateLimit: number = 1000, userId?: string): Promise<string> {
     const keyId = `gpay_${Buffer.from(`${Date.now()}-${Math.random()}`).toString('base64').substring(0, 32)}`;
     
     try {
@@ -23,7 +24,8 @@ export class ApiKeyService {
         isActive: true,
         createdAt: new Date(),
         scope: scope,
-        rateLimit: rateLimit
+        rateLimit: rateLimit,
+        userId: userId || null
       };
       
       await storage.createSystemSetting({
@@ -32,7 +34,7 @@ export class ApiKeyService {
         value: JSON.stringify(keyData)
       });
       
-      console.log(`[API Key] ✓ Generated: ${name} (${keyId})`);
+      console.log(`[API Key] ✓ Generated: ${name} (${keyId}) for user: ${userId || 'system'}`);
       return keyId;
     } catch (error) {
       console.error('[API Key] Error generating key:', error);

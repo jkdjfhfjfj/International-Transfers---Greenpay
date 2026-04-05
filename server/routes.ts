@@ -9144,8 +9144,14 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   });
 
   // API Key Management Endpoints
-  app.post("/api/admin/api-keys/generate", requireAuth, async (req, res) => {
+  app.post("/api/api-keys/generate", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
       const { name, scope, rateLimit } = req.body;
       
       if (!name || !scope || !Array.isArray(scope)) {
@@ -9153,7 +9159,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       }
 
       const { apiKeyService } = await import('./services/api-key');
-      const key = await apiKeyService.generateApiKey(name, scope, rateLimit || 1000);
+      const key = await apiKeyService.generateApiKey(name, scope, rateLimit || 1000, sessionUserId);
       
       res.json({ 
         success: true, 
@@ -9169,10 +9175,24 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  app.get("/api/admin/api-keys", requireAuth, async (req, res) => {
+  app.get("/api/api-keys", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      // Get all API keys and filter by user ID
       const settings = await storage.getSystemSettingsByCategory('api_keys');
-      const apiKeys = settings.map(s => {
+      const userApiKeys = settings.filter(s => {
+        try {
+          const keyData = JSON.parse(typeof s.value === 'string' ? s.value : JSON.stringify(s.value));
+          return keyData.userId === sessionUserId;
+        } catch (e) {
+          return false;
+        }
+      }).map(s => {
         const keyData = JSON.parse(typeof s.value === 'string' ? s.value : JSON.stringify(s.value));
         return {
           id: s.key,
@@ -9185,16 +9205,37 @@ Sitemap: https://greenpay.world/sitemap.xml`;
         };
       });
       
-      res.json({ keys: apiKeys });
+      res.json({ keys: userApiKeys });
     } catch (error) {
       console.error("[API Keys] List error:", error);
       res.status(500).json({ error: "Failed to fetch API keys" });
     }
   });
 
-  app.post("/api/admin/api-keys/:keyId/revoke", requireAuth, async (req, res) => {
+  app.post("/api/api-keys/:keyId/revoke", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = (req as any).session?.userId;
       const { keyId } = req.params;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+
+      // Verify key belongs to user before revoking
+      const settings = await storage.getSystemSettingsByCategory('api_keys');
+      const keySettings = settings.find(s => s.key === keyId);
+      
+      if (!keySettings) {
+        return res.status(404).json({ error: "API key not found" });
+      }
+
+      const keyData = JSON.parse(typeof keySettings.value === 'string' ? keySettings.value : JSON.stringify(keySettings.value));
+      
+      // Security: only allow users to revoke their own keys
+      if (keyData.userId !== sessionUserId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
       const { apiKeyService } = await import('./services/api-key');
       
       const success = await apiKeyService.revokeApiKey(keyId);
