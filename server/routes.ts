@@ -1486,10 +1486,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Check if user already has a card
+      // Check if user already has an ACTIVE card
       const existingCard = await storage.getVirtualCardByUserId(userId);
-      if (existingCard) {
-        return res.status(400).json({ message: "User already has a virtual card" });
+      if (existingCard && existingCard.status === "active") {
+        return res.status(400).json({ message: "User already has an active virtual card" });
+      }
+      // Allow repurchase if card is blocked, deactivated, or expired
+      if (existingCard && (existingCard.status === "blocked" || existingCard.status === "inactive")) {
+        console.log(`🔄 User ${user.email} repurchasing card (current status: ${existingCard.status})`);
       }
 
       // Allow card purchase for production - KYC verification can be added later
@@ -2343,7 +2347,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      // Create bill payment record
+      // Create bill payment record as PENDING - verify with provider first
       const billPayment = await storage.createBillPayment({
         userId,
         provider,
@@ -2351,40 +2355,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountNumber: accountNumber || null,
         amount: amount.toString(),
         currency: "KES",
-        status: "completed",
+        status: "pending",
         fee: "0.00",
         description: `Bill payment for ${provider}${meterNumber ? ` (${meterNumber})` : accountNumber ? ` (${accountNumber})` : ''}`,
         reference: `BP-${Date.now()}`,
         metadata: { meterNumber, accountNumber, provider }
       });
 
-      console.log(`💾 Bill payment created: ${billPayment.id}`);
+      console.log(`💾 Bill payment created (PENDING): ${billPayment.id}`);
 
-      // Create transaction record
+      // Create transaction record as PENDING
       await storage.createTransaction({
         userId,
         type: "bill_payment",
         amount: amount.toString(),
         currency: "KES",
-        status: "completed",
+        status: "pending",
         fee: "0.00",
         description: `Bill payment - ${provider}`,
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
 
-      // Update user KES balance
-      const newKesBalance = kesBalance - paymentAmount;
-      await storage.updateUser(userId, { kesBalance: newKesBalance.toFixed(2) });
-      
-      console.log(`✅ Updated user balance: ${kesBalance} -> ${newKesBalance}`);
-      console.log(`🎉 Bill payment completed successfully`);
+      // DO NOT deduct balance yet - only when verified as completed
+      console.log(`⏳ Bill payment pending verification with provider`);
 
       res.json({ 
         success: true,
-        message: "Bill payment successful",
+        message: "Bill payment submitted for verification. You will receive confirmation shortly.",
         billPayment,
-        newBalance: newKesBalance.toFixed(2)
+        status: "pending"
       });
     } catch (error) {
       console.error('❌ Bill payment error:', error);
@@ -6836,19 +6836,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       
       if (transaction) {
-        // Notify user
+        // REFUND the balance to user since withdrawal was rejected
         const user = await storage.getUser(transaction.userId);
         if (user) {
+          const isKes = transaction.currency?.toUpperCase() === 'KES';
+          const currentBalance = isKes ? parseFloat(user.kesBalance || '0') : parseFloat(user.balance || '0');
+          const refundAmount = parseFloat(transaction.amount) + parseFloat(transaction.fee || '0');
+          const newBalance = currentBalance + refundAmount;
+          
+          const balanceUpdate = isKes 
+            ? { kesBalance: newBalance.toFixed(2) }
+            : { balance: newBalance.toFixed(2) };
+          
+          await storage.updateUser(transaction.userId, balanceUpdate);
+          console.log(`✅ Refunded ${transaction.currency} ${refundAmount} to user ${user.email}`);
+          
+          // Notify user
           await notificationService.sendNotification({
-            title: "Withdrawal Rejected",
-            body: `Your withdrawal request has been rejected. ${adminNotes || 'Please contact support for details.'}`,
+            title: "Withdrawal Rejected & Refunded",
+            body: `Your withdrawal request has been rejected. ${transaction.currency} ${refundAmount} has been refunded to your account. ${adminNotes || 'Please contact support for details.'}`,
             userId: user.id,
             type: "transaction"
           });
         }
       }
       
-      res.json({ transaction, message: "Withdrawal rejected" });
+      res.json({ transaction, message: "Withdrawal rejected and balance refunded" });
     } catch (error) {
       console.error('Error rejecting withdrawal:', error);
       res.status(500).json({ message: "Error rejecting withdrawal" });
@@ -7327,7 +7340,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // For KES withdrawals, check KES balance; for USD withdrawals, check USD balance
       const realTimeBalance = userTransactions.reduce((balance: number, txn: any) => {
-        if (txn.status === 'completed') {
+        // Count both COMPLETED and PENDING transactions to prevent multiple withdrawals
+        if (txn.status === 'completed' || (txn.status === 'pending' && txn.type === 'withdraw')) {
           // Only count transactions matching the withdrawal currency
           const txnCurrency = txn.currency?.toUpperCase();
           const matchesCurrency = isKesWithdrawal ? txnCurrency === 'KES' : txnCurrency !== 'KES';
