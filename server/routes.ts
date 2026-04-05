@@ -3339,6 +3339,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get payment requests RECEIVED by user (not sent)
+  app.get("/api/payment-requests-received", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const user = await storage.getUser(sessionUserId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Get all payment requests where email or phone matches this user
+      const allRequests = await storage.getAllPaymentRequests();
+      const receivedRequests = allRequests.filter((req: any) => 
+        req.toEmail === user.email || req.toPhone === user.phone
+      );
+      
+      res.json({ requests: receivedRequests });
+    } catch (error) {
+      console.error('Error fetching received payment requests:', error);
+      res.status(500).json({ message: "Error fetching payment requests" });
+    }
+  });
+
+  // Get unique receive payment link for user
+  app.get("/api/receive-payment-link", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const user = await storage.getUser(sessionUserId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Generate unique receive link
+      const receiveLink = `${req.protocol}://${req.get('host')}/pay-to/${sessionUserId}`;
+      const qrValue = `greenpay://pay/${sessionUserId}`;
+      
+      res.json({ 
+        receiveLink,
+        qrValue,
+        accountNumber: `GP-${sessionUserId.slice(-9)}`,
+        accountName: user.fullName,
+        bankName: "GreenPay Digital Bank"
+      });
+    } catch (error) {
+      console.error('Error generating receive link:', error);
+      res.status(500).json({ message: "Error generating receive link" });
+    }
+  });
+
   // Admin Authentication Routes
   app.post("/api/admin/login", async (req, res) => {
     try {

@@ -1,10 +1,10 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,7 @@ import { apiRequest } from "@/lib/queryClient";
 import QRCode from "@/components/qr-code";
 import { mockCurrencies } from "@/lib/mock-data";
 import { WavyHeader } from "@/components/wavy-header";
+import { Badge } from "@/components/ui/badge";
 
 const paymentRequestSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than 0"),
@@ -33,8 +34,32 @@ type PaymentRequestForm = z.infer<typeof paymentRequestSchema>;
 export default function ReceiveMoneyPage() {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<"qr" | "request">("qr");
+  const [receiveLink, setReceiveLink] = useState<string>("");
   const { toast } = useToast();
   const { user } = useAuth();
+
+  // Fetch unique receive link and received payment requests
+  const { data: receiveLinkData } = useQuery({
+    queryKey: ["/api/receive-payment-link"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/receive-payment-link");
+      return response.json();
+    },
+  });
+
+  const { data: receivedRequests = { requests: [] } } = useQuery({
+    queryKey: ["/api/payment-requests-received"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/payment-requests-received");
+      return response.json();
+    },
+  });
+
+  useEffect(() => {
+    if (receiveLinkData?.receiveLink) {
+      setReceiveLink(receiveLinkData.receiveLink);
+    }
+  }, [receiveLinkData]);
 
   const form = useForm<PaymentRequestForm>({
     resolver: zodResolver(paymentRequestSchema),
@@ -141,34 +166,48 @@ export default function ReceiveMoneyPage() {
               initial={{ opacity: 0, y: 30 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="bg-card p-6 rounded-xl border border-border text-center elevation-1"
+              className="bg-gradient-to-br from-card to-muted p-8 rounded-xl border border-border text-center elevation-2 shadow-lg"
             >
-              <h3 className="font-semibold mb-4">Scan to Pay</h3>
-              <div className="flex justify-center mb-4">
+              <div className="flex items-center justify-center mb-4">
+                <span className="material-icons text-4xl text-primary">qr_code</span>
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Your Unique Payment Link</h3>
+              <p className="text-sm text-muted-foreground mb-6">Share this QR code or link for instant payments</p>
+              
+              {/* QR Code Display */}
+              <div className="flex justify-center mb-6 p-4 bg-white rounded-xl">
                 <QRCode
-                  value={`greenpay://pay/${user?.id}`}
-                  size={192}
+                  value={receiveLinkData?.qrValue || `greenpay://pay/${user?.id}`}
+                  size={220}
                   className="mx-auto"
                 />
               </div>
-              <p className="text-sm text-muted-foreground mb-4">Share this QR code for instant payments</p>
-              <div className="flex space-x-3">
+
+              {/* Unique Link Display */}
+              <div className="bg-muted p-3 rounded-lg mb-4 break-all text-sm font-mono">
+                {receiveLink || `${window.location.origin}/pay-to/${user?.id}`}
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <Button
+                  onClick={() => {
+                    navigator.clipboard.writeText(receiveLink || `${window.location.origin}/pay-to/${user?.id}`);
+                    toast({ title: "Link copied to clipboard!" });
+                  }}
+                  className="w-full"
+                  data-testid="button-copy-link"
+                >
+                  <span className="material-icons text-sm mr-1">content_copy</span>
+                  Copy Link
+                </Button>
                 <Button
                   onClick={handleShare}
-                  className="flex-1"
+                  variant="outline"
+                  className="w-full"
                   data-testid="button-share-qr"
                 >
                   <span className="material-icons text-sm mr-1">share</span>
-                  Share
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleShare}
-                  className="flex-1"
-                  data-testid="button-save-qr"
-                >
-                  <span className="material-icons text-sm mr-1">file_download</span>
-                  Save
+                  Share Link & QR
                 </Button>
               </div>
             </motion.div>
@@ -372,7 +411,7 @@ export default function ReceiveMoneyPage() {
           </>
         )}
 
-        {/* Recent Requests */}
+        {/* Received Payment Requests */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -380,13 +419,53 @@ export default function ReceiveMoneyPage() {
           className="bg-card rounded-xl border border-border elevation-1"
         >
           <div className="p-4 border-b border-border">
-            <h3 className="font-semibold">Recent Requests</h3>
+            <h3 className="font-semibold">Incoming Payment Requests</h3>
           </div>
-          <div className="p-8 text-center">
-            <span className="material-icons text-muted-foreground mb-3 block text-3xl">inbox</span>
-            <p className="text-muted-foreground">No payment requests yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Your payment requests will appear here</p>
-          </div>
+          
+          {receivedRequests.requests && receivedRequests.requests.length > 0 ? (
+            <div className="divide-y divide-border">
+              {receivedRequests.requests.map((request: any) => (
+                <motion.div
+                  key={request.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="p-4 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="font-medium text-sm">From: {request.fromUserId?.slice(0, 8)}...</p>
+                      <p className="text-xs text-muted-foreground">{request.message}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-primary">{request.currency} {request.amount}</p>
+                      <Badge variant={request.status === 'pending' ? 'default' : 'secondary'} className="text-xs mt-1">
+                        {request.status === 'pending' ? '⏳ Pending' : '✓ Paid'}
+                      </Badge>
+                    </div>
+                  </div>
+                  
+                  {request.status === 'pending' && (
+                    <Button
+                      size="sm"
+                      className="w-full mt-2"
+                      onClick={() => {
+                        // TODO: Navigate to payment form with request details
+                        setLocation(`/send-money?requestId=${request.id}`);
+                      }}
+                    >
+                      Pay Now
+                    </Button>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <span className="material-icons text-muted-foreground mb-3 block text-4xl">inbox</span>
+              <p className="text-muted-foreground">No incoming payment requests</p>
+              <p className="text-sm text-muted-foreground mt-1">Payment requests from others will appear here</p>
+            </div>
+          )}
         </motion.div>
       </div>
     </div>
