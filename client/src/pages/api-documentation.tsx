@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -13,15 +13,6 @@ export default function APIDocumentationPage() {
   const { toast } = useToast();
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "auth" | "endpoints" | "examples">("overview");
-  const [demoKeys, setDemoKeys] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Fetch demo keys from API
-    fetch("/api/demo-keys")
-      .then(res => res.json())
-      .then(data => setDemoKeys(data.keys || []))
-      .catch(err => console.error("Failed to fetch demo keys:", err));
-  }, []);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -114,40 +105,43 @@ export default function APIDocumentationPage() {
               </p>
             </div>
 
-            {/* Demo Keys Section */}
+            {/* Getting Started */}
             <div className="bg-card border border-primary/20 p-6 rounded-lg space-y-4">
               <div className="flex items-start gap-3">
                 <AlertCircle className="text-primary mt-1" size={20} />
                 <div>
-                  <h3 className="font-bold mb-2">📋 Available Demo API Keys</h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Use these keys for testing (no setup required):
-                  </p>
-                  <div className="space-y-2">
-                    {demoKeys.length > 0 ? (
-                      demoKeys.map((key) => (
-                        <div
-                          key={key.key}
-                          className="bg-muted p-3 rounded flex justify-between items-start gap-3"
-                        >
-                          <div className="flex-1">
-                            <div className="font-mono text-sm font-bold text-primary">{key.key}</div>
-                            <div className="text-xs text-muted-foreground">{key.description}</div>
-                          </div>
-                          <button
-                            onClick={() => copyToClipboard(key.key, `key-${key.key}`)}
-                            className="text-xs text-primary hover:text-primary/80"
-                          >
-                            {copiedCode === `key-${key.key}` ? <Check size={14} /> : <Copy size={14} />}
-                          </button>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-sm text-muted-foreground">Loading demo keys...</div>
-                    )}
-                  </div>
+                  <h3 className="font-bold mb-2">🚀 Get Started in 3 Steps</h3>
+                  <ol className="space-y-3 text-sm">
+                    <li className="flex gap-3">
+                      <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">1</span>
+                      <div>
+                        <span className="font-semibold">Log in to your GreenPay account</span>
+                        <p className="text-muted-foreground text-xs">Go to Settings → API Keys</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">2</span>
+                      <div>
+                        <span className="font-semibold">Click "Generate New Key"</span>
+                        <p className="text-muted-foreground text-xs">Configure name, scope, and rate limits</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">3</span>
+                      <div>
+                        <span className="font-semibold">Copy and store securely</span>
+                        <p className="text-muted-foreground text-xs">Save in environment variables, never commit to version control</p>
+                      </div>
+                    </li>
+                  </ol>
                 </div>
               </div>
+              <Button 
+                onClick={() => setLocation('/api-service')}
+                className="w-full mt-4"
+              >
+                Generate API Key Now
+              </Button>
             </div>
 
             {/* Key Features */}
@@ -255,17 +249,21 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
 
             {/* Creating API Keys */}
             <div className="bg-card border border-border p-6 rounded-lg space-y-4">
-              <h3 className="text-lg font-bold">Generating Production API Keys</h3>
-              <ol className="space-y-2 text-sm list-decimal list-inside">
-                <li>Log in to your GreenPay account</li>
-                <li>Navigate to Settings → API Keys</li>
-                <li>Click "Generate New Key"</li>
-                <li>Configure scope (read, write, all)</li>
-                <li>Copy the key immediately (you won't see it again)</li>
-                <li>Store securely in environment variables</li>
+              <h3 className="text-lg font-bold">Generating Your API Keys</h3>
+              <ol className="space-y-3 text-sm list-decimal list-inside">
+                <li><strong>Create your account</strong> - Sign up at greenpay.world</li>
+                <li><strong>Verify email & phone</strong> - Complete KYC verification</li>
+                <li><strong>Navigate to Settings</strong> - Go to Settings → API Keys in your dashboard</li>
+                <li><strong>Generate Key</strong> - Click "Generate New Key"</li>
+                <li><strong>Configure scopes</strong> - Select read, write, or all permissions</li>
+                <li><strong>Copy immediately</strong> - You won't be able to see it again</li>
+                <li><strong>Store securely</strong> - Use environment variables in production</li>
               </ol>
+              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded mt-4">
+                <p className="text-sm"><strong>⚠️ Important:</strong> Each API key is unique and personal. Never share your keys or commit them to version control.</p>
+              </div>
               <div className="bg-muted p-3 rounded text-sm font-mono mt-4">
-                export GREENPAY_API_KEY="gpay_your_production_key"
+                export GREENPAY_API_KEY="gpay_your_unique_key_here"
               </div>
             </div>
 
@@ -473,9 +471,13 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
             <div className="space-y-3">
               <h3 className="text-xl font-bold">JavaScript/Node.js</h3>
               <CodeBlock
-                code={`// Initialize with API key
-const API_KEY = 'gpay_demo_test';
+                code={`// Get your API key from Settings → API Keys dashboard
+const API_KEY = process.env.GREENPAY_API_KEY;
 const BASE_URL = '${API_BASE_URL}';
+
+if (!API_KEY) {
+  throw new Error('GREENPAY_API_KEY environment variable not set');
+}
 
 // Send money
 async function sendMoney(recipientId, amount, currency) {
@@ -519,10 +521,14 @@ async function getExchangeRate(from, to) {
               <h3 className="text-xl font-bold">Python</h3>
               <CodeBlock
                 code={`import requests
-import json
+import os
 
-API_KEY = 'gpay_demo_test'
+# Get your API key from Settings → API Keys dashboard
+API_KEY = os.getenv('GREENPAY_API_KEY')
 BASE_URL = '${API_BASE_URL}'
+
+if not API_KEY:
+    raise ValueError('GREENPAY_API_KEY environment variable not set')
 
 headers = {
     'Authorization': f'Bearer {API_KEY}',
@@ -570,19 +576,20 @@ def pay_bill(provider, amount, account_number):
             {/* cURL Examples */}
             <div className="space-y-3">
               <h3 className="text-xl font-bold">cURL</h3>
+              <p className="text-sm text-muted-foreground mb-3">Replace <code className="bg-muted px-1 py-0.5 rounded">YOUR_API_KEY</code> with your actual API key from the dashboard</p>
               <CodeBlock
                 code={`# Get user profile
 curl -X GET ${API_BASE_URL}/api/users/profile \\
-  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json"
 
 # Get exchange rate
 curl -X GET ${API_BASE_URL}/api/exchange-rates/USD/KES \\
-  -H "Authorization: Bearer gpay_demo_test"
+  -H "Authorization: Bearer YOUR_API_KEY"
 
 # Send money
 curl -X POST ${API_BASE_URL}/api/transactions/send \\
-  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "amount": "100",
@@ -592,7 +599,7 @@ curl -X POST ${API_BASE_URL}/api/transactions/send \\
 
 # Pay bill
 curl -X POST ${API_BASE_URL}/api/bills/pay \\
-  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Authorization: Bearer YOUR_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "provider": "kplc",
