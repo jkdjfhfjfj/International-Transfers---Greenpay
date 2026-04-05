@@ -1,739 +1,669 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { WavyHeader } from "@/components/wavy-header";
-import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, MapPin } from "lucide-react";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, ExternalLink, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/use-auth";
 
-interface Example {
-  language: string;
-  code: string;
-}
+const API_BASE_URL = "https://api.greenpay.world";
 
-interface Endpoint {
-  method: string;
-  path: string;
-  title: string;
-  description: string;
-  request?: string;
-  response?: string;
-  examples?: Example[];
-  category: string;
-}
-
-const ENDPOINTS: Endpoint[] = [
-  // Authentication
-  {
-    method: "POST",
-    path: "/auth/signup",
-    title: "Sign Up",
-    description: "Create new user account",
-    category: "Authentication",
-    request: JSON.stringify({
-      fullName: "John Doe",
-      email: "john@example.com",
-      phone: "+254712345678",
-      country: "KE",
-      password: "SecurePass123!"
-    }, null, 2),
-    response: JSON.stringify({
-      user: {
-        id: "user-id-123",
-        email: "john@example.com",
-        fullName: "John Doe",
-        phone: "+254712345678",
-        country: "KE",
-        isPhoneVerified: true,
-        isEmailVerified: true
-      },
-      message: "Account created successfully"
-    }, null, 2),
-    examples: [
-      {
-        language: "JavaScript",
-        code: `const response = await fetch('https://greenpay.world/api/auth/signup', {
-  method: 'POST',
-  headers: {
-    'Authorization': 'Bearer gpay_xxxxx',
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    fullName: "John Doe",
-    email: "john@example.com",
-    phone: "+254712345678",
-    country: "KE",
-    password: "SecurePass123!"
-  })
-});
-const data = await response.json();`
-      },
-      {
-        language: "Python",
-        code: `import requests
-response = requests.post(
-  'https://greenpay.world/api/auth/signup',
-  headers={'Authorization': 'Bearer gpay_xxxxx'},
-  json={
-    'fullName': 'John Doe',
-    'email': 'john@example.com',
-    'phone': '+254712345678',
-    'country': 'KE',
-    'password': 'SecurePass123!'
-  }
-)
-data = response.json()`
-      },
-      {
-        language: "cURL",
-        code: `curl -X POST https://greenpay.world/api/auth/signup \\
-  -H "Authorization: Bearer gpay_xxxxx" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "fullName": "John Doe",
-    "email": "john@example.com",
-    "phone": "+254712345678",
-    "country": "KE",
-    "password": "SecurePass123!"
-  }'`
-      }
-    ]
-  },
-  {
-    method: "POST",
-    path: "/auth/login",
-    title: "Login",
-    description: "User login with email and password",
-    category: "Authentication",
-    request: JSON.stringify({
-      email: "john@example.com",
-      password: "SecurePass123!"
-    }, null, 2),
-    response: JSON.stringify({
-      user: {
-        id: "user-id",
-        email: "john@example.com",
-        fullName: "John Doe",
-        balance: "0.00",
-        kycStatus: "pending"
-      },
-      requiresOtp: true,
-      message: "OTP sent to your phone"
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/auth/verify-otp",
-    title: "Verify OTP",
-    description: "Verify OTP code for login",
-    category: "Authentication",
-    request: JSON.stringify({ code: "123456" }, null, 2),
-    response: JSON.stringify({
-      success: true,
-      user: { id: "user-id", email: "john@example.com" },
-      message: "Login successful"
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/exchange-rates/:base",
-    title: "Get Exchange Rates",
-    description: "Get exchange rates for a base currency",
-    category: "Financial",
-    response: JSON.stringify({
-      base: "USD",
-      rates: { KES: 145.50, EUR: 0.92, GBP: 0.79 },
-      timestamp: "2024-01-15T10:30:00Z"
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/exchange/convert",
-    title: "Convert Currency",
-    description: "Convert between currencies",
-    category: "Financial",
-    request: JSON.stringify({
-      amount: "100",
-      fromCurrency: "USD",
-      toCurrency: "KES"
-    }, null, 2),
-    response: JSON.stringify({
-      fromAmount: "100",
-      fromCurrency: "USD",
-      toAmount: "14550.00",
-      toCurrency: "KES",
-      rate: 145.50,
-      fee: "10.00",
-      netAmount: "14540.00"
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/transactions",
-    title: "Get Transactions",
-    description: "Retrieve all user transactions",
-    category: "Financial",
-    response: JSON.stringify({
-      transactions: [{
-        id: "txn-id",
-        type: "send",
-        amount: "500",
-        currency: "KES",
-        status: "completed",
-        recipientName: "Jane Doe",
-        timestamp: "2024-01-15T10:30:00Z"
-      }]
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/deposit/initialize-payment",
-    title: "Initialize Deposit",
-    description: "Start a deposit transaction",
-    category: "Financial",
-    request: JSON.stringify({
-      amount: "1000",
-      currency: "KES",
-      paymentMethod: "mpesa"
-    }, null, 2),
-    response: JSON.stringify({
-      paymentId: "pay-id",
-      amount: "1000",
-      currency: "KES",
-      status: "pending",
-      paymentLink: "https://pay.greenpay.world/...",
-      expiresAt: "2024-01-15T11:30:00Z"
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/airtime/purchase",
-    title: "Purchase Airtime",
-    description: "Buy airtime for a phone",
-    category: "Financial",
-    request: JSON.stringify({
-      phoneNumber: "+254712345678",
-      amount: "50",
-      provider: "safaricom"
-    }, null, 2),
-    response: JSON.stringify({
-      transaction: {
-        id: "txn-id",
-        status: "completed",
-        phoneNumber: "+254712345678",
-        amount: "50",
-        provider: "safaricom",
-        timestamp: "2024-01-15T10:30:00Z"
-      }
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/users/profile",
-    title: "Get Profile",
-    description: "Retrieve user profile information",
-    category: "User Profile",
-    response: JSON.stringify({
-      id: "user-id",
-      fullName: "John Doe",
-      email: "john@example.com",
-      phone: "+254712345678",
-      country: "KE",
-      balance: "10000.00",
-      currency: "KES",
-      kycStatus: "verified",
-      hasVirtualCard: true
-    }, null, 2)
-  },
-  {
-    method: "PUT",
-    path: "/users/profile",
-    title: "Update Profile",
-    description: "Update user profile data",
-    category: "User Profile",
-    request: JSON.stringify({
-      fullName: "John Updated",
-      phone: "+254712345679",
-      darkMode: true
-    }, null, 2),
-    response: JSON.stringify({
-      user: { id: "user-id", fullName: "John Updated" },
-      message: "Profile updated successfully"
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/kyc/submit",
-    title: "Submit KYC",
-    description: "Submit KYC documents for verification",
-    category: "User Profile",
-    request: JSON.stringify({
-      documentType: "national_id",
-      frontImage: "base64-encoded-image",
-      dateOfBirth: "1990-01-15"
-    }, null, 2),
-    response: JSON.stringify({
-      kyc: {
-        id: "kyc-id",
-        status: "pending",
-        submittedAt: "2024-01-15T10:30:00Z"
-      }
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/notifications",
-    title: "Get Notifications",
-    description: "Retrieve user notifications",
-    category: "User Profile",
-    response: JSON.stringify({
-      notifications: [{
-        id: "notif-id",
-        title: "Payment Received",
-        message: "You received 1000 KES from John",
-        read: false,
-        timestamp: "2024-01-15T10:30:00Z"
-      }]
-    }, null, 2)
-  },
-  {
-    method: "POST",
-    path: "/support/tickets",
-    title: "Create Ticket",
-    description: "Create a support ticket",
-    category: "Support",
-    request: JSON.stringify({
-      issueType: "payment_issue",
-      description: "Transaction failed but money was deducted"
-    }, null, 2),
-    response: JSON.stringify({
-      ticket: {
-        id: "ticket-id",
-        status: "open",
-        createdAt: "2024-01-15T10:30:00Z",
-        trackingUrl: "https://support.greenpay.world/tickets/..."
-      }
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/support/tickets",
-    title: "Get Support Tickets",
-    description: "Retrieve all support tickets",
-    category: "Support",
-    response: JSON.stringify({
-      tickets: [{
-        id: "ticket-id",
-        status: "open",
-        issueType: "payment_issue",
-        createdAt: "2024-01-15T10:30:00Z"
-      }]
-    }, null, 2)
-  },
-  {
-    method: "GET",
-    path: "/system/status",
-    title: "System Status",
-    description: "Check API and system health",
-    category: "System",
-    response: JSON.stringify({
-      status: "operational",
-      version: "1.0.0",
-      timestamp: "2024-01-15T10:30:00Z",
-      components: {
-        api: "operational",
-        database: "operational",
-        whatsapp: "operational",
-        email: "operational"
-      }
-    }, null, 2)
-  }
-];
-
-export default function ApiDocumentationPage() {
+export default function APIDocumentationPage() {
   const [, setLocation] = useLocation();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [expandedEndpoint, setExpandedEndpoint] = useState<string | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [testResponse, setTestResponse] = useState<string | null>(null);
-  const [selectedExample, setSelectedExample] = useState<string | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"overview" | "auth" | "endpoints" | "examples">("overview");
+  const [demoKeys, setDemoKeys] = useState<any[]>([]);
 
-  const categories = Array.from(new Set(ENDPOINTS.map(e => e.category)));
+  useEffect(() => {
+    // Fetch demo keys from API
+    fetch("/api/demo-keys")
+      .then(res => res.json())
+      .then(data => setDemoKeys(data.keys || []))
+      .catch(err => console.error("Failed to fetch demo keys:", err));
+  }, []);
 
   const copyToClipboard = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    toast({ description: "Copied to clipboard" });
-    setTimeout(() => setCopiedId(null), 2000);
+    setCopiedCode(id);
+    toast({ title: "Copied to clipboard!" });
+    setTimeout(() => setCopiedCode(null), 2000);
   };
 
-  const generatePDF = () => {
-    try {
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let yPosition = 15;
-
-      // Title Page
-      pdf.setFillColor(34, 197, 94);
-      pdf.rect(0, 0, pageWidth, 50, 'F');
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(28);
-      pdf.text('GreenPay API', 15, 25);
-      pdf.setFontSize(14);
-      pdf.text('Complete Developer Reference', 15, 35);
-      pdf.setFontSize(10);
-      pdf.text('Version 1.0.0 - November 2024', 15, 42);
-
-      // Add new page for content
-      pdf.addPage();
-      yPosition = 15;
-
-      // Table of Contents
-      pdf.setTextColor(0, 0, 0);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setFontSize(16);
-      pdf.text('Table of Contents', 15, yPosition);
-      yPosition += 12;
-
-      categories.forEach((cat, idx) => {
-        pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(10);
-        const count = ENDPOINTS.filter(e => e.category === cat).length;
-        pdf.text(`${idx + 1}. ${cat} (${count} endpoints)`, 20, yPosition);
-        yPosition += 8;
-      });
-
-      // All endpoints with full details
-      categories.forEach((category) => {
-        pdf.addPage();
-        yPosition = 15;
-
-        // Category Header
-        pdf.setFillColor(34, 197, 94);
-        pdf.rect(0, yPosition - 8, pageWidth, 12, 'F');
-        pdf.setTextColor(255, 255, 255);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(14);
-        pdf.text(category, 15, yPosition);
-        yPosition += 18;
-
-        // Endpoints in category
-        ENDPOINTS.filter(e => e.category === category).forEach((endpoint) => {
-          if (yPosition > pageHeight - 40) {
-            pdf.addPage();
-            yPosition = 15;
-          }
-
-          // Endpoint title
-          pdf.setTextColor(0, 0, 0);
-          pdf.setFont('helvetica', 'bold');
-          pdf.setFontSize(11);
-          pdf.text(`${endpoint.method} ${endpoint.path}`, 15, yPosition);
-          yPosition += 6;
-
-          pdf.setFont('helvetica', 'normal');
-          pdf.setFontSize(10);
-          pdf.setTextColor(100, 100, 100);
-          pdf.text(endpoint.title, 15, yPosition);
-          yPosition += 4;
-
-          pdf.setTextColor(80, 80, 80);
-          const descLines = pdf.splitTextToSize(endpoint.description, 180);
-          pdf.text(descLines, 15, yPosition);
-          yPosition += descLines.length * 4 + 3;
-
-          // Request
-          if (endpoint.request) {
-            if (yPosition > pageHeight - 30) {
-              pdf.addPage();
-              yPosition = 15;
-            }
-            pdf.setFont('helvetica', 'bold');
-            pdf.setTextColor(34, 197, 94);
-            pdf.setFontSize(9);
-            pdf.text('Request Body:', 15, yPosition);
-            yPosition += 5;
-
-            pdf.setFont('courier', 'normal');
-            pdf.setFontSize(8);
-            pdf.setTextColor(40, 40, 40);
-            const reqLines = endpoint.request.split('\n');
-            reqLines.forEach(line => {
-              if (yPosition > pageHeight - 15) {
-                pdf.addPage();
-                yPosition = 15;
-              }
-              pdf.text(line, 18, yPosition);
-              yPosition += 3.5;
-            });
-            yPosition += 2;
-          }
-
-          // Response
-          if (endpoint.response) {
-            if (yPosition > pageHeight - 30) {
-              pdf.addPage();
-              yPosition = 15;
-            }
-            pdf.setFont('helvetica', 'bold');
-            pdf.setTextColor(34, 197, 94);
-            pdf.setFontSize(9);
-            pdf.text('Response:', 15, yPosition);
-            yPosition += 5;
-
-            pdf.setFont('courier', 'normal');
-            pdf.setFontSize(8);
-            pdf.setTextColor(40, 40, 40);
-            const respLines = endpoint.response.split('\n');
-            respLines.forEach(line => {
-              if (yPosition > pageHeight - 15) {
-                pdf.addPage();
-                yPosition = 15;
-              }
-              pdf.text(line, 18, yPosition);
-              yPosition += 3.5;
-            });
-            yPosition += 5;
-          }
-        });
-      });
-
-      // Add footer
-      const pageCount = pdf.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        pdf.setPage(i);
-        pdf.setFontSize(9);
-        pdf.setTextColor(150, 150, 150);
-        pdf.text(`Page ${i} of ${pageCount}`, pageWidth - 30, pageHeight - 10);
-        pdf.text('GreenPay © 2024', 15, pageHeight - 10);
-      }
-
-      pdf.save('GreenPay-API-Documentation.pdf');
-      toast({ description: "PDF downloaded successfully" });
-    } catch (error) {
-      toast({ description: "Error generating PDF", variant: "destructive" });
-    }
-  };
+  const CodeBlock = ({ code, language = "bash", id }: any) => (
+    <div className="bg-muted p-4 rounded-lg my-4 relative">
+      <div className="flex justify-between items-center mb-2">
+        <span className="text-xs font-mono text-muted-foreground">{language}</span>
+        <button
+          onClick={() => copyToClipboard(code, id)}
+          className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+        >
+          {copiedCode === id ? <Check size={14} /> : <Copy size={14} />}
+          {copiedCode === id ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <pre className="text-xs overflow-x-auto max-h-96">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-green-50 pb-20">
-      <WavyHeader
-        
-        
-        rightContent={
-          <button
-            onClick={generatePDF}
-            className="text-gray-800 dark:text-gray-200 p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
-            
-          >
-            <Download className="w-5 h-5" />
-          </button>
-        }
-        size="md"
-      />
+    <div className="min-h-screen bg-background pb-20">
+      <WavyHeader size="sm" />
 
-      <div className="max-w-7xl mx-auto p-6 space-y-8">
-        {/* API Key Input */}
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-xl shadow-md p-6 border-l-4 border-green-600"
+          className="space-y-4"
         >
-          <h3 className="text-lg font-bold text-gray-900 mb-3">Test API Endpoints</h3>
-          <div className="flex gap-2 mb-2">
-            <input
-              type="password"
-              placeholder="Enter your API key (gpay_...)"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-600"
-            />
-            <button
-              onClick={() => setApiKey("")}
-              className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium"
-            >
-              Clear
-            </button>
+          <h1 className="text-4xl font-bold">GreenPay API Documentation</h1>
+          <p className="text-lg text-muted-foreground">
+            Complete REST API reference for integrating GreenPay into your applications
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Globe size={16} className="text-primary" />
+              <span>Base URL: <code className="bg-muted px-2 py-1 rounded">{API_BASE_URL}</code></span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Zap size={16} className="text-primary" />
+              <span>Rate Limit: 1000 requests/hour</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Shield size={16} className="text-primary" />
+              <span>HTTPS Required</span>
+            </div>
           </div>
-          <p className="text-xs text-gray-500">Your API key is stored locally only - never sent to external servers</p>
         </motion.div>
 
-        {/* Endpoints */}
-        {categories.map((category) => (
-          <motion.div key={category} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="h-1 w-8 bg-green-600 rounded"></div>
-              <h2 className="text-2xl font-bold text-gray-900">{category}</h2>
-              <span className="text-sm font-semibold bg-green-100 text-green-700 px-3 py-1 rounded-full">
-                {ENDPOINTS.filter(e => e.category === category).length}
-              </span>
+        {/* Tab Navigation */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="flex flex-wrap gap-2 border-b border-border"
+        >
+          {["overview", "auth", "endpoints", "examples"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab as any)}
+              className={`pb-3 px-4 font-medium transition-colors ${
+                activeTab === tab
+                  ? "border-b-2 border-primary text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </motion.div>
+
+        {/* OVERVIEW TAB */}
+        {activeTab === "overview" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Getting Started</h2>
+              <p className="text-muted-foreground mb-4">
+                GreenPay provides a comprehensive REST API for financial transactions, user management, and more.
+              </p>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {ENDPOINTS.filter(e => e.category === category).map((endpoint, idx) => {
-                const endpointId = `${endpoint.method}-${endpoint.path}`;
-                const isExpanded = expandedEndpoint === endpointId;
-                return (
-                  <motion.div
-                    key={idx}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden hover:shadow-lg transition-all"
-                  >
-                    {/* Header - CLICKABLE */}
-                    <button
-                      onClick={() => setExpandedEndpoint(isExpanded ? null : endpointId)}
-                      className="w-full text-left bg-gradient-to-r from-gray-50 to-gray-100 p-4 border-b hover:from-gray-100 hover:to-gray-150 transition-all"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className={`text-xs font-bold px-2 py-1 rounded text-white ${
-                              endpoint.method === 'GET' ? 'bg-blue-600' : 'bg-green-600'
-                            }`}>
-                              {endpoint.method}
-                            </span>
-                            <code className="font-mono text-sm font-semibold text-gray-900">{endpoint.path}</code>
-                          </div>
-                          <h4 className="text-lg font-bold text-gray-900">{endpoint.title}</h4>
-                          <p className="text-sm text-gray-600">{endpoint.description}</p>
-                        </div>
-                        <Code2 className={`w-6 h-6 text-green-600 opacity-20 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                      </div>
-                    </button>
-
-                    {/* Expanded Content */}
-                    {isExpanded && (
-                      <div className="p-6 space-y-4 bg-white">
-                        {/* Request */}
-                        {endpoint.request && (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-sm font-bold text-gray-700">Request</label>
-                              <button
-                                onClick={() => copyToClipboard(endpoint.request!, `req-${endpointId}`)}
-                                className={`text-xs px-2 py-1 rounded transition-all ${
-                                  copiedId === `req-${endpointId}`
-                                    ? 'bg-green-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                              >
-                                {copiedId === `req-${endpointId}` ? 'Copied' : 'Copy'}
-                              </button>
-                            </div>
-                            <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">
-                              {endpoint.request}
-                            </pre>
-                          </div>
-                        )}
-
-                        {/* Response */}
-                        {endpoint.response && (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-sm font-bold text-gray-700">Response Example</label>
-                              <button
-                                onClick={() => copyToClipboard(endpoint.response!, `resp-${endpointId}`)}
-                                className={`text-xs px-2 py-1 rounded transition-all ${
-                                  copiedId === `resp-${endpointId}`
-                                    ? 'bg-green-600 text-white'
-                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                }`}
-                              >
-                                {copiedId === `resp-${endpointId}` ? 'Copied' : 'Copy'}
-                              </button>
-                            </div>
-                            <pre className="bg-green-50 border border-green-300 text-gray-900 p-3 rounded text-xs overflow-x-auto">
-                              {endpoint.response}
-                            </pre>
-                          </div>
-                        )}
-
-                        {/* Code Examples */}
-                        {endpoint.examples && (
-                          <div>
-                            <label className="text-sm font-bold text-gray-700 mb-3 block">Code Examples</label>
-                            <div className="flex gap-2 mb-3">
-                              {endpoint.examples.map((ex) => (
-                                <button
-                                  key={ex.language}
-                                  onClick={() => setSelectedExample(selectedExample === ex.language ? null : ex.language)}
-                                  className={`px-3 py-1 rounded text-sm font-medium transition-all ${
-                                    selectedExample === ex.language
-                                      ? 'bg-green-600 text-white'
-                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                  }`}
-                                >
-                                  {ex.language}
-                                </button>
-                              ))}
-                            </div>
-                            {selectedExample && (
-                              <div>
-                                <button
-                                  onClick={() => copyToClipboard(
-                                    endpoint.examples!.find(e => e.language === selectedExample)?.code || '',
-                                    `ex-${endpointId}-${selectedExample}`
-                                  )}
-                                  className={`text-xs px-2 py-1 rounded transition-all mb-2 ${
-                                    copiedId === `ex-${endpointId}-${selectedExample}`
-                                      ? 'bg-green-600 text-white'
-                                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                                  }`}
-                                >
-                                  {copiedId === `ex-${endpointId}-${selectedExample}` ? 'Copied' : 'Copy Code'}
-                                </button>
-                                <pre className="bg-gray-900 text-gray-100 p-3 rounded text-xs overflow-x-auto">
-                                  {endpoint.examples?.find(e => e.language === selectedExample)?.code}
-                                </pre>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Test Button */}
-                        <button
-                          onClick={() => {
-                            if (!apiKey) {
-                              toast({ description: "Please enter your API key", variant: "destructive" });
-                              return;
-                            }
-                            setTestResponse(JSON.stringify(JSON.parse(endpoint.response || '{}'), null, 2));
-                          }}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-all"
+            {/* Demo Keys Section */}
+            <div className="bg-card border border-primary/20 p-6 rounded-lg space-y-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="text-primary mt-1" size={20} />
+                <div>
+                  <h3 className="font-bold mb-2">📋 Available Demo API Keys</h3>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Use these keys for testing (no setup required):
+                  </p>
+                  <div className="space-y-2">
+                    {demoKeys.length > 0 ? (
+                      demoKeys.map((key) => (
+                        <div
+                          key={key.key}
+                          className="bg-muted p-3 rounded flex justify-between items-start gap-3"
                         >
-                          <Play className="w-4 h-4" />
-                          Test This Endpoint
-                        </button>
-
-                        {testResponse && (
-                          <div>
-                            <p className="text-sm font-bold text-gray-700 mb-2">Test Response:</p>
-                            <pre className="bg-blue-50 border border-blue-300 text-gray-900 p-3 rounded text-xs overflow-x-auto">
-                              {testResponse}
-                            </pre>
+                          <div className="flex-1">
+                            <div className="font-mono text-sm font-bold text-primary">{key.key}</div>
+                            <div className="text-xs text-muted-foreground">{key.description}</div>
                           </div>
-                        )}
-                      </div>
+                          <button
+                            onClick={() => copyToClipboard(key.key, `key-${key.key}`)}
+                            className="text-xs text-primary hover:text-primary/80"
+                          >
+                            {copiedCode === `key-${key.key}` ? <Check size={14} /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Loading demo keys...</div>
                     )}
-                  </motion.div>
-                );
-              })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Key Features */}
+            <div>
+              <h3 className="text-xl font-bold mb-4">Key Features</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-bold mb-2">💰 Payments</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Send and receive money, manage transactions, convert currencies
+                  </p>
+                </div>
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-bold mb-2">💳 Virtual Cards</h4>
+                  <p className="text-sm text-muted-foreground">
+                    Issue, manage, and track virtual card transactions
+                  </p>
+                </div>
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-bold mb-2">🔐 Security</h4>
+                  <p className="text-sm text-muted-foreground">
+                    OAuth 2.0, API keys, rate limiting, encryption
+                  </p>
+                </div>
+                <div className="bg-muted p-4 rounded-lg">
+                  <h4 className="font-bold mb-2">📱 Mobile Ready</h4>
+                  <p className="text-sm text-muted-foreground">
+                    SMS notifications, WhatsApp integration, webhooks
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Requirements */}
+            <div>
+              <h3 className="text-xl font-bold mb-4">Requirements</h3>
+              <ul className="space-y-2 text-muted-foreground list-disc list-inside">
+                <li>Valid API key (use demo keys for testing)</li>
+                <li>HTTPS requests only</li>
+                <li>Application/JSON content type for POST/PUT requests</li>
+                <li>User authentication or valid Bearer token</li>
+              </ul>
             </div>
           </motion.div>
-        ))}
+        )}
+
+        {/* AUTH TAB */}
+        {activeTab === "auth" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Authentication</h2>
+              <p className="text-muted-foreground mb-6">
+                GreenPay supports two authentication methods:
+              </p>
+            </div>
+
+            {/* Session-Based Auth */}
+            <div className="space-y-4">
+              <div className="border-l-4 border-primary pl-4">
+                <h3 className="text-xl font-bold mb-2">1. Session Authentication</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Used for web applications and user dashboards
+                </p>
+              </div>
+              <CodeBlock
+                code={`// Login endpoint
+POST /api/auth/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "SecurePassword123!"
+}
+
+// Response includes session cookie automatically set`}
+                language="http"
+                id="session-auth"
+              />
+            </div>
+
+            {/* API Key Auth */}
+            <div className="space-y-4">
+              <div className="border-l-4 border-primary pl-4">
+                <h3 className="text-xl font-bold mb-2">2. API Key Authentication</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Used for server-to-server requests and integrations
+                </p>
+              </div>
+              <CodeBlock
+                code={`// Include in Authorization header
+Authorization: Bearer gpay_demo_test
+
+// Example with curl
+curl -X GET ${API_BASE_URL}/api/endpoint \\
+  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Content-Type: application/json"`}
+                language="bash"
+                id="api-key-auth"
+              />
+            </div>
+
+            {/* Creating API Keys */}
+            <div className="bg-card border border-border p-6 rounded-lg space-y-4">
+              <h3 className="text-lg font-bold">Generating Production API Keys</h3>
+              <ol className="space-y-2 text-sm list-decimal list-inside">
+                <li>Log in to your GreenPay account</li>
+                <li>Navigate to Settings → API Keys</li>
+                <li>Click "Generate New Key"</li>
+                <li>Configure scope (read, write, all)</li>
+                <li>Copy the key immediately (you won't see it again)</li>
+                <li>Store securely in environment variables</li>
+              </ol>
+              <div className="bg-muted p-3 rounded text-sm font-mono mt-4">
+                export GREENPAY_API_KEY="gpay_your_production_key"
+              </div>
+            </div>
+
+            {/* Security Best Practices */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-bold">🔒 Security Best Practices</h3>
+              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded space-y-3 text-sm">
+                <div>✓ Never commit API keys to version control</div>
+                <div>✓ Use environment variables for production</div>
+                <div>✓ Rotate keys regularly</div>
+                <div>✓ Use HTTPS for all requests</div>
+                <div>✓ Revoke compromised keys immediately</div>
+                <div>✓ Use different keys for dev/prod/test</div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ENDPOINTS TAB */}
+        {activeTab === "endpoints" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-8"
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-4">API Endpoints</h2>
+              <p className="text-muted-foreground mb-4">
+                All endpoints require authentication unless noted otherwise.
+              </p>
+            </div>
+
+            {/* Authentication Endpoints */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b border-border pb-2">Authentication</h3>
+              
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/auth/signup</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Create a new user account</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/auth/login</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Login to an existing account</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                    <span className="ml-3 font-mono">/api/auth/me</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Get current authenticated user info</p>
+              </div>
+            </div>
+
+            {/* Transactions */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b border-border pb-2">Transactions</h3>
+              
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/transactions/send</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Send money to another user</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                    <span className="ml-3 font-mono">/api/transactions/:userId</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Get user's transaction history</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                    <span className="ml-3 font-mono">/api/exchange-rates/:from/:to</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Get real-time exchange rates</p>
+              </div>
+            </div>
+
+            {/* Bills & Payments */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b border-border pb-2">Bills & Payments</h3>
+              
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/bills/pay</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Pay utility bills (KPLC, Zuku, Water, etc.)</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/airtime/purchase</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Buy airtime for mobile phones</p>
+              </div>
+            </div>
+
+            {/* Virtual Cards */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b border-border pb-2">Virtual Cards</h3>
+              
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/virtual-card/purchase</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Create or purchase a new virtual card</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                    <span className="ml-3 font-mono">/api/virtual-card/:userId</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Get user's virtual card details</p>
+              </div>
+            </div>
+
+            {/* API Keys */}
+            <div className="space-y-4">
+              <h3 className="text-xl font-bold border-b border-border pb-2">API Key Management</h3>
+              
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/api-keys/generate</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Generate a new API key</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-green-500/20 text-green-600 dark:text-green-400 px-2 py-1 rounded text-xs font-mono">GET</span>
+                    <span className="ml-3 font-mono">/api/api-keys</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">List your API keys</p>
+              </div>
+
+              <div className="bg-card p-4 rounded-lg border border-border space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="bg-red-500/20 text-red-600 dark:text-red-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="ml-3 font-mono">/api/api-keys/:keyId/revoke</span>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">Revoke an API key</p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* EXAMPLES TAB */}
+        {activeTab === "examples" && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="space-y-6"
+          >
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Code Examples</h2>
+              <p className="text-muted-foreground mb-6">
+                Production-ready examples using demo API keys
+              </p>
+            </div>
+
+            {/* JavaScript Example */}
+            <div className="space-y-3">
+              <h3 className="text-xl font-bold">JavaScript/Node.js</h3>
+              <CodeBlock
+                code={`// Initialize with API key
+const API_KEY = 'gpay_demo_test';
+const BASE_URL = '${API_BASE_URL}';
+
+// Send money
+async function sendMoney(recipientId, amount, currency) {
+  const response = await fetch(\`\${BASE_URL}/api/transactions/send\`, {
+    method: 'POST',
+    headers: {
+      'Authorization': \`Bearer \${API_KEY}\`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      amount,
+      currency,
+      recipientDetails: { userId: recipientId }
+    })
+  });
+  
+  if (!response.ok) {
+    throw new Error(\`API Error: \${response.status}\`);
+  }
+  
+  return await response.json();
+}
+
+// Get exchange rate
+async function getExchangeRate(from, to) {
+  const response = await fetch(
+    \`\${BASE_URL}/api/exchange-rates/\${from}/\${to}\`,
+    {
+      headers: { 'Authorization': \`Bearer \${API_KEY}\` }
+    }
+  );
+  return await response.json();
+}`}
+                language="javascript"
+                id="js-example"
+              />
+            </div>
+
+            {/* Python Example */}
+            <div className="space-y-3">
+              <h3 className="text-xl font-bold">Python</h3>
+              <CodeBlock
+                code={`import requests
+import json
+
+API_KEY = 'gpay_demo_test'
+BASE_URL = '${API_BASE_URL}'
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json'
+}
+
+# Send money
+def send_money(recipient_id, amount, currency):
+    response = requests.post(
+        f'{BASE_URL}/api/transactions/send',
+        headers=headers,
+        json={
+            'amount': amount,
+            'currency': currency,
+            'recipientDetails': {'userId': recipient_id}
+        }
+    )
+    return response.json()
+
+# Get transaction history
+def get_transactions(user_id):
+    response = requests.get(
+        f'{BASE_URL}/api/transactions/{user_id}',
+        headers=headers
+    )
+    return response.json()
+
+# Pay bills
+def pay_bill(provider, amount, account_number):
+    response = requests.post(
+        f'{BASE_URL}/api/bills/pay',
+        headers=headers,
+        json={
+            'provider': provider,
+            'amount': amount,
+            'accountNumber': account_number
+        }
+    )
+    return response.json()`}
+                language="python"
+                id="python-example"
+              />
+            </div>
+
+            {/* cURL Examples */}
+            <div className="space-y-3">
+              <h3 className="text-xl font-bold">cURL</h3>
+              <CodeBlock
+                code={`# Get user profile
+curl -X GET ${API_BASE_URL}/api/users/profile \\
+  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Content-Type: application/json"
+
+# Get exchange rate
+curl -X GET ${API_BASE_URL}/api/exchange-rates/USD/KES \\
+  -H "Authorization: Bearer gpay_demo_test"
+
+# Send money
+curl -X POST ${API_BASE_URL}/api/transactions/send \\
+  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "amount": "100",
+    "currency": "USD",
+    "recipientDetails": {"userId": "recipient-id"}
+  }'
+
+# Pay bill
+curl -X POST ${API_BASE_URL}/api/bills/pay \\
+  -H "Authorization: Bearer gpay_demo_test" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "provider": "kplc",
+    "amount": "1000",
+    "meterNumber": "12345678"
+  }'`}
+                language="bash"
+                id="curl-examples"
+              />
+            </div>
+
+            {/* Error Handling */}
+            <div className="bg-card border border-border p-6 rounded-lg space-y-4">
+              <h3 className="text-lg font-bold">Error Handling</h3>
+              <CodeBlock
+                code={`// Always handle errors in production
+try {
+  const response = await fetch(\`\${BASE_URL}/api/endpoint\`, {
+    headers: { 'Authorization': \`Bearer gpay_demo_test\` }
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    switch (response.status) {
+      case 401:
+        console.error('Unauthorized - Invalid API key');
+        break;
+      case 403:
+        console.error('Forbidden - Insufficient permissions');
+        break;
+      case 404:
+        console.error('Not found - Invalid endpoint');
+        break;
+      case 429:
+        console.error('Rate limit exceeded');
+        break;
+      default:
+        console.error('Error:', error.message);
+    }
+  }
+  
+  const data = await response.json();
+  return data;
+} catch (error) {
+  console.error('Network error:', error);
+  // Implement retry logic here
+}`}
+                language="javascript"
+                id="error-handling"
+              />
+            </div>
+          </motion.div>
+        )}
 
         {/* Footer */}
-        <div className="text-center text-sm text-gray-500 py-6 border-t">
-          <p>© 2024 GreenPay. All rights reserved. API v1.0.0</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="border-t border-border pt-8 mt-8 space-y-4"
+        >
+          <div className="bg-card p-6 rounded-lg">
+            <h3 className="font-bold mb-3">📞 Support</h3>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>📧 Email: api-support@greenpay.world</li>
+              <li>🐛 Issues: github.com/greenpay/api-issues</li>
+              <li>📚 Docs: docs.greenpay.world</li>
+              <li>💬 Community: community.greenpay.world</li>
+            </ul>
+          </div>
+        </motion.div>
       </div>
     </div>
   );
