@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "314788638",
+    "project_id": "greenpay-mobile-24b8d",
+    "storage_bucket": "greenpay-mobile-24b8d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:314788638:android:d52d71a84c8d274084d70f",
+        "android_client_info": {
+          "package_name": "com.greenpay.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD7D3worHICL0l67MmWYRq6-8cGKfnpX9o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
