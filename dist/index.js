@@ -14,6 +14,7 @@ __export(schema_exports, {
   adminLogs: () => adminLogs,
   admins: () => admins,
   aiUsage: () => aiUsage,
+  announcements: () => announcements,
   apiConfigurations: () => apiConfigurations,
   billPayments: () => billPayments,
   budgets: () => budgets,
@@ -22,6 +23,7 @@ __export(schema_exports, {
   insertAdminLogSchema: () => insertAdminLogSchema,
   insertAdminSchema: () => insertAdminSchema,
   insertAiUsageSchema: () => insertAiUsageSchema,
+  insertAnnouncementSchema: () => insertAnnouncementSchema,
   insertApiConfigurationSchema: () => insertApiConfigurationSchema,
   insertBillPaymentSchema: () => insertBillPaymentSchema,
   insertBudgetSchema: () => insertBudgetSchema,
@@ -75,7 +77,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, kycDocuments, virtualCards, transactions, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, aiUsage, insertAiUsageSchema;
+var users, kycDocuments, virtualCards, transactions, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, announcements, insertAnnouncementSchema, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, aiUsage, insertAiUsageSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -113,6 +115,12 @@ var init_schema = __esm({
       defaultCurrency: text("default_currency").default("KES"),
       pinEnabled: boolean("pin_enabled").default(false),
       pinCode: text("pin_code"),
+      isSuspended: boolean("is_suspended").default(false),
+      suspendedAt: timestamp("suspended_at"),
+      suspensionReason: text("suspension_reason"),
+      fcmToken: text("fcm_token"),
+      // Firebase Cloud Messaging token for push notifications
+      lastLoginAt: timestamp("last_login_at"),
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
     });
@@ -140,7 +148,9 @@ var init_schema = __esm({
       cvv: text("cvv").notNull(),
       balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
       status: text("status").default("active"),
-      // active, frozen, expired
+      // active, frozen, expired, blocked
+      freezeReason: text("freeze_reason"),
+      blockReason: text("block_reason"),
       purchaseAmount: decimal("purchase_amount", { precision: 10, scale: 2 }).default("60.00"),
       paystackReference: text("paystack_reference"),
       purchaseDate: timestamp("purchase_date").defaultNow(),
@@ -521,6 +531,26 @@ var init_schema = __esm({
       // success, failed
       createdAt: timestamp("created_at").defaultNow()
     });
+    announcements = pgTable("announcements", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      title: text("title").notNull(),
+      content: text("content").notNull(),
+      type: text("type").default("announcement"),
+      // announcement, offer, promotion
+      imageUrl: text("image_url"),
+      actionUrl: text("action_url"),
+      isActive: boolean("is_active").default(true),
+      priority: integer("priority").default(0),
+      startsAt: timestamp("starts_at").defaultNow(),
+      expiresAt: timestamp("expires_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertAnnouncementSchema = createInsertSchema(announcements).omit({
+      id: true,
+      createdAt: true,
+      updatedAt: true
+    });
     userSessions = pgTable("user_sessions", {
       sid: varchar("sid").primaryKey(),
       sess: jsonb("sess").notNull(),
@@ -703,23 +733,71 @@ var init_schema = __esm({
 var db_exports = {};
 __export(db_exports, {
   db: () => db,
+  ensureSchema: () => ensureSchema,
   pool: () => pool
 });
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
 import ws from "ws";
+function resolveConnectionString() {
+  if (process.env.DATABASE_URL) {
+    return process.env.DATABASE_URL.replace(/^"(.*)"$/, "$1").trim();
+  }
+  const { PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT } = process.env;
+  if (PGHOST && PGUSER && PGPASSWORD && PGDATABASE) {
+    const port = PGPORT || "5432";
+    return `postgresql://${PGUSER}:${encodeURIComponent(PGPASSWORD)}@${PGHOST}:${port}/${PGDATABASE}?sslmode=require`;
+  }
+  throw new Error(
+    "No database connection configured. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE environment variables."
+  );
+}
+async function alterMissingColumns() {
+  const migrations = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,
+    `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`
+  ];
+  for (const sql3 of migrations) {
+    try {
+      await pool.query(sql3);
+    } catch (err) {
+      console.warn(`\u26A0\uFE0F Migration skipped (${sql3.slice(0, 50)}...): ${err.message}`);
+    }
+  }
+}
+async function tablesExist() {
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'users'`
+    );
+    return parseInt(result.rows[0].count, 10) > 0;
+  } catch {
+    return false;
+  }
+}
+async function ensureSchema() {
+  const exists = await tablesExist();
+  if (!exists) {
+    console.warn('\u26A0\uFE0F  Database tables not found. If this is a fresh database, run "npm run db:push" manually to create the schema.');
+  } else {
+    await alterMissingColumns();
+    console.log("\u2705 Schema up to date (existing database \u2014 no destructive changes)");
+  }
+}
 var connectionString, pool, db;
 var init_db = __esm({
   "server/db.ts"() {
     "use strict";
     init_schema();
     neonConfig.webSocketConstructor = ws;
+    connectionString = resolveConnectionString();
     if (!process.env.DATABASE_URL) {
-      throw new Error(
-        "DATABASE_URL must be set. Did you forget to provision a database?"
-      );
+      process.env.DATABASE_URL = connectionString;
     }
-    connectionString = process.env.DATABASE_URL.replace(/^"(.*)"$/, "$1").trim();
     pool = new Pool({ connectionString });
     db = drizzle({ client: pool, schema: schema_exports });
   }
@@ -727,7 +805,7 @@ var init_db = __esm({
 
 // server/storage.ts
 import { randomUUID } from "crypto";
-import { eq, desc, count, sum, isNull, gte, lt, and, asc } from "drizzle-orm";
+import { eq, desc, count, sum, or, isNull, gte, lt, and, sql as sql2, asc } from "drizzle-orm";
 import bcrypt from "bcrypt";
 var MemStorage, DatabaseStorage, storage, memStorage;
 var init_storage = __esm({
@@ -751,8 +829,70 @@ var init_storage = __esm({
       systemSettings = /* @__PURE__ */ new Map();
       adminLogs = /* @__PURE__ */ new Map();
       systemLogs = /* @__PURE__ */ new Map();
+      announcements = /* @__PURE__ */ new Map();
       constructor() {
         this.initMockData();
+      }
+      initMockData() {
+      }
+      // Announcement operations
+      async getAnnouncements() {
+        if (db) {
+          return await db.select().from(announcements).orderBy(desc(announcements.priority));
+        }
+        return Array.from(this.announcements.values()).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      }
+      async getActiveAnnouncements() {
+        const now = /* @__PURE__ */ new Date();
+        if (db) {
+          return await db.select().from(announcements).where(
+            and(
+              eq(announcements.isActive, true),
+              or(isNull(announcements.startsAt), lte(announcements.startsAt, now)),
+              or(isNull(announcements.expiresAt), gte(announcements.expiresAt, now))
+            )
+          ).orderBy(desc(announcements.priority));
+        }
+        return Array.from(this.announcements.values()).filter((a) => a.isActive && (!a.startsAt || a.startsAt <= now) && (!a.expiresAt || a.expiresAt >= now)).sort((a, b) => (b.priority || 0) - (a.priority || 0));
+      }
+      async createAnnouncement(insertAnnouncement) {
+        if (db) {
+          const [announcement2] = await db.insert(announcements).values(insertAnnouncement).returning();
+          return announcement2;
+        }
+        const id = randomUUID();
+        const announcement = {
+          ...insertAnnouncement,
+          id,
+          imageUrl: insertAnnouncement.imageUrl ?? null,
+          actionUrl: insertAnnouncement.actionUrl ?? null,
+          isActive: insertAnnouncement.isActive ?? true,
+          priority: insertAnnouncement.priority ?? 0,
+          startsAt: insertAnnouncement.startsAt ?? /* @__PURE__ */ new Date(),
+          expiresAt: insertAnnouncement.expiresAt ?? null,
+          createdAt: /* @__PURE__ */ new Date(),
+          updatedAt: /* @__PURE__ */ new Date()
+        };
+        this.announcements.set(id, announcement);
+        return announcement;
+      }
+      async updateAnnouncement(id, updates) {
+        if (db) {
+          const [announcement2] = await db.update(announcements).set(updates).where(eq(announcements.id, id)).returning();
+          return announcement2;
+        }
+        const announcement = this.announcements.get(id);
+        if (!announcement) return void 0;
+        const updated = { ...announcement, ...updates, updatedAt: /* @__PURE__ */ new Date() };
+        this.announcements.set(id, updated);
+        return updated;
+      }
+      async deleteAnnouncement(id) {
+        if (db) {
+          await db.delete(announcements).where(eq(announcements.id, id));
+          return;
+        }
+        this.announcements.delete(id);
       }
       initMockData() {
         const demoUser = {
@@ -1237,6 +1377,9 @@ var init_storage = __esm({
       async getAdminByEmail(email) {
         return Array.from(this.admins.values()).find((admin) => admin.email === email);
       }
+      async getAdminById(id) {
+        return this.admins.get(String(id));
+      }
       async createAdmin(insertAdmin) {
         const id = randomUUID();
         const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
@@ -1678,6 +1821,10 @@ var init_storage = __esm({
         const [admin] = await db.select().from(admins).where(eq(admins.email, email));
         return admin || void 0;
       }
+      async getAdminById(id) {
+        const [admin] = await db.select().from(admins).where(eq(admins.id, id));
+        return admin || void 0;
+      }
       async createAdmin(insertAdmin) {
         const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
         const [admin] = await db.insert(admins).values({ ...insertAdmin, password: hashedPassword }).returning();
@@ -2056,6 +2203,31 @@ var init_storage = __esm({
           isActive: false
         }).returning();
         return config;
+      }
+      // Announcement operations
+      async getAnnouncements() {
+        return await db.select().from(announcements).orderBy(desc(announcements.priority));
+      }
+      async getActiveAnnouncements() {
+        const now = /* @__PURE__ */ new Date();
+        return await db.select().from(announcements).where(
+          and(
+            eq(announcements.isActive, true),
+            or(isNull(announcements.startsAt), sql2`${announcements.startsAt} <= ${now}`),
+            or(isNull(announcements.expiresAt), sql2`${announcements.expiresAt} >= ${now}`)
+          )
+        ).orderBy(desc(announcements.priority));
+      }
+      async createAnnouncement(insertAnnouncement) {
+        const [announcement] = await db.insert(announcements).values(insertAnnouncement).returning();
+        return announcement;
+      }
+      async updateAnnouncement(id, updates) {
+        const [announcement] = await db.update(announcements).set(updates).where(eq(announcements.id, id)).returning();
+        return announcement;
+      }
+      async deleteAnnouncement(id) {
+        await db.delete(announcements).where(eq(announcements.id, id));
       }
     };
     storage = new DatabaseStorage();
@@ -3142,12 +3314,18 @@ var init_whatsapp = __esm({
         try {
           const formattedPhone = this.formatPhoneNumber(phoneNumber);
           const url = `${this.graphApiUrl}/${this.apiVersion}/${this.phoneNumberId}/messages`;
+          const now = /* @__PURE__ */ new Date();
+          const dateStr = now.toLocaleDateString("en-KE", { day: "2-digit", month: "short", year: "numeric" });
+          const timeStr = now.toLocaleTimeString("en-KE", { hour: "2-digit", minute: "2-digit" });
           const payload = {
             messaging_product: "whatsapp",
             to: formattedPhone,
             type: "text",
             text: {
-              body: message
+              body: `${message}
+
+Sent on: ${dateStr} at ${timeStr}
+(This message is within 24 hours of your last interaction)`
             }
           };
           console.log("[WhatsApp] Sending text message to", formattedPhone, ":", message);
@@ -4388,7 +4566,7 @@ var init_messaging = __esm({
     init_email();
     init_whatsapp();
     MessagingService = class {
-      SMS_URL = "https://talkntalk.africa/api/v1/sms/send";
+      SMS_URL = "https://comms.umeskiasoftwares.com/api/v1/sms/send";
       MAX_MESSAGE_LENGTH = 160;
       MESSAGE_PREFIX = "[Greenpay] ";
       /**
@@ -4397,26 +4575,26 @@ var init_messaging = __esm({
       async getCredentials() {
         try {
           const settings = await storage.getSystemSettingsByCategory("messaging");
-          let apiKey = settings.find((s) => s.key === "api_key")?.value;
-          let accountEmail = settings.find((s) => s.key === "account_email")?.value;
-          let senderId = settings.find((s) => s.key === "sender_id")?.value;
-          apiKey = apiKey || process.env.TALKNTALK_API_KEY || "";
-          accountEmail = accountEmail || process.env.TALKNTALK_EMAIL || "";
-          senderId = senderId || process.env.TALKNTALK_SENDER_ID || "";
-          if (!apiKey || !accountEmail || !senderId) {
+          let apiKey = settings.find((s) => s.key === "sms_api_key")?.value;
+          let appId = settings.find((s) => s.key === "sms_app_id")?.value;
+          let senderId = settings.find((s) => s.key === "sms_sender_id")?.value;
+          apiKey = apiKey || process.env.SMS_API_KEY || "";
+          appId = appId || process.env.SMS_APP_ID || "";
+          senderId = senderId || process.env.SMS_SENDER_ID || "UMS_TX";
+          if (!apiKey || !appId || !senderId) {
             console.warn("SMS messaging credentials not fully configured (settings or env)");
             return null;
           }
-          return { apiKey, accountEmail, senderId };
+          return { apiKey, appId, senderId };
         } catch (error) {
           console.error("Error fetching messaging credentials:", error);
           return null;
         }
       }
       /**
-       * Format phone number to Kenya format (+254XXXXXXXXX)
+       * Format phone number to Kenya format without + (254XXXXXXXXX)
        * Handles: +254xxx, 00254xxx, 0xxx, 254xxx, 7xxx, 1xxx
-       * Always returns phone with + prefix for database consistency
+       * Returns phone without + prefix for SMS API compatibility
        */
       formatPhoneNumber(phone) {
         let cleaned = phone.replace(/[\s-()]/g, "");
@@ -4427,13 +4605,13 @@ var init_messaging = __esm({
           cleaned = cleaned.substring(1);
         }
         if (cleaned.startsWith("254")) {
-          return "+" + cleaned;
+          return cleaned;
         } else if (cleaned.startsWith("0")) {
-          return "+254" + cleaned.substring(1);
+          return "254" + cleaned.substring(1);
         } else if (cleaned.length === 9 && (cleaned.startsWith("7") || cleaned.startsWith("1"))) {
-          return "+254" + cleaned;
+          return "254" + cleaned;
         }
-        return "+" + cleaned;
+        return cleaned.startsWith("254") ? cleaned : "254" + cleaned;
       }
       /**
        * Truncate message to fit within character limit (including prefix)
@@ -4456,18 +4634,18 @@ var init_messaging = __esm({
           const response = await fetch8(this.SMS_URL, {
             method: "POST",
             headers: {
-              "Content-Type": "application/json",
-              "X-API-Key": credentials.apiKey,
-              "X-Account-Email": credentials.accountEmail
+              "Content-Type": "application/json"
             },
             body: JSON.stringify({
+              api_key: credentials.apiKey,
+              app_id: credentials.appId,
               sender_id: credentials.senderId,
-              recipient: formattedPhone,
+              phone: formattedPhone,
               message: formattedMessage
             })
           });
           const result = await response.json();
-          if (result.status_code === 200) {
+          if (result.status_code === 200 || result.status_code === 0) {
             console.log(`SMS sent successfully to ${formattedPhone}`);
             return true;
           } else {
@@ -4557,19 +4735,24 @@ var init_messaging = __esm({
        * Send OTP verification code via SMS, WhatsApp (template), and Email (CONCURRENT)
        */
       async sendOTP(phone, otpCode, email, userName) {
+        console.log(`[OTP] Starting OTP send for phone: ${phone}`);
         const enableSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
+        console.log(`[OTP] enable_otp_messages setting:`, enableSetting?.value || "not set (will allow)");
         if (enableSetting?.value === "false") {
+          console.log("[OTP] OTP messages disabled, skipping send");
           return { sms: false, whatsapp: false, email: false };
         }
         const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
         const credentials = await this.getCredentials();
+        console.log(`[OTP] SMS credentials available: ${!!credentials}`);
         const firstName = userName?.split(" ")[0] || "User";
         const lastName = userName?.split(" ").slice(1).join(" ") || "";
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your verification code is ${otpCode}. Valid for 10 minutes.`, credentials) : (console.log("SMS not sent: credentials missing"), Promise.resolve(false)),
-          whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : (console.log("WhatsApp not sent: not configured"), Promise.resolve(false)),
-          email ? mailtrapService3.sendOTP(email, firstName, lastName, otpCode) : (console.log("Email not sent: missing or service down"), Promise.resolve(false))
+          credentials ? this.sendSMS(phone, `Your verification code is ${otpCode}. Valid for 10 minutes.`, credentials) : (console.log("[OTP] SMS skipped: credentials missing"), Promise.resolve(false)),
+          whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : (console.log("[OTP] WhatsApp skipped: not configured"), Promise.resolve(false)),
+          email ? mailtrapService3.sendOTP(email, firstName, lastName, otpCode) : (console.log("[OTP] Email skipped: no email or service down"), Promise.resolve(false))
         ]);
+        console.log(`[OTP] Send results - SMS: ${smsResult}, WhatsApp: ${whatsappResult}, Email: ${emailResult}`);
         return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
@@ -4930,7 +5113,7 @@ var init_api_key = __esm({
     "use strict";
     init_storage();
     ApiKeyService = class {
-      async generateApiKey(name, scope = ["read", "write"], rateLimit = 1e3) {
+      async generateApiKey(name, scope = ["read", "write"], rateLimit = 1e3, userId) {
         const keyId = `gpay_${Buffer.from(`${Date.now()}-${Math.random()}`).toString("base64").substring(0, 32)}`;
         try {
           const keyData = {
@@ -4940,14 +5123,15 @@ var init_api_key = __esm({
             isActive: true,
             createdAt: /* @__PURE__ */ new Date(),
             scope,
-            rateLimit
+            rateLimit,
+            userId: userId || null
           };
           await storage.createSystemSetting({
             category: "api_keys",
             key: keyId,
             value: JSON.stringify(keyData)
           });
-          console.log(`[API Key] \u2713 Generated: ${name} (${keyId})`);
+          console.log(`[API Key] \u2713 Generated: ${name} (${keyId}) for user: ${userId || "system"}`);
           return keyId;
         } catch (error) {
           console.error("[API Key] Error generating key:", error);
@@ -5020,7 +5204,312 @@ var init_api_key = __esm({
   }
 });
 
+// server/services/fcm.ts
+import axios from "axios";
+var FCM_API_URL, FCMService, fcmService;
+var init_fcm = __esm({
+  "server/services/fcm.ts"() {
+    "use strict";
+    FCM_API_URL = "https://fcm.googleapis.com/v1/projects";
+    FCMService = class {
+      accessToken = null;
+      tokenExpiry = 0;
+      projectId;
+      constructor() {
+        this.projectId = process.env.FIREBASE_PROJECT_ID || "greenpay-mobile";
+      }
+      async getAccessToken() {
+        try {
+          if (this.accessToken && Date.now() < this.tokenExpiry) {
+            return this.accessToken;
+          }
+          const serviceAccount = JSON.parse(
+            process.env.FIREBASE_SERVICE_ACCOUNT || "{}"
+          );
+          const response = await axios.post(
+            "https://oauth2.googleapis.com/token",
+            {
+              client_id: serviceAccount.client_id,
+              client_secret: serviceAccount.client_secret,
+              refresh_token: serviceAccount.refresh_token,
+              grant_type: "refresh_token"
+            }
+          );
+          this.accessToken = response.data.access_token;
+          this.tokenExpiry = Date.now() + response.data.expires_in * 1e3;
+          return this.accessToken;
+        } catch (error) {
+          console.error("FCM token error:", error);
+          throw new Error("Failed to get FCM access token");
+        }
+      }
+      async sendToToken(token, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          const message = {
+            token,
+            notification: { title, body },
+            data,
+            android: {
+              priority: "high",
+              notification: {
+                sound: "default",
+                click_action: "FLUTTER_NOTIFICATION_CLICK"
+              }
+            }
+          };
+          const response = await axios.post(
+            `${FCM_API_URL}/${this.projectId}/messages:send`,
+            { message },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              }
+            }
+          );
+          console.log("FCM sent successfully:", response.data.name);
+          return true;
+        } catch (error) {
+          console.error("FCM send error:", error);
+          return false;
+        }
+      }
+      async sendToTopic(topic, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          const message = {
+            topic,
+            notification: { title, body },
+            data,
+            android: {
+              priority: "high",
+              notification: {
+                sound: "default",
+                click_action: "FLUTTER_NOTIFICATION_CLICK"
+              }
+            }
+          };
+          const response = await axios.post(
+            `${FCM_API_URL}/${this.projectId}/messages:send`,
+            { message },
+            {
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              }
+            }
+          );
+          console.log("FCM topic sent successfully:", response.data.name);
+          return true;
+        } catch (error) {
+          console.error("FCM topic send error:", error);
+          return false;
+        }
+      }
+      async sendMulticast(tokens, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          let successCount = 0;
+          let failureCount = 0;
+          for (let i = 0; i < tokens.length; i += 500) {
+            const batch = tokens.slice(i, i + 500);
+            for (const token of batch) {
+              try {
+                const message = {
+                  token,
+                  notification: { title, body },
+                  data,
+                  android: {
+                    priority: "high",
+                    notification: {
+                      sound: "default",
+                      click_action: "FLUTTER_NOTIFICATION_CLICK"
+                    }
+                  }
+                };
+                await axios.post(
+                  `${FCM_API_URL}/${this.projectId}/messages:send`,
+                  { message },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                      "Content-Type": "application/json"
+                    }
+                  }
+                );
+                successCount++;
+              } catch (error) {
+                failureCount++;
+              }
+            }
+          }
+          console.log(
+            `FCM multicast: ${successCount} success, ${failureCount} failures`
+          );
+          return { success: successCount, failure: failureCount };
+        } catch (error) {
+          console.error("FCM multicast error:", error);
+          return { success: 0, failure: tokens.length };
+        }
+      }
+    };
+    fcmService = new FCMService();
+  }
+});
+
+// server/services/notification-queue.ts
+var notification_queue_exports = {};
+__export(notification_queue_exports, {
+  NotificationQueue: () => NotificationQueue,
+  notificationQueue: () => notificationQueue
+});
+var NotificationQueue, notificationQueue;
+var init_notification_queue = __esm({
+  "server/services/notification-queue.ts"() {
+    "use strict";
+    init_storage();
+    init_fcm();
+    NotificationQueue = class {
+      async sendKYCNotification(userId, status) {
+        return this.queueNotification({
+          userId,
+          title: "\u{1F4CB} KYC Status Update",
+          body: status === "verified" ? "Your KYC verification is complete! Welcome." : status === "pending" ? "Your KYC documents are being reviewed." : "KYC verification failed. Please resubmit.",
+          type: "kyc",
+          data: { kyc_status: status }
+        });
+      }
+      async sendTransactionNotification(userId, type, amount, senderName) {
+        return this.queueNotification({
+          userId,
+          title: type === "sent" ? "\u{1F4B8} Money Sent" : "\u{1F4B0} Money Received",
+          body: type === "sent" ? `You sent $${amount}` : `${senderName || "Someone"} sent you $${amount}`,
+          type: "transaction",
+          data: { transaction_type: type, amount }
+        });
+      }
+      async sendWithdrawalNotification(userId, status, amount) {
+        const titles = {
+          pending: "\u23F3 Withdrawal Pending",
+          completed: "\u2705 Withdrawal Completed",
+          failed: "\u274C Withdrawal Failed"
+        };
+        const bodies = {
+          pending: `Withdrawal of $${amount} is being processed.`,
+          completed: `You received $${amount} to your account.`,
+          failed: `Withdrawal of $${amount} could not be completed.`
+        };
+        return this.queueNotification({
+          userId,
+          title: titles[status],
+          body: bodies[status],
+          type: "withdrawal",
+          data: { withdrawal_status: status, amount }
+        });
+      }
+      async sendBillPaymentNotification(userId, status, provider, amount) {
+        const titles = {
+          pending: "\u23F3 Bill Payment Pending",
+          completed: "\u2705 Bill Paid Successfully",
+          failed: "\u274C Bill Payment Failed"
+        };
+        const bodies = {
+          pending: `Payment to ${provider} for $${amount} is processing.`,
+          completed: `Your ${provider} bill of $${amount} has been paid.`,
+          failed: `Payment to ${provider} for $${amount} failed.`
+        };
+        return this.queueNotification({
+          userId,
+          title: titles[status],
+          body: bodies[status],
+          type: "payment",
+          data: { payment_status: status, provider, amount }
+        });
+      }
+      async sendAirtimeNotification(userId, phoneNumber, amount) {
+        return this.queueNotification({
+          userId,
+          title: "\u{1F4F1} Airtime Purchased",
+          body: `${amount} airtime sent to ${phoneNumber}`,
+          type: "transaction",
+          data: { airtime_amount: amount, phone: phoneNumber }
+        });
+      }
+      async sendAdminAlert(userId, title, message) {
+        return this.queueNotification({
+          userId,
+          title,
+          body: message,
+          type: "alert"
+        });
+      }
+      async sendBulkNotification(payload) {
+        try {
+          let targetUserIds = payload.targetUserIds || [];
+          if (payload.sendToAll) {
+            const users3 = await storage.getAllUsers();
+            targetUserIds = users3.filter((u) => u.fcmToken).map((u) => u.id);
+          }
+          if (targetUserIds.length === 0) {
+            console.warn("No target users for bulk notification");
+            return { success: 0, failure: 0 };
+          }
+          const users2 = await Promise.all(
+            targetUserIds.map((id) => storage.getUser(id))
+          );
+          const tokens = users2.filter((u) => u && u.fcmToken).map((u) => u.fcmToken);
+          if (tokens.length === 0) {
+            console.warn("No FCM tokens found for target users");
+            return { success: 0, failure: targetUserIds.length };
+          }
+          const result = await fcmService.sendMulticast(
+            tokens,
+            payload.title,
+            payload.body,
+            payload.data
+          );
+          console.log(
+            `Bulk notification sent: ${result.success} success, ${result.failure} failures`
+          );
+          return result;
+        } catch (error) {
+          console.error("Bulk notification error:", error);
+          return { success: 0, failure: 0 };
+        }
+      }
+      async queueNotification(payload) {
+        try {
+          if (!payload.userId && !payload.sendToAll && !payload.targetUserIds) {
+            console.warn("No target specified for notification");
+            return false;
+          }
+          if (payload.userId && !payload.sendToAll) {
+            const user = await storage.getUser(payload.userId);
+            if (!user || !user.fcmToken) {
+              console.warn(`No FCM token for user ${payload.userId}`);
+              return false;
+            }
+            return await fcmService.sendToToken(
+              user.fcmToken,
+              payload.title,
+              payload.body,
+              payload.data
+            );
+          }
+          return await this.sendBulkNotification(payload);
+        } catch (error) {
+          console.error("Notification queue error:", error);
+          return false;
+        }
+      }
+    };
+    notificationQueue = new NotificationQueue();
+  }
+});
+
 // server/index.ts
+import "dotenv/config";
 import express2 from "express";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -5912,6 +6401,12 @@ var statumService = new StatumService();
 
 // server/middleware/api-key.ts
 init_storage();
+var DEMO_KEYS = {
+  "gpay_demo_test": { isActive: true, scope: ["read", "write", "*"] },
+  "gpay_demo_read": { isActive: true, scope: ["read"] },
+  "gpay_demo_write": { isActive: true, scope: ["write"] },
+  "gpay_demo_all": { isActive: true, scope: ["*"] }
+};
 async function optionalApiKey(req, res, next) {
   try {
     const authHeader = req.headers.authorization;
@@ -5919,6 +6414,14 @@ async function optionalApiKey(req, res, next) {
       const key = authHeader.substring(7);
       if (key && key.startsWith("gpay_")) {
         try {
+          if (key.startsWith("gpay_demo_")) {
+            const demoKey = DEMO_KEYS[key];
+            if (demoKey && demoKey.isActive) {
+              req.apiKey = key;
+              console.log(`\u2713 [Demo API Key] Optional: ${key}`);
+              return next();
+            }
+          }
           const settings = await storage.getSystemSetting("api_keys", key);
           if (settings) {
             const keyData = settings.value;
@@ -5938,18 +6441,17 @@ async function optionalApiKey(req, res, next) {
 }
 
 // server/services/ai.ts
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import OpenAI from "openai";
 var OpenAIService = class {
-  genAI;
-  model;
+  openai;
   constructor() {
-    const apiKey = process.env.GOOGLE_AI_API_KEY;
+    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-      console.warn("\u26A0\uFE0F Google AI API key not configured");
+      console.warn("\u26A0\uFE0F Groq API key not configured");
     }
-    this.genAI = new GoogleGenerativeAI(apiKey || "");
-    this.model = this.genAI.getGenerativeModel({
-      model: "gemini-2.5-flash"
+    this.openai = new OpenAI({
+      apiKey: apiKey || "",
+      baseURL: "https://api.groq.com/openai/v1"
     });
   }
   async generateResponse(messages2) {
@@ -5971,24 +6473,19 @@ You MUST only answer questions related to GreenPay's features and services:
 
 If asked about unrelated topics, politely redirect the user.
 `;
-      const contents = [
-        {
-          role: "user",
-          parts: [{ text: systemPrompt }]
-        },
-        {
-          role: "model",
-          parts: [{ text: "Understood." }]
-        },
-        ...messages2.map((msg) => ({
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }]
-        }))
-      ];
-      const result = await this.model.generateContent({ contents });
-      return result.response.text() || "Unable to generate response";
+      const response = await this.openai.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...messages2.map((msg) => ({
+            role: msg.role === "assistant" ? "assistant" : "user",
+            content: msg.content
+          }))
+        ]
+      });
+      return response.choices[0]?.message?.content || "Unable to generate response";
     } catch (error) {
-      console.error("Google AI API error:", error);
+      console.error("Groq AI API error:", error);
       throw error;
     }
   }
@@ -6081,8 +6578,8 @@ var upload = multer({
   storage: multer.memoryStorage(),
   // Store files in memory buffer for cloud upload
   limits: {
-    fileSize: 10 * 1024 * 1024
-    // 10MB limit
+    fileSize: 50 * 1024 * 1024
+    // 50MB limit (supports video announcements)
   },
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = [
@@ -6148,13 +6645,14 @@ async function registerRoutes(app2) {
   const checkMaintenanceMode = async (req, res, next) => {
     try {
       const maintenanceSetting = await storage.getSystemSetting("general", "maintenance_mode");
-      const maintenanceEnabled = maintenanceSetting?.value === true || maintenanceSetting?.value === "true";
-      const allowedPaths = ["/api/auth/login", "/api/auth/logout", "/api/auth/verify-otp", "/"];
+      const maintenanceEnabled = String(maintenanceSetting?.value) === "true";
+      const allowedPaths = ["/api/auth/login", "/api/auth/logout", "/api/auth/verify-otp", "/api/admin/auth/login", "/api/admin/settings"];
       const isAllowedPath = allowedPaths.some((path3) => req.path.startsWith(path3));
       if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
         const messageSetting = await storage.getSystemSetting("general", "maintenance_message");
         return res.status(503).json({
-          message: messageSetting?.value || "System is under maintenance. Please try again later."
+          message: messageSetting?.value || "System is under maintenance. Please try again later.",
+          maintenanceMode: true
         });
       }
     } catch (error) {
@@ -6171,6 +6669,32 @@ async function registerRoutes(app2) {
     }
     next();
   };
+  app2.get("/api/auth/me", async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        req.session.destroy(() => {
+        });
+        return res.status(401).json({ message: "Session expired \u2014 user not found" });
+      }
+      const { password, ...userResponse } = user;
+      res.json({ user: userResponse });
+    } catch (error) {
+      console.error("Auth me error:", error);
+      res.status(500).json({ message: "Failed to retrieve session user" });
+    }
+  });
+  app2.post("/api/auth/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) console.error("Logout session destroy error:", err);
+      res.clearCookie("connect.sid");
+      res.json({ message: "Logged out successfully" });
+    });
+  });
   app2.post("/api/deposit/manual-proof", requireAuth, upload.single("proof"), async (req, res) => {
     try {
       if (!req.file) {
@@ -6216,21 +6740,9 @@ async function registerRoutes(app2) {
     }
   });
   const requireAdminAuth = (req, res, next) => {
-    const adminId = req.session?.admin?.id;
-    console.log(`[ADMIN AUTH] Session check - hasSession: ${!!req.session}, hasAdminId: ${!!adminId}`);
-    if (!adminId) {
-      console.log(`[ADMIN AUTH] FAILED - No admin ID in session`);
-      return res.status(401).json({
-        message: "Authentication required. Please log in as an administrator."
-      });
+    if (!req.session?.admin?.id) {
+      return res.status(401).json({ message: "Admin authentication required" });
     }
-    if (!req.session.admin.role || req.session.admin.role !== "admin") {
-      console.log(`[ADMIN AUTH] FAILED - Invalid role:`, req.session.admin.role);
-      return res.status(403).json({
-        message: "Access denied. Administrator privileges required."
-      });
-    }
-    console.log(`[ADMIN AUTH] SUCCESS - Admin ${req.session.admin.email} authenticated`);
     next();
   };
   app2.use(checkMaintenanceMode);
@@ -6240,6 +6752,42 @@ async function registerRoutes(app2) {
       timestamp: (/* @__PURE__ */ new Date()).toISOString(),
       env: process.env.NODE_ENV,
       uptime: process.uptime()
+    });
+  });
+  app2.get("/api/demo-keys", (_req, res) => {
+    res.status(200).json({
+      message: "Available demo API keys for testing (development only)",
+      keys: [
+        {
+          key: "gpay_demo_test",
+          name: "Full Test Key",
+          scope: ["read", "write", "*"],
+          description: "Full access for testing all API operations"
+        },
+        {
+          key: "gpay_demo_read",
+          name: "Read-Only Key",
+          scope: ["read"],
+          description: "Read-only access for testing GET endpoints"
+        },
+        {
+          key: "gpay_demo_write",
+          name: "Write-Only Key",
+          scope: ["write"],
+          description: "Write-only access for testing POST/PUT endpoints"
+        },
+        {
+          key: "gpay_demo_all",
+          name: "Admin Key",
+          scope: ["*"],
+          description: "Full admin access (all scopes)"
+        }
+      ],
+      usage: {
+        example: "curl -H 'Authorization: Bearer gpay_demo_test' https://api.greenpay.app/api/endpoint",
+        header: "Authorization: Bearer YOUR_API_KEY"
+      },
+      note: "These demo keys are for development and testing only"
     });
   });
   app2.get("/objects/:objectPath(*)", async (req, res) => {
@@ -6351,6 +6899,14 @@ async function registerRoutes(app2) {
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
+      if (user.isSuspended) {
+        return res.status(403).json({
+          message: "Your account has been suspended. Please contact support for assistance.",
+          accountSuspended: true,
+          suspensionReason: user.suspensionReason || null
+        });
+      }
+      await storage.updateUser(user.id, { lastLoginAt: /* @__PURE__ */ new Date() });
       const twoFactorRequiredSetting = await storage.getSystemSetting("security", "two_factor_required");
       const twoFactorRequired = twoFactorRequiredSetting?.value === "true";
       const kycRequiredSetting = await storage.getSystemSetting("security", "kyc_auto_approval");
@@ -6365,12 +6921,12 @@ async function registerRoutes(app2) {
       const whatsappEnabled = otpWhatsappSetting?.value !== "false";
       const pinRequiredSetting = await storage.getSystemSetting("security", "pin_required");
       const pinRequired = pinRequiredSetting?.value === "true";
-      const apiKeySetting = await storage.getSystemSetting("messaging", "api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "account_email");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
+      const appIdSetting = await storage.getSystemSetting("messaging", "sms_app_id");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
       const whatsappTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
-      const smsConfigured = !!(apiKeySetting?.value && emailSetting?.value && senderIdSetting?.value);
+      const smsConfigured = !!((apiKeySetting?.value || process.env.SMS_API_KEY) && (appIdSetting?.value || process.env.SMS_APP_ID) && (senderIdSetting?.value || process.env.SMS_SENDER_ID));
       const whatsappConfigured = !!((whatsappTokenSetting?.value || process.env.WHATSAPP_ACCESS_TOKEN) && (whatsappPhoneSetting?.value || process.env.WHATSAPP_PHONE_NUMBER_ID));
       const messagesConfigured = smsConfigured || whatsappConfigured;
       if (kycRequired && user.kycStatus !== "verified") {
@@ -6434,54 +6990,76 @@ async function registerRoutes(app2) {
         });
         return;
       }
-      if (!messagesConfigured) {
-        console.error("OTP is required but no messaging channels configured (SMS or WhatsApp)");
-        return res.status(500).json({
-          message: "Verification service not configured. Please contact support."
-        });
-      }
-      const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
-      const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
-      const otpCode = messagingService3.generateOTP();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1e3);
-      await storage.updateUserOtp(user.id, otpCode, otpExpiry);
-      const [smsWhatsappResult, emailResult] = await Promise.all([
-        messagingService3.sendOTP(user.phone, otpCode),
-        user.email ? mailtrapService3.sendOTP(user.email, user.firstName || "User", user.lastName || "", otpCode) : Promise.resolve(false)
-      ]);
-      const result = { ...smsWhatsappResult, email: emailResult };
-      if (!result.sms && !result.whatsapp && !result.email) {
-        console.error("OTP delivery failed - messaging configured but delivery failed");
-        return res.status(500).json({
-          message: "Failed to send verification code. Please try again or contact support."
-        });
-      }
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error("Session regeneration error:", err);
-          return res.status(500).json({ message: "Session error" });
+      if (messagesConfigured) {
+        const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+        const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+        const otpCode = messagingService3.generateOTP();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1e3);
+        await storage.updateUserOtp(user.id, otpCode, otpExpiry);
+        const [smsWhatsappResult, emailResult] = await Promise.all([
+          messagingService3.sendOTP(user.phone, otpCode),
+          user.email ? mailtrapService3.sendOTP(user.email, user.firstName || "User", user.lastName || "", otpCode) : Promise.resolve(false)
+        ]);
+        const result = { ...smsWhatsappResult, email: emailResult };
+        if (!result.sms && !result.whatsapp && !result.email) {
+          console.error("OTP delivery failed - messaging configured but delivery failed");
+          return res.status(500).json({
+            message: "Failed to send verification code. Please try again or contact support."
+          });
         }
-        req.session.pendingLoginUserId = user.id;
-        req.session.loginIp = req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress;
-        req.session.loginLocation = req.headers["cf-ipcountry"] || "Unknown Location";
-        req.session.save((saveErr) => {
-          if (saveErr) {
-            console.error("Session save error:", saveErr);
-            return res.status(500).json({ message: "Session save error" });
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error("Session regeneration error:", err);
+            return res.status(500).json({ message: "Session error" });
           }
-          const sentMethods = [];
-          if (result.sms) sentMethods.push("SMS");
-          if (result.whatsapp) sentMethods.push("WhatsApp");
-          if (result.email) sentMethods.push("Email");
-          res.json({
-            requiresOtp: true,
-            userId: user.id,
-            phone: user.phone,
-            sentVia: sentMethods.length > 0 ? sentMethods.join(" and ") : "SMS, WhatsApp or Email",
-            message: `Verification code sent to ${sentMethods.length > 0 ? sentMethods.join(", ") : "SMS, WhatsApp or Email"}`
+          req.session.pendingLoginUserId = user.id;
+          req.session.loginIp = req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+          req.session.loginLocation = req.headers["cf-ipcountry"] || "Unknown Location";
+          req.session.save((saveErr) => {
+            if (saveErr) {
+              console.error("Session save error:", saveErr);
+              return res.status(500).json({ message: "Session save error" });
+            }
+            const sentMethods = [];
+            if (result.sms) sentMethods.push("SMS");
+            if (result.whatsapp) sentMethods.push("WhatsApp");
+            if (result.email) sentMethods.push("Email");
+            res.json({
+              requiresOtp: true,
+              userId: user.id,
+              phone: user.phone,
+              sentVia: sentMethods.length > 0 ? sentMethods.join(" and ") : "SMS, WhatsApp or Email",
+              message: `Verification code sent to ${sentMethods.length > 0 ? sentMethods.join(", ") : "SMS, WhatsApp or Email"}`
+            });
           });
         });
-      });
+      } else {
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error("Session regeneration error:", err);
+            return res.status(500).json({ message: "Session error" });
+          }
+          const userResponse = {
+            id: user.id,
+            firstName: user.firstName || "",
+            lastName: user.lastName || "",
+            email: user.email || "",
+            phone: user.phone || "",
+            avatar: user.avatar || "",
+            kycStatus: user.kycStatus || "pending",
+            balance: user.balance || 0
+          };
+          req.session.userId = user.id;
+          req.session.userRole = user.role || "user";
+          req.session.save((err2) => {
+            if (err2) {
+              console.error("Session save error:", err2);
+              return res.status(500).json({ message: "Session error" });
+            }
+            res.json({ user: userResponse });
+          });
+        });
+      }
     } catch (error) {
       console.error("Login error:", error);
       res.status(400).json({ message: "Invalid login data" });
@@ -6931,39 +7509,43 @@ async function registerRoutes(app2) {
     try {
       const userId = req.session?.userId;
       const adminId = req.session?.admin?.id;
-      console.log("[Upload] Request received:", { hasFile: !!req.file, userId, adminId });
       if (!userId && !adminId) {
         return res.status(401).json({ message: "Authentication required" });
       }
       if (!req.file) {
-        console.error("[Upload] No file in request");
         return res.status(400).json({ message: "No file uploaded" });
       }
-      console.log("[Upload] File details:", {
-        filename: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-        hasBuffer: !!req.file.buffer
-      });
-      try {
-        const url = await cloudinaryStorage2.uploadChatFile(
-          req.file.buffer,
-          req.file.originalname,
-          req.file.mimetype
-        );
-        console.log("[Upload] Successfully uploaded to Cloudinary:", { url });
-        res.json({
-          url,
-          fileUrl: url,
-          fileName: req.file.originalname,
-          fileSize: req.file.size,
-          mimeType: req.file.mimetype,
-          message: "File uploaded successfully"
-        });
-      } catch (uploadError) {
-        console.error("[Upload] Cloudinary upload error:", uploadError);
-        return res.status(500).json({ message: "Failed to upload file to storage", error: String(uploadError) });
+      const cloudinaryReady = !!(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+      if (cloudinaryReady) {
+        try {
+          const url = await cloudinaryStorage2.uploadChatFile(
+            req.file.buffer,
+            req.file.originalname,
+            req.file.mimetype
+          );
+          return res.json({
+            url,
+            fileUrl: url,
+            fileName: req.file.originalname,
+            fileSize: req.file.size,
+            mimeType: req.file.mimetype,
+            message: "File uploaded successfully"
+          });
+        } catch (uploadError) {
+          console.error("[Upload] Cloudinary upload error:", uploadError);
+        }
       }
+      const base64 = req.file.buffer.toString("base64");
+      const dataUrl = `data:${req.file.mimetype};base64,${base64}`;
+      console.log("[Upload] Returning base64 data URL (Cloudinary not configured or failed)");
+      return res.json({
+        url: dataUrl,
+        fileUrl: dataUrl,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        message: "File stored as base64 (no cloud storage)"
+      });
     } catch (error) {
       console.error("[Upload] Request error:", error);
       res.status(500).json({ message: "Failed to upload file", error: String(error) });
@@ -7129,8 +7711,11 @@ async function registerRoutes(app2) {
         return res.status(404).json({ message: "User not found" });
       }
       const existingCard = await storage.getVirtualCardByUserId(userId);
-      if (existingCard) {
-        return res.status(400).json({ message: "User already has a virtual card" });
+      if (existingCard && existingCard.status === "active") {
+        return res.status(400).json({ message: "User already has an active virtual card" });
+      }
+      if (existingCard && (existingCard.status === "blocked" || existingCard.status === "inactive")) {
+        console.log(`\u{1F504} User ${user.email} repurchasing card (current status: ${existingCard.status})`);
       }
       const reference = payHeroService.generateReference();
       if (!user.email || !user.email.includes("@") || !user.email.includes(".")) {
@@ -7619,11 +8204,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error verifying payment" });
     }
   });
-  app2.post("/api/airtime/purchase", optionalApiKey, async (req, res) => {
+  app2.post("/api/airtime/purchase", requireAuth, async (req, res) => {
     try {
-      const { userId, phoneNumber, amount, currency, provider, pin } = req.body;
+      const sessionUserId = req.session?.userId;
+      const { phoneNumber, amount, currency, provider, pin } = req.body;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const userId = sessionUserId;
       console.log(`\u{1F4F1} Airtime purchase request - User: ${userId}, Phone: ${phoneNumber}, Amount: ${amount} ${currency}, Provider: ${provider}`);
-      if (!userId || !phoneNumber || !amount || !currency || !provider) {
+      if (!phoneNumber || !amount || !currency || !provider) {
         console.warn(`\u26A0\uFE0F Missing required fields in airtime purchase request`);
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -7689,14 +8279,14 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: errorMessage });
     }
   });
-  app2.post("/api/airtime/claim-bonus", optionalApiKey, async (req, res) => {
+  app2.post("/api/airtime/claim-bonus", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.body;
-      console.log(`\u{1F381} Airtime bonus claim request - User: ${userId}`);
-      if (!userId) {
-        console.warn(`\u26A0\uFE0F Missing userId in bonus claim request`);
-        return res.status(400).json({ message: "Missing userId" });
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
       }
+      const userId = sessionUserId;
+      console.log(`\u{1F381} Airtime bonus claim request - User: ${userId}`);
       const user = await storage.getUser(userId);
       if (!user) {
         console.error(`\u274C User not found: ${userId}`);
@@ -7707,8 +8297,14 @@ async function registerRoutes(app2) {
         console.warn(`\u26A0\uFE0F User ${userId} has already claimed airtime bonus`);
         return res.status(400).json({ message: "You have already claimed your airtime bonus" });
       }
+      const bonusAmountSetting = await storage.getSystemSetting("general", "airtime_bonus_amount");
+      const bonusEnabledSetting = await storage.getSystemSetting("general", "enable_airtime_bonus");
+      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "15"));
+      const isEnabled = String(bonusEnabledSetting?.value) === "true";
+      if (!isEnabled) {
+        return res.status(400).json({ message: "Bonus claiming is currently disabled" });
+      }
       const currentKesBalance = parseFloat(user.kesBalance || "0");
-      const bonusAmount = 15;
       const newKesBalance = currentKesBalance + bonusAmount;
       await storage.updateUser(userId, {
         kesBalance: newKesBalance.toFixed(2),
@@ -7722,13 +8318,13 @@ async function registerRoutes(app2) {
         currency: "KES",
         status: "completed",
         fee: "0.00",
-        description: "One-time airtime bonus - KES 15"
+        description: `Welcome Airtime Bonus - KES ${bonusAmount}`
       });
       console.log(`\u{1F4BE} Bonus transaction created: ${transaction.id}`);
       console.log(`\u2705 Airtime bonus claimed successfully`);
       res.json({
         success: true,
-        message: "Airtime bonus claimed successfully! KES 15 has been added to your balance.",
+        message: `Airtime bonus claimed successfully! KES ${bonusAmount} has been added to your balance.`,
         newBalance: newKesBalance.toFixed(2),
         bonusAmount,
         transaction
@@ -7738,11 +8334,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error claiming airtime bonus" });
     }
   });
-  app2.post("/api/bills/pay", optionalApiKey, async (req, res) => {
+  app2.post("/api/bills/pay", requireAuth, async (req, res) => {
     try {
-      const { userId, provider, meterNumber, accountNumber, amount } = req.body;
+      const sessionUserId = req.session?.userId;
+      const { provider, meterNumber, accountNumber, amount } = req.body;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const userId = sessionUserId;
       console.log(`\u{1F4B3} Bill payment request - User: ${userId}, Provider: ${provider}, Amount: ${amount} KES`);
-      if (!userId || !provider || !amount || !meterNumber && !accountNumber) {
+      if (!provider || !amount || !meterNumber && !accountNumber) {
         console.warn(`\u26A0\uFE0F Missing required fields in bill payment request`);
         return res.status(400).json({ message: "Missing required fields" });
       }
@@ -7767,33 +8368,30 @@ async function registerRoutes(app2) {
         accountNumber: accountNumber || null,
         amount: amount.toString(),
         currency: "KES",
-        status: "completed",
+        status: "pending",
         fee: "0.00",
         description: `Bill payment for ${provider}${meterNumber ? ` (${meterNumber})` : accountNumber ? ` (${accountNumber})` : ""}`,
         reference: `BP-${Date.now()}`,
         metadata: { meterNumber, accountNumber, provider }
       });
-      console.log(`\u{1F4BE} Bill payment created: ${billPayment.id}`);
+      console.log(`\u{1F4BE} Bill payment created (PENDING): ${billPayment.id}`);
       await storage.createTransaction({
         userId,
         type: "bill_payment",
         amount: amount.toString(),
         currency: "KES",
-        status: "completed",
+        status: "pending",
         fee: "0.00",
         description: `Bill payment - ${provider}`,
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
-      const newKesBalance = kesBalance - paymentAmount;
-      await storage.updateUser(userId, { kesBalance: newKesBalance.toFixed(2) });
-      console.log(`\u2705 Updated user balance: ${kesBalance} -> ${newKesBalance}`);
-      console.log(`\u{1F389} Bill payment completed successfully`);
+      console.log(`\u23F3 Bill payment pending verification with provider`);
       res.json({
         success: true,
-        message: "Bill payment successful",
+        message: "Bill payment submitted for verification. You will receive confirmation shortly.",
         billPayment,
-        newBalance: newKesBalance.toFixed(2)
+        status: "pending"
       });
     } catch (error) {
       console.error("\u274C Bill payment error:", error);
@@ -7803,7 +8401,12 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/bills/history/:userId", requireAuth, async (req, res) => {
     try {
-      const payments = await storage.getBillPaymentsByUserId(req.params.userId);
+      const sessionUserId = req.session?.userId;
+      const requestedUserId = req.params.userId;
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const payments = await storage.getBillPaymentsByUserId(requestedUserId);
       res.json({ payments });
     } catch (error) {
       console.error("Error fetching bill payments:", error);
@@ -7812,7 +8415,12 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/virtual-card/:userId", requireAuth, async (req, res) => {
     try {
-      const card = await storage.getVirtualCardByUserId(req.params.userId);
+      const sessionUserId = req.session?.userId;
+      const requestedUserId = req.params.userId;
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const card = await storage.getVirtualCardByUserId(requestedUserId);
       res.json({ card });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
@@ -7849,10 +8457,18 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error fetching exchange rates" });
     }
   });
-  app2.post("/api/transactions/send", optionalApiKey, async (req, res) => {
+  app2.post("/api/transactions/send", requireAuth, async (req, res) => {
     try {
-      const { userId, amount, currency, recipientDetails, targetCurrency } = req.body;
+      const sessionUserId = req.session?.userId;
+      const { amount, currency, recipientDetails, targetCurrency } = req.body;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const userId = sessionUserId;
       const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
       if (!user?.hasVirtualCard) {
         return res.status(400).json({ message: "Virtual card required for transactions" });
       }
@@ -7902,9 +8518,14 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: "Transaction failed" });
     }
   });
-  app2.post("/api/transactions/receive", optionalApiKey, async (req, res) => {
+  app2.post("/api/transactions/receive", requireAuth, async (req, res) => {
     try {
-      const { userId, amount, currency, senderDetails } = req.body;
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const { amount, currency, senderDetails } = req.body;
+      const userId = sessionUserId;
       const transaction = await storage.createTransaction({
         userId,
         type: "receive",
@@ -7935,17 +8556,29 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/transactions/:userId", requireAuth, async (req, res) => {
     try {
-      const transactions2 = await storage.getTransactionsByUserId(req.params.userId);
+      const sessionUserId = req.session?.userId;
+      const requestedUserId = req.params.userId;
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const transactions2 = await storage.getTransactionsByUserId(requestedUserId);
       res.json({ transactions: transactions2 });
     } catch (error) {
       res.status(500).json({ message: "Error fetching transactions" });
     }
   });
-  app2.get("/api/transactions/status/:transactionId", optionalApiKey, async (req, res) => {
+  app2.get("/api/transactions/status/:transactionId", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       const transaction = await storage.getTransaction(req.params.transactionId);
       if (!transaction) {
         return res.status(404).json({ message: "Transaction not found" });
+      }
+      if (transaction.userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
       }
       res.json({ transaction });
     } catch (error) {
@@ -8165,19 +8798,26 @@ async function registerRoutes(app2) {
       if (!credentialId) {
         return res.status(400).json({ message: "Invalid credential" });
       }
+      console.log(`[Biometric Login] Attempting login with credentialId: ${credentialId}`);
       const allUsers = await storage.getAllUsers();
-      const users2 = Array.isArray(allUsers) ? allUsers : allUsers?.users || [];
+      const users2 = Array.isArray(allUsers) ? allUsers : [];
       const user = users2.find((u) => {
+        if (!u.biometricEnabled || !u.biometricCredentialId) return false;
         try {
-          const stored = u.biometricCredentialId ? typeof u.biometricCredentialId === "string" ? JSON.parse(u.biometricCredentialId) : u.biometricCredentialId : null;
-          return stored && stored.credentialId === credentialId && u.biometricEnabled;
-        } catch {
-          return false;
+          const stored = typeof u.biometricCredentialId === "string" ? JSON.parse(u.biometricCredentialId) : u.biometricCredentialId;
+          return stored && (stored.credentialId === credentialId || u.biometricCredentialId.includes(credentialId));
+        } catch (e) {
+          console.error(`[Biometric Login] Error parsing credential for user ${u.id}:`, e);
+          return typeof u.biometricCredentialId === "string" && u.biometricCredentialId.includes(credentialId);
         }
       });
       if (!user) {
-        return res.status(401).json({ message: "No passkey found for this device. Please log in with your email and password first, then enable biometric login in settings." });
+        console.warn(`[Biometric Login] No user found for credentialId: ${credentialId}`);
+        return res.status(401).json({
+          message: "No passkey found for this device in our records. Please ensure you have enabled biometric login in Settings while logged in."
+        });
       }
+      console.log(`[Biometric Login] Success for user: ${user.email}`);
       req.session.regenerate((err) => {
         if (err) {
           console.error("Session regeneration error:", err);
@@ -8240,9 +8880,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error registering push notifications" });
     }
   });
-  app2.post("/api/recipients", optionalApiKey, async (req, res) => {
+  app2.post("/api/recipients", requireAuth, async (req, res) => {
     try {
-      const recipientData = insertRecipientSchema.parse(req.body);
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const recipientData = insertRecipientSchema.parse({
+        ...req.body,
+        userId: sessionUserId
+      });
       const recipient = await storage.createRecipient(recipientData);
       res.json({ recipient, message: "Recipient added successfully" });
     } catch (error) {
@@ -8250,16 +8897,29 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: "Invalid recipient data" });
     }
   });
-  app2.get("/api/recipients/:userId", optionalApiKey, async (req, res) => {
+  app2.get("/api/recipients/:userId", requireAuth, async (req, res) => {
     try {
-      const recipients2 = await storage.getRecipientsByUserId(req.params.userId);
+      const sessionUserId = req.session?.userId;
+      const requestedUserId = req.params.userId;
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const recipients2 = await storage.getRecipientsByUserId(requestedUserId);
       res.json({ recipients: recipients2 });
     } catch (error) {
       res.status(500).json({ message: "Error fetching recipients" });
     }
   });
-  app2.put("/api/recipients/:id", async (req, res) => {
+  app2.put("/api/recipients/:id", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const recipientData = await storage.getRecipient(req.params.id);
+      if (!recipientData || recipientData.userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
       const recipient = await storage.updateRecipient(req.params.id, req.body);
       if (recipient) {
         res.json({ recipient, message: "Recipient updated successfully" });
@@ -8271,8 +8931,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error updating recipient" });
     }
   });
-  app2.delete("/api/recipients/:id", async (req, res) => {
+  app2.delete("/api/recipients/:id", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const recipientData = await storage.getRecipient(req.params.id);
+      if (!recipientData || recipientData.userId !== sessionUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
       await storage.deleteRecipient(req.params.id);
       res.json({ message: "Recipient deleted successfully" });
     } catch (error) {
@@ -8394,18 +9062,26 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: "Invalid payment request data" });
     }
   });
-  app2.get("/api/payment-requests/:userId", async (req, res) => {
+  app2.get("/api/payment-requests/:userId", requireAuth, async (req, res) => {
     try {
-      const requests = await storage.getPaymentRequestsByUserId(req.params.userId);
+      const sessionUserId = req.session?.userId;
+      const requestedUserId = req.params.userId;
+      if (sessionUserId !== requestedUserId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      const requests = await storage.getPaymentRequestsByUserId(requestedUserId);
       res.json({ requests });
     } catch (error) {
       res.status(500).json({ message: "Error fetching payment requests" });
     }
   });
-  app2.post("/api/payment-requests/:id/pay", async (req, res) => {
+  app2.post("/api/payment-requests/:id/pay", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { payerUserId } = req.body;
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       const paymentRequest = await storage.getPaymentRequest(id);
       if (!paymentRequest) {
         return res.status(404).json({ message: "Payment request not found" });
@@ -8413,6 +9089,7 @@ async function registerRoutes(app2) {
       if (paymentRequest.status !== "pending") {
         return res.status(400).json({ message: "Payment request already processed" });
       }
+      const payerUserId = sessionUserId;
       const transaction = await storage.createTransaction({
         userId: payerUserId,
         type: "send",
@@ -8434,6 +9111,50 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Payment processing error:", error);
       res.status(500).json({ message: "Error processing payment" });
+    }
+  });
+  app2.get("/api/payment-requests-received", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const user = await storage.getUser(sessionUserId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const allRequests = await storage.getAllPaymentRequests();
+      const receivedRequests = allRequests.filter(
+        (req2) => req2.toEmail === user.email || req2.toPhone === user.phone
+      );
+      res.json({ requests: receivedRequests });
+    } catch (error) {
+      console.error("Error fetching received payment requests:", error);
+      res.status(500).json({ message: "Error fetching payment requests" });
+    }
+  });
+  app2.get("/api/receive-payment-link", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      const user = await storage.getUser(sessionUserId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const receiveLink = `${req.protocol}://${req.get("host")}/pay-to/${sessionUserId}`;
+      const qrValue = `greenpay://pay/${sessionUserId}`;
+      res.json({
+        receiveLink,
+        qrValue,
+        accountNumber: `GP-${sessionUserId.slice(-9)}`,
+        accountName: user.fullName,
+        bankName: "GreenPay Digital Bank"
+      });
+    } catch (error) {
+      console.error("Error generating receive link:", error);
+      res.status(500).json({ message: "Error generating receive link" });
     }
   });
   app2.post("/api/admin/login", async (req, res) => {
@@ -8502,6 +9223,124 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Admin login error:", error);
       res.status(500).json({ message: "Login failed" });
+    }
+  });
+  app2.get("/api/admin/session", (req, res) => {
+    if (req.session?.admin?.id) {
+      return res.json({ admin: req.session.admin });
+    }
+    res.status(401).json({ message: "Not authenticated" });
+  });
+  app2.post("/api/admin/logout", (req, res) => {
+    req.session.destroy((err) => {
+      if (err) {
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ message: "Logged out successfully" });
+    });
+  });
+  app2.get("/api/admin/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const admin = req.session?.admin;
+      if (!admin) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      res.json({
+        id: admin.id,
+        email: admin.email,
+        fullName: admin.fullName,
+        role: admin.role
+      });
+    } catch (error) {
+      console.error("Error fetching admin profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+  app2.put("/api/admin/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const { email, currentPassword, newPassword } = req.body;
+      const admin = req.session?.admin;
+      if (!admin) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+      const dbAdmin = await storage.getAdminById(admin.id);
+      if (!dbAdmin) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+      if (newPassword) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: "Current password required to set new password" });
+        }
+        const isPasswordValid = await bcrypt2.compare(currentPassword, dbAdmin.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Current password is incorrect" });
+        }
+        if (newPassword.length < 8) {
+          return res.status(400).json({ message: "New password must be at least 8 characters" });
+        }
+      }
+      const updates = {};
+      if (email && email !== dbAdmin.email) {
+        const existingAdmin = await storage.getAdminByEmail(email);
+        if (existingAdmin && existingAdmin.id !== admin.id) {
+          return res.status(409).json({ message: "Email already in use" });
+        }
+        updates.email = email;
+      }
+      if (newPassword) {
+        updates.password = await bcrypt2.hash(newPassword, 10);
+      }
+      if (Object.keys(updates).length === 0) {
+        return res.json({ message: "No changes made" });
+      }
+      const updatedAdmin = await storage.updateAdmin(admin.id, updates);
+      req.session.admin = {
+        id: updatedAdmin.id,
+        email: updatedAdmin.email,
+        fullName: updatedAdmin.fullName,
+        role: updatedAdmin.role
+      };
+      res.json({
+        message: "Profile updated successfully",
+        admin: {
+          id: updatedAdmin.id,
+          email: updatedAdmin.email,
+          fullName: updatedAdmin.fullName,
+          role: updatedAdmin.role
+        }
+      });
+    } catch (error) {
+      console.error("Error updating admin profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+  app2.post("/api/admin/create-admin", requireAdminAuth, async (req, res) => {
+    try {
+      const { email, password, fullName, role } = req.body;
+      if (!email || !password || !fullName) {
+        return res.status(400).json({ message: "Email, password, and fullName are required" });
+      }
+      const existingAdmin = await storage.getAdminByEmail(email);
+      if (existingAdmin) {
+        return res.status(409).json({ message: "Admin with this email already exists" });
+      }
+      const hashedPassword = await bcrypt2.hash(password, 10);
+      const newAdmin = await storage.createAdmin({
+        email,
+        password: hashedPassword,
+        fullName,
+        role: role || "admin"
+      });
+      storage.createAdminLog({
+        adminId: req.session.admin.id,
+        action: "CREATE_ADMIN",
+        details: `Created admin: ${email}`,
+        ipAddress: req.ip
+      }).catch((err) => console.error("Admin log error:", err));
+      res.json({ admin: newAdmin, message: "Admin created successfully" });
+    } catch (error) {
+      console.error("Create admin error:", error);
+      res.status(500).json({ message: "Failed to create admin" });
     }
   });
   app2.get("/api/admin/dashboard", async (req, res) => {
@@ -8728,12 +9567,36 @@ async function registerRoutes(app2) {
           updateData = { isEmailVerified: true, isPhoneVerified: true };
           logMessage = `Admin unblocked user account: ${user.email}`;
           break;
+        case "suspend": {
+          const { reason } = req.body;
+          updateData = { isSuspended: true, suspendedAt: /* @__PURE__ */ new Date(), suspensionReason: reason || "Account suspended by administrator" };
+          logMessage = `Admin suspended user account: ${user.email}. Reason: ${reason || "No reason provided"}`;
+          break;
+        }
+        case "unsuspend":
+          updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          logMessage = `Admin unsuspended user account: ${user.email}`;
+          break;
         case "force_logout":
           logMessage = `Admin forced logout for user: ${user.email}`;
           break;
-        case "reset_password":
-          logMessage = `Admin initiated password reset for user: ${user.email}`;
+        case "reset_password": {
+          const defaultPassword = "12345678";
+          const hashedDefault = await bcrypt2.hash(defaultPassword, 10);
+          updateData = { password: hashedDefault };
+          logMessage = `Admin reset password to default for user: ${user.email}`;
           break;
+        }
+        case "change_password": {
+          const { newPassword } = req.body;
+          if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ message: "Password must be at least 6 characters" });
+          }
+          const hashedNew = await bcrypt2.hash(newPassword, 10);
+          updateData = { password: hashedNew };
+          logMessage = `Admin changed password for user: ${user.email}`;
+          break;
+        }
         default:
           return res.status(400).json({ message: "Invalid action" });
       }
@@ -8746,7 +9609,12 @@ async function registerRoutes(app2) {
         details: logMessage,
         targetId: id
       });
-      res.json({ message: "Account action completed successfully" });
+      const updatedUser = await storage.getUser(id);
+      const { password, ...userWithoutPassword } = updatedUser;
+      res.json({
+        message: "Account action completed successfully",
+        user: userWithoutPassword
+      });
     } catch (error) {
       console.error("Admin account action error:", error);
       res.status(500).json({ message: "Failed to perform account action" });
@@ -8824,6 +9692,42 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Admin notification action error:", error);
       res.status(500).json({ message: "Failed to update notification settings" });
+    }
+  });
+  app2.get("/api/admin/users/:id/transactions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const transactions2 = await storage.getTransactionsByUserId(id);
+      res.json({ transactions: transactions2 });
+    } catch (error) {
+      console.error("Admin user transactions error:", error);
+      res.status(500).json({ message: "Failed to fetch user transactions" });
+    }
+  });
+  app2.put("/api/admin/transactions/:txId/status", async (req, res) => {
+    try {
+      const { txId } = req.params;
+      const { status } = req.body;
+      const validStatuses = ["pending", "processing", "completed", "failed", "cancelled"];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      const updated = await storage.updateTransaction(txId, { status });
+      if (!updated) return res.status(404).json({ message: "Transaction not found" });
+      res.json({ transaction: updated });
+    } catch (error) {
+      console.error("Admin update transaction status error:", error);
+      res.status(500).json({ message: "Failed to update transaction status" });
+    }
+  });
+  app2.get("/api/admin/users/:id/card", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const card = await storage.getVirtualCardByUserId(id);
+      res.json({ card: card || null });
+    } catch (error) {
+      console.error("Admin user card error:", error);
+      res.status(500).json({ message: "Failed to fetch user card" });
     }
   });
   app2.get("/api/admin/users/:id/export", async (req, res) => {
@@ -9675,6 +10579,57 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to update virtual card" });
     }
   });
+  app2.post("/api/admin/virtual-cards/:id/reissue", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const oldCard = await storage.getVirtualCardById(id);
+      if (!oldCard) {
+        return res.status(404).json({ message: "Virtual card not found" });
+      }
+      const userId = oldCard.userId;
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      await storage.updateVirtualCard(id, { status: "inactive" });
+      const newCardNumber = `4567${Math.random().toString().slice(2, 14)}`;
+      const newCvv = Math.floor(100 + Math.random() * 900).toString();
+      const expiryDate = /* @__PURE__ */ new Date();
+      expiryDate.setFullYear(expiryDate.getFullYear() + 3);
+      const newExpiryDate = (expiryDate.getMonth() + 1).toString().padStart(2, "0") + "/" + expiryDate.getFullYear().toString().slice(-2);
+      const newCard = await storage.createVirtualCard({
+        userId,
+        cardNumber: newCardNumber,
+        expiryDate: newExpiryDate,
+        cvv: newCvv,
+        cardHolderName: user.fullName || "Card User",
+        status: "active",
+        balance: "0.00",
+        currency: "USD",
+        purchaseDate: /* @__PURE__ */ new Date()
+      });
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "card_reissued",
+        details: `Admin reissued virtual card for user: ${user.email}. Old card: ${id}, New card: ${newCard.id}`,
+        targetId: userId
+      });
+      await notificationService.sendNotification({
+        title: "New Virtual Card Issued",
+        body: "Your virtual card has been reissued. Please check the app for your new card details.",
+        userId,
+        type: "general"
+      });
+      res.json({
+        message: "Card reissued successfully",
+        newCard,
+        oldCardId: id
+      });
+    } catch (error) {
+      console.error("Card reissue error:", error);
+      res.status(500).json({ message: "Failed to reissue card" });
+    }
+  });
   app2.get("/api/admin/settings", async (req, res) => {
     try {
       const settings = await storage.getSystemSettings();
@@ -9684,16 +10639,18 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch system settings" });
     }
   });
-  app2.put("/api/admin/settings/:key", requireAdminAuth, async (req, res) => {
+  app2.put("/api/admin/settings/:key", async (req, res) => {
     try {
       const { key } = req.params;
       const { value } = req.body;
       const stringValue = typeof value === "string" ? value : String(value);
-      let category = "messaging";
-      if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message") {
-        category = "general";
-      } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
-        category = "fees";
+      let category = req.body.category || "messaging";
+      if (!req.body.category) {
+        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus") {
+          category = "general";
+        } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
+          category = "fees";
+        }
       }
       let updatedSetting = await storage.updateSystemSetting(key, stringValue);
       if (!updatedSetting) {
@@ -9848,11 +10805,22 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/users/:id", requireAuth, async (req, res) => {
     try {
-      const user = await storage.getUser(req.params.id);
-      if (!user) {
-        return res.status(404).json({ error: "User not found" });
+      const requestedId = req.params.id;
+      const sessionUserId = req.session?.userId;
+      if (sessionUserId && requestedId !== sessionUserId) {
+        return res.status(403).json({ error: "Access denied" });
       }
-      res.json({ user });
+      const user = await storage.getUser(requestedId);
+      if (!user) {
+        console.warn(`[GET /api/users/:id] User ${requestedId} not found in database. Destroying stale session.`);
+        if (req.session) {
+          req.session.destroy(() => {
+          });
+        }
+        return res.status(401).json({ error: "Session expired \u2014 user not found. Please log in again." });
+      }
+      const { password, ...userWithoutPassword } = user;
+      res.json({ user: userWithoutPassword });
     } catch (error) {
       console.error("Error retrieving user:", error);
       res.status(500).json({ error: "Failed to retrieve user data" });
@@ -10313,9 +11281,9 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const apiKeySetting = await storage.getSystemSetting("messaging", "api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "account_email");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
+      const emailSetting = await storage.getSystemSetting("messaging", "sms_app_id");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
       const whatsappAccessTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneNumberIdSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       const whatsappWabaIdSetting = await storage.getSystemSetting("messaging", "whatsapp_business_account_id");
@@ -10340,53 +11308,53 @@ async function registerRoutes(app2) {
   });
   app2.put("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const { apiKey, accountEmail, senderId, whatsappAccessToken, whatsappPhoneNumberId, whatsappBusinessAccountId } = req.body;
-      console.log("Admin updated messaging settings (SMS via TalkNTalk, WhatsApp via Meta)");
+      const { sms_api_key, sms_app_id, sms_sender_id, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
+      console.log("Admin updated messaging settings (SMS via Umeskia Software, WhatsApp via Meta)");
       await storage.setSystemSetting({
         category: "messaging",
-        key: "api_key",
-        value: (apiKey || "").trim(),
-        description: "TalkNTalk API key for SMS"
+        key: "sms_api_key",
+        value: (sms_api_key || "").trim(),
+        description: "Umeskia Software API key for SMS"
       });
       await storage.setSystemSetting({
         category: "messaging",
-        key: "account_email",
-        value: (accountEmail || "").trim(),
-        description: "TalkNTalk account email"
+        key: "sms_app_id",
+        value: (sms_app_id || "").trim(),
+        description: "Umeskia Software App ID"
       });
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sender_id",
-        value: (senderId || "").trim(),
+        key: "sms_sender_id",
+        value: (sms_sender_id || "").trim(),
         description: "SMS sender ID"
       });
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_access_token",
-        value: (whatsappAccessToken || "").trim(),
+        value: (whatsapp_access_token || "").trim(),
         description: "Meta WhatsApp Business API access token"
       });
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_phone_number_id",
-        value: String(whatsappPhoneNumberId || "").trim(),
+        value: String(whatsapp_phone_number_id || "").trim(),
         description: "Meta WhatsApp Business phone number ID"
       });
       await storage.setSystemSetting({
         category: "messaging",
         key: "whatsapp_business_account_id",
-        value: String(whatsappBusinessAccountId || "").trim(),
+        value: String(whatsapp_business_account_id || "").trim(),
         description: "Meta WhatsApp Business Account ID (WABA ID)"
       });
-      process.env.WHATSAPP_ACCESS_TOKEN = (whatsappAccessToken || "").trim();
-      process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsappPhoneNumberId || "").trim();
-      process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsappBusinessAccountId || "").trim();
+      process.env.WHATSAPP_ACCESS_TOKEN = (whatsapp_access_token || "").trim();
+      process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsapp_phone_number_id || "").trim();
+      process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsapp_business_account_id || "").trim();
       console.log("[Messaging Settings] Updated:", {
-        sms: !!apiKey && !!accountEmail && !!senderId,
-        whatsapp: !!whatsappAccessToken && !!whatsappPhoneNumberId,
-        wabaId: !!whatsappBusinessAccountId
+        sms: !!sms_api_key && !!sms_app_id && !!sms_sender_id,
+        whatsapp: !!whatsapp_access_token && !!whatsapp_phone_number_id,
+        wabaId: !!whatsapp_business_account_id
       });
-      if (whatsappAccessToken && whatsappPhoneNumberId) {
+      if (whatsapp_access_token && whatsapp_phone_number_id) {
         const { whatsappService: whatsappService2 } = await Promise.resolve().then(() => (init_whatsapp(), whatsapp_exports));
         await whatsappService2.refreshCredentials();
         console.log("[WhatsApp] Credentials refreshed after admin update");
@@ -10400,7 +11368,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error updating messaging settings" });
     }
   });
-  app2.get("/api/admin/message-toggles", requireAdminAuth, async (req, res) => {
+  app2.get("/api/admin/message-toggles", async (req, res) => {
     try {
       const enableOtpSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
       const enablePasswordSetting = await storage.getSystemSetting("messaging", "enable_password_reset_messages");
@@ -10421,7 +11389,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error fetching message toggles" });
     }
   });
-  app2.put("/api/admin/message-toggles", requireAdminAuth, async (req, res) => {
+  app2.put("/api/admin/message-toggles", async (req, res) => {
     try {
       const { enableOtpMessages, enablePasswordResetMessages, enableFundReceiptMessages, enableKycVerifiedMessages, enableCardActivationMessages, enableLoginAlertMessages } = req.body;
       await storage.setSystemSetting({
@@ -11119,15 +12087,22 @@ async function registerRoutes(app2) {
       if (transaction) {
         const user = await storage.getUser(transaction.userId);
         if (user) {
+          const isKes = transaction.currency?.toUpperCase() === "KES";
+          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
+          const refundAmount = parseFloat(transaction.amount) + parseFloat(transaction.fee || "0");
+          const newBalance = currentBalance + refundAmount;
+          const balanceUpdate = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
+          await storage.updateUser(transaction.userId, balanceUpdate);
+          console.log(`\u2705 Refunded ${transaction.currency} ${refundAmount} to user ${user.email}`);
           await notificationService.sendNotification({
-            title: "Withdrawal Rejected",
-            body: `Your withdrawal request has been rejected. ${adminNotes || "Please contact support for details."}`,
+            title: "Withdrawal Rejected & Refunded",
+            body: `Your withdrawal request has been rejected. ${transaction.currency} ${refundAmount} has been refunded to your account. ${adminNotes || "Please contact support for details."}`,
             userId: user.id,
             type: "transaction"
           });
         }
       }
-      res.json({ transaction, message: "Withdrawal rejected" });
+      res.json({ transaction, message: "Withdrawal rejected and balance refunded" });
     } catch (error) {
       console.error("Error rejecting withdrawal:", error);
       res.status(500).json({ message: "Error rejecting withdrawal" });
@@ -11249,6 +12224,29 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error updating card price:", error);
       res.status(500).json({ message: "Error updating card price" });
+    }
+  });
+  app2.get("/api/system-settings/discount-enabled", async (req, res) => {
+    try {
+      const setting = await storage.getSystemSetting("virtual_card", "discount_enabled");
+      const enabled = setting?.value !== "false";
+      res.json({ enabled });
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching discount setting" });
+    }
+  });
+  app2.put("/api/system-settings/discount-enabled", async (req, res) => {
+    try {
+      const { enabled } = req.body;
+      await storage.setSystemSetting({
+        category: "virtual_card",
+        key: "discount_enabled",
+        value: String(!!enabled),
+        description: "Whether to show the discount badge on the virtual card purchase page"
+      });
+      res.json({ success: true, enabled: !!enabled });
+    } catch (error) {
+      res.status(500).json({ message: "Error updating discount setting" });
     }
   });
   app2.post("/api/convert-to-kes", async (req, res) => {
@@ -11476,9 +12474,13 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error checking transaction status" });
     }
   });
-  app2.post("/api/transactions", async (req, res) => {
+  app2.post("/api/transactions", requireAuth, async (req, res) => {
     try {
-      const { userId, type, amount, currency, description, fee, recipientDetails } = req.body;
+      const sessionUserId = req.session?.userId;
+      const { type, amount, currency, description, fee, recipientDetails } = req.body;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
       if (type !== "withdraw") {
         return res.status(400).json({ message: "This endpoint only handles withdrawal requests" });
       }
@@ -11487,6 +12489,7 @@ async function registerRoutes(app2) {
       if (withdrawAmount <= 0) {
         return res.status(400).json({ message: "Invalid withdrawal amount" });
       }
+      const userId = sessionUserId;
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -11494,7 +12497,7 @@ async function registerRoutes(app2) {
       const userTransactions = await storage.getTransactionsByUserId(userId);
       const isKesWithdrawal = currency?.toUpperCase() === "KES";
       const realTimeBalance = userTransactions.reduce((balance, txn) => {
-        if (txn.status === "completed") {
+        if (txn.status === "completed" || txn.status === "pending" && txn.type === "withdraw") {
           const txnCurrency = txn.currency?.toUpperCase();
           const matchesCurrency = isKesWithdrawal ? txnCurrency === "KES" : txnCurrency !== "KES";
           if (matchesCurrency) {
@@ -12825,14 +13828,18 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       res.status(500).json({ message: "Failed to update config" });
     }
   });
-  app2.post("/api/admin/api-keys/generate", requireAuth, async (req, res) => {
+  app2.post("/api/api-keys/generate", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
       const { name, scope, rateLimit } = req.body;
       if (!name || !scope || !Array.isArray(scope)) {
         return res.status(400).json({ error: "Missing required fields: name, scope" });
       }
       const { apiKeyService: apiKeyService2 } = await Promise.resolve().then(() => (init_api_key(), api_key_exports));
-      const key = await apiKeyService2.generateApiKey(name, scope, rateLimit || 1e3);
+      const key = await apiKeyService2.generateApiKey(name, scope, rateLimit || 1e3, sessionUserId);
       res.json({
         success: true,
         key,
@@ -12846,10 +13853,21 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       res.status(500).json({ error: "Failed to generate API key" });
     }
   });
-  app2.get("/api/admin/api-keys", requireAuth, async (req, res) => {
+  app2.get("/api/api-keys", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
       const settings = await storage.getSystemSettingsByCategory("api_keys");
-      const apiKeys = settings.map((s) => {
+      const userApiKeys = settings.filter((s) => {
+        try {
+          const keyData = JSON.parse(typeof s.value === "string" ? s.value : JSON.stringify(s.value));
+          return keyData.userId === sessionUserId;
+        } catch (e) {
+          return false;
+        }
+      }).map((s) => {
         const keyData = JSON.parse(typeof s.value === "string" ? s.value : JSON.stringify(s.value));
         return {
           id: s.key,
@@ -12861,15 +13879,28 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           lastUsedAt: keyData.lastUsedAt
         };
       });
-      res.json({ keys: apiKeys });
+      res.json({ keys: userApiKeys });
     } catch (error) {
       console.error("[API Keys] List error:", error);
       res.status(500).json({ error: "Failed to fetch API keys" });
     }
   });
-  app2.post("/api/admin/api-keys/:keyId/revoke", requireAuth, async (req, res) => {
+  app2.post("/api/api-keys/:keyId/revoke", requireAuth, async (req, res) => {
     try {
+      const sessionUserId = req.session?.userId;
       const { keyId } = req.params;
+      if (!sessionUserId) {
+        return res.status(401).json({ error: "Authentication required" });
+      }
+      const settings = await storage.getSystemSettingsByCategory("api_keys");
+      const keySettings = settings.find((s) => s.key === keyId);
+      if (!keySettings) {
+        return res.status(404).json({ error: "API key not found" });
+      }
+      const keyData = JSON.parse(typeof keySettings.value === "string" ? keySettings.value : JSON.stringify(keySettings.value));
+      if (keyData.userId !== sessionUserId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const { apiKeyService: apiKeyService2 } = await Promise.resolve().then(() => (init_api_key(), api_key_exports));
       const success = await apiKeyService2.revokeApiKey(keyId);
       if (success) {
@@ -12965,6 +13996,204 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       LogStreamService.createLogEntry("info", `GreenPay server started on port ${process.env.PORT || 5e3}`, "system")
     );
   }, 1e3);
+  app2.post("/api/admin/announcements/upload-media", requireAdminAuth, upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file provided" });
+      const isVideo = file.mimetype.startsWith("video/");
+      const folder = isVideo ? "announcements/video" : "announcements/image";
+      const url = await cloudinaryStorage2.uploadFile(`${folder}/${Date.now()}-${file.originalname}`, file.buffer, file.mimetype);
+      res.json({ url, type: isVideo ? "video" : "image" });
+    } catch (error) {
+      console.error("Announcement media upload error:", error);
+      res.status(500).json({ message: "Failed to upload media" });
+    }
+  });
+  app2.get("/api/announcements", async (req, res) => {
+    try {
+      const announcements2 = await storage.getActiveAnnouncements();
+      res.json({ announcements: announcements2 });
+    } catch (error) {
+      console.error("Fetch announcements error:", error);
+      res.status(500).json({ message: "Failed to fetch announcements" });
+    }
+  });
+  app2.get("/api/admin/announcements", requireAdminAuth, async (req, res) => {
+    try {
+      const announcements2 = await storage.getAnnouncements();
+      res.json({ announcements: announcements2 });
+    } catch (error) {
+      console.error("Admin fetch announcements error:", error);
+      res.status(500).json({ message: "Failed to fetch announcements" });
+    }
+  });
+  app2.post("/api/admin/announcements", requireAdminAuth, async (req, res) => {
+    try {
+      const announcementData = insertAnnouncementSchema.parse(req.body);
+      const announcement = await storage.createAnnouncement(announcementData);
+      res.json({ announcement, message: "Announcement created successfully" });
+    } catch (error) {
+      console.error("Create announcement error:", error);
+      res.status(400).json({ message: "Invalid announcement data" });
+    }
+  });
+  app2.put("/api/admin/announcements/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const announcement = await storage.updateAnnouncement(id, req.body);
+      if (announcement) {
+        res.json({ announcement, message: "Announcement updated successfully" });
+      } else {
+        res.status(404).json({ message: "Announcement not found" });
+      }
+    } catch (error) {
+      console.error("Update announcement error:", error);
+      res.status(500).json({ message: "Error updating announcement" });
+    }
+  });
+  app2.delete("/api/admin/announcements/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteAnnouncement(id);
+      res.json({ message: "Announcement deleted successfully" });
+    } catch (error) {
+      console.error("Delete announcement error:", error);
+      res.status(500).json({ message: "Error deleting announcement" });
+    }
+  });
+  app2.post("/api/admin/send-bulk-messages", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, message } = req.body;
+      if (!userIds || !Array.isArray(userIds) || userIds.length === 0 || !message) {
+        return res.status(400).json({ message: "User IDs array and message are required" });
+      }
+      const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+      let sentCount = 0;
+      const errors = [];
+      for (const userId of userIds) {
+        try {
+          const user = await storage.getUser(userId);
+          if (!user) {
+            errors.push(`User ${userId} not found`);
+            continue;
+          }
+          await messagingService3.sendMessage(user.phone, message);
+          sentCount++;
+        } catch (error) {
+          errors.push(`Failed to send to ${userId}: ${String(error)}`);
+        }
+      }
+      console.log(`Admin sent bulk messages to ${sentCount}/${userIds.length} users`);
+      res.json({
+        success: true,
+        sentCount,
+        totalRequested: userIds.length,
+        errors: errors.length > 0 ? errors : void 0,
+        message: `Message sent to ${sentCount} user(s)`
+      });
+    } catch (error) {
+      console.error("Bulk message error:", error);
+      res.status(500).json({ message: "Error sending bulk messages" });
+    }
+  });
+  app2.post("/api/fcm/register-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      const sessionUserId = req.session?.userId;
+      if (!token) {
+        return res.status(400).json({ message: "FCM token is required" });
+      }
+      await storage.updateUser(sessionUserId, { fcmToken: token });
+      console.log(`FCM token registered for user: ${sessionUserId}`);
+      res.json({ message: "FCM token registered successfully" });
+    } catch (error) {
+      console.error("FCM registration error:", error);
+      res.status(500).json({ message: "Failed to register FCM token" });
+    }
+  });
+  app2.post("/api/admin/push-notifications/send-user", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId, title, body, data } = req.body;
+      if (!userId || !title || !body) {
+        return res.status(400).json({ message: "userId, title, and body are required" });
+      }
+      const { notificationQueue: notificationQueue2 } = await Promise.resolve().then(() => (init_notification_queue(), notification_queue_exports));
+      const result = await notificationQueue2.sendAdminAlert(userId, title, body);
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "push_notification_sent",
+        details: `Admin sent push notification to user: ${userId}`,
+        targetId: userId
+      });
+      res.json({
+        success: result,
+        message: result ? "Notification sent" : "Failed to send notification"
+      });
+    } catch (error) {
+      console.error("Push notification error:", error);
+      res.status(500).json({ message: "Failed to send notification" });
+    }
+  });
+  app2.post("/api/admin/push-notifications/send-all", requireAdminAuth, async (req, res) => {
+    try {
+      const { title, body, data } = req.body;
+      if (!title || !body) {
+        return res.status(400).json({ message: "title and body are required" });
+      }
+      const { notificationQueue: notificationQueue2 } = await Promise.resolve().then(() => (init_notification_queue(), notification_queue_exports));
+      const result = await notificationQueue2.sendBulkNotification({
+        title,
+        body,
+        type: "general",
+        data,
+        sendToAll: true
+      });
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "bulk_push_notification",
+        details: `Admin sent broadcast notification to all users`
+      });
+      res.json({
+        success: result.success > 0,
+        sent: result.success,
+        failed: result.failure,
+        message: `Notification sent to ${result.success} user(s)`
+      });
+    } catch (error) {
+      console.error("Bulk notification error:", error);
+      res.status(500).json({ message: "Failed to send bulk notification" });
+    }
+  });
+  app2.post("/api/admin/push-notifications/send-multiple", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, title, body, data } = req.body;
+      if (!userIds || !Array.isArray(userIds) || !title || !body) {
+        return res.status(400).json({ message: "userIds array, title, and body are required" });
+      }
+      const { notificationQueue: notificationQueue2 } = await Promise.resolve().then(() => (init_notification_queue(), notification_queue_exports));
+      const result = await notificationQueue2.sendBulkNotification({
+        title,
+        body,
+        type: "general",
+        data,
+        targetUserIds: userIds
+      });
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "targeted_push_notification",
+        details: `Admin sent notification to ${userIds.length} user(s)`
+      });
+      res.json({
+        success: result.success > 0,
+        sent: result.success,
+        failed: result.failure,
+        message: `Notification sent to ${result.success} user(s), ${result.failure} failed`
+      });
+    } catch (error) {
+      console.error("Targeted notification error:", error);
+      res.status(500).json({ message: "Failed to send notifications" });
+    }
+  });
   return httpServer;
 }
 
@@ -13002,11 +14231,10 @@ var vite_config_default = defineConfig({
     emptyOutDir: true
   },
   server: {
-    middlewareMode: false,
+    allowedHosts: true,
     hmr: {
-      host: process.env.REPL_SLUG ? `${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : "localhost",
-      port: 443,
-      protocol: process.env.REPL_SLUG ? "wss" : "ws"
+      clientPort: 443,
+      protocol: "wss"
     },
     fs: {
       strict: true,
@@ -13156,6 +14384,7 @@ var SystemLogger = class _SystemLogger {
 var systemLogger = SystemLogger.getInstance();
 
 // server/index.ts
+init_db();
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = "production";
 }
@@ -13262,8 +14491,8 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "\u2026";
+      if (logLine.length > 500) {
+        logLine = logLine.slice(0, 499) + "\u2026";
       }
       log(logLine);
       const LogStreamService = global.LogStreamService;
@@ -13289,6 +14518,7 @@ app.use((req, res, next) => {
   try {
     systemLogger.init();
     console.log("\u2705 System logger initialized - capturing console output to database");
+    await ensureSchema();
     const server = await registerRoutes(app);
     app.use((err, _req, res, _next) => {
       const status = err.status || err.statusCode || 500;

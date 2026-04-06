@@ -71,22 +71,63 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
           echo "KEYSTORE_PATH=/tmp/keystore.jks" >> $GITHUB_ENV
 
+      - name: Prepare Firebase Configuration
+        env:
+          FIREBASE_CONFIG: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+        run: |
+          # Create google-services.json from secret
+          echo "$FIREBASE_CONFIG" > android/app/google-services.json
+          
+          # Verify file was created
+          if [ ! -f android/app/google-services.json ]; then
+            echo "⚠️ google-services.json not found. Using fallback."
+            echo '{"type":"service_account","project_id":"greenpay-mobile"}' > android/app/google-services.json
+          fi
+
       - name: Build Android release APK
+        env:
+          KEYSTORE_PATH: /tmp/keystore.jks
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd android
-          # Build APK for direct installation
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
-            -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
           
-          # Also build bundle for Play Store
+          # Build APK for direct installation (direct install)
+          echo "Building release APK..."
+          ./gradlew clean assembleRelease \
+            --no-daemon \
+            -Pandroid.injected.signing.store.file=$KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ APK build failed"
+            exit 1
+          fi
+          
+          echo "✅ APK built successfully"
+          
+          # Build bundle for Play Store
+          echo "Building App Bundle..."
           ./gradlew bundleRelease \
-            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
-            -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+            --no-daemon \
+            -Pandroid.injected.signing.store.file=$KEYSTORE_PATH \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD"
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Bundle build failed"
+            exit 1
+          fi
+          
+          echo "✅ Bundle built successfully"
+          
+          # List outputs
+          ls -lh app/build/outputs/apk/release/
+          ls -lh app/build/outputs/bundle/release/
 
       - name: Upload APK to GitHub Artifacts
         uses: actions/upload-artifact@v3
