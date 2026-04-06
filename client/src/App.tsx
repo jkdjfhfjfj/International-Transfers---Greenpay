@@ -35,6 +35,7 @@ import LoadingScreen from "@/components/loading-screen";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PWAInstallPrompt } from "@/components/pwa-install";
 import { AIChatWidget } from "@/components/ai-chat-widget";
+import { OfflineIndicator } from "@/components/offline-indicator";
 import PaymentCallbackPage from "@/pages/payment-callback";
 import PaymentSuccessPage from "@/pages/payment-success";
 import PaymentFailedPage from "@/pages/payment-failed";
@@ -206,6 +207,7 @@ function AppContent() {
   return (
     <TooltipProvider>
       <Toaster />
+      <OfflineIndicator />
       <Router />
       {!isAdminPage && <BottomNavigation />}
       {!isAdminPage && <PWAInstallPrompt />}

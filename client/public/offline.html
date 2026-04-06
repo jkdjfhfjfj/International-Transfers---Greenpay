@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GreenPay - Offline Mode</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            text-align: center;
+        }
+        
+        .icon {
+            font-size: 80px;
+            margin-bottom: 30px;
+            display: block;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 18px;
+            margin-bottom: 20px;
+            line-height: 1.6;
+        }
+        
+        .features {
+            background: #f5f5f5;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 30px 0;
+            text-align: left;
+        }
+        
+        .features h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+        
+        .features ul {
+            list-style: none;
+        }
+        
+        .features li {
+            color: #666;
+            margin: 10px 0;
+            padding-left: 25px;
+            position: relative;
+            font-size: 14px;
+        }
+        
+        .features li:before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .button:active {
+            transform: translateY(0);
+        }
+        
+        .status {
+            margin-top: 30px;
+            padding: 15px;
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            border-radius: 8px;
+            text-align: left;
+        }
+        
+        .status p {
+            color: #2e7d32;
+            font-size: 14px;
+            margin: 5px 0;
+        }
+        
+        .status.loading {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+        
+        .status.loading p {
+            color: #e65100;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+            vertical-align: middle;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .reconnect-indicator {
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 30px 20px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .subtitle {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <span class="icon">📡</span>
+        <h1>You're Offline</h1>
+        <p class="subtitle">You don't have an internet connection, but GreenPay is ready to work offline!</p>
+        
+        <div class="features">
+            <h3>📊 Available Offline:</h3>
+            <ul>
+                <li>View your account balance</li>
+                <li>Check transaction history</li>
+                <li>View virtual cards</li>
+                <li>Read announcements</li>
+                <li>Access settings</li>
+                <li>Browse help & FAQs</li>
+            </ul>
+        </div>
+        
+        <div class="status" id="status">
+            <div class="spinner"></div>
+            <p><strong>Checking for connection...</strong></p>
+        </div>
+        
+        <button class="button" onclick="retryConnection()">Retry Now</button>
+        <button class="button" onclick="goHome()" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Open GreenPay</button>
+    </div>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        
+        // Check if online
+        function updateStatus() {
+            if (navigator.onLine) {
+                statusEl.classList.remove('loading');
+                statusEl.innerHTML = '<p>✅ <strong>You\'re back online! Syncing data...</strong></p>';
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1500);
+            } else {
+                statusEl.classList.add('loading');
+                statusEl.innerHTML = '<p><span class="spinner"></span><strong>Still offline. You can still use GreenPay offline.</strong></p>';
+            }
+        }
+        
+        // Listen for online event
+        window.addEventListener('online', updateStatus);
+        window.addEventListener('offline', updateStatus);
+        
+        // Initial check
+        updateStatus();
+        
+        // Retry connection
+        function retryConnection() {
+            fetch('/api/health', { method: 'HEAD' })
+                .then(() => {
+                    window.location.href = '/';
+                })
+                .catch(() => {
+                    statusEl.classList.add('loading');
+                    statusEl.innerHTML = '<p>Still offline. You can browse cached content below.</p>';
+                });
+        }
+        
+        // Go home (will show cached version if offline)
+        function goHome() {
+            window.location.href = '/';
+        }
+    </script>
+</body>
+</html>
