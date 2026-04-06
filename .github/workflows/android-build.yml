@@ -64,7 +64,9 @@ jobs:
         run: npm run build
 
       - name: Create Capacitor build
-        run: npx cap sync android
+        run: |
+          mkdir -p android/app/src/main/assets
+          npx cap sync android
 
       - name: Decode keystore
         run: |
