@@ -61,7 +61,7 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Build web app
-        run: npm run build --workspace=client
+        run: npm run build
 
       - name: Create Capacitor build
         run: npx cap sync android
