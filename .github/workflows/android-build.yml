@@ -73,18 +73,13 @@ jobs:
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
           echo "KEYSTORE_PATH=/tmp/keystore.jks" >> $GITHUB_ENV
 
-      - name: Prepare Firebase Configuration
-        env:
-          FIREBASE_CONFIG: ${{ secrets.FIREBASE_GOOGLE_SERVICES_JSON }}
+      - name: Verify Firebase Configuration
         run: |
-          # Create google-services.json from secret
-          echo "$FIREBASE_CONFIG" > android/app/google-services.json
-          
-          # Verify file was created
           if [ ! -f android/app/google-services.json ]; then
-            echo "⚠️ google-services.json not found. Using fallback."
-            echo '{"type":"service_account","project_id":"greenpay-mobile"}' > android/app/google-services.json
+            echo "❌ google-services.json not found!"
+            exit 1
           fi
+          echo "✅ google-services.json verified"
 
       - name: Build Android release APK
         env:
