@@ -12,8 +12,6 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        
-        // Initialize Firebase Cloud Messaging
-        registerPlugin(com.capacitor.community.fcm.FCMPlugin.class);
+        // Firebase Cloud Messaging handled by GreenPayMessagingService
     }
 }
