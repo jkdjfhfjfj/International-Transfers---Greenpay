@@ -1,0 +1,124 @@
+name: Android Build & Release to Play Store
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'client/src/**'
+      - 'capacitor.config.ts'
+      - 'android/**'
+      - 'package.json'
+  workflow_dispatch:
+    inputs:
+      release_type:
+        description: 'Release type'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v2
+        with:
+          api-level: 33
+          build-tools-version: 33.0.0
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Build web app
+        run: npm run build --workspace=client
+
+      - name: Create Capacitor build
+        run: npx cap sync android
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/keystore.jks
+          echo "KEYSTORE_PATH=/tmp/keystore.jks" >> $GITHUB_ENV
+
+      - name: Build Android release APK
+        run: |
+          cd android
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
+            -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload to Play Store (internal testing)
+        if: github.event.inputs.release_type == 'internal' || github.event_name == 'push'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.greenpay.mobile
+          releaseFiles: 'android/app/build/outputs/bundle/release/app-release.aab'
+          track: internal
+          status: draft
+
+      - name: Upload to Play Store (alpha)
+        if: github.event.inputs.release_type == 'alpha'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.greenpay.mobile
+          releaseFiles: 'android/app/build/outputs/bundle/release/app-release.aab'
+          track: alpha
+          status: draft
+
+      - name: Upload to Play Store (beta)
+        if: github.event.inputs.release_type == 'beta'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.greenpay.mobile
+          releaseFiles: 'android/app/build/outputs/bundle/release/app-release.aab'
+          track: beta
+          status: draft
+
+      - name: Upload to Play Store (production)
+        if: github.event.inputs.release_type == 'production'
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
+          packageName: com.greenpay.mobile
+          releaseFiles: 'android/app/build/outputs/bundle/release/app-release.aab'
+          track: production
+          status: completed
+
+      - name: Create Release
+        if: github.event.inputs.release_type == 'production'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: GreenPay v${{ github.run_number }}
+          body: Production release
+          draft: false
+          prerelease: false
