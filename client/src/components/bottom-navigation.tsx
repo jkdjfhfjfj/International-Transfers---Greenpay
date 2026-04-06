@@ -43,7 +43,8 @@ export default function BottomNavigation() {
     location.startsWith('/bills') ||
     location.startsWith('/status') ||
     location.startsWith('/loans') ||
-    location.startsWith('/api-documentation')
+    location.startsWith('/api-documentation') ||
+    location.startsWith('/admin-notifications')
   );
 
   if (!showBottomNav) return null;

@@ -1,4 +1,4 @@
-name: Android Build & Release to Play Store
+name: Build Android APK & Release
 
 on:
   push:
@@ -9,10 +9,19 @@ on:
       - 'capacitor.config.ts'
       - 'android/**'
       - 'package.json'
+      - 'native/**'
   workflow_dispatch:
     inputs:
-      release_type:
-        description: 'Release type'
+      build_type:
+        description: 'Build type'
+        required: true
+        default: 'apk'
+        type: choice
+        options:
+          - apk
+          - aab
+      release_track:
+        description: 'Release track'
         required: true
         default: 'internal'
         type: choice
@@ -65,14 +74,34 @@ jobs:
       - name: Build Android release APK
         run: |
           cd android
+          # Build APK for direct installation
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
+            -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
+          
+          # Also build bundle for Play Store
           ./gradlew bundleRelease \
             -Pandroid.injected.signing.store.file=${{ env.KEYSTORE_PATH }} \
             -Pandroid.injected.signing.store.password=${{ secrets.ANDROID_KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.ANDROID_KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: Upload APK to GitHub Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: GreenPay-release.apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload Bundle to GitHub Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: GreenPay-release.aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+
       - name: Upload to Play Store (internal testing)
-        if: github.event.inputs.release_type == 'internal' || github.event_name == 'push'
+        if: github.event.inputs.release_track == 'internal' || github.event_name == 'push'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
@@ -82,7 +111,7 @@ jobs:
           status: draft
 
       - name: Upload to Play Store (alpha)
-        if: github.event.inputs.release_type == 'alpha'
+        if: github.event.inputs.release_track == 'alpha'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
@@ -92,7 +121,7 @@ jobs:
           status: draft
 
       - name: Upload to Play Store (beta)
-        if: github.event.inputs.release_type == 'beta'
+        if: github.event.inputs.release_track == 'beta'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}
@@ -102,7 +131,7 @@ jobs:
           status: draft
 
       - name: Upload to Play Store (production)
-        if: github.event.inputs.release_type == 'production'
+        if: github.event.inputs.release_track == 'production'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: ${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}

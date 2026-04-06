@@ -79,6 +79,7 @@ import LoansPage from "@/pages/loans";
 import APIServicePage from "@/pages/api-service";
 import ApiDocumentationPage from "@/pages/api-documentation";
 import UserSupportTickets from "@/pages/user-support-tickets";
+import { useFCM } from "@/hooks/use-fcm";
 
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -190,6 +191,9 @@ function Router() {
 function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated } = useAuth();
+  
+  // Initialize FCM push notifications
+  useFCM();
   
   // Landing/public pages and admin pages that should not show user widgets
   const landingPages = ['/', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];

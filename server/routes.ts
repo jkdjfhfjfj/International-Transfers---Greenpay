@@ -9590,5 +9590,130 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
+  // FCM Token Management
+  app.post("/api/fcm/register-token", requireAuth, async (req, res) => {
+    try {
+      const { token } = req.body;
+      const sessionUserId = (req as any).session?.userId;
+      
+      if (!token) {
+        return res.status(400).json({ message: "FCM token is required" });
+      }
+      
+      // Update user's FCM token
+      await storage.updateUser(sessionUserId, { fcmToken: token });
+      
+      console.log(`FCM token registered for user: ${sessionUserId}`);
+      res.json({ message: "FCM token registered successfully" });
+    } catch (error) {
+      console.error('FCM registration error:', error);
+      res.status(500).json({ message: "Failed to register FCM token" });
+    }
+  });
+
+  // Admin: Send push notification to specific user
+  app.post("/api/admin/push-notifications/send-user", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId, title, body, data } = req.body;
+      
+      if (!userId || !title || !body) {
+        return res.status(400).json({ message: "userId, title, and body are required" });
+      }
+      
+      const { notificationQueue } = await import('./services/notification-queue');
+      const result = await notificationQueue.sendAdminAlert(userId, title, body);
+      
+      // Log admin action
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: 'push_notification_sent',
+        details: `Admin sent push notification to user: ${userId}`,
+        targetId: userId,
+      });
+      
+      res.json({ 
+        success: result,
+        message: result ? "Notification sent" : "Failed to send notification"
+      });
+    } catch (error) {
+      console.error('Push notification error:', error);
+      res.status(500).json({ message: "Failed to send notification" });
+    }
+  });
+
+  // Admin: Send push notification to all users
+  app.post("/api/admin/push-notifications/send-all", requireAdminAuth, async (req, res) => {
+    try {
+      const { title, body, data } = req.body;
+      
+      if (!title || !body) {
+        return res.status(400).json({ message: "title and body are required" });
+      }
+      
+      const { notificationQueue } = await import('./services/notification-queue');
+      const result = await notificationQueue.sendBulkNotification({
+        title,
+        body,
+        type: 'general',
+        data,
+        sendToAll: true,
+      });
+      
+      // Log admin action
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: 'bulk_push_notification',
+        details: `Admin sent broadcast notification to all users`,
+      });
+      
+      res.json({ 
+        success: result.success > 0,
+        sent: result.success,
+        failed: result.failure,
+        message: `Notification sent to ${result.success} user(s)`
+      });
+    } catch (error) {
+      console.error('Bulk notification error:', error);
+      res.status(500).json({ message: "Failed to send bulk notification" });
+    }
+  });
+
+  // Admin: Send to multiple users
+  app.post("/api/admin/push-notifications/send-multiple", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, title, body, data } = req.body;
+      
+      if (!userIds || !Array.isArray(userIds) || !title || !body) {
+        return res.status(400).json({ message: "userIds array, title, and body are required" });
+      }
+      
+      const { notificationQueue } = await import('./services/notification-queue');
+      const result = await notificationQueue.sendBulkNotification({
+        title,
+        body,
+        type: 'general',
+        data,
+        targetUserIds: userIds,
+      });
+      
+      // Log admin action
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: 'targeted_push_notification',
+        details: `Admin sent notification to ${userIds.length} user(s)`,
+      });
+      
+      res.json({ 
+        success: result.success > 0,
+        sent: result.success,
+        failed: result.failure,
+        message: `Notification sent to ${result.success} user(s), ${result.failure} failed`
+      });
+    } catch (error) {
+      console.error('Targeted notification error:', error);
+      res.status(500).json({ message: "Failed to send notifications" });
+    }
+  });
+
   return httpServer;
 }

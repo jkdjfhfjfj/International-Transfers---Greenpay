@@ -35,6 +35,7 @@ export const users = pgTable("users", {
   isSuspended: boolean("is_suspended").default(false),
   suspendedAt: timestamp("suspended_at"),
   suspensionReason: text("suspension_reason"),
+  fcmToken: text("fcm_token"), // Firebase Cloud Messaging token for push notifications
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
