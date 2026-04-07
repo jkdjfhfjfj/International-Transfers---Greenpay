@@ -85,7 +85,7 @@ jobs:
         env:
           KEYSTORE_PATH: /tmp/keystore.jks
           KEYSTORE_PASSWORD: Kitondosch.6639
-          KEY_ALIAS: greenpay-key
+          KEY_ALIAS: greenpay-alias
           KEY_PASSWORD: Kitondosch.6639
         run: |
           cd android
