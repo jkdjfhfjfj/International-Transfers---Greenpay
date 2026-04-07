@@ -1,65 +1,65 @@
 /**
  * API Configuration for GreenPay
- * Handles both web and mobile environments
+ * Handles both web and mobile (Capacitor) environments
  */
 
+function isNativePlatform(): boolean {
+  try {
+    const cap = (window as any).Capacitor;
+    if (!cap) return false;
+    if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform();
+    // Fallback: if platform is android or ios, it's native
+    return cap.platform === "android" || cap.platform === "ios";
+  } catch {
+    return false;
+  }
+}
+
 export function getApiBaseUrl(): string {
-  // Check if running in Capacitor (mobile app)
-  if (window.Capacitor && window.Capacitor.isNativePlatform?.()) {
-    // Use Capacitor server URL for mobile
-    const baseUrl = import.meta.env.VITE_API_URL || 'https://greenpay.world';
-    return baseUrl;
+  // Native app (Android / iOS) — always call the production server
+  if (isNativePlatform()) {
+    return import.meta.env.VITE_API_URL || "https://greenpay.world";
   }
 
-  // Check for environment variable (build-time configuration)
+  // Build-time env var override
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
   }
 
-  // Check for runtime environment variable
+  // Runtime window variable
   const envUrl = (window as any).REACT_APP_API_URL;
-  if (envUrl) {
-    return envUrl;
-  }
+  if (envUrl) return envUrl;
 
-  // Use current origin for web (same-origin requests)
-  // This works for web where React and backend are on same domain
-  if (typeof window !== 'undefined' && window.location) {
+  // Web: same-origin (React + backend on same domain)
+  if (typeof window !== "undefined" && window.location) {
     return window.location.origin;
   }
 
-  // Default to production
-  return 'https://greenpay.world';
+  return "https://greenpay.world";
 }
 
 /**
  * Construct full API URL from path
- * @example
- * apiUrl('/api/auth/login') → 'https://greenpay.world/api/auth/login'
+ * @example apiUrl('/api/auth/login') → 'https://greenpay.world/api/auth/login'
  */
 export function apiUrl(path: string): string {
   const base = getApiBaseUrl();
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  
-  // If base is root (same-origin), return relative path
-  if (base === window.location.origin || base === '/') {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  if (base === window.location.origin || base === "/") {
     return normalizedPath;
   }
 
-  // Otherwise combine base URL with path
-  return `${base}${normalizedPath}`.replace(/\/+/g, '/').replace(':/', '://');
+  return `${base}${normalizedPath}`.replace(/([^:])\/\/+/g, "$1/");
 }
 
-/**
- * Get environment info for debugging
- */
 export function getEnvironmentInfo() {
   return {
-    isNative: window.Capacitor?.isNativePlatform?.(),
+    isNative: isNativePlatform(),
     apiBaseUrl: getApiBaseUrl(),
     userAgent: navigator.userAgent,
-    platform: navigator.platform,
+    platform: (window as any).Capacitor?.platform ?? "web",
     buildEnv: import.meta.env.MODE,
-    apiUrl: import.meta.env.VITE_API_URL || 'default',
+    apiUrl: import.meta.env.VITE_API_URL || "default",
   };
 }

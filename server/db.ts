@@ -6,7 +6,7 @@ import * as schema from "@shared/schema";
 neonConfig.webSocketConstructor = ws;
 
 // Resolve the connection string — prefer DATABASE_URL, fall back to individual PG* vars
-function resolveConnectionString(): string {
+function resolveConnectionString(): string | null {
   if (process.env.DATABASE_URL) {
     return process.env.DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
   }
@@ -17,20 +17,13 @@ function resolveConnectionString(): string {
     return `postgresql://${PGUSER}:${encodeURIComponent(PGPASSWORD)}@${PGHOST}:${port}/${PGDATABASE}?sslmode=require`;
   }
 
-  throw new Error(
-    "No database connection configured. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE environment variables."
-  );
+  return null;
 }
 
 const connectionString = resolveConnectionString();
 
-// Ensure DATABASE_URL is set so drizzle-kit and other tools can find it
-if (!process.env.DATABASE_URL) {
-  process.env.DATABASE_URL = connectionString;
-}
-
-export const pool = new Pool({ connectionString });
-export const db = drizzle({ client: pool, schema });
+export const pool = connectionString ? new Pool({ connectionString }) : null as any;
+export const db = connectionString ? drizzle({ client: pool, schema }) : null as any;
 
 // Safely add new columns to existing tables — never drops or recreates anything
 async function alterMissingColumns() {
@@ -65,6 +58,7 @@ async function tablesExist(): Promise<boolean> {
 }
 
 export async function ensureSchema() {
+  if (!pool) return; // No database configured — MemStorage handles persistence
   const exists = await tablesExist();
 
   if (!exists) {

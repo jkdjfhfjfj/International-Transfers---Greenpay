@@ -1,62 +1,83 @@
 import { createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App";
+import { ErrorBoundary } from "./components/error-boundary";
 import "./index.css";
-
-// Check if we need to clear state due to version mismatch or white screen issues
-const APP_VERSION = "1.0.3"; // Incremented version
-const storedVersion = localStorage.getItem("app_version");
-
-// Detect if we're in a crash loop (more than 3 reloads in 10 seconds)
-const reloadCount = parseInt(sessionStorage.getItem("reload_count") || "0");
-const lastReload = parseInt(sessionStorage.getItem("last_reload") || "0");
-const now = Date.now();
-
-if (now - lastReload < 10000 && reloadCount > 3) {
-  console.error("Crash loop detected. Stopping automatic reloads.");
-  // Don't reload anymore, just log the error
-} else {
-  if (now - lastReload > 10000) {
-    sessionStorage.setItem("reload_count", "1");
-  } else {
-    sessionStorage.setItem("reload_count", (reloadCount + 1).toString());
-  }
-  sessionStorage.setItem("last_reload", now.toString());
-}
-
-if (storedVersion && storedVersion !== APP_VERSION) {
-  // Only clear and reload once per version update
-  localStorage.setItem("app_version", APP_VERSION);
-  localStorage.clear();
-  sessionStorage.clear();
-  window.location.reload();
-} else if (!storedVersion) {
-  localStorage.setItem("app_version", APP_VERSION);
-}
-
-// Error boundary for the whole app to prevent white screen
-window.addEventListener('error', (event) => {
-  if (event.message.includes('Loading chunk') || 
-      event.message.includes('CSS_CHUNK_LOAD_FAILED') ||
-      event.message.includes('Unexpected token') ||
-      event.message.includes('is not a function')) {
-    const lastCriticalError = parseInt(sessionStorage.getItem("last_critical_error") || "0");
-    // Only auto-reset once per minute for critical errors to avoid loops
-    if (Date.now() - lastCriticalError > 60000) {
-      sessionStorage.setItem("last_critical_error", Date.now().toString());
-      console.warn('Critical error detected, forcing full reset and reload...');
-      window.location.href = window.location.origin + "/?clear_cache=1&s=1";
-    }
-  }
-});
 
 // Polyfill for global if needed
 if (typeof global === 'undefined') {
   (window as any).global = window;
 }
 
+const APP_VERSION = "1.0.3";
+const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
+
+// Only do version-mismatch reload on web — on native it kills the WebView
+if (!isNative) {
+  const storedVersion = localStorage.getItem("app_version");
+  if (storedVersion && storedVersion !== APP_VERSION) {
+    localStorage.setItem("app_version", APP_VERSION);
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.reload();
+  } else if (!storedVersion) {
+    localStorage.setItem("app_version", APP_VERSION);
+  }
+}
+
+// ─── Debug overlay (visible on device without adb) ───────────────────────────
+function showDebugLine(msg: string) {
+  try {
+    let overlay = document.getElementById("gp-debug-overlay");
+    if (!overlay) {
+      overlay = document.createElement("div");
+      overlay.id = "gp-debug-overlay";
+      overlay.style.cssText =
+        "position:fixed;bottom:0;left:0;right:0;max-height:45vh;" +
+        "overflow-y:auto;background:rgba(0,0,0,0.9);color:#ff4444;" +
+        "font-size:11px;font-family:monospace;padding:8px;" +
+        "z-index:99999;border-top:2px solid #ff0000;";
+      document.body?.appendChild(overlay);
+    }
+    const entry = `[${new Date().toISOString().slice(11, 23)}] ${msg}`;
+    const line = document.createElement("div");
+    line.style.cssText = "padding:2px 0;border-bottom:1px solid #333;word-break:break-all;";
+    line.textContent = entry;
+    overlay.appendChild(line);
+    overlay.scrollTop = overlay.scrollHeight;
+  } catch {}
+}
+
+function logError(msg: string, src?: string) {
+  const full = msg + (src ? " @ " + src : "");
+  console.error("GP_ERROR:", full); // Shows in adb logcat under Capacitor/Console
+  if (isNative) showDebugLine(full);
+  try {
+    const prev: string[] = JSON.parse(sessionStorage.getItem("gp_errors") || "[]");
+    prev.push(full);
+    if (prev.length > 30) prev.shift();
+    sessionStorage.setItem("gp_errors", JSON.stringify(prev));
+  } catch {}
+}
+
+// Catch all unhandled JS errors — log only, never redirect
+window.addEventListener("error", (event) => {
+  logError(event.message || "JS Error", event.filename?.split("/").pop());
+});
+
+// Catch unhandled promise rejections
+window.addEventListener("unhandledrejection", (event) => {
+  const reason =
+    event.reason instanceof Error
+      ? event.reason.message + (event.reason.stack ? "\n" + event.reason.stack.split("\n")[1] : "")
+      : String(event.reason ?? "Unhandled rejection");
+  logError(reason);
+});
+
 createRoot(document.getElementById("root")!).render(
   <HelmetProvider>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </HelmetProvider>
 );

@@ -2204,8 +2204,8 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-// Use DatabaseStorage instead of MemStorage
-export const storage = new DatabaseStorage();
+// Use DatabaseStorage when database is configured, otherwise fall back to MemStorage
+export const storage: IStorage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
 
 // Keep MemStorage for fallback if needed
 export const memStorage = new MemStorage();
