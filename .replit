@@ -1,6 +1,6 @@
 modules = ["nodejs-20", "web", "postgresql-16"]
 [nix]
-packages = ["unzipNLS"]
+packages = ["unzipNLS", "zulu23", "nano"]
 channel = "stable-25_05"
 
 [agent]
