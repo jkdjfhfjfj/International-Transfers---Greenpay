@@ -6,7 +6,7 @@ import { WavyHeader } from "@/components/wavy-header";
 import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, ExternalLink, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/api` : "https://api.greenpay.world";
+const API_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/api` : "https://greenpay.world/api";
 
 export default function APIDocumentationPage() {
   const [, setLocation] = useLocation();

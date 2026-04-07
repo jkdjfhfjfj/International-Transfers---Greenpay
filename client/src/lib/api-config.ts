@@ -7,7 +7,7 @@ export function getApiBaseUrl(): string {
   // Check if running in Capacitor (mobile app)
   if (window.Capacitor && window.Capacitor.isNativePlatform?.()) {
     // Use Capacitor server URL for mobile
-    const baseUrl = import.meta.env.VITE_API_URL || 'https://api.greenpay.world';
+    const baseUrl = import.meta.env.VITE_API_URL || 'https://greenpay.world';
     return baseUrl;
   }
 
@@ -29,13 +29,13 @@ export function getApiBaseUrl(): string {
   }
 
   // Default to production
-  return 'https://api.greenpay.world';
+  return 'https://greenpay.world';
 }
 
 /**
  * Construct full API URL from path
  * @example
- * apiUrl('/api/auth/login') → 'https://api.greenpay.world/api/auth/login'
+ * apiUrl('/api/auth/login') → 'https://greenpay.world/api/auth/login'
  */
 export function apiUrl(path: string): string {
   const base = getApiBaseUrl();
