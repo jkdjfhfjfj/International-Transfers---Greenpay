@@ -5,7 +5,7 @@ const isDev = !!process.env.CAPACITOR_SERVER_URL;
 const config: CapacitorConfig = {
   appId: 'com.greenpay.mobile',
   appName: 'GreenPay',
-  webDir: 'client/dist',
+  webDir: 'dist/public',
   server: isDev
     ? {
         androidScheme: 'https',
