@@ -102,6 +102,7 @@ export interface IStorage {
   // Virtual Card operations
   createVirtualCard(card: InsertVirtualCard): Promise<VirtualCard>;
   getVirtualCardByUserId(userId: string): Promise<VirtualCard | undefined>;
+  getVirtualCardById(id: string): Promise<VirtualCard | undefined>;
   updateVirtualCard(id: string, updates: Partial<VirtualCard>): Promise<VirtualCard | undefined>;
 
   // Transaction operations
@@ -605,6 +606,10 @@ export class MemStorage implements IStorage {
     return Array.from(this.virtualCards.values()).find(card => card.userId === userId);
   }
 
+  async getVirtualCardById(id: string): Promise<VirtualCard | undefined> {
+    return this.virtualCards.get(id);
+  }
+
   async updateVirtualCard(id: string, updates: Partial<VirtualCard>): Promise<VirtualCard | undefined> {
     const card = this.virtualCards.get(id);
     if (!card) return undefined;
@@ -1071,9 +1076,30 @@ export class MemStorage implements IStorage {
     this.supportTickets.delete(id);
   }
   async assignSupportTicket(): Promise<SupportTicket | undefined> { return undefined; }
-  async getSystemSetting(): Promise<SystemSetting | undefined> { return undefined; }
-  async getSystemSettingsByCategory(): Promise<SystemSetting[]> { return []; }
-  async setSystemSetting(): Promise<SystemSetting> { throw new Error('Not implemented'); }
+  async getSystemSetting(category: string, key: string): Promise<SystemSetting | undefined> {
+    return Array.from(this.systemSettings?.values?.() || []).find(
+      (s: any) => s.category === category && s.key === key
+    ) as SystemSetting | undefined;
+  }
+  async getSystemSettingsByCategory(category: string): Promise<SystemSetting[]> {
+    return Array.from(this.systemSettings?.values?.() || []).filter(
+      (s: any) => s.category === category
+    ) as SystemSetting[];
+  }
+  async setSystemSetting(setting: { category: string; key: string; value: string; description?: string }): Promise<SystemSetting> {
+    const id = randomUUID();
+    const existing = Array.from(this.systemSettings.values()).find(
+      s => s.category === setting.category && s.key === setting.key
+    );
+    if (existing) {
+      const updated = { ...existing, value: setting.value, updatedAt: new Date() };
+      this.systemSettings.set(existing.id, updated as any);
+      return updated as any;
+    }
+    const newSetting = { id, ...setting, createdAt: new Date(), updatedAt: new Date() } as any;
+    this.systemSettings.set(id, newSetting);
+    return newSetting;
+  }
   async updateUserOtp(id: string, otpCode: string | null, otpExpiry: Date | null): Promise<User | undefined> {
     const user = this.users.get(id);
     if (user) {
@@ -1290,6 +1316,11 @@ export class DatabaseStorage implements IStorage {
 
   async getVirtualCardByUserId(userId: string): Promise<VirtualCard | undefined> {
     const [card] = await db.select().from(virtualCards).where(eq(virtualCards.userId, userId));
+    return card || undefined;
+  }
+
+  async getVirtualCardById(id: string): Promise<VirtualCard | undefined> {
+    const [card] = await db.select().from(virtualCards).where(eq(virtualCards.id, id));
     return card || undefined;
   }
 

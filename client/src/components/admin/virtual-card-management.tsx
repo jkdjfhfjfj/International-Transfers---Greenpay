@@ -51,6 +51,9 @@ interface VirtualCard {
   currency: string;
   purchaseDate: string;
   lastUsed: string | null;
+  userName?: string;
+  userEmail?: string;
+  userPhone?: string;
 }
 
 interface VirtualCardsResponse {
@@ -186,7 +189,7 @@ export default function VirtualCardManagement() {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
-              placeholder="Search by card number, user ID, or cardholder name..."
+              placeholder="Search by card number, name, email, phone, or user ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-10"
@@ -226,7 +229,7 @@ export default function VirtualCardManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>Card</TableHead>
-                <TableHead>Cardholder</TableHead>
+                <TableHead>Cardholder / User</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Balance</TableHead>
                 <TableHead>Purchase Date</TableHead>
@@ -242,7 +245,12 @@ export default function VirtualCardManagement() {
                   </TableCell>
                   <TableCell>
                     <p className="font-medium text-sm">{card.cardHolderName}</p>
-                    <p className="text-xs text-muted-foreground">{card.userId.slice(0, 8)}...</p>
+                    {card.userName && card.userName !== card.cardHolderName && (
+                      <p className="text-xs text-primary font-medium">{card.userName}</p>
+                    )}
+                    {card.userEmail && (
+                      <p className="text-xs text-muted-foreground truncate max-w-[160px]">{card.userEmail}</p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {getStatusBadge(card.status)}
@@ -442,8 +450,11 @@ export default function VirtualCardManagement() {
                 <div className="flex gap-2 items-start">
                   <User className="w-4 h-4 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-muted-foreground text-xs">User ID</p>
-                    <p className="font-mono text-xs">{viewDialogCard.userId}</p>
+                    <p className="text-muted-foreground text-xs">Account Owner</p>
+                    {viewDialogCard.userName && <p className="text-sm font-medium">{viewDialogCard.userName}</p>}
+                    {viewDialogCard.userEmail && <p className="text-xs text-muted-foreground">{viewDialogCard.userEmail}</p>}
+                    {viewDialogCard.userPhone && <p className="text-xs text-muted-foreground">{viewDialogCard.userPhone}</p>}
+                    <p className="font-mono text-xs text-muted-foreground mt-1">{viewDialogCard.userId}</p>
                   </div>
                 </div>
               </div>

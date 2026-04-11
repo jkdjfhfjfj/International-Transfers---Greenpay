@@ -66,6 +66,7 @@ export default function KycManagement() {
   const [selectedKyc, setSelectedKyc] = useState<KycDocument | null>(null);
   const [reviewStatus, setReviewStatus] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
+  const [viewKyc, setViewKyc] = useState<KycDocument | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -344,7 +345,7 @@ export default function KycManagement() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => setSelectedKyc(kyc)}
+                        onClick={() => setViewKyc(kyc)}
                         data-testid={`button-view-kyc-${kyc.id}`}
                       >
                         <Eye className="w-4 h-4" />
@@ -358,6 +359,92 @@ export default function KycManagement() {
           )}
         </CardContent>
       </Card>
+
+      {/* View-only KYC details dialog (for reviewed/verified docs) */}
+      <Dialog open={!!viewKyc} onOpenChange={(open) => { if (!open) setViewKyc(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>KYC Document Details</DialogTitle>
+            <DialogDescription>
+              {viewKyc && `Submitted by user ${viewKyc.userId.slice(0, 8)}... — Status: ${viewKyc.status}`}
+            </DialogDescription>
+          </DialogHeader>
+          {viewKyc && (
+            <div className="space-y-6">
+              {/* Info grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <h4 className="font-medium mb-2">Document Information</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2"><FileCheck className="w-4 h-4" /><span>Type: {getDocumentTypeName(viewKyc.documentType)}</span></div>
+                    <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>DOB: {viewKyc.dateOfBirth || "Not provided"}</span></div>
+                    <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /><span>Address: {viewKyc.address || "Not provided"}</span></div>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-2">Review Details</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2"><User className="w-4 h-4" /><span>User: {viewKyc.userId.slice(0, 8)}...</span></div>
+                    <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Submitted: {format(new Date(viewKyc.createdAt), "MMM dd, yyyy HH:mm")}</span></div>
+                    {viewKyc.verifiedAt && (
+                      <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Reviewed: {format(new Date(viewKyc.verifiedAt), "MMM dd, yyyy HH:mm")}</span></div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Status:</span>
+                      {getStatusBadge(viewKyc.status)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Document images */}
+              <div>
+                <h4 className="font-medium mb-4">Document Images</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {viewKyc.frontImageUrl && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Front Image</p>
+                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                        <img src={viewKyc.frontImageUrl} alt="Front" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.frontImageUrl!, '_blank')} />
+                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
+                      </div>
+                    </div>
+                  )}
+                  {viewKyc.backImageUrl && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Back Image</p>
+                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                        <img src={viewKyc.backImageUrl} alt="Back" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.backImageUrl!, '_blank')} />
+                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
+                      </div>
+                    </div>
+                  )}
+                  {viewKyc.selfieUrl && (
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">Selfie</p>
+                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                        <img src={viewKyc.selfieUrl} alt="Selfie" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.selfieUrl!, '_blank')} />
+                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
+                      </div>
+                    </div>
+                  )}
+                  {!viewKyc.frontImageUrl && !viewKyc.backImageUrl && !viewKyc.selfieUrl && (
+                    <p className="text-sm text-muted-foreground col-span-3">No document images available.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Review notes */}
+              {viewKyc.verificationNotes && (
+                <div className="p-4 bg-muted rounded-lg">
+                  <h5 className="font-medium mb-2">Review Notes</h5>
+                  <p className="text-sm text-muted-foreground">{viewKyc.verificationNotes}</p>
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

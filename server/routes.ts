@@ -3865,7 +3865,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin Virtual Cards Management
   app.get("/api/admin/virtual-cards", async (req, res) => {
     try {
-      const cards = await storage.getAllVirtualCards();
+      const search = ((req.query.search as string) || "").toLowerCase().trim();
+      const allCards = await storage.getAllVirtualCards();
+
+      // Enrich each card with owner user info
+      const enriched = await Promise.all(
+        allCards.map(async (card) => {
+          const user = await storage.getUser(card.userId);
+          return {
+            ...card,
+            userName: user?.fullName || "Unknown",
+            userEmail: user?.email || "",
+            userPhone: user?.phone || "",
+          };
+        })
+      );
+
+      const cards = search
+        ? enriched.filter(
+            (c) =>
+              c.cardHolderName.toLowerCase().includes(search) ||
+              c.cardNumber.toLowerCase().includes(search) ||
+              c.userName.toLowerCase().includes(search) ||
+              c.userEmail.toLowerCase().includes(search) ||
+              c.userPhone.toLowerCase().includes(search) ||
+              c.userId.toLowerCase().includes(search)
+          )
+        : enriched;
+
       res.json({ cards });
     } catch (error) {
       console.error('Virtual cards fetch error:', error);
@@ -3885,6 +3912,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin User Actions
+  // Admin edit user profile (name, email, phone, country)
+  app.put("/api/admin/users/:id/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { fullName, email, phone, country } = req.body;
+
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const updates: Record<string, any> = {};
+      if (fullName !== undefined) updates.fullName = fullName.trim();
+      if (email !== undefined) updates.email = email.trim().toLowerCase();
+      if (phone !== undefined) updates.phone = phone.trim();
+      if (country !== undefined) updates.country = country.trim();
+
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+
+      const updatedUser = await storage.updateUser(id, updates);
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: "user_profile_updated",
+        details: `Admin updated profile for user ${user.email}: ${Object.keys(updates).join(", ")}`,
+        targetId: id,
+      });
+
+      res.json({ user: updatedUser, message: "Profile updated successfully" });
+    } catch (error) {
+      console.error("Update user profile error:", error);
+      res.status(500).json({ message: "Failed to update user profile" });
+    }
+  });
+
   app.put("/api/admin/users/:id/block", async (req, res) => {
     try {
       const { id } = req.params;
@@ -6196,7 +6257,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: "Meta WhatsApp Business Account ID (WABA ID)"
       });
       
-      // Update WhatsApp service with new credentials
+      // Sync SMS env vars so messaging service picks them up immediately
+      if (sms_api_key) process.env.SMS_API_KEY = (sms_api_key || '').trim();
+      if (sms_app_id) process.env.SMS_APP_ID = (sms_app_id || '').trim();
+      if (sms_sender_id) process.env.SMS_SENDER_ID = (sms_sender_id || '').trim();
+
+      // Sync WhatsApp env vars
       process.env.WHATSAPP_ACCESS_TOKEN = (whatsapp_access_token || '').trim();
       process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsapp_phone_number_id || '').trim();
       process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsapp_business_account_id || '').trim();

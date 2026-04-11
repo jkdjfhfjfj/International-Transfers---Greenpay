@@ -1,4 +1,4 @@
-import axios from 'axios';
+import fetch from 'node-fetch';
 
 const FCM_API_URL = 'https://fcm.googleapis.com/v1/projects';
 
@@ -38,19 +38,21 @@ export class FCMService {
         process.env.FIREBASE_SERVICE_ACCOUNT || '{}'
       );
 
-      const response = await axios.post(
-        'https://oauth2.googleapis.com/token',
-        {
+      const response = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           client_id: serviceAccount.client_id,
           client_secret: serviceAccount.client_secret,
           refresh_token: serviceAccount.refresh_token,
           grant_type: 'refresh_token',
-        }
-      );
+        }),
+      });
 
-      this.accessToken = response.data.access_token;
-      this.tokenExpiry = Date.now() + (response.data.expires_in * 1000);
-      return this.accessToken;
+      const data = await response.json() as any;
+      this.accessToken = data.access_token;
+      this.tokenExpiry = Date.now() + (data.expires_in * 1000);
+      return this.accessToken!;
     } catch (error) {
       console.error('FCM token error:', error);
       throw new Error('Failed to get FCM access token');
@@ -78,18 +80,20 @@ export class FCMService {
         },
       };
 
-      const response = await axios.post(
+      const response = await fetch(
         `${FCM_API_URL}/${this.projectId}/messages:send`,
-        { message },
         {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ message }),
         }
       );
 
-      console.log('FCM sent successfully:', response.data.name);
+      const result = await response.json() as any;
+      console.log('FCM sent successfully:', result.name);
       return true;
     } catch (error) {
       console.error('FCM send error:', error);
@@ -118,18 +122,20 @@ export class FCMService {
         },
       };
 
-      const response = await axios.post(
+      const response = await fetch(
         `${FCM_API_URL}/${this.projectId}/messages:send`,
-        { message },
         {
+          method: 'POST',
           headers: {
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
+          body: JSON.stringify({ message }),
         }
       );
 
-      console.log('FCM topic sent successfully:', response.data.name);
+      const result = await response.json() as any;
+      console.log('FCM topic sent successfully:', result.name);
       return true;
     } catch (error) {
       console.error('FCM topic send error:', error);
@@ -148,7 +154,6 @@ export class FCMService {
       let successCount = 0;
       let failureCount = 0;
 
-      // FCM batch send (up to 500 tokens per request)
       for (let i = 0; i < tokens.length; i += 500) {
         const batch = tokens.slice(i, i + 500);
 
@@ -167,26 +172,25 @@ export class FCMService {
               },
             };
 
-            await axios.post(
+            await fetch(
               `${FCM_API_URL}/${this.projectId}/messages:send`,
-              { message },
               {
+                method: 'POST',
                 headers: {
                   Authorization: `Bearer ${accessToken}`,
                   'Content-Type': 'application/json',
                 },
+                body: JSON.stringify({ message }),
               }
             );
             successCount++;
-          } catch (error) {
+          } catch {
             failureCount++;
           }
         }
       }
 
-      console.log(
-        `FCM multicast: ${successCount} success, ${failureCount} failures`
-      );
+      console.log(`FCM multicast: ${successCount} success, ${failureCount} failures`);
       return { success: successCount, failure: failureCount };
     } catch (error) {
       console.error('FCM multicast error:', error);

@@ -65,6 +65,9 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   ChevronDown,
+  Pencil,
+  Save,
+  X,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -547,8 +550,31 @@ function UserDetailsDialog({ user }: { user: User }) {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [suspendReason, setSuspendReason] = useState("");
+
+  // Edit profile state
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName, setEditName] = useState(user.fullName);
+  const [editEmail, setEditEmail] = useState(user.email);
+  const [editPhone, setEditPhone] = useState(user.phone);
+  const [editCountry, setEditCountry] = useState(user.country);
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { fullName: string; email: string; phone: string; country: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/users/${user.id}/profile`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setEditingProfile(false);
+      toast({ title: "Profile Updated", description: "User profile saved successfully" });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to update user profile", variant: "destructive" });
+    },
+  });
 
   const { data: userTransactions, isLoading: txLoading } = useQuery({
     queryKey: ["/api/admin/users", user.id, "transactions"],
@@ -892,19 +918,83 @@ function UserDetailsDialog({ user }: { user: User }) {
         <TabsContent value="overview" className="space-y-4 mt-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2 bg-muted/40 p-3 rounded-xl">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Profile</p>
-              {[
-                { label: "Name", value: user.fullName },
-                { label: "Email", value: user.email },
-                { label: "Phone", value: user.phone },
-                { label: "Country", value: user.country },
-                { label: "Joined", value: format(new Date(user.createdAt), "MMM dd, yyyy") },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-[10px] text-muted-foreground">{label}</p>
-                  <p className="text-xs font-medium break-all">{value}</p>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Profile</p>
+                {!editingProfile ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 text-xs px-2"
+                    onClick={() => {
+                      setEditName(user.fullName);
+                      setEditEmail(user.email);
+                      setEditPhone(user.phone);
+                      setEditCountry(user.country);
+                      setEditingProfile(true);
+                    }}
+                  >
+                    <Pencil className="w-3 h-3 mr-1" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs px-2 text-green-600"
+                      disabled={updateProfileMutation.isPending}
+                      onClick={() => updateProfileMutation.mutate({ fullName: editName, email: editEmail, phone: editPhone, country: editCountry })}
+                    >
+                      <Save className="w-3 h-3 mr-1" /> Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs px-2"
+                      onClick={() => setEditingProfile(false)}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                )}
+              </div>
+              {editingProfile ? (
+                <div className="space-y-2">
+                  {[
+                    { label: "Name", value: editName, onChange: setEditName },
+                    { label: "Email", value: editEmail, onChange: setEditEmail },
+                    { label: "Phone", value: editPhone, onChange: setEditPhone },
+                    { label: "Country", value: editCountry, onChange: setEditCountry },
+                  ].map(({ label, value, onChange }) => (
+                    <div key={label}>
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                      <Input
+                        className="h-7 text-xs"
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                      />
+                    </div>
+                  ))}
+                  <div>
+                    <p className="text-[10px] text-muted-foreground">Joined</p>
+                    <p className="text-xs font-medium">{format(new Date(user.createdAt), "MMM dd, yyyy")}</p>
+                  </div>
                 </div>
-              ))}
+              ) : (
+                <>
+                  {[
+                    { label: "Name", value: user.fullName },
+                    { label: "Email", value: user.email },
+                    { label: "Phone", value: user.phone },
+                    { label: "Country", value: user.country },
+                    { label: "Joined", value: format(new Date(user.createdAt), "MMM dd, yyyy") },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <p className="text-[10px] text-muted-foreground">{label}</p>
+                      <p className="text-xs font-medium break-all">{value}</p>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
             <div className="space-y-2 bg-muted/40 p-3 rounded-xl">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
