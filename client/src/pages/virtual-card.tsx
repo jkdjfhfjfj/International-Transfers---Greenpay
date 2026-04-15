@@ -1,13 +1,14 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { SiVisa, SiMastercard } from "react-icons/si";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
@@ -18,6 +19,11 @@ export default function VirtualCardPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
+  const [selectedCardIdx, setSelectedCardIdx] = useState(0);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
+  const [transferAmount, setTransferAmount] = useState('');
+  const touchStartX = useRef<number | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -25,6 +31,10 @@ export default function VirtualCardPage() {
   const { data: cardData } = useQuery({
     queryKey: ["/api/virtual-card", user?.id],
     enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/virtual-card/${user?.id}`);
+      return res.json();
+    },
   });
 
   const { data: settingsData } = useQuery({
@@ -57,8 +67,9 @@ export default function VirtualCardPage() {
     },
   });
 
-  const card = (cardData as any)?.card;
-  const hasCard = (user?.hasVirtualCard || !!card) && !forceRepurchase;
+  const allCards: any[] = (cardData as any)?.cards || [];
+  const card = allCards[selectedCardIdx] || (cardData as any)?.card || null;
+  const hasCard = (user?.hasVirtualCard || allCards.length > 0) && !forceRepurchase;
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const discountEnabled = (discountData as any)?.enabled !== false;
@@ -70,6 +81,8 @@ export default function VirtualCardPage() {
   const isBlocked = card?.status === 'blocked';
   const isFrozen = card?.status === 'frozen';
   const isExpired = card?.status === 'expired';
+  const isActive = card?.status === 'active';
+  const userFrozen = isFrozen && card?.freezeReason === 'Frozen by cardholder';
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -78,40 +91,78 @@ export default function VirtualCardPage() {
     });
   };
 
+  const maskCardNumber = (number: string) => {
+    if (showCardDetails) return number.replace(/(.{4})/g, "$1 ").trim();
+    return `•••• •••• •••• ${number.slice(-4)}`;
+  };
+
   const purchaseCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", {
-        userId: user?.id,
-      });
+      const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", { userId: user?.id });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
-        toast({
-          title: "STK Push Sent!",
-          description: data.message || "Check your phone and enter your M-Pesa PIN to complete the payment.",
-        });
-        setTimeout(() => {
-          setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`);
-        }, 2000);
+        toast({ title: "STK Push Sent!", description: data.message || "Check your phone and enter your M-Pesa PIN." });
+        setTimeout(() => setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`), 2000);
       } else {
         throw new Error(data.message || "Unable to initialize M-Pesa payment");
       }
     },
     onError: (error: any) => {
-      toast({
-        title: "Purchase Failed",
-        description: error.message || "Unable to initiate card purchase. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Purchase Failed", description: error.message || "Unable to initiate card purchase.", variant: "destructive" });
     },
   });
 
-  const maskCardNumber = (number: string) => {
-    if (showCardDetails) {
-      return number.replace(/(.{4})/g, "$1 ").trim();
+  const freezeMutation = useMutation({
+    mutationFn: async (cardId: string) => {
+      const res = await apiRequest("POST", `/api/virtual-card/${cardId}/freeze`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Card Frozen", description: "Your card has been temporarily frozen." });
+      queryClient.invalidateQueries({ queryKey: ["/api/virtual-card", user?.id] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message || "Could not freeze card.", variant: "destructive" }),
+  });
+
+  const unfreezeMutation = useMutation({
+    mutationFn: async (cardId: string) => {
+      const res = await apiRequest("POST", `/api/virtual-card/${cardId}/unfreeze`, {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Card Unfrozen", description: "Your card is active again." });
+      queryClient.invalidateQueries({ queryKey: ["/api/virtual-card", user?.id] });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message || "Could not unfreeze card.", variant: "destructive" }),
+  });
+
+  const transferMutation = useMutation({
+    mutationFn: async ({ cardId, direction, amount }: { cardId: string; direction: string; amount: string }) => {
+      const res = await apiRequest("POST", "/api/virtual-card/transfer", { cardId, direction, amount });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Transfer Complete", description: data.message });
+      setTransferAmount('');
+      setTransferOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/virtual-card", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user"] });
+    },
+    onError: (e: any) => toast({ title: "Transfer Failed", description: e.message || "Could not complete transfer.", variant: "destructive" }),
+  });
+
+  // Swipe handlers
+  const handleTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && selectedCardIdx < allCards.length - 1) setSelectedCardIdx(selectedCardIdx + 1);
+      else if (diff < 0 && selectedCardIdx > 0) setSelectedCardIdx(selectedCardIdx - 1);
     }
-    return `•••• •••• •••• ${number.slice(-4)}`;
+    touchStartX.current = null;
   };
 
   // ─── PURCHASE SCREEN ────────────────────────────────────────────────────────
@@ -136,11 +187,7 @@ export default function VirtualCardPage() {
 
         <div className="p-6 space-y-6">
           {/* Card Preview */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-900 p-6 rounded-2xl text-white elevation-3 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16" />
               <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8" />
@@ -155,9 +202,7 @@ export default function VirtualCardPage() {
                     <div className="w-5 h-5 rounded-full bg-white/40" />
                   </div>
                 </div>
-                <p className="text-xl font-mono tracking-widest text-green-100 mb-6">
-                  •••• •••• •••• ••••
-                </p>
+                <p className="text-xl font-mono tracking-widest text-green-100 mb-6">•••• •••• •••• ••••</p>
                 <div className="flex justify-between items-end">
                   <div>
                     <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
@@ -176,11 +221,9 @@ export default function VirtualCardPage() {
             </div>
           </motion.div>
 
-          {/* Repurchase notice if coming from blocked card */}
+          {/* Repurchase notice */}
           {forceRepurchase && card?.blockReason && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl p-4"
             >
               <div className="flex items-start gap-3">
@@ -195,10 +238,7 @@ export default function VirtualCardPage() {
           )}
 
           {/* Purchase Info */}
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+          <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
             className="bg-card p-6 rounded-xl border border-border elevation-1"
           >
             <div className="text-center space-y-4">
@@ -207,30 +247,20 @@ export default function VirtualCardPage() {
               </div>
               <div>
                 <h2 className="text-xl font-semibold mb-2">Get Your Virtual Card</h2>
-                <p className="text-muted-foreground text-sm">
-                  Purchase a virtual card to unlock international transactions and online payments.
-                </p>
+                <p className="text-muted-foreground text-sm">Purchase a virtual card to unlock international transactions and online payments.</p>
               </div>
 
-              {/* Price row */}
               <div className="bg-muted p-4 rounded-lg">
                 <div className="flex items-center justify-between">
                   <span className="font-medium">Virtual Card</span>
                   <div className="flex items-center gap-2">
-                    {showDiscount && (
-                      <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
-                    )}
+                    {showDiscount && <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>}
                     <span className="text-xl font-bold text-green-600">${currentCardPrice}</span>
-                    {showDiscount && (
-                      <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
-                        {discountPct}% OFF
-                      </span>
-                    )}
+                    {showDiscount && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">{discountPct}% OFF</span>}
                   </div>
                 </div>
               </div>
 
-              {/* Card notes */}
               <div className="text-left space-y-2 py-1">
                 {[
                   "Works for international online payments & subscriptions",
@@ -244,60 +274,40 @@ export default function VirtualCardPage() {
                 ))}
               </div>
 
-              {/* Partner logos */}
               <div className="space-y-2 py-1">
                 <p className="text-xs text-muted-foreground text-center font-medium">Trusted partners in your country</p>
                 <div className="flex items-center justify-center gap-4">
-                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm">
-                    <SiVisa className="w-9 h-6 text-blue-600" />
-                  </div>
-                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm">
-                    <SiMastercard className="w-7 h-7 text-orange-500" />
-                  </div>
+                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm"><SiVisa className="w-9 h-6 text-blue-600" /></div>
+                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm"><SiMastercard className="w-7 h-7 text-orange-500" /></div>
                   <div className="flex items-center gap-1.5 bg-muted px-4 py-2 rounded-lg shadow-sm">
                     <span className="font-extrabold text-sm tracking-tight">
-                      <span className="text-[#4caf50]">M</span>
-                      <span className="text-[#e03a3e]">-Pesa</span>
+                      <span className="text-[#4caf50]">M</span><span className="text-[#e03a3e]">-Pesa</span>
                     </span>
                   </div>
                 </div>
               </div>
 
-              {/* Payment method tabs */}
               <div className="flex rounded-xl overflow-hidden border border-border">
-                <button
-                  onClick={() => setPaymentMethod('auto')}
+                <button onClick={() => setPaymentMethod('auto')}
                   className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
-                    paymentMethod === 'auto'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-background text-muted-foreground hover:bg-muted'
-                  }`}
-                  data-testid="button-payment-auto"
+                    paymentMethod === 'auto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`} data-testid="button-payment-auto"
                 >
                   M-Pesa (Auto)
-                  {paymentMethod !== 'auto' && (
-                    <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>
-                  )}
-                  {paymentMethod === 'auto' && (
-                    <span className="text-[10px] bg-white/20 text-primary-foreground px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>
-                  )}
+                  {paymentMethod !== 'auto' && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>}
+                  {paymentMethod === 'auto' && <span className="text-[10px] bg-white/20 text-primary-foreground px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>}
                 </button>
-                <button
-                  onClick={() => setPaymentMethod('manual')}
+                <button onClick={() => setPaymentMethod('manual')}
                   className={`flex-1 py-3 text-sm font-medium transition-colors ${
-                    paymentMethod === 'manual'
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-background text-muted-foreground hover:bg-muted'
-                  }`}
-                  data-testid="button-payment-manual"
+                    paymentMethod === 'manual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`} data-testid="button-payment-manual"
                 >
                   Manual Payment
                 </button>
               </div>
 
               {paymentMethod === 'auto' ? (
-                <Button
-                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
+                <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
                   onClick={() => purchaseCardMutation.mutate()}
                   disabled={purchaseCardMutation.isPending}
                   data-testid="button-purchase-card-auto"
@@ -318,16 +328,12 @@ export default function VirtualCardPage() {
                       { step: 6, text: "Enter your M-Pesa PIN and confirm" },
                     ].map(({ step, text }) => (
                       <div key={step} className="flex items-start gap-3 text-sm">
-                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">
-                          {step}
-                        </span>
+                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">{step}</span>
                         <span className="text-foreground">{text}</span>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-muted-foreground text-center">
-                    After payment, contact support with your M-Pesa reference number.
-                  </p>
+                  <p className="text-xs text-muted-foreground text-center">After payment, contact support with your M-Pesa reference number.</p>
                 </div>
               )}
             </div>
@@ -343,66 +349,115 @@ export default function VirtualCardPage() {
       <WavyHeader size="sm" />
 
       <div className="p-5 space-y-5">
-        {/* ── CARD VISUAL ──────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 30, rotateY: -8 }}
-          animate={{ opacity: 1, y: 0, rotateY: 0 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-        >
-          <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-900 p-6 rounded-2xl text-white elevation-3 relative overflow-hidden">
-            {/* Decorative circles */}
-            <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8 pointer-events-none" />
 
-            {/* Status badge */}
-            <div className="absolute top-4 left-4">
-              <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
-                !card ? 'bg-gray-500/80' :
-                card.status === 'active' ? 'bg-green-400/30 text-green-100 border border-green-300/40' :
-                card.status === 'frozen' ? 'bg-orange-400/30 text-orange-100 border border-orange-300/40' :
-                card.status === 'blocked' ? 'bg-red-500/40 text-red-100 border border-red-400/40' :
-                'bg-gray-500/30 text-gray-100 border border-gray-400/40'
-              }`}>
-                {!card ? '...' : card.status === 'active' ? '● Active' : card.status === 'frozen' ? '⏸ Frozen' : card.status === 'blocked' ? '⊘ Blocked' : 'Expired'}
-              </span>
-            </div>
+        {/* ── CARD SLIDER ──────────────────────────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
 
-            <div className="relative z-10 mt-2">
-              <div className="flex items-center justify-between mb-6">
-                <div className="pt-4">
-                  <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
-                  <p className="text-white/40 text-[10px]">Virtual Visa</p>
-                </div>
-                <div className="flex gap-1.5">
-                  <div className="w-8 h-5 rounded bg-white/25" />
-                  <div className="w-5 h-5 rounded-full bg-white/40" />
-                </div>
-              </div>
-
-              {/* Card Number */}
-              <p className="text-xl font-mono tracking-widest mb-6 text-green-50" data-testid="text-card-number">
-                {card ? maskCardNumber(card.cardNumber || "4567123456784567") : "•••• •••• •••• ••••"}
+          {/* Navigation header when multiple cards */}
+          {allCards.length > 1 && (
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm text-muted-foreground font-medium">
+                Card {selectedCardIdx + 1} of {allCards.length}
               </p>
-
-              {/* Bottom row */}
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
-                  <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
-                </div>
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Expires</p>
-                  <p className="text-sm font-semibold">{showCardDetails ? (card?.expiryDate || "12/27") : "••/••"}</p>
-                </div>
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">CVV</p>
-                  <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "•••") : "•••"}</p>
-                </div>
+              <div className="flex items-center gap-1">
+                {allCards.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setSelectedCardIdx(i); setShowCardDetails(false); }}
+                    className={`rounded-full transition-all ${i === selectedCardIdx ? 'bg-primary w-5 h-2' : 'bg-muted-foreground/30 w-2 h-2'}`}
+                  />
+                ))}
+              </div>
+              <div className="flex gap-1">
+                <button onClick={() => { if (selectedCardIdx > 0) { setSelectedCardIdx(selectedCardIdx - 1); setShowCardDetails(false); } }}
+                  disabled={selectedCardIdx === 0}
+                  className="p-1.5 rounded-full bg-card border border-border disabled:opacity-30 hover:bg-muted transition-colors"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+                <button onClick={() => { if (selectedCardIdx < allCards.length - 1) { setSelectedCardIdx(selectedCardIdx + 1); setShowCardDetails(false); } }}
+                  disabled={selectedCardIdx === allCards.length - 1}
+                  className="p-1.5 rounded-full bg-card border border-border disabled:opacity-30 hover:bg-muted transition-colors"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {/* See/Hide + Copy — OUTSIDE the card */}
+          {/* Card visual */}
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={selectedCardIdx}
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -30 }}
+              transition={{ duration: 0.25 }}
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              <div className={`p-6 rounded-2xl text-white elevation-3 relative overflow-hidden ${
+                isBlocked ? 'bg-gradient-to-br from-red-700 via-red-800 to-red-900' :
+                isFrozen ? 'bg-gradient-to-br from-blue-600 via-blue-700 to-blue-900' :
+                isExpired ? 'bg-gradient-to-br from-gray-500 via-gray-600 to-gray-800' :
+                'bg-gradient-to-br from-green-600 via-emerald-700 to-green-900'
+              }`}>
+                <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8 pointer-events-none" />
+
+                {/* Status badge */}
+                <div className="absolute top-4 left-4">
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${
+                    !card ? 'bg-gray-500/80' :
+                    isActive ? 'bg-green-400/30 text-green-100 border border-green-300/40' :
+                    isFrozen ? 'bg-blue-300/30 text-blue-100 border border-blue-200/40' :
+                    isBlocked ? 'bg-red-500/40 text-red-100 border border-red-400/40' :
+                    'bg-gray-500/30 text-gray-100 border border-gray-400/40'
+                  }`}>
+                    {!card ? '...' :
+                      isActive ? '● Active' :
+                      isFrozen ? '❄ Frozen' :
+                      isBlocked ? '⊘ Blocked' :
+                      'Expired'}
+                  </span>
+                </div>
+
+                <div className="relative z-10 mt-2">
+                  <div className="flex items-center justify-between mb-6">
+                    <div className="pt-4">
+                      <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
+                      <p className="text-white/40 text-[10px]">Virtual Visa</p>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <div className="w-8 h-5 rounded bg-white/25" />
+                      <div className="w-5 h-5 rounded-full bg-white/40" />
+                    </div>
+                  </div>
+
+                  <p className="text-xl font-mono tracking-widest mb-6 text-green-50" data-testid="text-card-number">
+                    {card ? maskCardNumber(card.cardNumber || "4567123456784567") : "•••• •••• •••• ••••"}
+                  </p>
+
+                  <div className="flex justify-between items-end">
+                    <div>
+                      <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
+                      <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Expires</p>
+                      <p className="text-sm font-semibold">{showCardDetails ? (card?.expiryDate || "12/27") : "••/••"}</p>
+                    </div>
+                    <div>
+                      <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">CVV</p>
+                      <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "•••") : "•••"}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Show/Hide + Copy row */}
           <div className="flex items-center justify-between mt-3 px-1">
             <motion.button
               whileTap={{ scale: 0.97 }}
@@ -425,31 +480,21 @@ export default function VirtualCardPage() {
                 className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
                 data-testid="button-copy-card-number"
               >
-                {copied === "number"
-                  ? <><Check className="w-4 h-4 text-green-500" /> Copied!</>
-                  : <><Copy className="w-4 h-4 text-muted-foreground" /> Copy Number</>
-                }
+                {copied === "number" ? <><Check className="w-4 h-4 text-green-500" /> Copied!</> : <><Copy className="w-4 h-4 text-muted-foreground" /> Copy Number</>}
               </motion.button>
             )}
           </div>
 
           {/* CVV + Expiry copy row */}
           {card && showCardDetails && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 mt-2 px-1"
-            >
+            <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-2 mt-2 px-1">
               <motion.button
                 whileTap={{ scale: 0.95 }}
                 onClick={() => copyToClipboard(card.cvv || "", "cvv")}
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-medium shadow-sm hover:bg-muted transition-colors"
                 data-testid="button-copy-cvv"
               >
-                {copied === "cvv"
-                  ? <><Check className="w-3 h-3 text-green-500" /> CVV Copied</>
-                  : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy CVV</>
-                }
+                {copied === "cvv" ? <><Check className="w-3 h-3 text-green-500" /> CVV Copied</> : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy CVV</>}
               </motion.button>
               <motion.button
                 whileTap={{ scale: 0.95 }}
@@ -457,50 +502,40 @@ export default function VirtualCardPage() {
                 className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-card border border-border text-xs font-medium shadow-sm hover:bg-muted transition-colors"
                 data-testid="button-copy-expiry"
               >
-                {copied === "expiry"
-                  ? <><Check className="w-3 h-3 text-green-500" /> Expiry Copied</>
-                  : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy Expiry</>
-                }
+                {copied === "expiry" ? <><Check className="w-3 h-3 text-green-500" /> Expiry Copied</> : <><Copy className="w-3 h-3 text-muted-foreground" /> Copy Expiry</>}
               </motion.button>
             </motion.div>
           )}
         </motion.div>
 
-        {/* ── BALANCE ────────────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-card rounded-2xl border border-border p-5 elevation-1"
+        {/* ── BALANCES ────────────────────────────────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+          className="grid grid-cols-2 gap-3"
         >
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Available Balance</p>
-              <p className="text-3xl font-bold text-primary" data-testid="text-card-balance">
-                ${formatNumber(realTimeBalance)}
-              </p>
-            </div>
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <span className="material-icons text-primary">account_balance_wallet</span>
-            </div>
+          <div className="bg-card rounded-2xl border border-border p-4 elevation-1">
+            <p className="text-xs text-muted-foreground mb-1">Wallet Balance</p>
+            <p className="text-2xl font-bold text-primary" data-testid="text-wallet-balance">${formatNumber(realTimeBalance)}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">USD</p>
+          </div>
+          <div className="bg-card rounded-2xl border border-border p-4 elevation-1">
+            <p className="text-xs text-muted-foreground mb-1">Card Balance</p>
+            <p className="text-2xl font-bold text-emerald-600" data-testid="text-card-balance">
+              ${formatNumber(parseFloat(card?.balance || '0'))}
+            </p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">USD</p>
           </div>
         </motion.div>
 
-        {/* ── BLOCKED CARD ALERT ──────────────────────────────────────────── */}
+        {/* ── STATUS ALERTS ────────────────────────────────────────────────── */}
         {card && isBlocked && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
             className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-2xl p-5"
           >
             <div className="flex items-start gap-3 mb-4">
               <ShieldOff className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
               <div className="flex-1">
                 <h3 className="font-semibold text-red-700 dark:text-red-400">Card Blocked</h3>
-                <p className="text-sm text-red-600 dark:text-red-300 mt-1">
-                  Your virtual card has been permanently blocked by an administrator.
-                </p>
+                <p className="text-sm text-red-600 dark:text-red-300 mt-1">Your virtual card has been permanently blocked by an administrator.</p>
                 {card.blockReason && (
                   <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/40 rounded-xl">
                     <p className="text-[10px] font-semibold text-red-700 dark:text-red-300 uppercase tracking-widest mb-1">Block Reason</p>
@@ -510,96 +545,62 @@ export default function VirtualCardPage() {
               </div>
             </div>
             <div className="flex gap-2 flex-wrap">
-              <Button
-                onClick={() => setForceRepurchase(true)}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-xl"
-                data-testid="button-buy-new-card"
-              >
-                <Sparkles className="w-4 h-4 mr-2" />
-                Buy New Card
+              <Button onClick={() => setForceRepurchase(true)} className="bg-green-600 hover:bg-green-700 text-white rounded-xl" data-testid="button-buy-new-card">
+                <Sparkles className="w-4 h-4 mr-2" /> Buy New Card
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setLocation('/support')}
-                className="rounded-xl"
-                data-testid="button-contact-support-blocked"
-              >
-                <span className="material-icons text-sm mr-1">support_agent</span>
-                Contact Support
+              <Button variant="outline" onClick={() => setLocation('/support')} className="rounded-xl" data-testid="button-contact-support-blocked">
+                <span className="material-icons text-sm mr-1">support_agent</span> Contact Support
               </Button>
             </div>
           </motion.div>
         )}
 
-        {/* ── FROZEN CARD ALERT ───────────────────────────────────────────── */}
         {card && isFrozen && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className="bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-2xl p-5"
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
+            className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-2xl p-5"
           >
             <div className="flex items-start gap-3 mb-4">
-              <span className="material-icons text-orange-500 mt-0.5">pause_circle_filled</span>
+              <Snowflake className="w-5 h-5 text-blue-500 mt-0.5" />
               <div>
-                <h3 className="font-semibold text-orange-700 dark:text-orange-400">Card Frozen</h3>
-                <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
-                  Your card has been temporarily frozen by an administrator.
+                <h3 className="font-semibold text-blue-700 dark:text-blue-400">Card Frozen</h3>
+                <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
+                  {userFrozen ? "You have temporarily frozen this card." : "This card has been frozen by an administrator."}
                 </p>
-                {card.freezeReason && (
-                  <div className="mt-3 p-3 bg-orange-100 dark:bg-orange-900/40 rounded-xl">
-                    <p className="text-[10px] font-semibold text-orange-700 dark:text-orange-300 uppercase tracking-widest mb-1">Reason</p>
-                    <p className="text-sm font-medium text-orange-800 dark:text-orange-200">{card.freezeReason}</p>
-                  </div>
-                )}
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setLocation('/support')}
-              className="rounded-xl border-orange-300 text-orange-600 hover:bg-orange-50"
-            >
-              <span className="material-icons text-sm mr-1">support_agent</span>
-              Contact Support
-            </Button>
+            {userFrozen && (
+              <Button
+                onClick={() => unfreezeMutation.mutate(card.id)}
+                disabled={unfreezeMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+              >
+                <Snowflake className="w-4 h-4 mr-2" />
+                {unfreezeMutation.isPending ? "Unfreezing..." : "Unfreeze Card"}
+              </Button>
+            )}
           </motion.div>
         )}
 
-        {/* ── EXPIRED CARD ALERT ──────────────────────────────────────────── */}
         {card && isExpired && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
             className="bg-muted border border-border rounded-2xl p-5"
           >
             <div className="flex items-start gap-3 mb-4">
               <span className="material-icons text-muted-foreground mt-0.5">schedule</span>
               <div>
                 <h3 className="font-semibold">Card Expired</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Your card has expired. Purchase a new card to continue transacting.
-                </p>
+                <p className="text-sm text-muted-foreground mt-1">Your card has expired. Purchase a new card to continue transacting.</p>
               </div>
             </div>
-            <Button
-              onClick={() => setForceRepurchase(true)}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl"
-              data-testid="button-buy-new-card-expired"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Buy New Card
+            <Button onClick={() => setForceRepurchase(true)} className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl" data-testid="button-buy-new-card-expired">
+              <Sparkles className="w-4 h-4 mr-2" /> Buy New Card
             </Button>
           </motion.div>
         )}
 
-        {/* ── QUICK ACTIONS (only when card is active) ─────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="grid grid-cols-3 gap-3"
+        {/* ── QUICK ACTIONS ─────────────────────────────────────────────── */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+          className="grid grid-cols-4 gap-2"
         >
           {[
             {
@@ -607,11 +608,9 @@ export default function VirtualCardPage() {
               label: "Top Up",
               sublabel: "Add funds",
               color: "text-primary",
+              disabled: !isActive,
               action: () => {
-                if (!card || card.status !== 'active') {
-                  toast({ title: "Card Unavailable", description: "Your card must be active to top up.", variant: "destructive" });
-                  return;
-                }
+                if (!isActive) { toast({ title: "Card Unavailable", description: "Your card must be active to top up.", variant: "destructive" }); return; }
                 setLocation("/deposit");
               },
             },
@@ -620,58 +619,150 @@ export default function VirtualCardPage() {
               label: "Withdraw",
               sublabel: "To bank",
               color: "text-secondary",
+              disabled: !isActive,
               action: () => {
-                if (!card || card.status !== 'active') {
-                  toast({ title: "Card Unavailable", description: "Your card must be active to withdraw.", variant: "destructive" });
-                  return;
-                }
+                if (!isActive) { toast({ title: "Card Unavailable", description: "Your card must be active to withdraw.", variant: "destructive" }); return; }
                 setLocation("/withdraw");
               },
             },
             {
-              icon: "lock",
-              label: "Freeze",
-              sublabel: "Temp. disable",
-              color: "text-orange-500",
+              icon: null,
+              iconComponent: <ArrowRightLeft className="w-6 h-6 mb-1" />,
+              label: "Transfer",
+              sublabel: "Card ↔ Wallet",
+              color: "text-purple-500",
+              disabled: !isActive,
+              action: () => {
+                if (!isActive) { toast({ title: "Card Unavailable", description: "Your card must be active to transfer.", variant: "destructive" }); return; }
+                setTransferOpen(!transferOpen);
+              },
+            },
+            {
+              icon: null,
+              iconComponent: isFrozen
+                ? <Snowflake className="w-6 h-6 mb-1 text-blue-400" />
+                : <Snowflake className="w-6 h-6 mb-1" />,
+              label: userFrozen ? "Unfreeze" : "Freeze",
+              sublabel: userFrozen ? "Reactivate" : "Temp. disable",
+              color: isFrozen ? "text-blue-400" : "text-orange-500",
+              disabled: isBlocked || isExpired || (isFrozen && !userFrozen),
               action: () => {
                 if (!card) return;
-                if (card.status !== 'active') {
-                  toast({ title: "Cannot Freeze", description: "Card is not active.", variant: "destructive" });
-                  return;
+                if (isBlocked) { toast({ title: "Card Blocked", description: "Blocked cards cannot be frozen.", variant: "destructive" }); return; }
+                if (isExpired) { toast({ title: "Card Expired", description: "Expired cards cannot be frozen.", variant: "destructive" }); return; }
+                if (isFrozen && !userFrozen) { toast({ title: "Admin Frozen", description: "This card was frozen by an admin. Contact support to unfreeze.", variant: "destructive" }); return; }
+                if (isFrozen && userFrozen) {
+                  unfreezeMutation.mutate(card.id);
+                } else {
+                  freezeMutation.mutate(card.id);
                 }
-                toast({ title: "Contact Support", description: "Please contact support to freeze your card." });
               },
             },
           ].map((item) => (
             <motion.button
               key={item.label}
-              whileHover={card?.status === 'active' ? { scale: 1.02 } : {}}
-              whileTap={card?.status === 'active' ? { scale: 0.97 } : {}}
+              whileHover={!item.disabled ? { scale: 1.02 } : {}}
+              whileTap={!item.disabled ? { scale: 0.97 } : {}}
               onClick={item.action}
-              className={`bg-card p-4 rounded-2xl border border-border text-center transition-colors elevation-1 ${
-                card?.status === 'active' ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              className={`bg-card p-3 rounded-2xl border border-border text-center transition-colors elevation-1 ${
+                !item.disabled ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
               }`}
               data-testid={`button-${item.label.toLowerCase().replace(' ', '-')}`}
             >
-              <span className={`material-icons text-2xl mb-1 block ${card?.status === 'active' ? item.color : 'text-muted-foreground'}`}>
-                {item.icon}
-              </span>
-              <p className="font-semibold text-sm">{item.label}</p>
-              <p className="text-[10px] text-muted-foreground">{item.sublabel}</p>
+              {item.iconComponent
+                ? <div className={`flex justify-center ${!item.disabled ? item.color : 'text-muted-foreground'}`}>{item.iconComponent}</div>
+                : <span className={`material-icons text-2xl mb-1 block ${!item.disabled ? item.color : 'text-muted-foreground'}`}>{item.icon}</span>
+              }
+              <p className="font-semibold text-xs">{item.label}</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">{item.sublabel}</p>
             </motion.button>
           ))}
         </motion.div>
 
+        {/* ── TRANSFER PANEL ────────────────────────────────────────────────── */}
+        <AnimatePresence>
+          {transferOpen && isActive && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="bg-card rounded-2xl border border-border p-5 elevation-1 space-y-4">
+                <div className="flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-purple-500" />
+                  <h3 className="font-semibold text-sm">Transfer Funds</h3>
+                </div>
+
+                {/* Direction toggle */}
+                <div className="flex rounded-xl overflow-hidden border border-border">
+                  <button
+                    onClick={() => setTransferDirection('wallet_to_card')}
+                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                      transferDirection === 'wallet_to_card' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    Wallet → Card
+                  </button>
+                  <button
+                    onClick={() => setTransferDirection('card_to_wallet')}
+                    className={`flex-1 py-2.5 text-sm font-medium transition-colors ${
+                      transferDirection === 'card_to_wallet' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                    }`}
+                  >
+                    Card → Wallet
+                  </button>
+                </div>
+
+                {/* Balances hint */}
+                <div className="flex justify-between text-xs text-muted-foreground px-1">
+                  <span>Wallet: <span className="text-foreground font-medium">${formatNumber(realTimeBalance)}</span></span>
+                  <span>Card: <span className="text-foreground font-medium">${formatNumber(parseFloat(card?.balance || '0'))}</span></span>
+                </div>
+
+                {/* Amount input */}
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">$</span>
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    className="pl-7 rounded-xl"
+                  />
+                </div>
+
+                <Button
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl"
+                  disabled={!transferAmount || parseFloat(transferAmount) <= 0 || transferMutation.isPending}
+                  onClick={() => {
+                    if (!card || !transferAmount) return;
+                    transferMutation.mutate({ cardId: card.id, direction: transferDirection, amount: transferAmount });
+                  }}
+                >
+                  {transferMutation.isPending ? "Transferring..." : `Transfer $${transferAmount || '0.00'}`}
+                </Button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── CARD INFO ─────────────────────────────────────────────────────── */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
           className="bg-card rounded-2xl border border-border elevation-1 overflow-hidden"
         >
-          <div className="p-4 border-b border-border flex items-center gap-2">
-            <span className="material-icons text-primary text-lg">info_outline</span>
-            <h3 className="font-semibold text-sm">Card Information</h3>
+          <div className="p-4 border-b border-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="material-icons text-primary text-lg">info_outline</span>
+              <h3 className="font-semibold text-sm">Card Information</h3>
+            </div>
+            {allCards.length > 1 && (
+              <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                {allCards.length} cards total
+              </span>
+            )}
           </div>
           <div className="p-4 space-y-3">
             {[
@@ -680,9 +771,9 @@ export default function VirtualCardPage() {
                 value: (
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                     !card ? 'bg-muted text-muted-foreground' :
-                    card.status === 'active' ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' :
-                    card.status === 'frozen' ? 'bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400' :
-                    card.status === 'blocked' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
+                    isActive ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400' :
+                    isFrozen ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400' :
+                    isBlocked ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400' :
                     'bg-muted text-muted-foreground'
                   }`}>
                     {!card ? 'Loading...' : card.status.charAt(0).toUpperCase() + card.status.slice(1)}
@@ -701,6 +792,20 @@ export default function VirtualCardPage() {
             ))}
           </div>
         </motion.div>
+
+        {/* ── BUY ANOTHER CARD ─────────────────────────────────────────────── */}
+        {isActive && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+            <button
+              onClick={() => setForceRepurchase(true)}
+              className="w-full text-sm text-muted-foreground hover:text-foreground transition-colors text-center py-2 flex items-center justify-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Get an additional card
+            </button>
+          </motion.div>
+        )}
+
       </div>
     </div>
   );

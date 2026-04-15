@@ -2473,15 +2473,132 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sessionUserId = (req as any).session?.userId;
       const requestedUserId = req.params.userId;
       
-      // Security: users can only view their own virtual card
+      // Security: users can only view their own virtual cards
       if (sessionUserId !== requestedUserId) {
         return res.status(403).json({ message: "Access denied" });
       }
       
-      const card = await storage.getVirtualCardByUserId(requestedUserId);
-      res.json({ card });
+      const cards = await storage.getVirtualCardsByUserId(requestedUserId);
+      // Also return the primary card (most recent active) for backward compat
+      const card = cards.find(c => c.status === 'active') || cards[0] || null;
+      res.json({ card, cards });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
+    }
+  });
+
+  // User freeze own card
+  app.post("/api/virtual-card/:cardId/freeze", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      const { cardId } = req.params;
+      
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== 'active') return res.status(400).json({ message: "Only active cards can be frozen" });
+      
+      const updated = await storage.updateVirtualCard(cardId, { status: 'frozen', freezeReason: 'Frozen by cardholder' });
+      res.json({ card: updated, message: "Card frozen successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error freezing card" });
+    }
+  });
+
+  // User unfreeze own card
+  app.post("/api/virtual-card/:cardId/unfreeze", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      const { cardId } = req.params;
+      
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== 'frozen') return res.status(400).json({ message: "Card is not frozen" });
+      // Only allow unfreeze if frozen by user (not admin)
+      if (card.freezeReason && card.freezeReason !== 'Frozen by cardholder') {
+        return res.status(403).json({ message: "This card was frozen by an admin and cannot be unfrozen by you" });
+      }
+      
+      const updated = await storage.updateVirtualCard(cardId, { status: 'active', freezeReason: null });
+      res.json({ card: updated, message: "Card unfrozen successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error unfreezing card" });
+    }
+  });
+
+  // Transfer between wallet and card
+  app.post("/api/virtual-card/transfer", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      const { cardId, direction, amount } = req.body; // direction: 'wallet_to_card' | 'card_to_wallet'
+      
+      if (!cardId || !direction || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "Invalid transfer parameters" });
+      }
+      
+      const transferAmount = parseFloat(amount);
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== 'active') return res.status(400).json({ message: "Card must be active to transfer funds" });
+      
+      const user = await storage.getUser(sessionUserId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      
+      const walletBalance = parseFloat(user.balance || '0');
+      const cardBalance = parseFloat(card.balance || '0');
+      
+      if (direction === 'wallet_to_card') {
+        if (walletBalance < transferAmount) {
+          return res.status(400).json({ message: "Insufficient wallet balance" });
+        }
+        const newWalletBalance = (walletBalance - transferAmount).toFixed(2);
+        const newCardBalance = (cardBalance + transferAmount).toFixed(2);
+        
+        await storage.updateUser(sessionUserId, { balance: newWalletBalance });
+        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        
+        await storage.createTransaction({
+          userId: sessionUserId,
+          type: 'card_transfer',
+          amount: amount.toString(),
+          currency: 'USD',
+          status: 'completed',
+          description: `Wallet to card transfer`,
+          completedAt: new Date(),
+          metadata: { direction: 'wallet_to_card', cardId }
+        });
+        
+        res.json({ message: "Funds transferred to card", walletBalance: newWalletBalance, cardBalance: newCardBalance });
+      } else if (direction === 'card_to_wallet') {
+        if (cardBalance < transferAmount) {
+          return res.status(400).json({ message: "Insufficient card balance" });
+        }
+        const newCardBalance = (cardBalance - transferAmount).toFixed(2);
+        const newWalletBalance = (walletBalance + transferAmount).toFixed(2);
+        
+        await storage.updateUser(sessionUserId, { balance: newWalletBalance });
+        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        
+        await storage.createTransaction({
+          userId: sessionUserId,
+          type: 'card_transfer',
+          amount: amount.toString(),
+          currency: 'USD',
+          status: 'completed',
+          description: `Card to wallet transfer`,
+          completedAt: new Date(),
+          metadata: { direction: 'card_to_wallet', cardId }
+        });
+        
+        res.json({ message: "Funds transferred to wallet", walletBalance: newWalletBalance, cardBalance: newCardBalance });
+      } else {
+        res.status(400).json({ message: "Invalid direction. Use 'wallet_to_card' or 'card_to_wallet'" });
+      }
+    } catch (error) {
+      console.error('Card transfer error:', error);
+      res.status(500).json({ message: "Error processing transfer" });
     }
   });
 
@@ -5276,7 +5393,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin reissue virtual card
-  app.post("/api/admin/virtual-cards/:id/reissue", requireAdminAuth, async (req, res) => {
+  app.post("/api/admin/virtual-cards/:id/reissue", async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -5292,8 +5409,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Deactivate old card
-      await storage.updateVirtualCard(id, { status: "inactive" });
+      // Block old card so user doesn't see it as active
+      await storage.updateVirtualCard(id, { status: "blocked", blockReason: "Replaced by reissued card" });
 
       // Create new card with same structure as original cards
       const newCardNumber = `4567${Math.random().toString().slice(2, 14)}`;

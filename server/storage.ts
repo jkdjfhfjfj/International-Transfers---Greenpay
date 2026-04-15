@@ -102,6 +102,7 @@ export interface IStorage {
   // Virtual Card operations
   createVirtualCard(card: InsertVirtualCard): Promise<VirtualCard>;
   getVirtualCardByUserId(userId: string): Promise<VirtualCard | undefined>;
+  getVirtualCardsByUserId(userId: string): Promise<VirtualCard[]>;
   getVirtualCardById(id: string): Promise<VirtualCard | undefined>;
   updateVirtualCard(id: string, updates: Partial<VirtualCard>): Promise<VirtualCard | undefined>;
 
@@ -603,7 +604,17 @@ export class MemStorage implements IStorage {
   }
 
   async getVirtualCardByUserId(userId: string): Promise<VirtualCard | undefined> {
-    return Array.from(this.virtualCards.values()).find(card => card.userId === userId);
+    // Return the most recent active card, otherwise the most recent card
+    const allCards = Array.from(this.virtualCards.values())
+      .filter(card => card.userId === userId)
+      .sort((a, b) => new Date(b.purchaseDate!).getTime() - new Date(a.purchaseDate!).getTime());
+    return allCards.find(c => c.status === 'active') || allCards[0];
+  }
+
+  async getVirtualCardsByUserId(userId: string): Promise<VirtualCard[]> {
+    return Array.from(this.virtualCards.values())
+      .filter(card => card.userId === userId)
+      .sort((a, b) => new Date(b.purchaseDate!).getTime() - new Date(a.purchaseDate!).getTime());
   }
 
   async getVirtualCardById(id: string): Promise<VirtualCard | undefined> {
@@ -1315,8 +1326,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getVirtualCardByUserId(userId: string): Promise<VirtualCard | undefined> {
-    const [card] = await db.select().from(virtualCards).where(eq(virtualCards.userId, userId));
-    return card || undefined;
+    // Return the most recent active card, otherwise the most recent card
+    const allCards = await db
+      .select()
+      .from(virtualCards)
+      .where(eq(virtualCards.userId, userId))
+      .orderBy(desc(virtualCards.purchaseDate));
+    return allCards.find(c => c.status === 'active') || allCards[0] || undefined;
+  }
+
+  async getVirtualCardsByUserId(userId: string): Promise<VirtualCard[]> {
+    return await db
+      .select()
+      .from(virtualCards)
+      .where(eq(virtualCards.userId, userId))
+      .orderBy(desc(virtualCards.purchaseDate));
   }
 
   async getVirtualCardById(id: string): Promise<VirtualCard | undefined> {

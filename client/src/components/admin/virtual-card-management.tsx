@@ -32,6 +32,10 @@ import {
   DollarSign,
   ShieldOff,
   EyeOff,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  List,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -65,6 +69,8 @@ export default function VirtualCardManagement() {
   const [selectedCard, setSelectedCard] = useState<VirtualCard | null>(null);
   const [viewDialogCard, setViewDialogCard] = useState<VirtualCard | null>(null);
   const [showCvv, setShowCvv] = useState(false);
+  const [groupByUser, setGroupByUser] = useState(false);
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
 
   const [freezeDialogCard, setFreezeDialogCard] = useState<VirtualCard | null>(null);
   const [freezeReason, setFreezeReason] = useState("");
@@ -84,7 +90,7 @@ export default function VirtualCardManagement() {
     },
   });
 
-  const cards: VirtualCard[] = (cardsData as any)?.cards || [];
+  const cards: VirtualCard[] = (cardsData as any)?.virtualCards || (cardsData as any)?.cards || [];
 
   const updateCardMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<VirtualCard> & { blockReason?: string | null } }) => {
@@ -169,10 +175,40 @@ export default function VirtualCardManagement() {
     );
   }
 
+  // Client-side filtering
+  const filteredCards = cards.filter((c) => {
+    if (!search.trim()) return true;
+    const q = search.toLowerCase();
+    return (
+      c.cardNumber?.toLowerCase().includes(q) ||
+      c.cardHolderName?.toLowerCase().includes(q) ||
+      c.userEmail?.toLowerCase().includes(q) ||
+      c.userName?.toLowerCase().includes(q) ||
+      c.userPhone?.toLowerCase().includes(q) ||
+      c.userId?.toLowerCase().includes(q) ||
+      c.status?.toLowerCase().includes(q)
+    );
+  });
+
   const activeCards = cards.filter((c) => c.status === "active").length;
   const frozenCards = cards.filter((c) => c.status === "frozen").length;
   const blockedCards = cards.filter((c) => c.status === "blocked").length;
-  const totalBalance = cards.reduce((sum, c) => sum + parseFloat(c.balance || "0"), 0);
+
+  // Group by user
+  const cardsByUser: Record<string, VirtualCard[]> = {};
+  filteredCards.forEach((c) => {
+    if (!cardsByUser[c.userId]) cardsByUser[c.userId] = [];
+    cardsByUser[c.userId].push(c);
+  });
+  const usersWithMultipleCards = Object.values(cardsByUser).filter((g) => g.length > 1).length;
+
+  const toggleUser = (userId: string) => {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev);
+      next.has(userId) ? next.delete(userId) : next.add(userId);
+      return next;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -185,7 +221,7 @@ export default function VirtualCardManagement() {
           </CardTitle>
           <CardDescription>Monitor and manage virtual cards across the platform</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <Input
@@ -195,6 +231,22 @@ export default function VirtualCardManagement() {
               className="pl-10"
               data-testid="input-card-search"
             />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={groupByUser ? "default" : "outline"}
+              size="sm"
+              onClick={() => setGroupByUser(!groupByUser)}
+              className="gap-2"
+            >
+              <Users className="w-4 h-4" />
+              {groupByUser ? "Flat List" : "Group by User"}
+            </Button>
+            {usersWithMultipleCards > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {usersWithMultipleCards} user{usersWithMultipleCards > 1 ? 's' : ''} with multiple cards
+              </span>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -219,10 +271,69 @@ export default function VirtualCardManagement() {
         ))}
       </div>
 
-      {/* Cards Table */}
-      <Card>
+      {/* Grouped by user view */}
+      {groupByUser && (
+        <div className="space-y-3">
+          {Object.entries(cardsByUser).map(([userId, userCards]) => {
+            const firstCard = userCards[0];
+            const isExpanded = expandedUsers.has(userId);
+            const hasMultiple = userCards.length > 1;
+            return (
+              <Card key={userId}>
+                <div
+                  className={`p-4 flex items-center justify-between ${hasMultiple ? 'cursor-pointer hover:bg-muted/50 transition-colors' : ''}`}
+                  onClick={() => hasMultiple && toggleUser(userId)}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="w-4 h-4 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{firstCard.userName || firstCard.cardHolderName}</p>
+                      <p className="text-xs text-muted-foreground">{firstCard.userEmail}</p>
+                    </div>
+                    <div className="flex gap-1 ml-2">
+                      {userCards.map((c) => getStatusBadge(c.status))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-muted-foreground">{userCards.length} card{userCards.length > 1 ? 's' : ''}</span>
+                    {hasMultiple && (isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />)}
+                  </div>
+                </div>
+                {(isExpanded || !hasMultiple) && (
+                  <CardContent className="pt-0 pb-4 px-4">
+                    <div className="space-y-2">
+                      {userCards.map((c) => (
+                        <div key={c.id} className="flex items-center justify-between p-3 bg-muted rounded-xl">
+                          <div>
+                            <p className="font-mono text-sm font-medium">{maskCardNumber(c.cardNumber)}</p>
+                            <p className="text-xs text-muted-foreground">Exp: {c.expiryDate} · Balance: ${parseFloat(c.balance).toFixed(2)}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(c.status)}
+                            <Button variant="ghost" size="sm" onClick={() => { setViewDialogCard(c); setShowCvv(false); }}>
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                )}
+              </Card>
+            );
+          })}
+          {Object.keys(cardsByUser).length === 0 && (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">No virtual cards found</CardContent></Card>
+          )}
+        </div>
+      )}
+
+      {/* Flat Cards Table */}
+      {!groupByUser && <Card>
         <CardHeader>
-          <CardTitle>Virtual Cards ({cards.length})</CardTitle>
+          <CardTitle>Virtual Cards ({filteredCards.length}{search ? ` of ${cards.length}` : ''})</CardTitle>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <Table>
@@ -237,7 +348,7 @@ export default function VirtualCardManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {cards.map((card) => (
+              {filteredCards.map((card) => (
                 <TableRow key={card.id}>
                   <TableCell>
                     <p className="font-mono text-sm font-medium">{maskCardNumber(card.cardNumber)}</p>
@@ -358,7 +469,7 @@ export default function VirtualCardManagement() {
                   </TableCell>
                 </TableRow>
               ))}
-              {cards.length === 0 && (
+              {filteredCards.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No virtual cards found
@@ -368,7 +479,7 @@ export default function VirtualCardManagement() {
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* View Card Dialog */}
       <Dialog open={!!viewDialogCard} onOpenChange={(open) => { if (!open) { setViewDialogCard(null); setShowCvv(false); } }}>
