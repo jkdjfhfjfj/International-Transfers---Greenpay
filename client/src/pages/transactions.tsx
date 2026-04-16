@@ -5,7 +5,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { generateTransactionPDF } from "@/lib/pdf-export";
-import { Download, Mail, Filter, X, ChevronRight, Copy, Calendar, User, Tag, DollarSign, RefreshCw } from "lucide-react";
+import { Download, Mail, Filter, X, ChevronRight, Copy, Calendar, User, Tag, DollarSign, RefreshCw, AlertTriangle, ShieldAlert } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +31,9 @@ export default function TransactionsPage() {
   const [exportEmail, setExportEmail] = useState("");
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilters>({});
   const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [showDisputeForm, setShowDisputeForm] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("unauthorized");
+  const [disputeDescription, setDisputeDescription] = useState("");
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -122,6 +125,23 @@ export default function TransactionsPage() {
         description: "Failed to send export email",
         variant: "destructive",
       });
+    },
+  });
+
+  const disputeMutation = useMutation({
+    mutationFn: async ({ transactionId, reason, description }: { transactionId: string; reason: string; description: string }) => {
+      const res = await apiRequest("POST", "/api/disputes", { transactionId, reason, description });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Dispute Filed", description: "Your dispute has been submitted. Our team will review it within 24–48 hours." });
+      setShowDisputeForm(false);
+      setDisputeReason("unauthorized");
+      setDisputeDescription("");
+    },
+    onError: (err: any) => {
+      const msg = err?.message || "Failed to submit dispute";
+      toast({ title: "Error", description: msg, variant: "destructive" });
     },
   });
 
@@ -788,6 +808,67 @@ export default function TransactionsPage() {
                 Close
               </button>
             </div>
+
+            {/* Dispute button */}
+            {selectedTransaction.status === 'completed' && (
+              <div className="pt-2">
+                {!showDisputeForm ? (
+                  <button
+                    onClick={() => setShowDisputeForm(true)}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-orange-300 dark:border-orange-700 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-950/30 transition-colors text-sm font-medium"
+                  >
+                    <AlertTriangle className="h-4 w-4" />
+                    Flag as Unauthorized / Dispute
+                  </button>
+                ) : (
+                  <div className="bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-800 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <ShieldAlert className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                      <p className="font-semibold text-sm text-orange-700 dark:text-orange-300">File a Dispute</p>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Reason</label>
+                      <select
+                        value={disputeReason}
+                        onChange={(e) => setDisputeReason(e.target.value)}
+                        className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background"
+                      >
+                        <option value="unauthorized">Unauthorized transaction</option>
+                        <option value="duplicate">Duplicate charge</option>
+                        <option value="wrong_amount">Wrong amount charged</option>
+                        <option value="fraud">Fraud / Suspicious activity</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Additional details (optional)</label>
+                      <textarea
+                        value={disputeDescription}
+                        onChange={(e) => setDisputeDescription(e.target.value)}
+                        placeholder="Describe the issue..."
+                        rows={3}
+                        className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-background resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => disputeMutation.mutate({ transactionId: selectedTransaction.id, reason: disputeReason, description: disputeDescription })}
+                        disabled={disputeMutation.isPending}
+                        className="flex-1 py-2 rounded-lg bg-orange-600 text-white text-sm font-medium hover:bg-orange-700 transition-colors disabled:opacity-50"
+                      >
+                        {disputeMutation.isPending ? "Submitting..." : "Submit Dispute"}
+                      </button>
+                      <button
+                        onClick={() => setShowDisputeForm(false)}
+                        className="px-4 py-2 rounded-lg border border-border text-sm hover:bg-muted transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </motion.div>
         </motion.div>
       )}

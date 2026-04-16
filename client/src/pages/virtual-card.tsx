@@ -18,7 +18,7 @@ export default function VirtualCardPage() {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual' | 'crypto'>('auto');
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
@@ -289,20 +289,27 @@ export default function VirtualCardPage() {
 
               <div className="flex rounded-xl overflow-hidden border border-border">
                 <button onClick={() => setPaymentMethod('auto')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
                     paymentMethod === 'auto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
                   }`} data-testid="button-payment-auto"
                 >
-                  M-Pesa (Auto)
-                  {paymentMethod !== 'auto' && <span className="text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>}
-                  {paymentMethod === 'auto' && <span className="text-[10px] bg-white/20 text-primary-foreground px-1.5 py-0.5 rounded-full font-semibold">Recommended</span>}
+                  M-Pesa
+                  {paymentMethod === 'auto' && <span className="text-[9px] bg-white/20 text-primary-foreground px-1 py-0.5 rounded-full">Auto</span>}
                 </button>
                 <button onClick={() => setPaymentMethod('manual')}
-                  className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                  className={`flex-1 py-3 text-xs font-medium transition-colors ${
                     paymentMethod === 'manual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
                   }`} data-testid="button-payment-manual"
                 >
-                  Manual Payment
+                  Manual
+                </button>
+                <button onClick={() => setPaymentMethod('crypto')}
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                    paymentMethod === 'crypto' ? 'bg-orange-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`} data-testid="button-payment-crypto"
+                >
+                  Crypto
+                  {paymentMethod === 'crypto' && <span className="text-[9px] text-orange-100">₿ ETH USDT</span>}
                 </button>
               </div>
 
@@ -315,7 +322,7 @@ export default function VirtualCardPage() {
                   <Sparkles className="w-4 h-4 mr-2" />
                   {purchaseCardMutation.isPending ? "Processing..." : `Pay via M-Pesa · $${currentCardPrice}`}
                 </Button>
-              ) : (
+              ) : paymentMethod === 'manual' ? (
                 <div className="space-y-3 text-left">
                   <div className="bg-muted p-4 rounded-xl space-y-2">
                     <p className="text-sm font-semibold mb-3">How to pay via Paybill</p>
@@ -334,6 +341,36 @@ export default function VirtualCardPage() {
                     ))}
                   </div>
                   <p className="text-xs text-muted-foreground text-center">After payment, contact support with your M-Pesa reference number.</p>
+                </div>
+              ) : (
+                <div className="space-y-3 text-left">
+                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-4 rounded-xl space-y-3">
+                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">Pay with Crypto</p>
+                    <p className="text-xs text-orange-700 dark:text-orange-300">Purchase your virtual card using Bitcoin, Ethereum, or stablecoins. Your card will be activated after payment confirmation.</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { coin: "BTC", label: "Bitcoin", icon: "₿", eq: `${(parseFloat(currentCardPrice) / 65000).toFixed(6)} BTC` },
+                        { coin: "ETH", label: "Ethereum", icon: "Ξ", eq: `${(parseFloat(currentCardPrice) / 3200).toFixed(5)} ETH` },
+                        { coin: "USDT", label: "Tether", icon: "₮", eq: `${currentCardPrice} USDT` },
+                        { coin: "USDC", label: "USD Coin", icon: "◎", eq: `${currentCardPrice} USDC` },
+                      ].map(c => (
+                        <div key={c.coin} className="bg-white dark:bg-orange-900/30 rounded-xl p-3 text-center border border-orange-200 dark:border-orange-700">
+                          <p className="text-xl font-bold text-orange-600">{c.icon}</p>
+                          <p className="text-xs font-semibold">{c.label}</p>
+                          <p className="text-[10px] text-muted-foreground">{c.eq}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <Button
+                    className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-6"
+                    onClick={() => setLocation('/crypto')}
+                    data-testid="button-goto-crypto"
+                  >
+                    <span className="mr-2">₿</span>
+                    Go to Crypto Wallet · ${currentCardPrice}
+                  </Button>
+                  <p className="text-xs text-muted-foreground text-center">You'll be taken to your crypto wallet to complete the purchase.</p>
                 </div>
               )}
             </div>
@@ -535,7 +572,7 @@ export default function VirtualCardPage() {
               <ShieldOff className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
               <div className="flex-1">
                 <h3 className="font-semibold text-red-700 dark:text-red-400">Card Blocked</h3>
-                <p className="text-sm text-red-600 dark:text-red-300 mt-1">Your virtual card has been permanently blocked by an administrator.</p>
+                <p className="text-sm text-red-600 dark:text-red-300 mt-1">Your virtual card has been permanently blocked by the system.</p>
                 {card.blockReason && (
                   <div className="mt-3 p-3 bg-red-100 dark:bg-red-900/40 rounded-xl">
                     <p className="text-[10px] font-semibold text-red-700 dark:text-red-300 uppercase tracking-widest mb-1">Block Reason</p>
@@ -564,7 +601,7 @@ export default function VirtualCardPage() {
               <div>
                 <h3 className="font-semibold text-blue-700 dark:text-blue-400">Card Frozen</h3>
                 <p className="text-sm text-blue-600 dark:text-blue-300 mt-1">
-                  {userFrozen ? "You have temporarily frozen this card." : "This card has been frozen by an administrator."}
+                  {userFrozen ? "You have temporarily frozen this card." : "This card has been frozen by the system."}
                 </p>
               </div>
             </div>
@@ -650,7 +687,7 @@ export default function VirtualCardPage() {
                 if (!card) return;
                 if (isBlocked) { toast({ title: "Card Blocked", description: "Blocked cards cannot be frozen.", variant: "destructive" }); return; }
                 if (isExpired) { toast({ title: "Card Expired", description: "Expired cards cannot be frozen.", variant: "destructive" }); return; }
-                if (isFrozen && !userFrozen) { toast({ title: "Admin Frozen", description: "This card was frozen by an admin. Contact support to unfreeze.", variant: "destructive" }); return; }
+                if (isFrozen && !userFrozen) { toast({ title: "Card Frozen", description: "This card was frozen by the system. Contact support to unfreeze.", variant: "destructive" }); return; }
                 if (isFrozen && userFrozen) {
                   unfreezeMutation.mutate(card.id);
                 } else {

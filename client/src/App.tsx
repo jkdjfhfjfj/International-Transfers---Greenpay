@@ -80,6 +80,10 @@ import LoansPage from "@/pages/loans";
 import APIServicePage from "@/pages/api-service";
 import ApiDocumentationPage from "@/pages/api-documentation";
 import UserSupportTickets from "@/pages/user-support-tickets";
+import CryptoPage from "@/pages/crypto";
+import AnalyticsPage from "@/pages/analytics";
+import AdminDisputesPage from "@/pages/admin-disputes";
+import AdminCryptoPage from "@/pages/admin-crypto";
 import { useFCM } from "@/hooks/use-fcm";
 
 // User Route Guard Component
@@ -157,6 +161,12 @@ function Router() {
       <Route path="/loans" component={LoansPage} />
       <Route path="/api-service" component={APIServicePage} />
       <Route path="/api-documentation" component={ApiDocumentationPage} />
+      <Route path="/crypto">
+        <ProtectedRoute component={CryptoPage} />
+      </Route>
+      <Route path="/analytics">
+        <ProtectedRoute component={AnalyticsPage} />
+      </Route>
       {/* Admin routes — auth handled inside each page via AdminShell */}
       <Route path="/admin-login" component={AdminLogin} />
       <Route path="/admin/login" component={AdminLogin} />
@@ -184,6 +194,8 @@ function Router() {
       <Route path="/admin/messaging" component={AdminMessagingSMSPage} />
       <Route path="/admin/announcements" component={AdminAnnouncementsDBPage} />
       <Route path="/admin/profile" component={AdminProfilePage} />
+      <Route path="/admin/disputes" component={AdminDisputesPage} />
+      <Route path="/admin/crypto" component={AdminCryptoPage} />
       <Route component={NotFound} />
     </Switch>
   );

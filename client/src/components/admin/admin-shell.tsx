@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, FileCheck, DollarSign, Banknote, CreditCard,
   Bell, Mail, MessageCircle, Headphones, FileText, Activity, Smartphone,
   Settings, MessageSquare, History, Database, BarChart3, LogOut, Menu, X,
-  Shield, ChevronRight, User, Megaphone
+  Shield, ChevronRight, User, Megaphone, Bitcoin, AlertTriangle
 } from "lucide-react";
 
 interface AdminUser {
@@ -44,6 +44,8 @@ const navSections = [
       { href: "/admin/withdrawals", label: "Withdrawals", icon: Banknote },
       { href: "/admin/cards", label: "Virtual Cards", icon: CreditCard },
       { href: "/admin/pricing", label: "Card Pricing", icon: CreditCard },
+      { href: "/admin/crypto", label: "Crypto", icon: Bitcoin },
+      { href: "/admin/disputes", label: "Disputes", icon: AlertTriangle },
     ],
   },
   {

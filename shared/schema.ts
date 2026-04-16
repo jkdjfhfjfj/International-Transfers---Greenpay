@@ -714,6 +714,55 @@ export type TicketReply = typeof ticketReplies.$inferSelect;
 export const insertTicketReplySchema = createInsertSchema(ticketReplies).omit({ id: true, createdAt: true });
 export type InsertTicketReply = z.infer<typeof insertTicketReplySchema>;
 
+// Transaction Disputes table - users flag unauthorized transactions
+export const transactionDisputes = pgTable("transaction_disputes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+  reason: text("reason").notNull(), // unauthorized, duplicate, wrong_amount, fraud, other
+  description: text("description"),
+  status: text("status").default("open"), // open, under_review, resolved, rejected
+  adminNotes: text("admin_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Crypto wallets table - user crypto deposit addresses
+export const cryptoWallets = pgTable("crypto_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(), // bitcoin, ethereum, tron (for USDT TRC-20)
+  address: text("address").notNull(),
+  balance: decimal("balance", { precision: 18, scale: 8 }).default("0.00000000"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Crypto transactions table - deposits, withdrawals, card purchases via crypto
+export const cryptoTransactions = pgTable("crypto_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // deposit, withdrawal, card_purchase
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(),
+  amount: decimal("amount", { precision: 18, scale: 8 }).notNull(), // crypto amount
+  usdValue: decimal("usd_value", { precision: 10, scale: 2 }).notNull(), // equivalent USD
+  txHash: text("tx_hash"), // blockchain transaction hash
+  fromAddress: text("from_address"),
+  toAddress: text("to_address"),
+  status: text("status").default("pending"), // pending, confirming, completed, failed
+  confirmations: integer("confirmations").default(0),
+  requiredConfirmations: integer("required_confirmations").default(3),
+  fee: decimal("fee", { precision: 18, scale: 8 }).default("0.00000000"),
+  adminNotes: text("admin_notes"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const aiUsage = pgTable("ai_usage", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id"), // Can be null for guest users tracked by IP
@@ -727,3 +776,15 @@ export const aiUsage = pgTable("ai_usage", {
 export const insertAiUsageSchema = createInsertSchema(aiUsage).omit({ id: true, createdAt: true, updatedAt: true });
 export type AiUsage = typeof aiUsage.$inferSelect;
 export type InsertAiUsage = z.infer<typeof insertAiUsageSchema>;
+
+export const insertTransactionDisputeSchema = createInsertSchema(transactionDisputes).omit({ id: true, createdAt: true, updatedAt: true, resolvedAt: true, status: true, adminNotes: true });
+export type TransactionDispute = typeof transactionDisputes.$inferSelect;
+export type InsertTransactionDispute = z.infer<typeof insertTransactionDisputeSchema>;
+
+export const insertCryptoWalletSchema = createInsertSchema(cryptoWallets).omit({ id: true, createdAt: true, updatedAt: true, balance: true });
+export type CryptoWallet = typeof cryptoWallets.$inferSelect;
+export type InsertCryptoWallet = z.infer<typeof insertCryptoWalletSchema>;
+
+export const insertCryptoTransactionSchema = createInsertSchema(cryptoTransactions).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type CryptoTransaction = typeof cryptoTransactions.$inferSelect;
+export type InsertCryptoTransaction = z.infer<typeof insertCryptoTransactionSchema>;

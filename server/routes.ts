@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions } from "@shared/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -9954,6 +9954,493 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     } catch (error) {
       console.error('Targeted notification error:', error);
       res.status(500).json({ message: "Failed to send notifications" });
+    }
+  });
+
+  // ============================================================
+  // TRANSACTION DISPUTES
+  // ============================================================
+
+  app.post("/api/disputes", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { transactionId, reason, description } = req.body;
+      if (!transactionId || !reason) return res.status(400).json({ message: "transactionId and reason required" });
+
+      // Check transaction belongs to user
+      const [txn] = await db.select().from(transactions).where(eq(transactions.id, transactionId));
+      if (!txn || txn.userId !== userId) return res.status(404).json({ message: "Transaction not found" });
+
+      // Check no existing open dispute
+      const existing = await db.select().from(transactionDisputes)
+        .where(eq(transactionDisputes.transactionId, transactionId));
+      if (existing.some((d: any) => d.status === 'open' || d.status === 'under_review')) {
+        return res.status(409).json({ message: "An open dispute already exists for this transaction" });
+      }
+
+      const [dispute] = await db.insert(transactionDisputes).values({
+        userId,
+        transactionId,
+        reason,
+        description: description || null,
+      }).returning();
+
+      res.json({ dispute, message: "Dispute submitted successfully" });
+    } catch (error) {
+      console.error("Error creating dispute:", error);
+      res.status(500).json({ message: "Failed to submit dispute" });
+    }
+  });
+
+  app.get("/api/disputes", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const disputes = await db.select().from(transactionDisputes)
+        .where(eq(transactionDisputes.userId, userId))
+        .orderBy(desc(transactionDisputes.createdAt));
+      res.json({ disputes });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+
+  // Admin: get all disputes
+  app.get("/api/admin/disputes", requireAdminAuth, async (req, res) => {
+    try {
+      const disputes = await db.select({
+        id: transactionDisputes.id,
+        userId: transactionDisputes.userId,
+        transactionId: transactionDisputes.transactionId,
+        reason: transactionDisputes.reason,
+        description: transactionDisputes.description,
+        status: transactionDisputes.status,
+        adminNotes: transactionDisputes.adminNotes,
+        resolvedAt: transactionDisputes.resolvedAt,
+        createdAt: transactionDisputes.createdAt,
+        userFullName: users.fullName,
+        userEmail: users.email,
+      }).from(transactionDisputes)
+        .leftJoin(users, eq(transactionDisputes.userId, users.id))
+        .orderBy(desc(transactionDisputes.createdAt));
+      res.json({ disputes });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+
+  app.patch("/api/admin/disputes/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const updateData: any = { updatedAt: new Date() };
+      if (status) updateData.status = status;
+      if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+      if (status === 'resolved' || status === 'rejected') updateData.resolvedAt = new Date();
+
+      const [updated] = await db.update(transactionDisputes)
+        .set(updateData)
+        .where(eq(transactionDisputes.id, req.params.id))
+        .returning();
+
+      res.json({ dispute: updated });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update dispute" });
+    }
+  });
+
+  // ============================================================
+  // CRYPTO INFRASTRUCTURE
+  // ============================================================
+
+  // Simulated crypto rates (USD per 1 unit)
+  const CRYPTO_RATES: Record<string, number> = {
+    BTC: 65000,
+    ETH: 3200,
+    USDT: 1.00,
+    USDC: 1.00,
+  };
+
+  const CRYPTO_NETWORKS: Record<string, string> = {
+    BTC: "bitcoin",
+    ETH: "ethereum",
+    USDT: "tron",
+    USDC: "ethereum",
+  };
+
+  function generateCryptoAddress(coin: string): string {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const rand = () => chars[Math.floor(Math.random() * chars.length)];
+    if (coin === "BTC") return "1" + Array.from({ length: 33 }, rand).join("");
+    if (coin === "ETH" || coin === "USDC") return "0x" + Array.from({ length: 40 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+    if (coin === "USDT") return "T" + Array.from({ length: 33 }, rand).join("");
+    return Array.from({ length: 34 }, rand).join("");
+  }
+
+  // GET user's crypto wallets
+  app.get("/api/crypto/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const wallets = await db.select().from(cryptoWallets)
+        .where(eq(cryptoWallets.userId, userId));
+
+      // Auto-create wallets for all supported coins if missing
+      const supported = ["BTC", "ETH", "USDT", "USDC"];
+      const existing = wallets.map((w: any) => w.coin);
+      const toCreate = supported.filter(c => !existing.includes(c));
+
+      const newWallets = [];
+      for (const coin of toCreate) {
+        const [w] = await db.insert(cryptoWallets).values({
+          userId,
+          coin,
+          network: CRYPTO_NETWORKS[coin],
+          address: generateCryptoAddress(coin),
+        }).returning();
+        newWallets.push(w);
+      }
+
+      const allWallets = [...wallets, ...newWallets].map((w: any) => ({
+        ...w,
+        usdRate: CRYPTO_RATES[w.coin] || 1,
+        usdBalance: (parseFloat(w.balance || "0") * (CRYPTO_RATES[w.coin] || 1)).toFixed(2),
+      }));
+
+      res.json({ wallets: allWallets, rates: CRYPTO_RATES });
+    } catch (error) {
+      console.error("Crypto wallets error:", error);
+      res.status(500).json({ message: "Failed to fetch crypto wallets" });
+    }
+  });
+
+  // POST initiate crypto deposit
+  app.post("/api/crypto/deposit", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { coin, amount } = req.body;
+      if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
+
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+
+      const cryptoAmount = parseFloat(amount);
+      const usdValue = cryptoAmount * rate;
+
+      // Get or create wallet
+      let [wallet] = await db.select().from(cryptoWallets)
+        .where(eq(cryptoWallets.userId, userId));
+
+      // Find coin-specific wallet
+      const coinWallet = (await db.select().from(cryptoWallets)
+        .where(eq(cryptoWallets.userId, userId)))
+        .find((w: any) => w.coin === coin);
+
+      const toAddress = coinWallet?.address || generateCryptoAddress(coin);
+
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "deposit",
+        coin,
+        network: CRYPTO_NETWORKS[coin] || "unknown",
+        amount: cryptoAmount.toFixed(8),
+        usdValue: usdValue.toFixed(2),
+        toAddress,
+        status: "pending",
+        confirmations: 0,
+        requiredConfirmations: coin === "BTC" ? 3 : coin === "ETH" || coin === "USDC" ? 12 : 20,
+      }).returning();
+
+      res.json({ 
+        cryptoTransaction: cryptoTx,
+        depositAddress: toAddress,
+        message: `Send exactly ${cryptoAmount} ${coin} to the address below. Your wallet will be credited after ${cryptoTx.requiredConfirmations} confirmations.`
+      });
+    } catch (error) {
+      console.error("Crypto deposit error:", error);
+      res.status(500).json({ message: "Failed to initiate deposit" });
+    }
+  });
+
+  // POST crypto withdrawal
+  app.post("/api/crypto/withdraw", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { coin, amount, toAddress } = req.body;
+      if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
+
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+
+      const cryptoAmount = parseFloat(amount);
+      const usdValue = cryptoAmount * rate;
+
+      // Check user USD balance
+      const [userRow] = await db.select().from(users).where(eq(users.id, userId));
+      if (!userRow) return res.status(404).json({ message: "User not found" });
+      if (parseFloat(userRow.balance || "0") < usdValue) {
+        return res.status(400).json({ message: "Insufficient wallet balance" });
+      }
+
+      // Deduct from balance
+      await db.update(users).set({
+        balance: (parseFloat(userRow.balance || "0") - usdValue).toFixed(2)
+      }).where(eq(users.id, userId));
+
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "withdrawal",
+        coin,
+        network: CRYPTO_NETWORKS[coin] || "unknown",
+        amount: cryptoAmount.toFixed(8),
+        usdValue: usdValue.toFixed(2),
+        toAddress,
+        status: "pending",
+        confirmations: 0,
+        requiredConfirmations: 1,
+      }).returning();
+
+      // Record as a transaction
+      await db.insert(transactions).values({
+        userId,
+        type: "withdraw",
+        amount: usdValue.toFixed(2),
+        currency: "USD",
+        status: "pending",
+        description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
+        reference: cryptoTx.id,
+      });
+
+      res.json({ cryptoTransaction: cryptoTx, message: "Withdrawal initiated. Processing may take 30–60 minutes." });
+    } catch (error) {
+      console.error("Crypto withdrawal error:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+
+  // POST buy virtual card with crypto
+  app.post("/api/crypto/buy-card", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { coin } = req.body;
+      if (!coin) return res.status(400).json({ message: "coin required" });
+
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+
+      // Get card price
+      const cardPriceSetting = await storage.getSystemSetting("general", "card_price");
+      const cardPriceUSD = parseFloat(cardPriceSetting?.value || "60.00");
+      const cryptoAmount = (cardPriceUSD / rate);
+
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "card_purchase",
+        coin,
+        network: CRYPTO_NETWORKS[coin] || "unknown",
+        amount: cryptoAmount.toFixed(8),
+        usdValue: cardPriceUSD.toFixed(2),
+        status: "pending",
+        requiredConfirmations: coin === "BTC" ? 3 : 12,
+      }).returning();
+
+      res.json({
+        cryptoTransaction: cryptoTx,
+        cryptoAmount: cryptoAmount.toFixed(8),
+        coin,
+        usdValue: cardPriceUSD,
+        message: `Send exactly ${cryptoAmount.toFixed(8)} ${coin} to receive your virtual card after confirmation.`
+      });
+    } catch (error) {
+      console.error("Crypto buy card error:", error);
+      res.status(500).json({ message: "Failed to initiate card purchase" });
+    }
+  });
+
+  // GET user's crypto transaction history
+  app.get("/api/crypto/transactions", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const txns = await db.select().from(cryptoTransactions)
+        .where(eq(cryptoTransactions.userId, userId))
+        .orderBy(desc(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+
+  // Admin: get all crypto transactions
+  app.get("/api/admin/crypto/transactions", requireAdminAuth, async (req, res) => {
+    try {
+      const txns = await db.select({
+        id: cryptoTransactions.id,
+        userId: cryptoTransactions.userId,
+        type: cryptoTransactions.type,
+        coin: cryptoTransactions.coin,
+        network: cryptoTransactions.network,
+        amount: cryptoTransactions.amount,
+        usdValue: cryptoTransactions.usdValue,
+        txHash: cryptoTransactions.txHash,
+        fromAddress: cryptoTransactions.fromAddress,
+        toAddress: cryptoTransactions.toAddress,
+        status: cryptoTransactions.status,
+        confirmations: cryptoTransactions.confirmations,
+        requiredConfirmations: cryptoTransactions.requiredConfirmations,
+        fee: cryptoTransactions.fee,
+        adminNotes: cryptoTransactions.adminNotes,
+        completedAt: cryptoTransactions.completedAt,
+        createdAt: cryptoTransactions.createdAt,
+        userFullName: users.fullName,
+        userEmail: users.email,
+      }).from(cryptoTransactions)
+        .leftJoin(users, eq(cryptoTransactions.userId, users.id))
+        .orderBy(desc(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+
+  // Admin: update crypto transaction (confirm, complete, fail)
+  app.patch("/api/admin/crypto/transactions/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { status, txHash, adminNotes, confirmations } = req.body;
+      const updateData: any = { updatedAt: new Date() };
+      if (status) updateData.status = status;
+      if (txHash) updateData.txHash = txHash;
+      if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+      if (confirmations !== undefined) updateData.confirmations = confirmations;
+
+      if (status === "completed") {
+        updateData.completedAt = new Date();
+        // If it's a deposit, credit user wallet
+        const [cryptoTx] = await db.select().from(cryptoTransactions)
+          .where(eq(cryptoTransactions.id, req.params.id));
+        if (cryptoTx && cryptoTx.type === "deposit") {
+          const [userRow] = await db.select().from(users).where(eq(users.id, cryptoTx.userId));
+          if (userRow) {
+            await db.update(users).set({
+              balance: (parseFloat(userRow.balance || "0") + parseFloat(cryptoTx.usdValue)).toFixed(2)
+            }).where(eq(users.id, cryptoTx.userId));
+
+            await db.insert(transactions).values({
+              userId: cryptoTx.userId,
+              type: "deposit",
+              amount: cryptoTx.usdValue,
+              currency: "USD",
+              status: "completed",
+              description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
+              reference: cryptoTx.id,
+              completedAt: new Date(),
+            });
+          }
+        }
+        // If card_purchase, trigger card creation
+        if (cryptoTx && cryptoTx.type === "card_purchase") {
+          const [userRow] = await db.select().from(users).where(eq(users.id, cryptoTx.userId));
+          if (userRow) {
+            await db.insert(transactions).values({
+              userId: cryptoTx.userId,
+              type: "card_purchase",
+              amount: cryptoTx.usdValue,
+              currency: "USD",
+              status: "completed",
+              description: `Virtual card purchase via ${cryptoTx.coin}`,
+              reference: cryptoTx.id,
+              completedAt: new Date(),
+            });
+          }
+        }
+      }
+
+      const [updated] = await db.update(cryptoTransactions)
+        .set(updateData)
+        .where(eq(cryptoTransactions.id, req.params.id))
+        .returning();
+
+      res.json({ transaction: updated });
+    } catch (error) {
+      console.error("Admin crypto update error:", error);
+      res.status(500).json({ message: "Failed to update crypto transaction" });
+    }
+  });
+
+  // GET analytics data for the user (spending by category per month)
+  app.get("/api/analytics/summary", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const allTxns = await db.select().from(transactions)
+        .where(eq(transactions.userId, userId))
+        .orderBy(desc(transactions.createdAt));
+
+      // Build monthly totals for last 6 months
+      const now = new Date();
+      const months: { label: string; sent: number; received: number; month: number; year: number }[] = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          label: d.toLocaleString("default", { month: "short" }),
+          month: d.getMonth(),
+          year: d.getFullYear(),
+          sent: 0,
+          received: 0,
+        });
+      }
+
+      const categoryMap: Record<string, number> = {
+        "Send Money": 0,
+        "Deposits": 0,
+        "Withdrawals": 0,
+        "Card Purchase": 0,
+        "Exchange": 0,
+        "Bills": 0,
+        "Airtime": 0,
+        "Other": 0,
+      };
+
+      for (const txn of allTxns as any[]) {
+        if (txn.status !== "completed") continue;
+        const amt = parseFloat(txn.amount || "0");
+        const usdAmt = txn.currency === "KES" ? amt / 130 : amt;
+        const txDate = new Date(txn.createdAt);
+
+        // Monthly chart
+        const mo = months.find(m => m.month === txDate.getMonth() && m.year === txDate.getFullYear());
+        if (mo) {
+          if (["send", "withdraw", "card_purchase", "exchange", "airtime", "bill"].includes(txn.type)) mo.sent += usdAmt;
+          else if (["receive", "deposit"].includes(txn.type)) mo.received += usdAmt;
+        }
+
+        // Category breakdown
+        if (txn.type === "send") categoryMap["Send Money"] += usdAmt;
+        else if (txn.type === "deposit") categoryMap["Deposits"] += usdAmt;
+        else if (txn.type === "withdraw") categoryMap["Withdrawals"] += usdAmt;
+        else if (txn.type === "card_purchase") categoryMap["Card Purchase"] += usdAmt;
+        else if (txn.type === "exchange") categoryMap["Exchange"] += usdAmt;
+        else if (txn.type === "bill") categoryMap["Bills"] += usdAmt;
+        else if (txn.type === "airtime") categoryMap["Airtime"] += usdAmt;
+        else categoryMap["Other"] += usdAmt;
+      }
+
+      const categoryData = Object.entries(categoryMap)
+        .filter(([, v]) => v > 0)
+        .map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
+
+      const totalIn = months.reduce((s, m) => s + m.received, 0);
+      const totalOut = months.reduce((s, m) => s + m.sent, 0);
+      const txCount = (allTxns as any[]).filter((t: any) => t.status === "completed").length;
+
+      res.json({
+        monthlyData: months.map(m => ({ label: m.label, sent: parseFloat(m.sent.toFixed(2)), received: parseFloat(m.received.toFixed(2)) })),
+        categoryData,
+        summary: {
+          totalIn: parseFloat(totalIn.toFixed(2)),
+          totalOut: parseFloat(totalOut.toFixed(2)),
+          txCount,
+          netFlow: parseFloat((totalIn - totalOut).toFixed(2)),
+        }
+      });
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
     }
   });
 

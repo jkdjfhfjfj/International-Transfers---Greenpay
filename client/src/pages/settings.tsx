@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const [twoFASecret, setTwoFASecret] = useState<string | null>(null);
   const [disablePasswordConfirm, setDisablePasswordConfirm] = useState('');
   const [fingerprintSetup, setFingerprintSetup] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
   
   // Photo upload states
   const [selectedPhoto, setSelectedPhoto] = useState<File | null>(null);
@@ -1487,26 +1488,78 @@ export default function SettingsPage() {
           className="space-y-3"
         >
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Download App</h3>
-          
+
+          {/* Play Store */}
+          <motion.a
+            href="https://play.google.com/store/apps/details?id=com.greenpay.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="w-full bg-black p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+            data-testid="button-playstore"
+          >
+            <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+              <span className="material-icons text-white">shop</span>
+            </div>
+            <div className="flex-1">
+              <p className="text-xs text-gray-400">GET IT ON</p>
+              <p className="font-bold text-base leading-tight">Google Play</p>
+            </div>
+            <span className="material-icons text-gray-400 text-sm">open_in_new</span>
+          </motion.a>
+
+          {/* Manual APK download */}
           <motion.a
             href="/greenpay.apk"
             download="GreenPay.apk"
             whileHover={{ scale: 1.01 }}
             whileTap={{ scale: 0.99 }}
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center justify-between text-white elevation-2 cursor-pointer"
-            data-testid="button-download-app"
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+            data-testid="button-download-apk"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <Download className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <p className="font-semibold">Download GreenPay App</p>
-                <p className="text-sm text-green-100">Android APK · Latest version</p>
-              </div>
+            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+              <Download className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold">Download APK Directly</p>
+              <p className="text-sm text-green-100">Android · Latest version</p>
             </div>
             <span className="material-icons text-white/80">android</span>
           </motion.a>
+
+          {/* Manual install instructions */}
+          <motion.div className="bg-card border border-border rounded-xl overflow-hidden elevation-1">
+            <button
+              onClick={() => setShowInstallGuide(prev => !prev)}
+              className="w-full p-4 flex items-center justify-between text-sm font-medium"
+            >
+              <div className="flex items-center gap-2">
+                <span className="material-icons text-primary text-base">help_outline</span>
+                How to install the APK manually
+              </div>
+              <span className="material-icons text-muted-foreground text-sm">{showInstallGuide ? "expand_less" : "expand_more"}</span>
+            </button>
+            {showInstallGuide && (
+              <div className="px-4 pb-4 space-y-2 border-t border-border">
+                {[
+                  { step: 1, text: 'Download the APK file using the "Download APK" button above.' },
+                  { step: 2, text: 'Open your phone\'s Settings → Security (or Privacy).' },
+                  { step: 3, text: 'Enable "Install unknown apps" or "Allow from this source".' },
+                  { step: 4, text: 'Open the downloaded GreenPay.apk file from your Downloads folder.' },
+                  { step: 5, text: 'Tap "Install" and wait for the installation to complete.' },
+                  { step: 6, text: 'Open GreenPay and log in with your existing account.' },
+                ].map(({ step, text }) => (
+                  <div key={step} className="flex items-start gap-3 pt-2">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-xs font-bold text-primary">{step}</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground leading-snug">{text}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </motion.div>
         </motion.div>
 
         {/* Support & Legal */}

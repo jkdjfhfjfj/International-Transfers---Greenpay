@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check, Bitcoin, BarChart3 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
@@ -151,6 +151,26 @@ export default function DashboardPage() {
       path: "/deposit", 
       color: "from-emerald-500 to-green-600",
       bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      disabled: false,
+      requiresCard: false
+    },
+    {
+      id: "crypto",
+      icon: Bitcoin,
+      label: "Crypto",
+      path: "/crypto",
+      color: "from-orange-500 to-yellow-500",
+      bgColor: "bg-orange-50 dark:bg-orange-950/20",
+      disabled: false,
+      requiresCard: false
+    },
+    {
+      id: "analytics",
+      icon: BarChart3,
+      label: "Analytics",
+      path: "/analytics",
+      color: "from-purple-500 to-indigo-500",
+      bgColor: "bg-purple-50 dark:bg-purple-950/20",
       disabled: false,
       requiresCard: false
     },
