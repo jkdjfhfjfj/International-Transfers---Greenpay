@@ -9,10 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { HelpCircle, ChevronRight, LogOut } from "lucide-react";
+import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function SettingsPage() {
@@ -503,11 +503,41 @@ export default function SettingsPage() {
   };
 
   const handleLogout = () => {
-    // Clear all local storage and session data
     localStorage.clear();
     sessionStorage.clear();
     logout();
     setLocation("/");
+  };
+
+  const { data: devicesData, refetch: refetchDevices } = useQuery({
+    queryKey: ["/api/users/me/devices"],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/users/me/devices");
+      return res.json();
+    },
+  });
+
+  const revokeAllSessionsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/users/me/revoke-all-sessions", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Sessions Revoked", description: "All other devices have been logged out." });
+      refetchDevices();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to revoke sessions.", variant: "destructive" });
+    },
+  });
+
+  const devices: any[] = (devicesData as any)?.devices || [];
+
+  const getDeviceIcon = (deviceType: string) => {
+    if (deviceType === 'mobile') return <Smartphone className="w-4 h-4" />;
+    if (deviceType === 'tablet') return <Tablet className="w-4 h-4" />;
+    return <Monitor className="w-4 h-4" />;
   };
 
   return (
@@ -1341,43 +1371,76 @@ export default function SettingsPage() {
           </Dialog>
         )}
 
-        {/* Security Section */}
+        {/* Devices Section */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
           className="space-y-3"
         >
-          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Security</h3>
-          
-          <motion.div
-            whileHover={{ scale: 1.01 }}
-            className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
-          >
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mr-3">
-                <span className="material-icons text-primary">fingerprint</span>
-              </div>
-              <div>
-                <p className="font-medium">Biometric Login</p>
-                <p className="text-sm text-muted-foreground">FaceID or Fingerprint</p>
-              </div>
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Devices & Sessions</h3>
+            {devices.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                onClick={() => revokeAllSessionsMutation.mutate()}
+                disabled={revokeAllSessionsMutation.isPending}
+              >
+                {revokeAllSessionsMutation.isPending ? "Revoking..." : "Sign Out All Others"}
+              </Button>
+            )}
+          </div>
+
+          {devices.length === 0 ? (
+            <div className="bg-card p-4 rounded-xl border border-border text-sm text-muted-foreground text-center elevation-1">
+              No recent device activity
             </div>
-            <div className="flex items-center space-x-2">
-              <Switch
-                checked={settings.biometricEnabled}
-                onCheckedChange={(checked) => {
-                  if (checked) {
-                    setupFingerprintMutation.mutate();
-                  } else {
-                    disableBiometricMutation.mutate();
-                  }
-                }}
-                disabled={setupFingerprintMutation.isPending || disableBiometricMutation.isPending}
-                data-testid="switch-biometric"
-              />
+          ) : (
+            <div className="space-y-2">
+              {devices.slice(0, 5).map((device: any, i: number) => (
+                <motion.div
+                  key={device.id || i}
+                  whileHover={{ scale: 1.01 }}
+                  className="bg-card p-3.5 rounded-xl border border-border elevation-1"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                      {getDeviceIcon(device.deviceType || 'desktop')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-sm truncate">
+                          {device.browser || 'Unknown Browser'}
+                          {device.deviceType && <span className="text-muted-foreground"> · {device.deviceType}</span>}
+                        </p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${device.status === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
+                          {device.status === 'success' ? 'Logged in' : 'Failed'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1">
+                        {device.location && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Globe className="w-3 h-3" /> {device.location}
+                          </span>
+                        )}
+                        {device.ipAddress && (
+                          <span className="text-xs text-muted-foreground">{device.ipAddress}</span>
+                        )}
+                      </div>
+                      {device.createdAt && (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {new Date(device.createdAt).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
-          </motion.div>
+          )}
         </motion.div>
 
         {/* Notifications */}
@@ -1414,6 +1477,36 @@ export default function SettingsPage() {
               />
             </div>
           </motion.div>
+        </motion.div>
+
+        {/* Download App */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.47 }}
+          className="space-y-3"
+        >
+          <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Download App</h3>
+          
+          <motion.a
+            href="/greenpay.apk"
+            download="GreenPay.apk"
+            whileHover={{ scale: 1.01 }}
+            whileTap={{ scale: 0.99 }}
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center justify-between text-white elevation-2 cursor-pointer"
+            data-testid="button-download-app"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                <Download className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <p className="font-semibold">Download GreenPay App</p>
+                <p className="text-sm text-green-100">Android APK · Latest version</p>
+              </div>
+            </div>
+            <span className="material-icons text-white/80">android</span>
+          </motion.a>
         </motion.div>
 
         {/* Support & Legal */}

@@ -5,7 +5,7 @@ import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations } from "@shared/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -5726,6 +5726,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error retrieving login history:", error);
       res.status(500).json({ error: "Failed to retrieve login history" });
+    }
+  });
+
+  // Get current user's devices (login history)
+  app.get("/api/users/me/devices", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const history = await storage.getLoginHistoryByUserId(userId, 20);
+      res.json({ devices: history });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve devices" });
+    }
+  });
+
+  // Revoke all sessions for current user (except current)
+  app.post("/api/users/me/revoke-all-sessions", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const currentSid = (req as any).session?.id;
+      // Delete all sessions for this user from user_sessions table except the current one
+      await db.execute(
+        sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${userId} AND sid != ${currentSid}`
+      );
+      res.json({ message: "All other sessions revoked successfully" });
+    } catch (error) {
+      console.error("Revoke sessions error:", error);
+      res.status(500).json({ error: "Failed to revoke sessions" });
+    }
+  });
+
+  // Admin: get devices (login history) for a specific user
+  app.get("/api/admin/users/:id/devices", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const history = await storage.getLoginHistoryByUserId(id, 30);
+      res.json({ devices: history });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve user devices" });
+    }
+  });
+
+  // Admin: revoke all sessions for a specific user
+  app.post("/api/admin/users/:id/revoke-all-sessions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await db.execute(
+        sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${id}`
+      );
+      // Log admin action
+      await storage.createAdminLog({
+        adminId: (req as any).session?.admin?.id || null,
+        action: "revoke_user_sessions",
+        details: `Admin revoked all sessions for user ${id}`,
+        targetId: id
+      });
+      res.json({ message: "All sessions for user revoked" });
+    } catch (error) {
+      console.error("Admin revoke sessions error:", error);
+      res.status(500).json({ error: "Failed to revoke user sessions" });
     }
   });
 

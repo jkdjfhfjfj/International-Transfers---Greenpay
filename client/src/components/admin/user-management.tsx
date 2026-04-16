@@ -68,6 +68,10 @@ import {
   Pencil,
   Save,
   X,
+  Monitor,
+  Smartphone,
+  Tablet,
+  Globe,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -595,6 +599,36 @@ function UserDetailsDialog({ user }: { user: User }) {
   const txList = (userTransactions as any)?.transactions || [];
   const card = (userCard as any)?.card || null;
 
+  const { data: userDevicesData, isLoading: devicesLoading, refetch: refetchDevices } = useQuery({
+    queryKey: ["/api/admin/users", user.id, "devices"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/users/${user.id}/devices`);
+      return r.json();
+    },
+  });
+
+  const userDevices: any[] = (userDevicesData as any)?.devices || [];
+
+  const revokeUserSessionsMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", `/api/admin/users/${user.id}/revoke-all-sessions`, {});
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Sessions Revoked", description: "All active sessions for this user have been terminated." });
+      refetchDevices();
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to revoke user sessions", variant: "destructive" });
+    },
+  });
+
+  const getDeviceIcon = (deviceType: string) => {
+    if (deviceType === 'mobile') return <Smartphone className="w-4 h-4 text-primary" />;
+    if (deviceType === 'tablet') return <Tablet className="w-4 h-4 text-primary" />;
+    return <Monitor className="w-4 h-4 text-primary" />;
+  };
+
   const copyUserId = async () => {
     await navigator.clipboard.writeText(user.id);
     setCopiedId(true);
@@ -907,11 +941,12 @@ function UserDetailsDialog({ user }: { user: User }) {
       </div>
 
       <Tabs defaultValue="overview">
-        <TabsList className="w-full grid grid-cols-4 h-9">
+        <TabsList className="w-full grid grid-cols-5 h-9">
           <TabsTrigger value="overview" className="text-xs">Overview</TabsTrigger>
-          <TabsTrigger value="transactions" className="text-xs">Transactions</TabsTrigger>
+          <TabsTrigger value="transactions" className="text-xs">Txns</TabsTrigger>
           <TabsTrigger value="card" className="text-xs">Card</TabsTrigger>
           <TabsTrigger value="account" className="text-xs">Account</TabsTrigger>
+          <TabsTrigger value="devices" className="text-xs">Devices</TabsTrigger>
         </TabsList>
 
         {/* ─── OVERVIEW TAB ─── */}
@@ -1353,6 +1388,77 @@ function UserDetailsDialog({ user }: { user: User }) {
               <Bell className="w-3 h-3 mr-2" /> Send
             </Button>
           </div>
+        </TabsContent>
+
+        {/* ─── DEVICES TAB ─── */}
+        <TabsContent value="devices" className="mt-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-muted-foreground">Login History & Active Sessions</p>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={() => revokeUserSessionsMutation.mutate()}
+              disabled={revokeUserSessionsMutation.isPending}
+            >
+              <LogOut className="w-3 h-3 mr-1" />
+              {revokeUserSessionsMutation.isPending ? "Revoking..." : "Revoke All Sessions"}
+            </Button>
+          </div>
+
+          {devicesLoading ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">Loading devices...</div>
+          ) : userDevices.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              <Monitor className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              No login history found
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {userDevices.map((device: any, i: number) => (
+                <div key={device.id || i} className="bg-muted/40 border border-border rounded-xl p-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
+                      {getDeviceIcon(device.deviceType || 'desktop')}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-sm truncate">
+                          {device.browser || 'Unknown Browser'}
+                          {device.deviceType && (
+                            <span className="text-muted-foreground font-normal"> · {device.deviceType}</span>
+                          )}
+                        </p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 ${
+                          device.status === 'success'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        }`}>
+                          {device.status === 'success' ? 'Success' : 'Failed'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                        {device.ipAddress && (
+                          <span className="text-xs text-muted-foreground">{device.ipAddress}</span>
+                        )}
+                        {device.location && (
+                          <span className="text-xs text-muted-foreground flex items-center gap-1">
+                            <Globe className="w-3 h-3" /> {device.location}
+                          </span>
+                        )}
+                      </div>
+                      {device.createdAt && (
+                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {format(new Date(device.createdAt), "MMM dd, yyyy HH:mm")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
