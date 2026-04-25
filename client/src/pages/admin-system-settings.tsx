@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle } from "lucide-react";
+import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download } from "lucide-react";
 
 interface SystemSettings {
   fees?: {
@@ -48,6 +48,13 @@ interface SystemSettings {
     business_account_id: string;
     access_token: string;
     is_active: boolean;
+  };
+  app_downloads?: {
+    play_store_url: string;
+    app_store_url: string;
+    apk_url: string;
+    apk_version: string;
+    huawei_app_gallery_url: string;
   };
 }
 
@@ -92,11 +99,32 @@ export default function AdminSystemSettingsPage() {
   const [waToken, setWaToken] = useState("");
   const [waActive, setWaActive] = useState(false);
 
+  // App Downloads state
+  const [playStoreUrl, setPlayStoreUrl] = useState("");
+  const [appStoreUrl, setAppStoreUrl] = useState("");
+  const [apkUrl, setApkUrl] = useState("");
+  const [apkVersion, setApkVersion] = useState("");
+  const [huaweiUrl, setHuaweiUrl] = useState("");
+
   const { data: settingsData, isLoading } = useQuery<SystemSettings>({
     queryKey: ["/api/admin/settings"],
     queryFn: async () => {
       const r = await apiRequest("GET", "/api/admin/settings");
-      return r.json();
+      const raw = await r.json();
+      // Backend returns { settings: SystemSetting[] } — transform into categorized shape.
+      if (raw && Array.isArray(raw.settings)) {
+        const grouped: any = {};
+        for (const s of raw.settings) {
+          if (!s?.category || !s?.key) continue;
+          if (!grouped[s.category]) grouped[s.category] = {};
+          let v: any = s.value;
+          if (v === "true") v = true;
+          else if (v === "false") v = false;
+          grouped[s.category][s.key] = v;
+        }
+        return grouped as SystemSettings;
+      }
+      return raw as SystemSettings;
     },
   });
 
@@ -133,6 +161,12 @@ export default function AdminSystemSettingsPage() {
       setWaBusinessId(settingsData.whatsapp?.business_account_id || "");
       setWaToken(settingsData.whatsapp?.access_token || "");
       setWaActive(settingsData.whatsapp?.is_active || false);
+
+      setPlayStoreUrl(settingsData.app_downloads?.play_store_url || "");
+      setAppStoreUrl(settingsData.app_downloads?.app_store_url || "");
+      setApkUrl(settingsData.app_downloads?.apk_url || "");
+      setApkVersion(settingsData.app_downloads?.apk_version || "");
+      setHuaweiUrl(settingsData.app_downloads?.huawei_app_gallery_url || "");
     }
   }, [settingsData]);
 
@@ -233,6 +267,26 @@ export default function AdminSystemSettingsPage() {
     onError: () => toast({ title: "Error", description: "Failed to save WhatsApp settings.", variant: "destructive" }),
   });
 
+  const appDownloadsMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/play_store_url", { value: String(playStoreUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/app_store_url", { value: String(appStoreUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/apk_url", { value: String(apkUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/apk_version", { value: String(apkVersion), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/huawei_app_gallery_url", { value: String(huaweiUrl), category: "app_downloads" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "App download links updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      qc.invalidateQueries({ queryKey: ["/api/app-downloads"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save app download links.", variant: "destructive" }),
+  });
+
   if (isLoading) {
     return (
       <AdminShell title="System Settings">
@@ -249,12 +303,13 @@ export default function AdminSystemSettingsPage() {
     <AdminShell title="System Settings">
       <div className="max-w-4xl">
         <Tabs defaultValue="fees" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 rounded-xl bg-gray-100 p-1">
+          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-100 p-1">
             <TabsTrigger value="fees">Fees</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+            <TabsTrigger value="app_downloads" data-testid="tab-app-downloads">App Links</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fees" className="space-y-4 mt-6">
@@ -484,6 +539,74 @@ export default function AdminSystemSettingsPage() {
                 <Button onClick={() => whatsappMutation.mutate()} disabled={whatsappMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
                   <Save className="w-4 h-4 mr-2" />
                   {whatsappMutation.isPending ? "Saving..." : "Save WhatsApp"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="app_downloads" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Download className="w-5 h-5" /> App Download Links</CardTitle>
+                <CardDescription>
+                  Configure the download URLs shown to users on the Settings page. Leave any field blank to hide that option.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="play-store-url">Google Play Store URL</Label>
+                  <Input
+                    id="play-store-url"
+                    placeholder="https://play.google.com/store/apps/details?id=com.greenpay.app"
+                    value={playStoreUrl}
+                    onChange={(e) => setPlayStoreUrl(e.target.value)}
+                    data-testid="input-play-store-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="app-store-url">Apple App Store URL</Label>
+                  <Input
+                    id="app-store-url"
+                    placeholder="https://apps.apple.com/app/idXXXXXXXXX"
+                    value={appStoreUrl}
+                    onChange={(e) => setAppStoreUrl(e.target.value)}
+                    data-testid="input-app-store-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="huawei-url">Huawei AppGallery URL (optional)</Label>
+                  <Input
+                    id="huawei-url"
+                    placeholder="https://appgallery.huawei.com/app/CXXXXXXX"
+                    value={huaweiUrl}
+                    onChange={(e) => setHuaweiUrl(e.target.value)}
+                    data-testid="input-huawei-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apk-url">Direct APK Download URL</Label>
+                  <Input
+                    id="apk-url"
+                    placeholder="https://cdn.example.com/greenpay.apk or /greenpay.apk"
+                    value={apkUrl}
+                    onChange={(e) => setApkUrl(e.target.value)}
+                    data-testid="input-apk-url"
+                  />
+                  <p className="text-xs text-muted-foreground">Use a fully qualified URL (https://...) for an externally hosted APK, or a relative path (/greenpay.apk) for the bundled file.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apk-version">APK Version (shown in label)</Label>
+                  <Input
+                    id="apk-version"
+                    placeholder="1.0.1"
+                    value={apkVersion}
+                    onChange={(e) => setApkVersion(e.target.value)}
+                    data-testid="input-apk-version"
+                  />
+                </div>
+                <Button onClick={() => appDownloadsMutation.mutate()} disabled={appDownloadsMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500" data-testid="button-save-app-downloads">
+                  <Save className="w-4 h-4 mr-2" />
+                  {appDownloadsMutation.isPending ? "Saving..." : "Save App Download Links"}
                 </Button>
               </CardContent>
             </Card>

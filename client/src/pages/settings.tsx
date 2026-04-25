@@ -510,6 +510,16 @@ export default function SettingsPage() {
     setLocation("/");
   };
 
+  const { data: appDownloads } = useQuery<{
+    playStoreUrl: string;
+    appStoreUrl: string;
+    apkUrl: string;
+    apkVersion: string;
+    huaweiUrl: string;
+  }>({
+    queryKey: ["/api/app-downloads"],
+  });
+
   const { data: devicesData, refetch: refetchDevices } = useQuery({
     queryKey: ["/api/users/me/devices"],
     enabled: !!user?.id,
@@ -1490,43 +1500,104 @@ export default function SettingsPage() {
           <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Download App</h3>
 
           {/* Play Store */}
-          <motion.a
-            href="https://play.google.com/store/apps/details?id=com.greenpay.app"
-            target="_blank"
-            rel="noopener noreferrer"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="w-full bg-black p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
-            data-testid="button-playstore"
-          >
-            <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
-              <span className="material-icons text-white">shop</span>
-            </div>
-            <div className="flex-1">
-              <p className="text-xs text-gray-400">GET IT ON</p>
-              <p className="font-bold text-base leading-tight">Google Play</p>
-            </div>
-            <span className="material-icons text-gray-400 text-sm">open_in_new</span>
-          </motion.a>
+          {appDownloads?.playStoreUrl && (
+            <motion.a
+              href={appDownloads.playStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full bg-black p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+              data-testid="button-playstore"
+            >
+              <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                <span className="material-icons text-white">shop</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-400">GET IT ON</p>
+                <p className="font-bold text-base leading-tight">Google Play</p>
+              </div>
+              <span className="material-icons text-gray-400 text-sm">open_in_new</span>
+            </motion.a>
+          )}
+
+          {/* App Store */}
+          {appDownloads?.appStoreUrl && (
+            <motion.a
+              href={appDownloads.appStoreUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full bg-black p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+              data-testid="button-appstore"
+            >
+              <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                <span className="material-icons text-white">apple</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-gray-400">DOWNLOAD ON THE</p>
+                <p className="font-bold text-base leading-tight">App Store</p>
+              </div>
+              <span className="material-icons text-gray-400 text-sm">open_in_new</span>
+            </motion.a>
+          )}
+
+          {/* Huawei AppGallery */}
+          {appDownloads?.huaweiUrl && (
+            <motion.a
+              href={appDownloads.huaweiUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full bg-red-600 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+              data-testid="button-huawei"
+            >
+              <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                <span className="material-icons text-white">storefront</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-xs text-red-100">EXPLORE IT ON</p>
+                <p className="font-bold text-base leading-tight">AppGallery</p>
+              </div>
+              <span className="material-icons text-red-100 text-sm">open_in_new</span>
+            </motion.a>
+          )}
 
           {/* Manual APK download */}
-          <motion.a
-            href="/greenpay.apk"
-            download="GreenPay.apk"
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
-            data-testid="button-download-apk"
-          >
-            <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
-              <Download className="w-5 h-5 text-white" />
+          {(appDownloads?.apkUrl || appDownloads === undefined) && (
+            <motion.a
+              href={appDownloads?.apkUrl || "/greenpay.apk"}
+              download="GreenPay.apk"
+              target={appDownloads?.apkUrl?.startsWith("http") ? "_blank" : undefined}
+              rel="noopener noreferrer"
+              whileHover={{ scale: 1.01 }}
+              whileTap={{ scale: 0.99 }}
+              className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+              data-testid="button-download-apk"
+            >
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold">Download APK Directly</p>
+                <p className="text-sm text-green-100">Android · {appDownloads?.apkVersion ? `Version ${appDownloads.apkVersion}` : "Latest version"}</p>
+              </div>
+              <span className="material-icons text-white/80">android</span>
+            </motion.a>
+          )}
+
+          {/* If no links are configured at all */}
+          {appDownloads &&
+           !appDownloads.playStoreUrl &&
+           !appDownloads.appStoreUrl &&
+           !appDownloads.apkUrl &&
+           !appDownloads.huaweiUrl && (
+            <div className="bg-card border border-border rounded-xl p-4 text-center">
+              <p className="text-sm text-muted-foreground">App download links are not yet available. Please check back soon.</p>
             </div>
-            <div className="flex-1">
-              <p className="font-semibold">Download APK Directly</p>
-              <p className="text-sm text-green-100">Android · Latest version</p>
-            </div>
-            <span className="material-icons text-white/80">android</span>
-          </motion.a>
+          )}
 
           {/* Manual install instructions */}
           <motion.div className="bg-card border border-border rounded-xl overflow-hidden elevation-1">

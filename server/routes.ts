@@ -5438,6 +5438,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Public App Download Links ────────────────────────────────────────────
+  // Returns admin-configured download URLs for the various app stores / direct APK.
+  // Exposed publicly so the in-app Settings page (and any landing pages) can show them.
+  app.get("/api/app-downloads", async (req, res) => {
+    try {
+      const keys = ["play_store_url", "app_store_url", "apk_url", "apk_version", "huawei_app_gallery_url"];
+      const out: Record<string, string> = {};
+      for (const key of keys) {
+        const setting = await storage.getSystemSetting("app_downloads", key);
+        if (setting) {
+          const v: any = (setting as any).value;
+          out[key] = typeof v === "string" ? v : (v?.value ?? String(v ?? ""));
+        }
+      }
+      res.json({
+        playStoreUrl: out.play_store_url || "",
+        appStoreUrl: out.app_store_url || "",
+        apkUrl: out.apk_url || "",
+        apkVersion: out.apk_version || "",
+        huaweiUrl: out.huawei_app_gallery_url || "",
+      });
+    } catch (error) {
+      console.error("App downloads fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch app download links" });
+    }
+  });
+
   // System Settings Management
   app.get("/api/admin/settings", async (req, res) => {
     try {

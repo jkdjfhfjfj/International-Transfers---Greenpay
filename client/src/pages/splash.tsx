@@ -1,7 +1,8 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send, CreditCard, TrendingUp, Shield, ChevronRight } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
 
 interface OnboardingSlide {
   id: number;
@@ -45,32 +46,21 @@ const slides: OnboardingSlide[] = [
 export default function SplashPage() {
   const [, setLocation] = useLocation();
   const [currentSlide, setCurrentSlide] = useState(0);
+  const { isAuthenticated, isLoading } = useAuth();
+
+  // If user is already signed in (valid session cookie), skip onboarding
+  // and take them straight to the dashboard.
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      setLocation("/dashboard");
+    }
+  }, [isAuthenticated, isLoading, setLocation]);
 
   const handleNext = () => {
-    // Clear all local data to ensure a fresh session and prevent white screens whenever root is accessed
-    try {
-      localStorage.clear();
-      sessionStorage.clear();
-      
-      // Clear all cookies
-      const cookies = document.cookie.split(";");
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i];
-        const eqPos = cookie.indexOf("=");
-        const name = eqPos > -1 ? cookie.substr(0, eqPos) : cookie;
-        document.cookie = name + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/";
-      }
-    } catch (e) {
-      console.error("Error clearing storage:", e);
-    }
-
     if (currentSlide < slides.length - 1) {
       setCurrentSlide(currentSlide + 1);
     } else {
-      // Add a small delay to ensure storage is cleared before redirect
-      setTimeout(() => {
-        setLocation("/signup");
-      }, 100);
+      setLocation("/signup");
     }
   };
 
