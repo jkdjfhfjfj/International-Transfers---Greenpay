@@ -145,6 +145,26 @@ export default function TransactionsPage() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: async (transactionId: string) => {
+      const res = await apiRequest("POST", `/api/transactions/${transactionId}/cancel`);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Transaction Cancelled",
+        description: data?.refunded ? "Your funds have been refunded to your wallet." : "Transaction has been cancelled.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      setSelectedTransaction(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Cancel failed", description: err?.message || "Could not cancel this transaction.", variant: "destructive" });
+    },
+  });
+
   const getTransactionIcon = (type: string, status: string) => {
     if (status === "failed") return { icon: "close", bg: "bg-red-100", color: "text-red-600" };
     if (status === "pending") return { icon: "schedule", bg: "bg-yellow-100", color: "text-yellow-600" };
@@ -808,6 +828,26 @@ export default function TransactionsPage() {
                 Close
               </button>
             </div>
+
+            {/* Cancel pending transaction */}
+            {(selectedTransaction.status === 'pending' || selectedTransaction.status === 'processing') && (
+              <div className="pt-2">
+                <button
+                  onClick={() => {
+                    if (confirm("Cancel this transaction? Any deducted funds will be refunded to your wallet.")) {
+                      cancelMutation.mutate(selectedTransaction.id);
+                    }
+                  }}
+                  disabled={cancelMutation.isPending}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm font-medium disabled:opacity-50"
+                  data-testid="button-cancel-transaction"
+                >
+                  <X className="h-4 w-4" />
+                  {cancelMutation.isPending ? "Cancelling..." : "Cancel Transaction"}
+                </button>
+                <p className="text-[11px] text-muted-foreground mt-1.5 text-center">Pending transactions can be cancelled and refunded.</p>
+              </div>
+            )}
 
             {/* Dispute button */}
             {selectedTransaction.status === 'completed' && (

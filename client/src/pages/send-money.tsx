@@ -39,6 +39,15 @@ export default function SendMoneyPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Source of truth for "has active card": fetch the card itself.
+  // The user.hasVirtualCard flag can lag behind admin reissues/restores.
+  const { data: cardData, isLoading: cardLoading } = useQuery({
+    queryKey: ["/api/virtual-card", user?.id],
+    enabled: !!user?.id,
+  });
+  const activeCard = (cardData as any)?.card;
+  const hasActiveCard = !!user?.hasVirtualCard || (activeCard && activeCard.status !== "blocked" && activeCard.status !== "expired");
+
   // Get transactions for real-time balance calculation
   const { data: transactionData } = useQuery({
     queryKey: ["/api/transactions", user?.id],
@@ -210,52 +219,52 @@ export default function SendMoneyPage() {
     greenPayTransferMutation.mutate(transferPayload);
   };
 
-  // Check if user has virtual card requirement
-  if (!user?.hasVirtualCard) {
+  // Check if user has virtual card requirement (use real card data, not just user flag)
+  if (!cardLoading && !hasActiveCard) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="w-full max-w-sm">
-          {/* Icon */}
-          <div className="flex justify-center mb-6">
-            <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-              <span className="material-icons text-white text-5xl">credit_card</span>
+      <div className="min-h-screen bg-background pb-20">
+        <WavyHeader  size="sm" />
+
+        <div className="flex items-center justify-center p-4">
+          <div className="w-full max-w-sm">
+            <div className="flex justify-center mb-6 mt-4">
+              <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
+                <span className="material-icons text-white text-5xl">credit_card</span>
+              </div>
             </div>
-          </div>
 
-          {/* Info card */}
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm text-center space-y-3 mb-4">
-            <h2 className="text-xl font-bold">Virtual Card Required</h2>
-            <p className="text-muted-foreground text-sm leading-relaxed">
-              To send money to other GreenPay users, you first need an active virtual card.
-              Get yours in seconds and unlock full access.
-            </p>
+            <div className="bg-card border border-border rounded-2xl p-6 shadow-sm text-center space-y-3 mb-4">
+              <h2 className="text-xl font-bold">Virtual Card Required</h2>
+              <p className="text-muted-foreground text-sm leading-relaxed">
+                To send money to other GreenPay users, you first need an active virtual card.
+                Get yours in seconds and unlock full access.
+              </p>
 
-            {/* Benefits */}
-            <div className="space-y-2 text-left mt-2">
-              {[
-                { icon: "send", label: "Send money instantly" },
-                { icon: "payments", label: "Pay bills & buy airtime" },
-                { icon: "currency_exchange", label: "Exchange currencies" },
-              ].map((item) => (
-                <div key={item.icon} className="flex items-center gap-3 text-sm">
-                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="material-icons text-primary text-sm">{item.icon}</span>
+              <div className="space-y-2 text-left mt-2">
+                {[
+                  { icon: "send", label: "Send money instantly" },
+                  { icon: "payments", label: "Pay bills & buy airtime" },
+                  { icon: "currency_exchange", label: "Exchange currencies" },
+                ].map((item) => (
+                  <div key={item.icon} className="flex items-center gap-3 text-sm">
+                    <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <span className="material-icons text-primary text-sm">{item.icon}</span>
+                    </div>
+                    <span className="text-foreground">{item.label}</span>
                   </div>
-                  <span className="text-foreground">{item.label}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
+
+            <Button
+              className="w-full h-12 text-base font-semibold rounded-xl shadow-md"
+              onClick={() => setLocation("/virtual-card")}
+              data-testid="button-get-card"
+            >
+              <span className="material-icons mr-2 text-xl">add_card</span>
+              Get Virtual Card
+            </Button>
           </div>
-
-          {/* CTA */}
-          <Button
-            className="w-full h-12 text-base font-semibold rounded-xl shadow-md"
-            onClick={() => setLocation("/virtual-card")}
-          >
-            <span className="material-icons mr-2 text-xl">add_card</span>
-            Get Virtual Card
-          </Button>
-
         </div>
       </div>
     );

@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses } from "@shared/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -4291,8 +4291,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
+
+      const before = await storage.getTransaction(txId);
+      if (!before) return res.status(404).json({ message: "Transaction not found" });
+
       const updated = await storage.updateTransaction(txId, { status });
       if (!updated) return res.status(404).json({ message: "Transaction not found" });
+
+      // Refund logic: if admin moves a deduction-type tx to failed/cancelled and
+      // it was previously pending/processing/completed (i.e. balance had been deducted),
+      // credit the user back.
+      const deductionTypes = ["send", "withdraw", "transfer", "exchange", "bills", "airtime", "card_purchase"];
+      const wasDeducted = ["pending", "processing", "completed"].includes(before.status || "");
+      const nowFailed = status === "failed" || status === "cancelled";
+      const wasFailed = before.status === "failed" || before.status === "cancelled";
+
+      if (deductionTypes.includes(before.type) && wasDeducted && nowFailed && !wasFailed) {
+        const user = await storage.getUser(before.userId);
+        if (user) {
+          const isKes = (before.currency || "").toUpperCase() === "KES";
+          const refundAmount = parseFloat(before.amount || "0") + parseFloat(before.fee || "0");
+          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
+          const newBalance = currentBalance + refundAmount;
+          const upd = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
+          await storage.updateUser(before.userId, upd);
+          console.log(`✅ Refunded ${before.currency} ${refundAmount} to user ${user.email} (admin marked ${status})`);
+
+          try {
+            await notificationService.sendNotification({
+              title: status === "cancelled" ? "Transaction Cancelled & Refunded" : "Transaction Failed & Refunded",
+              body: `Your ${before.type} of ${before.currency} ${refundAmount} was marked as ${status}. The amount has been refunded to your wallet.`,
+              userId: before.userId,
+              type: "transaction",
+            });
+          } catch {}
+        }
+      }
+
       res.json({ transaction: updated });
     } catch (error) {
       console.error('Admin update transaction status error:', error);
@@ -5305,38 +5340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin Transaction Management  
-  app.get("/api/admin/transactions", async (req, res) => {
-    try {
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 20;
-      const status = req.query.status as string;
-      
-      const result = await storage.getAllTransactions({ status, page, limit });
-      res.json(result);
-    } catch (error) {
-      console.error('Transactions fetch error:', error);
-      res.status(500).json({ message: "Failed to fetch transactions" });
-    }
-  });
-
-  app.put("/api/admin/transactions/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      const updatedTransaction = await storage.updateTransaction(id, updates);
-      
-      if (!updatedTransaction) {
-        return res.status(404).json({ message: "Transaction not found" });
-      }
-
-      res.json({ transaction: updatedTransaction });
-    } catch (error) {
-      console.error('Transaction update error:', error);
-      res.status(500).json({ message: "Failed to update transaction" });
-    }
-  });
+  // (Duplicate admin transaction GET/PUT removed — primary handlers exist earlier)
 
   app.put("/api/admin/transactions/:id/date", async (req, res) => {
     try {
@@ -5363,34 +5367,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin Virtual Cards Management
-  app.get("/api/admin/virtual-cards", async (req, res) => {
-    try {
-      const virtualCards = await storage.getAllVirtualCards();
-      res.json({ virtualCards });
-    } catch (error) {
-      console.error('Virtual cards fetch error:', error);
-      res.status(500).json({ message: "Failed to fetch virtual cards" });
-    }
-  });
-
-  app.put("/api/admin/virtual-cards/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      
-      const updatedCard = await storage.updateVirtualCard(id, updates);
-      
-      if (!updatedCard) {
-        return res.status(404).json({ message: "Virtual card not found" });
-      }
-
-      res.json({ virtualCard: updatedCard });
-    } catch (error) {
-      console.error('Virtual card update error:', error);
-      res.status(500).json({ message: "Failed to update virtual card" });
-    }
-  });
+  // (Duplicate admin virtual-cards GET/PUT removed — primary handlers exist earlier with search support)
 
   // Admin reissue virtual card
   app.post("/api/admin/virtual-cards/:id/reissue", async (req, res) => {
@@ -5430,6 +5407,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         currency: "USD",
         purchaseDate: new Date()
       });
+
+      // Restore the user's card flag so they regain access to send/transfer/etc.
+      await storage.updateUser(userId, { hasVirtualCard: true, cardStatus: "active" });
 
       // Log admin action
       await storage.createAdminLog({
@@ -10075,25 +10055,37 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     return Array.from({ length: 34 }, rand).join("");
   }
 
-  // GET user's crypto wallets
+  // GET available admin-configured deposit addresses (public to authed users)
+  app.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
+    try {
+      const addrs = await db.select().from(cryptoDepositAddresses)
+        .where(eq(cryptoDepositAddresses.isActive, true))
+        .orderBy(cryptoDepositAddresses.coin);
+      res.json({ addresses: addrs, rates: CRYPTO_RATES });
+    } catch (error) {
+      console.error("Deposit addresses fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch deposit addresses" });
+    }
+  });
+
+  // GET user's crypto wallets (balances only — addresses come from admin config)
   app.get("/api/crypto/wallets", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
       const wallets = await db.select().from(cryptoWallets)
         .where(eq(cryptoWallets.userId, userId));
 
-      // Auto-create wallets for all supported coins if missing
       const supported = ["BTC", "ETH", "USDT", "USDC"];
       const existing = wallets.map((w: any) => w.coin);
       const toCreate = supported.filter(c => !existing.includes(c));
 
-      const newWallets = [];
+      const newWallets: any[] = [];
       for (const coin of toCreate) {
         const [w] = await db.insert(cryptoWallets).values({
           userId,
           coin,
           network: CRYPTO_NETWORKS[coin],
-          address: generateCryptoAddress(coin),
+          address: "", // no per-user address; admin master addresses are used
         }).returning();
         newWallets.push(w);
       }
@@ -10111,11 +10103,11 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
-  // POST initiate crypto deposit
+  // POST initiate crypto deposit (uses admin-configured address by coin + network)
   app.post("/api/crypto/deposit", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { coin, amount } = req.body;
+      const { coin, amount, network } = req.body;
       if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
 
       const rate = CRYPTO_RATES[coin];
@@ -10124,25 +10116,24 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const cryptoAmount = parseFloat(amount);
       const usdValue = cryptoAmount * rate;
 
-      // Get or create wallet
-      let [wallet] = await db.select().from(cryptoWallets)
-        .where(eq(cryptoWallets.userId, userId));
+      // Pick admin-configured address for this coin (and optional network)
+      const candidates = await db.select().from(cryptoDepositAddresses)
+        .where(eq(cryptoDepositAddresses.coin, coin));
+      const active = candidates.filter((a: any) => a.isActive);
+      const chosen = (network ? active.find((a: any) => a.network === network) : active[0]) || active[0];
 
-      // Find coin-specific wallet
-      const coinWallet = (await db.select().from(cryptoWallets)
-        .where(eq(cryptoWallets.userId, userId)))
-        .find((w: any) => w.coin === coin);
-
-      const toAddress = coinWallet?.address || generateCryptoAddress(coin);
+      if (!chosen) {
+        return res.status(503).json({ message: `No deposit address configured by admin for ${coin}. Please contact support.` });
+      }
 
       const [cryptoTx] = await db.insert(cryptoTransactions).values({
         userId,
         type: "deposit",
         coin,
-        network: CRYPTO_NETWORKS[coin] || "unknown",
+        network: chosen.network,
         amount: cryptoAmount.toFixed(8),
         usdValue: usdValue.toFixed(2),
-        toAddress,
+        toAddress: chosen.address,
         status: "pending",
         confirmations: 0,
         requiredConfirmations: coin === "BTC" ? 3 : coin === "ETH" || coin === "USDC" ? 12 : 20,
@@ -10150,8 +10141,10 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
       res.json({ 
         cryptoTransaction: cryptoTx,
-        depositAddress: toAddress,
-        message: `Send exactly ${cryptoAmount} ${coin} to the address below. Your wallet will be credited after ${cryptoTx.requiredConfirmations} confirmations.`
+        depositAddress: chosen.address,
+        memo: chosen.memo || null,
+        networkLabel: chosen.networkLabel,
+        message: `Send exactly ${cryptoAmount} ${coin} on ${chosen.networkLabel} to the address below. Your wallet will be credited after ${cryptoTx.requiredConfirmations} confirmations.`
       });
     } catch (error) {
       console.error("Crypto deposit error:", error);
@@ -10360,6 +10353,118 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     } catch (error) {
       console.error("Admin crypto update error:", error);
       res.status(500).json({ message: "Failed to update crypto transaction" });
+    }
+  });
+
+  // ─── Admin: Crypto Deposit Address Management ────────────────────────
+  app.get("/api/admin/crypto/addresses", requireAdminAuth, async (req, res) => {
+    try {
+      const addrs = await db.select().from(cryptoDepositAddresses)
+        .orderBy(cryptoDepositAddresses.coin);
+      res.json({ addresses: addrs });
+    } catch (error) {
+      console.error("Admin fetch crypto addresses error:", error);
+      res.status(500).json({ message: "Failed to fetch addresses" });
+    }
+  });
+
+  app.post("/api/admin/crypto/addresses", requireAdminAuth, async (req, res) => {
+    try {
+      const { coin, network, networkLabel, address, memo, qrCodeUrl, minDeposit, isActive, notes } = req.body;
+      if (!coin || !network || !networkLabel || !address) {
+        return res.status(400).json({ message: "coin, network, networkLabel and address are required" });
+      }
+      const [created] = await db.insert(cryptoDepositAddresses).values({
+        coin: coin.toUpperCase(),
+        network,
+        networkLabel,
+        address,
+        memo: memo || null,
+        qrCodeUrl: qrCodeUrl || null,
+        minDeposit: minDeposit ? String(minDeposit) : "0.00000000",
+        isActive: isActive !== false,
+        notes: notes || null,
+      }).returning();
+      res.json({ address: created });
+    } catch (error) {
+      console.error("Admin create crypto address error:", error);
+      res.status(500).json({ message: "Failed to create address" });
+    }
+  });
+
+  app.put("/api/admin/crypto/addresses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const updates: any = { ...req.body, updatedAt: new Date() };
+      if (updates.coin) updates.coin = String(updates.coin).toUpperCase();
+      if (updates.minDeposit !== undefined) updates.minDeposit = String(updates.minDeposit);
+      const [updated] = await db.update(cryptoDepositAddresses)
+        .set(updates)
+        .where(eq(cryptoDepositAddresses.id, req.params.id))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Address not found" });
+      res.json({ address: updated });
+    } catch (error) {
+      console.error("Admin update crypto address error:", error);
+      res.status(500).json({ message: "Failed to update address" });
+    }
+  });
+
+  app.delete("/api/admin/crypto/addresses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await db.delete(cryptoDepositAddresses)
+        .where(eq(cryptoDepositAddresses.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete crypto address error:", error);
+      res.status(500).json({ message: "Failed to delete address" });
+    }
+  });
+
+  // ─── Admin: All cards for a user ─────────────────────────────────────
+  app.get("/api/admin/users/:id/cards", async (req, res) => {
+    try {
+      const cards = await storage.getVirtualCardsByUserId(req.params.id);
+      res.json({ cards });
+    } catch (error) {
+      console.error("Admin fetch user cards error:", error);
+      res.status(500).json({ message: "Failed to fetch user cards" });
+    }
+  });
+
+  // ─── User: Cancel a pending transaction (with balance refund) ──────────
+  app.post("/api/transactions/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const tx = await storage.getTransactionById(req.params.id);
+      if (!tx) return res.status(404).json({ message: "Transaction not found" });
+      if (tx.userId !== userId) return res.status(403).json({ message: "Not your transaction" });
+      if (tx.status !== "pending" && tx.status !== "processing") {
+        return res.status(400).json({ message: "Only pending transactions can be cancelled" });
+      }
+
+      // Refund balance if this was a deduction type
+      const deductionTypes = ["send", "withdraw", "transfer", "exchange", "bills", "airtime", "card_purchase"];
+      if (deductionTypes.includes(tx.type)) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          const isKes = (tx.currency || "").toUpperCase() === "KES";
+          const refundAmount = parseFloat(tx.amount || "0") + parseFloat(tx.fee || "0");
+          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
+          const newBalance = currentBalance + refundAmount;
+          const upd = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
+          await storage.updateUser(userId, upd);
+        }
+      }
+
+      const updated = await storage.updateTransaction(tx.id, {
+        status: "cancelled",
+        description: (tx.description || "") + " (cancelled by user)",
+      });
+
+      res.json({ transaction: updated, message: "Transaction cancelled and balance refunded" });
+    } catch (error) {
+      console.error("Cancel transaction error:", error);
+      res.status(500).json({ message: "Failed to cancel transaction" });
     }
   });
 

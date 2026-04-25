@@ -596,8 +596,17 @@ function UserDetailsDialog({ user }: { user: User }) {
     },
   });
 
+  const { data: userCardsData, isLoading: cardsLoading } = useQuery({
+    queryKey: ["/api/admin/users", user.id, "cards"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/users/${user.id}/cards`);
+      return r.json();
+    },
+  });
+
   const txList = (userTransactions as any)?.transactions || [];
   const card = (userCard as any)?.card || null;
+  const allCards: any[] = (userCardsData as any)?.cards || [];
 
   const { data: userDevicesData, isLoading: devicesLoading, refetch: refetchDevices } = useQuery({
     queryKey: ["/api/admin/users", user.id, "devices"],
@@ -1163,11 +1172,11 @@ function UserDetailsDialog({ user }: { user: User }) {
 
         {/* ─── CARD TAB ─── */}
         <TabsContent value="card" className="mt-4 space-y-4">
-          {cardLoading ? (
+          {cardLoading || cardsLoading ? (
             <div className="flex justify-center py-8">
               <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : !card ? (
+          ) : allCards.length === 0 && !card ? (
             <div className="text-center py-6 space-y-3">
               <CreditCard className="w-10 h-10 text-muted-foreground mx-auto" />
               <p className="text-sm text-muted-foreground">No virtual card found for this user</p>
@@ -1177,6 +1186,30 @@ function UserDetailsDialog({ user }: { user: User }) {
             </div>
           ) : (
             <>
+              {/* All Cards Summary */}
+              {allCards.length > 1 && (
+                <div className="bg-muted/40 rounded-lg p-3 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    All Cards ({allCards.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {allCards.map((c, idx) => (
+                      <div key={c.id} className="flex items-center justify-between text-xs bg-card rounded p-2 border border-border" data-testid={`row-card-${c.id}`}>
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-3 h-3 text-muted-foreground" />
+                          <span className="font-mono">•••• {c.cardNumber?.slice(-4)}</span>
+                          <span className="text-muted-foreground">{format(new Date(c.purchaseDate), "MMM d, yyyy")}</span>
+                        </div>
+                        <Badge variant={c.status === "active" ? "default" : c.status === "frozen" ? "secondary" : "destructive"} className="text-[10px]">
+                          {c.status}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground italic">Active card details shown below.</p>
+                </div>
+              )}
+
               {/* Card Visual */}
               <div className="relative rounded-2xl bg-gradient-to-br from-primary to-secondary p-5 text-white shadow-lg overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-16 translate-x-16" />

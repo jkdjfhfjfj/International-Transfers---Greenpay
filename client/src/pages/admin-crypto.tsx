@@ -3,7 +3,15 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import AdminShell from "@/components/admin/admin-shell";
-import { CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown, Plus, Pencil, Trash2, Wallet } from "lucide-react";
 
 const COIN_COLORS: Record<string, string> = {
   BTC: "text-orange-500",
@@ -229,6 +237,243 @@ function CryptoManagement() {
   );
 }
 
+function AddressManagement() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [form, setForm] = useState<any>({
+    coin: "USDT",
+    network: "TRC20",
+    networkLabel: "TRON (TRC-20)",
+    address: "",
+    memo: "",
+    qrCodeUrl: "",
+    minDeposit: "0",
+    isActive: true,
+    notes: "",
+  });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/admin/crypto/addresses"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/admin/crypto/addresses");
+      return res.json();
+    },
+  });
+
+  const upsertMutation = useMutation({
+    mutationFn: async (payload: any) => {
+      if (editing?.id) {
+        const res = await apiRequest("PATCH", `/api/admin/crypto/addresses/${editing.id}`, payload);
+        return res.json();
+      }
+      const res = await apiRequest("POST", `/api/admin/crypto/addresses`, payload);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: editing ? "Address updated" : "Address created", description: "Deposit address saved successfully." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crypto/addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/deposit-addresses"] });
+      setDialogOpen(false);
+      setEditing(null);
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e?.message || "Failed to save address", variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/crypto/addresses/${id}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Address deleted" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crypto/addresses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/deposit-addresses"] });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e?.message || "Failed to delete", variant: "destructive" });
+    },
+  });
+
+  const addresses: any[] = (data as any)?.addresses || [];
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({
+      coin: "USDT",
+      network: "TRC20",
+      networkLabel: "TRON (TRC-20)",
+      address: "",
+      memo: "",
+      qrCodeUrl: "",
+      minDeposit: "0",
+      isActive: true,
+      notes: "",
+    });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (addr: any) => {
+    setEditing(addr);
+    setForm({
+      coin: addr.coin,
+      network: addr.network,
+      networkLabel: addr.networkLabel || addr.network,
+      address: addr.address,
+      memo: addr.memo || "",
+      qrCodeUrl: addr.qrCodeUrl || "",
+      minDeposit: addr.minDeposit || "0",
+      isActive: !!addr.isActive,
+      notes: addr.notes || "",
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (!form.address?.trim()) {
+      toast({ title: "Address required", variant: "destructive" });
+      return;
+    }
+    upsertMutation.mutate(form);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold">Deposit Addresses</h2>
+          <p className="text-sm text-muted-foreground">Manage the crypto wallet addresses users see when depositing.</p>
+        </div>
+        <Button onClick={openCreate} data-testid="button-add-address">
+          <Plus className="w-4 h-4 mr-2" /> Add Address
+        </Button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center py-10 text-sm text-muted-foreground">Loading addresses...</div>
+      ) : addresses.length === 0 ? (
+        <div className="text-center py-10 bg-card border border-border rounded-xl">
+          <Wallet className="w-10 h-10 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No deposit addresses configured yet.</p>
+          <Button size="sm" className="mt-3" onClick={openCreate}>Add your first address</Button>
+        </div>
+      ) : (
+        <div className="grid gap-3">
+          {addresses.map((addr) => (
+            <div key={addr.id} className="bg-card border border-border rounded-xl p-4" data-testid={`row-address-${addr.id}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+                    <span className={`font-bold text-sm ${COIN_COLORS[addr.coin] || ""}`}>{addr.coin}</span>
+                    <span className="px-2 py-0.5 text-xs rounded bg-primary/10 text-primary">{addr.networkLabel || addr.network}</span>
+                    {addr.isActive ? (
+                      <span className="px-2 py-0.5 text-xs rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">Active</span>
+                    ) : (
+                      <span className="px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400">Inactive</span>
+                    )}
+                  </div>
+                  <p className="font-mono text-xs break-all text-muted-foreground">{addr.address}</p>
+                  {addr.memo && <p className="text-xs mt-1"><span className="font-semibold text-orange-600">Memo:</span> <span className="font-mono">{addr.memo}</span></p>}
+                  {addr.minDeposit && parseFloat(addr.minDeposit) > 0 && <p className="text-xs text-muted-foreground mt-1">Min deposit: {addr.minDeposit} {addr.coin}</p>}
+                  {addr.notes && <p className="text-xs italic text-muted-foreground mt-1">{addr.notes}</p>}
+                </div>
+                <div className="flex flex-col gap-1.5 shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => openEdit(addr)} data-testid={`button-edit-address-${addr.id}`}>
+                    <Pencil className="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="destructive" onClick={() => { if (confirm(`Delete this ${addr.coin} address?`)) deleteMutation.mutate(addr.id); }} data-testid={`button-delete-address-${addr.id}`}>
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editing ? "Edit Deposit Address" : "Add Deposit Address"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Coin</Label>
+                <Select value={form.coin} onValueChange={(v) => setForm({ ...form, coin: v })}>
+                  <SelectTrigger data-testid="select-coin"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="BTC">BTC</SelectItem>
+                    <SelectItem value="ETH">ETH</SelectItem>
+                    <SelectItem value="USDT">USDT</SelectItem>
+                    <SelectItem value="USDC">USDC</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Network</Label>
+                <Input value={form.network} onChange={(e) => setForm({ ...form, network: e.target.value })} placeholder="TRC20" data-testid="input-network" />
+              </div>
+            </div>
+            <div>
+              <Label>Network Label (shown to users)</Label>
+              <Input value={form.networkLabel} onChange={(e) => setForm({ ...form, networkLabel: e.target.value })} placeholder="TRON (TRC-20)" data-testid="input-network-label" />
+            </div>
+            <div>
+              <Label>Wallet Address</Label>
+              <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="TXyz..." data-testid="input-address" className="font-mono text-xs" />
+            </div>
+            <div>
+              <Label>Memo / Tag (optional)</Label>
+              <Input value={form.memo} onChange={(e) => setForm({ ...form, memo: e.target.value })} placeholder="Required for some networks" data-testid="input-memo" />
+            </div>
+            <div>
+              <Label>QR Code URL (optional)</Label>
+              <Input value={form.qrCodeUrl} onChange={(e) => setForm({ ...form, qrCodeUrl: e.target.value })} placeholder="https://..." data-testid="input-qr" />
+            </div>
+            <div>
+              <Label>Minimum Deposit</Label>
+              <Input type="number" step="0.00000001" value={form.minDeposit} onChange={(e) => setForm({ ...form, minDeposit: e.target.value })} data-testid="input-min" />
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Important info shown to users" rows={2} data-testid="input-notes" />
+            </div>
+            <div className="flex items-center justify-between">
+              <Label>Active (visible to users)</Label>
+              <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} data-testid="switch-active" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={upsertMutation.isPending} data-testid="button-save-address">
+              {upsertMutation.isPending ? "Saving..." : "Save Address"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function AdminCryptoPage() {
-  return <AdminShell title="Crypto Management"><CryptoManagement /></AdminShell>;
+  return (
+    <AdminShell title="Crypto Management">
+      <Tabs defaultValue="transactions" className="w-full">
+        <TabsList className="grid w-full grid-cols-2 max-w-md">
+          <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="addresses" data-testid="tab-addresses">Deposit Addresses</TabsTrigger>
+        </TabsList>
+        <TabsContent value="transactions" className="mt-4">
+          <CryptoManagement />
+        </TabsContent>
+        <TabsContent value="addresses" className="mt-4">
+          <AddressManagement />
+        </TabsContent>
+      </Tabs>
+    </AdminShell>
+  );
 }

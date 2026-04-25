@@ -1618,6 +1618,14 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(virtualCards.purchaseDate));
   }
 
+  async getVirtualCardsByUserId(userId: string): Promise<VirtualCard[]> {
+    return await db
+      .select()
+      .from(virtualCards)
+      .where(eq(virtualCards.userId, userId))
+      .orderBy(desc(virtualCards.purchaseDate));
+  }
+
   async getUsersCount(): Promise<number> {
     const result = await db.select({ count: count() }).from(users);
     return result[0].count;

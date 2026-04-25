@@ -788,3 +788,23 @@ export type InsertCryptoWallet = z.infer<typeof insertCryptoWalletSchema>;
 export const insertCryptoTransactionSchema = createInsertSchema(cryptoTransactions).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
 export type CryptoTransaction = typeof cryptoTransactions.$inferSelect;
 export type InsertCryptoTransaction = z.infer<typeof insertCryptoTransactionSchema>;
+
+// Master crypto deposit addresses (admin configured) - users send to these
+export const cryptoDepositAddresses = pgTable("crypto_deposit_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(), // bitcoin, ethereum, tron, bsc, polygon, etc.
+  networkLabel: text("network_label").notNull(), // "Bitcoin Network", "Ethereum (ERC-20)", "TRON (TRC-20)"
+  address: text("address").notNull(),
+  memo: text("memo"), // optional memo/tag for some networks
+  qrCodeUrl: text("qr_code_url"), // optional admin-uploaded QR
+  minDeposit: decimal("min_deposit", { precision: 18, scale: 8 }).default("0.00000000"),
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"), // optional admin notes shown to users
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCryptoDepositAddressSchema = createInsertSchema(cryptoDepositAddresses).omit({ id: true, createdAt: true, updatedAt: true });
+export type CryptoDepositAddress = typeof cryptoDepositAddresses.$inferSelect;
+export type InsertCryptoDepositAddress = z.infer<typeof insertCryptoDepositAddressSchema>;

@@ -57,6 +57,15 @@ export default function CryptoPage() {
     },
   });
 
+  const { data: depositAddressesData } = useQuery({
+    queryKey: ["/api/crypto/deposit-addresses"],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/crypto/deposit-addresses");
+      return res.json();
+    },
+  });
+
   const { data: historyData, isLoading: historyLoading } = useQuery({
     queryKey: ["/api/crypto/transactions"],
     enabled: !!user?.id && activeTab === "history",
@@ -100,8 +109,17 @@ export default function CryptoPage() {
   const wallets: any[] = (walletsData as any)?.wallets || [];
   const rates: Record<string, number> = (walletsData as any)?.rates || {};
   const history: any[] = (historyData as any)?.transactions || [];
+  const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
+
+  const addressesByCoin: Record<string, any[]> = allDepositAddresses.reduce((acc, addr) => {
+    const c = (addr.coin || "").toUpperCase();
+    if (!acc[c]) acc[c] = [];
+    acc[c].push(addr);
+    return acc;
+  }, {} as Record<string, any[]>);
 
   const selectedWallet = wallets.find(w => w.coin === selectedCoin);
+  const selectedCoinAddresses = addressesByCoin[selectedCoin] || [];
   const totalUsdValue = wallets.reduce((s, w) => s + parseFloat(w.usdBalance || "0"), 0);
 
   const copyToClipboard = (text: string, key: string) => {
@@ -183,18 +201,14 @@ export default function CryptoPage() {
                     </div>
                   </div>
 
-                  <div className="bg-white/10 rounded-xl p-3">
-                    <p className="text-xs text-white/60 mb-1">{COIN_NETWORKS[wallet.coin] || "Network"} · Deposit Address</p>
-                    <div className="flex items-center gap-2">
-                      <p className="font-mono text-xs flex-1 truncate">{wallet.address}</p>
-                      <button
-                        onClick={() => copyToClipboard(wallet.address, wallet.id)}
-                        className="shrink-0 w-7 h-7 bg-white/20 rounded-lg flex items-center justify-center hover:bg-white/30 transition-colors"
-                      >
-                        {copied === wallet.id ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => { setSelectedCoin(wallet.coin); setActiveTab("deposit"); }}
+                    className="w-full bg-white/10 hover:bg-white/20 rounded-xl p-3 flex items-center justify-between transition-colors"
+                    data-testid={`button-deposit-${wallet.coin}`}
+                  >
+                    <span className="text-xs text-white/80">View Deposit Addresses ({(addressesByCoin[wallet.coin] || []).length} networks)</span>
+                    <ArrowDownToLine className="w-4 h-4 text-white/80" />
+                  </button>
 
                   <p className="text-xs text-white/50 mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString()}</p>
                 </motion.div>
@@ -226,19 +240,50 @@ export default function CryptoPage() {
                   </div>
                 </div>
 
-                {selectedWallet && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-muted-foreground">Your {selectedCoin} Address</label>
-                    <div className="bg-muted rounded-xl p-3 flex items-center gap-2">
-                      <p className="font-mono text-xs flex-1 break-all">{selectedWallet.address}</p>
-                      <button
-                        onClick={() => copyToClipboard(selectedWallet.address, "deposit-addr")}
-                        className="shrink-0 w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"
-                      >
-                        {copied === "deposit-addr" ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-primary" />}
-                      </button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">Network: {COIN_NETWORKS[selectedCoin]}</p>
+                {selectedCoinAddresses.length === 0 ? (
+                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 text-center">
+                    <p className="text-xs text-yellow-700 dark:text-yellow-300">No {selectedCoin} deposit addresses are currently available. Please check back shortly or contact support.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <label className="text-sm font-medium text-muted-foreground">Available {selectedCoin} Networks</label>
+                    {selectedCoinAddresses.map((addr) => (
+                      <div key={addr.id} className="bg-muted rounded-xl p-3 space-y-2" data-testid={`deposit-address-${addr.id}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded">
+                              {addr.networkLabel || addr.network}
+                            </span>
+                            {addr.minDeposit && parseFloat(addr.minDeposit) > 0 && (
+                              <span className="text-[10px] text-muted-foreground">Min: {addr.minDeposit} {selectedCoin}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => copyToClipboard(addr.address, `addr-${addr.id}`)}
+                            className="shrink-0 w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center"
+                            data-testid={`button-copy-address-${addr.id}`}
+                          >
+                            {copied === `addr-${addr.id}` ? <Check className="w-4 h-4 text-primary" /> : <Copy className="w-4 h-4 text-primary" />}
+                          </button>
+                        </div>
+                        <p className="font-mono text-xs break-all bg-background rounded p-2">{addr.address}</p>
+                        {addr.memo && (
+                          <div className="flex items-center gap-2 text-xs">
+                            <span className="font-semibold text-orange-600 dark:text-orange-400">Memo/Tag:</span>
+                            <span className="font-mono">{addr.memo}</span>
+                            <button
+                              onClick={() => copyToClipboard(addr.memo, `memo-${addr.id}`)}
+                              className="ml-auto"
+                            >
+                              {copied === `memo-${addr.id}` ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3 text-muted-foreground" />}
+                            </button>
+                          </div>
+                        )}
+                        {addr.notes && (
+                          <p className="text-[11px] text-muted-foreground italic">{addr.notes}</p>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 )}
 

@@ -328,6 +328,34 @@ export default function WithdrawPage() {
               />
             </motion.div>
 
+            {/* Crypto Withdrawal Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="bg-gradient-to-br from-orange-500/10 via-yellow-500/10 to-purple-500/10 border border-primary/20 rounded-xl p-4 elevation-1"
+            >
+              <button
+                type="button"
+                onClick={() => setLocation("/crypto?tab=withdraw")}
+                className="w-full flex items-center text-left group"
+                data-testid="button-crypto-withdraw"
+              >
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-purple-500 rounded-xl flex items-center justify-center mr-4 shadow-md group-hover:scale-105 transition-transform">
+                  <span className="material-icons text-white">currency_bitcoin</span>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="font-medium">Crypto Withdrawal</p>
+                    <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-full">BTC · ETH · USDT · USDC</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Withdraw to any wallet address worldwide</p>
+                  <p className="text-xs text-accent font-medium mt-1">30–60 minutes</p>
+                </div>
+                <span className="material-icons text-muted-foreground ml-2">chevron_right</span>
+              </button>
+            </motion.div>
+
             {/* Account Details Form */}
             {selectedMethod && (
               <motion.div
