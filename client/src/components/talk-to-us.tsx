@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, MessageCircle, Bot, ChevronUp } from 'lucide-react';
+import { X, MessageCircle, Bot, ChevronUp, Mail } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface Message {
@@ -217,6 +217,21 @@ export function TalkToUs() {
               <span className="text-sm font-medium">WhatsApp</span>
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
                 <MessageCircle className="w-5 h-5 text-white" />
+              </div>
+            </motion.a>
+
+            {/* Email option */}
+            <motion.a
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.1 }}
+              href="mailto:support@greenpay.world?subject=GreenPay Support"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
+            >
+              <span className="text-sm font-medium">Email Us</span>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                <Mail className="w-5 h-5 text-white" />
               </div>
             </motion.a>
           </motion.div>
