@@ -609,6 +609,8 @@ function UserDetailsDialog({ user }: { user: User }) {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [suspendReason, setSuspendReason] = useState("");
+  const [smsMessage, setSmsMessage] = useState("");
+  const [smsSending, setSmsSending] = useState(false);
 
   // Edit profile state
   const [editingProfile, setEditingProfile] = useState(false);
@@ -1467,14 +1469,63 @@ function UserDetailsDialog({ user }: { user: User }) {
           {/* Send Notification */}
           <div className="bg-muted/40 rounded-xl p-4 space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              <Bell className="w-3 h-3" /> Send Notification
+              <Bell className="w-3 h-3" /> Send In-App Notification
             </p>
             <Input id="notification-title" className="h-8 text-xs" placeholder="Title" />
             <Input id="notification-message" className="h-8 text-xs" placeholder="Message" />
             <Button size="sm" className="w-full text-xs h-8"
               onClick={() => handleSendNotification(user.id)} disabled={isLoading}>
-              <Bell className="w-3 h-3 mr-2" /> Send
+              <Bell className="w-3 h-3 mr-2" /> Send Notification
             </Button>
+          </div>
+
+          {/* Send SMS */}
+          <div className="bg-muted/40 rounded-xl p-4 space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+              <Phone className="w-3 h-3" /> Send SMS to {user.fullName?.split(' ')[0]}
+            </p>
+            {user.phone ? (
+              <>
+                <p className="text-xs text-muted-foreground">Sending to: <span className="font-mono font-medium">{user.phone}</span></p>
+                <Input
+                  className="h-8 text-xs"
+                  placeholder="SMS message (max 160 chars)"
+                  maxLength={160}
+                  value={smsMessage}
+                  onChange={(e) => setSmsMessage(e.target.value)}
+                  data-testid="input-user-sms-message"
+                />
+                <p className="text-[10px] text-muted-foreground text-right">{smsMessage.length}/160 — [GREENPAY] prefix added automatically</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs h-8 border-primary/40 text-primary hover:bg-primary/5"
+                  disabled={smsSending || !smsMessage.trim()}
+                  onClick={async () => {
+                    setSmsSending(true);
+                    try {
+                      const r = await apiRequest("POST", "/api/admin/sms/send-user", { userId: user.id, message: smsMessage.trim() });
+                      const result = await r.json();
+                      if (result.success) {
+                        toast({ title: "SMS Sent", description: `Message delivered to ${user.phone}` });
+                        setSmsMessage("");
+                      } else {
+                        toast({ title: "Send Failed", description: result.message || "Failed to send SMS", variant: "destructive" });
+                      }
+                    } catch {
+                      toast({ title: "Error", description: "Failed to send SMS", variant: "destructive" });
+                    } finally {
+                      setSmsSending(false);
+                    }
+                  }}
+                  data-testid="button-send-user-sms"
+                >
+                  <Phone className="w-3 h-3 mr-2" /> {smsSending ? "Sending..." : "Send SMS"}
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-destructive">This user has no phone number registered.</p>
+            )}
           </div>
         </TabsContent>
 

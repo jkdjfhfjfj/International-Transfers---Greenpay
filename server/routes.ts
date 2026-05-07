@@ -1665,18 +1665,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: "success"
             }).catch(err => console.error('Notification error:', err));
 
-            // Check for applicable deposit bonuses
+            // Send deposit confirmation SMS
+            try {
+              const { messagingService: depositSms } = await import('./services/messaging');
+              if (user.phone) {
+                depositSms.sendDepositConfirmation(user.phone, depositAmount.toFixed(2), 'USD', 'M-Pesa', user.email, user.fullName).catch(() => {});
+              }
+            } catch (_) {}
+
+            // Check for applicable deposit bonuses — apply highest matching bonus
             try {
               const activeBonuses = await db.select().from(depositBonuses)
                 .where(eq(depositBonuses.isActive, true));
-              for (const bonus of activeBonuses) {
-                const bonusMethod = bonus.method;
-                if (bonusMethod !== 'mpesa' && bonusMethod !== 'any') continue;
-                if (depositAmount < parseFloat(bonus.minAmount)) continue;
-                const bonusValue = bonus.bonusType === 'percentage'
-                  ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
-                  : parseFloat(bonus.bonusAmount);
-                if (bonusValue <= 0) continue;
+              // Filter eligible bonuses and pick the one with highest bonusValue
+              const eligible = activeBonuses
+                .filter(b => (b.method === 'mpesa' || b.method === 'any') && depositAmount >= parseFloat(b.minAmount))
+                .map(b => ({
+                  bonus: b,
+                  value: b.bonusType === 'percentage'
+                    ? (depositAmount * parseFloat(b.bonusAmount)) / 100
+                    : parseFloat(b.bonusAmount)
+                }))
+                .filter(e => e.value > 0)
+                .sort((a, b) => b.value - a.value); // highest bonus first
+
+              if (eligible.length > 0) {
+                const { bonus, value: bonusValue } = eligible[0];
                 const balanceAfterDeposit = parseFloat(newBalance);
                 const balanceWithBonus = (balanceAfterDeposit + bonusValue).toFixed(2);
                 await storage.updateUser(transaction.userId, { balance: balanceWithBonus });
@@ -1696,7 +1710,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   message: `You received a $${bonusValue.toFixed(2)} bonus for your M-Pesa deposit!`,
                   type: "success"
                 }).catch(err => console.error('Bonus notification error:', err));
-                break; // Apply only the first matching bonus
               }
             } catch (bonusErr) {
               console.error('[PayHero Bonus Error]:', bonusErr);
@@ -6764,28 +6777,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Messaging settings endpoints
   app.get("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "sms_app_id");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "commsGrid_api_key");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "commsGrid_sender_id");
+      const deviceIdSetting = await storage.getSystemSetting("messaging", "commsGrid_device_id");
       const whatsappAccessTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneNumberIdSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       const whatsappWabaIdSetting = await storage.getSystemSetting("messaging", "whatsapp_business_account_id");
       
       const settings = {
-        apiKey: apiKeySetting?.value || "",
-        accountEmail: emailSetting?.value || "",
-        senderId: senderIdSetting?.value || "",
+        commsGridApiKey: apiKeySetting?.value || "",
+        commsGridSenderId: senderIdSetting?.value || "",
+        commsGridDeviceId: deviceIdSetting?.value || "",
         whatsappAccessToken: whatsappAccessTokenSetting?.value || "",
         whatsappPhoneNumberId: String(whatsappPhoneNumberIdSetting?.value || ""),
         whatsappBusinessAccountId: String(whatsappWabaIdSetting?.value || ""),
       };
       
-      console.log('[Messaging Settings] Retrieved:', {
-        sms: !!settings.apiKey && !!settings.accountEmail && !!settings.senderId,
-        whatsapp: !!settings.whatsappAccessToken && !!settings.whatsappPhoneNumberId,
-        wabaId: !!settings.whatsappBusinessAccountId
-      });
-      
+      console.log('[Messaging Settings] Retrieved CommsGrid + WA settings');
       res.json(settings);
     } catch (error) {
       console.error('Error fetching messaging settings:', error);
@@ -6795,30 +6803,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.put("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const { sms_api_key, sms_app_id, sms_sender_id, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
+      const { commsGridApiKey, commsGridSenderId, commsGridDeviceId, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
       
-      console.log('Admin updated messaging settings (SMS via Umeskia Software, WhatsApp via Meta)');
+      console.log('Admin updated messaging settings (SMS via CommsGrid, WhatsApp via Meta)');
       
-      // SMS Settings (Umeskia Software API)
+      // SMS Settings (CommsGrid API)
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_api_key",
-        value: (sms_api_key || '').trim(),
-        description: "Umeskia Software API key for SMS"
+        key: "commsGrid_api_key",
+        value: (commsGridApiKey || '').trim(),
+        description: "CommsGrid API key (Bearer token)"
       });
       
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_app_id",
-        value: (sms_app_id || '').trim(),
-        description: "Umeskia Software App ID"
+        key: "commsGrid_sender_id",
+        value: (commsGridSenderId || '').trim(),
+        description: "CommsGrid sender ID"
       });
-      
+
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_sender_id",
-        value: (sms_sender_id || '').trim(),
-        description: "SMS sender ID"
+        key: "commsGrid_device_id",
+        value: (commsGridDeviceId || '').trim(),
+        description: "CommsGrid device ID (optional)"
       });
       
       // WhatsApp Settings (Meta Business API)
@@ -6843,21 +6851,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         description: "Meta WhatsApp Business Account ID (WABA ID)"
       });
       
-      // Sync SMS env vars so messaging service picks them up immediately
-      if (sms_api_key) process.env.SMS_API_KEY = (sms_api_key || '').trim();
-      if (sms_app_id) process.env.SMS_APP_ID = (sms_app_id || '').trim();
-      if (sms_sender_id) process.env.SMS_SENDER_ID = (sms_sender_id || '').trim();
+      // Sync env vars so messaging service picks them up immediately
+      if (commsGridApiKey) process.env.COMMSGRID_API_KEY = (commsGridApiKey || '').trim();
+      if (commsGridSenderId) process.env.COMMSGRID_SENDER_ID = (commsGridSenderId || '').trim();
+      if (commsGridDeviceId) process.env.COMMSGRID_DEVICE_ID = (commsGridDeviceId || '').trim();
 
       // Sync WhatsApp env vars
       process.env.WHATSAPP_ACCESS_TOKEN = (whatsapp_access_token || '').trim();
       process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsapp_phone_number_id || '').trim();
       process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsapp_business_account_id || '').trim();
       
-      console.log('[Messaging Settings] Updated:', {
-        sms: !!sms_api_key && !!sms_app_id && !!sms_sender_id,
-        whatsapp: !!whatsapp_access_token && !!whatsapp_phone_number_id,
-        wabaId: !!whatsapp_business_account_id
-      });
+      console.log('[Messaging Settings] Updated CommsGrid SMS + WhatsApp');
       
       // Refresh WhatsApp service credentials after update
       if (whatsapp_access_token && whatsapp_phone_number_id) {
@@ -10364,6 +10368,91 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     } catch (error) {
       console.error('Targeted notification error:', error);
       res.status(500).json({ message: "Failed to send notifications" });
+    }
+  });
+
+  // ============================================================
+  // ADMIN SMS ROUTES (CommsGrid)
+  // ============================================================
+
+  app.post("/api/admin/sms/send-user", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId, message } = req.body;
+      if (!userId || !message) return res.status(400).json({ message: "userId and message are required" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.phone) return res.status(400).json({ message: "User has no phone number" });
+      const { messagingService } = await import('./services/messaging');
+      const result = await messagingService.sendMessage(user.phone, message);
+      await storage.createAdminLog({ adminId: (req as any).session?.admin?.id || null, action: 'sms_send_user', details: `SMS sent to ${user.fullName} (${user.phone})` });
+      res.json({ success: true, sms: result.sms, whatsapp: result.whatsapp });
+    } catch (error) {
+      console.error('Admin SMS send-user error:', error);
+      res.status(500).json({ message: "Failed to send SMS" });
+    }
+  });
+
+  app.post("/api/admin/sms/broadcast", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, all, message } = req.body;
+      if (!message) return res.status(400).json({ message: "message is required" });
+
+      let phones: { phone: string }[] = [];
+      if (all) {
+        const allUsersResult = await storage.getAllUsers({ limit: 100000 });
+        phones = (allUsersResult.users || []).filter((u: any) => u.phone).map((u: any) => ({ phone: u.phone }));
+      } else if (Array.isArray(userIds) && userIds.length > 0) {
+        const found = await Promise.all(userIds.map((id: string) => storage.getUser(id)));
+        phones = found.filter((u: any) => u?.phone).map((u: any) => ({ phone: u.phone }));
+      } else {
+        return res.status(400).json({ message: "Provide userIds array or all: true" });
+      }
+
+      const { messagingService } = await import('./services/messaging');
+      const phoneNumbers = phones.map(p => p.phone);
+      const result = await messagingService.sendSMSToMultiple(phoneNumbers, message);
+
+      await storage.createAdminLog({ adminId: (req as any).session?.admin?.id || null, action: 'sms_broadcast', details: `SMS broadcast to ${result.sent} users` });
+      res.json({ success: true, sent: result.sent, failed: result.failed, total: phoneNumbers.length });
+    } catch (error) {
+      console.error('Admin SMS broadcast error:', error);
+      res.status(500).json({ message: "Failed to send SMS broadcast" });
+    }
+  });
+
+  // ============================================================
+  // ADMIN EMAIL TEMPLATE UUID MANAGEMENT
+  // ============================================================
+
+  app.get("/api/admin/email-templates", requireAdminAuth, async (req, res) => {
+    try {
+      const { mailtrapService } = await import('./services/mailtrap');
+      const templates = await mailtrapService.getAllTemplateUuids();
+      res.json({ templates });
+    } catch (error) {
+      console.error('Email templates fetch error:', error);
+      res.status(500).json({ message: "Failed to fetch email templates" });
+    }
+  });
+
+  app.put("/api/admin/email-templates", requireAdminAuth, async (req, res) => {
+    try {
+      const { templates } = req.body; // { templateName: uuid }
+      if (!templates || typeof templates !== 'object') {
+        return res.status(400).json({ message: "templates object required" });
+      }
+      for (const [name, uuid] of Object.entries(templates)) {
+        await storage.setSystemSetting({
+          category: "email_templates",
+          key: name,
+          value: String(uuid || '').trim(),
+          description: `Email template UUID for ${name}`,
+        });
+      }
+      res.json({ success: true, message: "Email template UUIDs saved" });
+    } catch (error) {
+      console.error('Email templates save error:', error);
+      res.status(500).json({ message: "Failed to save email templates" });
     }
   });
 

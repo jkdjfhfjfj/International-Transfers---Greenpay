@@ -6,7 +6,8 @@ interface MailtrapTemplate {
   variables: Record<string, string>;
 }
 
-const TEMPLATE_UUIDs = {
+// Default template UUIDs — overridden by admin settings in DB
+const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   otp: '64254a5b-a2ba-4b7d-aa41-5a0907c836db',
   password_reset: '97fe2c00-4cfd-433b-b262-25632cbdbed7',
   welcome: '7711c72e-431b-4fb9-bea9-9738d4d8bfe7',
@@ -15,7 +16,7 @@ const TEMPLATE_UUIDs = {
   login_alert: '42ce5e3b-eed9-41aa-808c-cfecbd906e60',
   fund_receipt: '5e2a2ec4-37fb-4178-96c4-598977065f9c',
   card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
-  transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39'
+  transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
 };
 
 export class MailtrapService {
@@ -23,55 +24,43 @@ export class MailtrapService {
   private apiUrl = 'https://send.api.mailtrap.io/api/send';
   private fromEmail = 'support@greenpay.world';
   private fromName = 'GreenPay';
-  private initialized = false;
 
   constructor() {
-    // Set default immediately so API key is available
     this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
-    console.log('[Mailtrap] ✓ Service initialized with API key');
-    // Load from database asynchronously in background
     this.loadApiKey().catch(err => console.error('[Mailtrap] Background load error:', err));
   }
 
-  /**
-   * Load Mailtrap API key from database or environment
-   */
   private async loadApiKey(): Promise<void> {
     try {
-      // Try to load from database first
-      const setting = await storage.getSystemSetting("email", "mailtrap_api_key");
-      
+      const setting = await storage.getSystemSetting('email', 'mailtrap_api_key');
       if (setting?.value) {
         this.apiKey = setting.value;
         process.env.MAILTRAP_API_KEY = setting.value;
-        console.log('[Mailtrap] ✓ API key loaded from database');
       } else {
-        // Fallback to environment variable or default
         this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
-        if (process.env.MAILTRAP_API_KEY) {
-          console.log('[Mailtrap] ✓ API key loaded from environment');
-        } else {
-          console.log('[Mailtrap] ✓ Using default API key');
-        }
       }
-      this.initialized = true;
-    } catch (error) {
-      console.error('[Mailtrap] Error loading API key:', error);
-      // Use default on error
+    } catch {
       this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
     }
   }
 
-  /**
-   * Refresh API key when settings are updated
-   */
   async refreshApiKey(): Promise<void> {
-    console.log('[Mailtrap] Refreshing API key...');
     await this.loadApiKey();
   }
 
   /**
-   * Send email using Mailtrap template with optional attachments
+   * Get template UUID — checks DB first, falls back to hardcoded defaults
+   */
+  private async getTemplateUuid(templateName: string): Promise<string | null> {
+    try {
+      const setting = await storage.getSystemSetting('email_templates', templateName);
+      if (setting?.value && setting.value.trim()) return setting.value.trim();
+    } catch { /* ignore */ }
+    return DEFAULT_TEMPLATE_UUIDs[templateName] || null;
+  }
+
+  /**
+   * Send email using Mailtrap template
    */
   async sendTemplate(
     toEmail: string,
@@ -81,165 +70,147 @@ export class MailtrapService {
   ): Promise<boolean> {
     try {
       if (!this.apiKey) {
-        console.error('[Mailtrap] ✗ API key not configured');
+        console.error('[Mailtrap] API key not configured');
+        return false;
+      }
+
+      if (!templateUuid) {
+        console.warn('[Mailtrap] Template UUID not configured — skipping email');
         return false;
       }
 
       const payload: any = {
         template_uuid: templateUuid,
         template_variables: variables,
-        from: {
-          email: this.fromEmail,
-          name: this.fromName
-        },
-        to: [
-          { email: toEmail }
-        ]
+        from: { email: this.fromEmail, name: this.fromName },
+        to: [{ email: toEmail }],
       };
 
-      if (attachments && attachments.length > 0) {
-        payload.attachments = attachments;
-      }
-
-      console.log(`[Mailtrap] Sending template ${templateUuid} to ${toEmail}${attachments ? ' with attachments' : ''}`);
+      if (attachments?.length) payload.attachments = attachments;
 
       const response = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
           'Api-Token': this.apiKey,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (!response.ok) {
         const error = await response.text();
-        console.error(`[Mailtrap] ✗ Send failed: ${response.status} - ${error}`);
+        console.error(`[Mailtrap] Send failed ${response.status}: ${error}`);
         return false;
       }
 
       const result = await response.json() as any;
-      console.log(`[Mailtrap] ✓ Full Response:`, JSON.stringify(result, null, 2));
-      
-      // Check if response has success field or message_id
       if (result.success || result.message_id || result.messages) {
-        console.log(`[Mailtrap] ✓ Email sent successfully - Response: ${JSON.stringify(result)}`);
+        console.log(`[Mailtrap] ✓ Sent template ${templateUuid} to ${toEmail}`);
         return true;
-      } else {
-        console.warn(`[Mailtrap] ⚠️ Unexpected response format:`, result);
-        return true; // Still return true as email might be queued
       }
+      console.warn('[Mailtrap] Unexpected response:', result);
+      return true;
     } catch (error) {
-      console.error('[Mailtrap] Error sending email:', error);
+      console.error('[Mailtrap] Error:', error);
       return false;
     }
   }
 
-  /**
-   * Send OTP verification email
-   */
   async sendOTP(toEmail: string, firstName: string, lastName: string, otp: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.otp, {
-      first_name: firstName,
-      last_name: lastName,
-      otp: otp
-    });
+    const uuid = await this.getTemplateUuid('otp');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, otp });
   }
 
-  /**
-   * Send password reset email
-   */
   async sendPasswordReset(toEmail: string, firstName: string, lastName: string, resetCode: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.password_reset, {
-      first_name: firstName,
-      last_name: lastName,
-      reset_code: resetCode
-    });
+    const uuid = await this.getTemplateUuid('password_reset');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, reset_code: resetCode });
   }
 
-  /**
-   * Send welcome email
-   */
   async sendWelcome(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.welcome, {
-      first_name: firstName,
-      last_name: lastName
-    });
+    const uuid = await this.getTemplateUuid('welcome');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
   }
 
-  /**
-   * Send KYC submitted notification
-   */
   async sendKYCSubmitted(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.kyc_submitted, {
-      first_name: firstName,
-      last_name: lastName
-    });
+    const uuid = await this.getTemplateUuid('kyc_submitted');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
   }
 
-  /**
-   * Send KYC verified notification
-   */
   async sendKYCVerified(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.kyc_verified, {
-      first_name: firstName,
-      last_name: lastName
-    });
+    const uuid = await this.getTemplateUuid('kyc_verified');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
   }
 
-  /**
-   * Send login alert email
-   */
   async sendLoginAlert(
-    toEmail: string,
-    firstName: string,
-    lastName: string,
-    location: string,
-    ipAddress: string,
-    device: string
+    toEmail: string, firstName: string, lastName: string,
+    location: string, ipAddress: string, device: string
   ): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.login_alert, {
-      first_name: firstName,
-      last_name: lastName,
-      location: location,
-      ip_address: ipAddress,
-      device: device
+    const uuid = await this.getTemplateUuid('login_alert');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName,
+      location, ip_address: ipAddress, device,
     });
   }
 
-  /**
-   * Send fund receipt notification email
-   */
-  async sendFundReceipt(toEmail: string, firstName: string, lastName: string, amount: string, currency: string, sender: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.fund_receipt, {
-      first_name: firstName,
-      last_name: lastName,
-      amount: amount,
-      currency: currency,
-      sender: sender
+  async sendFundReceipt(
+    toEmail: string, firstName: string, lastName: string,
+    amount: string, currency: string, sender: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('fund_receipt');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName,
+      amount, currency, sender,
     });
   }
 
-  /**
-   * Send card activation notification email
-   */
-  async sendCardActivation(toEmail: string, firstName: string, lastName: string, cardLastFour: string): Promise<boolean> {
-    return this.sendTemplate(toEmail, TEMPLATE_UUIDs.card_activation, {
-      first_name: firstName,
-      last_name: lastName,
-      card_last_four: cardLastFour
+  async sendCardActivation(
+    toEmail: string, firstName: string, lastName: string, cardLastFour: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('card_activation');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName, card_last_four: cardLastFour,
     });
   }
 
-  /**
-   * Admin: Send custom template to user
-   */
   async sendCustomTemplate(
-    toEmail: string,
-    templateUuid: string,
-    variables: Record<string, string>
+    toEmail: string, templateUuid: string, variables: Record<string, string>
   ): Promise<boolean> {
     return this.sendTemplate(toEmail, templateUuid, variables);
+  }
+
+  async sendTransactionExport(
+    toEmail: string, firstName: string, lastName: string,
+    attachments: Array<{ filename: string; content: string; disposition: string }>
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('transaction_export');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
+  }
+
+  /** Return all template names and their current UUIDs (DB overrides + defaults) */
+  async getAllTemplateUuids(): Promise<Record<string, { uuid: string; isCustom: boolean }>> {
+    const result: Record<string, { uuid: string; isCustom: boolean }> = {};
+    for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
+      try {
+        const setting = await storage.getSystemSetting('email_templates', name);
+        if (setting?.value?.trim()) {
+          result[name] = { uuid: setting.value.trim(), isCustom: true };
+        } else {
+          result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+        }
+      } catch {
+        result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+      }
+    }
+    return result;
   }
 }
 

@@ -46,7 +46,10 @@ export default function BottomNavigation() {
     location.startsWith('/api-documentation') ||
     location.startsWith('/admin-notifications') ||
     location.startsWith('/crypto') ||
-    location.startsWith('/analytics')
+    location.startsWith('/analytics') ||
+    location.startsWith('/payment-processing') ||
+    location.startsWith('/payment-success') ||
+    location.startsWith('/payment-failed')
   );
 
   if (!showBottomNav) return null;
