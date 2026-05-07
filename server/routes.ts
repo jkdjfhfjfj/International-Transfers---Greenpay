@@ -1569,11 +1569,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
       
       if (!paymentData.success) {
-        // Handle specific error types
         if (paymentData.status === 'INVALID_PHONE_NUMBER' || paymentData.status === 'INVALID_PHONE_FORMAT') {
           return res.status(400).json({ 
             message: 'Invalid phone number format. Please update your profile with a valid Kenyan phone number (e.g., +254712345678 or 0712345678)',
             status: paymentData.status 
+          });
+        }
+        if (paymentData.status === 'TIMEOUT') {
+          return res.status(504).json({
+            message: 'M-Pesa service is taking too long to respond. Please wait a moment and try again.',
+            status: 'TIMEOUT'
           });
         }
         return res.status(400).json({ 
@@ -1754,6 +1759,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!paymentData.success) {
         if (paymentData.status === 'INVALID_PHONE_NUMBER' || paymentData.status === 'INVALID_PHONE_FORMAT') {
           return res.status(400).json({ message: "Invalid phone number. Use format: 07XXXXXXXX or +2547XXXXXXXX", status: paymentData.status });
+        }
+        if (paymentData.status === 'TIMEOUT') {
+          return res.status(504).json({ message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.", status: 'TIMEOUT' });
         }
         return res.status(400).json({ message: "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
       }

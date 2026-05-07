@@ -220,14 +220,23 @@ export class PayHeroService {
         url: url
       });
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify(payload)
-      });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
+
+      let response: any;
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': authHeader
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       // Safely parse response — PayHero can return empty body on auth/network errors
       const rawText = await response.text();
@@ -267,11 +276,12 @@ export class PayHeroService {
         reference: data.reference || '',
         CheckoutRequestID: data.CheckoutRequestID || ''
       };
-    } catch (error) {
-      console.error('PayHero payment initiation error:', error);
+    } catch (error: any) {
+      const isTimeout = error?.name === 'AbortError' || error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT';
+      console.error('PayHero payment initiation error:', isTimeout ? 'Request timed out (504)' : error);
       return {
         success: false,
-        status: 'ERROR',
+        status: isTimeout ? 'TIMEOUT' : 'ERROR',
         reference: '',
         CheckoutRequestID: ''
       };
@@ -291,12 +301,19 @@ export class PayHeroService {
 
       console.log('Checking PayHero transaction status:', { reference, url });
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Authorization': authHeader
-        }
-      });
+      const statusController = new AbortController();
+      const statusTimeoutId = setTimeout(() => statusController.abort(), 15000); // 15-second timeout
+
+      let response: any;
+      try {
+        response = await fetch(url, {
+          method: 'GET',
+          headers: { 'Authorization': authHeader },
+          signal: statusController.signal
+        });
+      } finally {
+        clearTimeout(statusTimeoutId);
+      }
 
       // Safely parse — status endpoint can also return empty body
       const rawText = await response.text();
@@ -333,12 +350,13 @@ export class PayHeroService {
         data: data,
         message: data.message
       };
-    } catch (error) {
-      console.error('PayHero transaction status check error:', error);
+    } catch (error: any) {
+      const isTimeout = error?.name === 'AbortError' || error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT';
+      console.error('PayHero status check error:', isTimeout ? 'Request timed out' : error);
       return {
         success: false,
-        status: 'ERROR',
-        message: 'Failed to check transaction status'
+        status: isTimeout ? 'TIMEOUT' : 'ERROR',
+        message: isTimeout ? 'PayHero request timed out — please try again' : 'Failed to check transaction status'
       };
     }
   }
