@@ -229,8 +229,19 @@ export class PayHeroService {
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json() as any;
-      
+      // Safely parse response — PayHero can return empty body on auth/network errors
+      const rawText = await response.text();
+      let data: any = {};
+      if (rawText.trim()) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.error('PayHero response is not valid JSON:', rawText.slice(0, 200));
+        }
+      } else {
+        console.warn('PayHero returned an empty response body (HTTP', response.status, ')');
+      }
+
       console.log('PayHero HTTP response:', { 
         httpStatus: response.status, 
         success: data.success, 
@@ -287,8 +298,19 @@ export class PayHeroService {
         }
       });
 
-      const data = await response.json() as any;
-      
+      // Safely parse — status endpoint can also return empty body
+      const rawText = await response.text();
+      let data: any = {};
+      if (rawText.trim()) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.error('PayHero status response is not valid JSON:', rawText.slice(0, 200));
+        }
+      } else {
+        console.warn('PayHero status check returned empty body (HTTP', response.status, ')');
+      }
+
       console.log('PayHero transaction status response:', { 
         httpStatus: response.status,
         reference,
