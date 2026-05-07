@@ -106,10 +106,10 @@ export default function AnalyticsPage() {
             </div>
             <p className="text-xl font-bold">{isPositiveFlow ? "+" : ""}${formatNumber(Math.abs(summary.netFlow))}</p>
           </div>
-          <div className="bg-gradient-to-br from-purple-500 to-violet-600 text-white p-4 rounded-2xl">
+          <div className="bg-gradient-to-br from-emerald-500 to-teal-600 text-white p-4 rounded-2xl">
             <div className="flex items-center gap-1.5 mb-1">
               <Activity className="w-4 h-4" />
-              <p className="text-xs text-purple-100">Transactions</p>
+              <p className="text-xs text-emerald-100">Transactions</p>
             </div>
             <p className="text-xl font-bold">{summary.txCount}</p>
           </div>

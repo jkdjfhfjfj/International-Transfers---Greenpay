@@ -70,7 +70,7 @@ export default function PrivacyPolicyPage() {
           {[
             { icon: Shield, label: "Data Security", color: "from-emerald-500" },
             { icon: Lock, label: "Encryption", color: "from-blue-500" },
-            { icon: Eye, label: "Privacy Controls", color: "from-purple-500" },
+            { icon: Eye, label: "Privacy Controls", color: "from-teal-500" },
           ].map((item, idx) => (
             <motion.div
               key={idx}
@@ -138,7 +138,7 @@ export default function PrivacyPolicyPage() {
 
           <motion.section variants={itemVariants}>
             <div className="flex items-start gap-3 mb-4">
-              <Users className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
+              <Users className="w-6 h-6 text-teal-600 flex-shrink-0 mt-1" />
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
                   3. Data Sharing and Third Parties
@@ -188,7 +188,7 @@ export default function PrivacyPolicyPage() {
 
           <motion.section variants={itemVariants}>
             <div className="flex items-start gap-3 mb-4">
-              <Eye className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
+              <Eye className="w-6 h-6 text-teal-600 flex-shrink-0 mt-1" />
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
                   5. Your Privacy Rights
@@ -256,7 +256,7 @@ export default function PrivacyPolicyPage() {
 
           <motion.section variants={itemVariants}>
             <div className="flex items-start gap-3 mb-4">
-              <Users className="w-6 h-6 text-purple-600 flex-shrink-0 mt-1" />
+              <Users className="w-6 h-6 text-teal-600 flex-shrink-0 mt-1" />
               <div>
                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white">
                   9. Children's Privacy
@@ -284,7 +284,7 @@ export default function PrivacyPolicyPage() {
 
           <motion.section variants={itemVariants}>
             <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-3">
-              <Users className="w-6 h-6 text-purple-600" />
+              <Users className="w-6 h-6 text-teal-600" />
               11. Contact Us
             </h2>
             <p className="text-slate-700 dark:text-slate-300 leading-relaxed mb-3">

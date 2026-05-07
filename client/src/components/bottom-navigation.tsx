@@ -78,7 +78,7 @@ export default function BottomNavigation() {
                 >
                   <div className="relative">
                     {/* Elevated circular button with gradient */}
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary via-purple-500 to-secondary shadow-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary via-emerald-500 to-secondary shadow-xl flex items-center justify-center relative overflow-hidden">
                       {/* Animated glow effect */}
                       <motion.div
                         className="absolute inset-0 bg-gradient-to-r from-primary/50 to-secondary/50 rounded-full"

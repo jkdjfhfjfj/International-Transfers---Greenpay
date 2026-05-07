@@ -32,7 +32,7 @@ const slides: OnboardingSlide[] = [
     title: "Best Exchange Rates",
     description: "Real-time rates with no hidden fees. Get more value for your money.",
     icon: <TrendingUp className="w-24 h-24" />,
-    gradient: "from-purple-500 to-pink-600",
+    gradient: "from-emerald-500 to-teal-600",
   },
   {
     id: 4,

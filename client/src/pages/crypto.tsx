@@ -9,7 +9,7 @@ import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, C
 
 const COIN_COLORS: Record<string, string> = {
   BTC: "from-orange-500 to-yellow-500",
-  ETH: "from-purple-500 to-indigo-500",
+  ETH: "from-blue-500 to-indigo-500",
   USDT: "from-green-500 to-teal-500",
   USDC: "from-blue-500 to-cyan-500",
 };
@@ -152,7 +152,7 @@ export default function CryptoPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-indigo-600 via-purple-600 to-pink-600 rounded-2xl p-5 text-white"
+          className="bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600 rounded-2xl p-5 text-white"
         >
           <p className="text-sm text-white/70 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>

@@ -32,7 +32,7 @@ export default function AdminAnalyticsPage() {
           {[
             { label: "Total Users", value: metrics.totalUsers || 0, icon: Users, color: "text-blue-600" },
             { label: "Total Volume", value: `$${(metrics.totalVolume || 0).toLocaleString()}`, icon: DollarSign, color: "text-green-600" },
-            { label: "Revenue", value: `$${(metrics.totalRevenue || 0).toLocaleString()}`, icon: TrendingUp, color: "text-purple-600" },
+            { label: "Revenue", value: `$${(metrics.totalRevenue || 0).toLocaleString()}`, icon: TrendingUp, color: "text-emerald-600" },
           ].map((s) => {
             const Icon = s.icon;
             return (

@@ -175,11 +175,11 @@ export default function TransactionsPage() {
       case "receive":
         return { icon: "arrow_downward", bg: "bg-blue-100", color: "text-blue-600" };
       case "deposit":
-        return { icon: "add", bg: "bg-purple-100", color: "text-purple-600" };
+        return { icon: "add", bg: "bg-green-100", color: "text-green-600" };
       case "withdraw":
         return { icon: "remove", bg: "bg-orange-100", color: "text-orange-600" };
       case "exchange":
-        return { icon: "swap_horiz", bg: "bg-indigo-100", color: "text-indigo-600" };
+        return { icon: "swap_horiz", bg: "bg-teal-100", color: "text-teal-600" };
       case "card_purchase":
         return { icon: "credit_card", bg: "bg-pink-100", color: "text-pink-600" };
       default:

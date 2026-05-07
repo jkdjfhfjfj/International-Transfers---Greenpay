@@ -14,6 +14,7 @@ export const users = pgTable("users", {
   isEmailVerified: boolean("is_email_verified").default(false),
   isPhoneVerified: boolean("is_phone_verified").default(false),
   kycStatus: text("kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
+  advancedKycStatus: text("advanced_kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
   hasVirtualCard: boolean("has_virtual_card").default(false),
   twoFactorSecret: text("two_factor_secret"),
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
@@ -825,3 +826,25 @@ export const depositBonuses = pgTable("deposit_bonuses", {
 export const insertDepositBonusSchema = createInsertSchema(depositBonuses).omit({ id: true, createdAt: true, updatedAt: true });
 export type DepositBonus = typeof depositBonuses.$inferSelect;
 export type InsertDepositBonus = z.infer<typeof insertDepositBonusSchema>;
+
+// Advanced KYC documents — facial + address proof (separate from basic KYC)
+export const advancedKycDocuments = pgTable("advanced_kyc_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  facialPhotoUrl: text("facial_photo_url"),
+  addressProofUrl: text("address_proof_url"),
+  addressProofType: text("address_proof_type"), // utility_bill, bank_statement, lease, government_letter, other
+  fullAddress: text("full_address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  country: text("country"),
+  status: text("status").default("pending"), // pending, verified, rejected
+  verificationNotes: text("verification_notes"),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAdvancedKycSchema = createInsertSchema(advancedKycDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+export type AdvancedKycDocument = typeof advancedKycDocuments.$inferSelect;
+export type InsertAdvancedKyc = z.infer<typeof insertAdvancedKycSchema>;

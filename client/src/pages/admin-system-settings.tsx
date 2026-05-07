@@ -9,7 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download } from "lucide-react";
+import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download, Gift } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface SystemSettings {
   fees?: {
@@ -106,6 +107,12 @@ export default function AdminSystemSettingsPage() {
   const [apkVersion, setApkVersion] = useState("");
   const [huaweiUrl, setHuaweiUrl] = useState("");
 
+  // Airtime Bonus state
+  const [airtimeBonusEnabled, setAirtimeBonusEnabled] = useState(true);
+  const [airtimeBonusAmount, setAirtimeBonusAmount] = useState("10");
+  const [airtimeBonusRequireKyc, setAirtimeBonusRequireKyc] = useState("none");
+  const [airtimeBonusRequireEmail, setAirtimeBonusRequireEmail] = useState(false);
+
   const { data: settingsData, isLoading } = useQuery<SystemSettings>({
     queryKey: ["/api/admin/settings"],
     queryFn: async () => {
@@ -167,6 +174,12 @@ export default function AdminSystemSettingsPage() {
       setApkUrl(settingsData.app_downloads?.apk_url || "");
       setApkVersion(settingsData.app_downloads?.apk_version || "");
       setHuaweiUrl(settingsData.app_downloads?.huawei_app_gallery_url || "");
+
+      const g = settingsData.general as any;
+      setAirtimeBonusEnabled(g?.enable_airtime_bonus !== false && g?.enable_airtime_bonus !== 'false');
+      setAirtimeBonusAmount(g?.airtime_bonus_amount || "10");
+      setAirtimeBonusRequireKyc(g?.airtime_bonus_require_kyc || "none");
+      setAirtimeBonusRequireEmail(g?.airtime_bonus_require_email === true || g?.airtime_bonus_require_email === 'true');
     }
   }, [settingsData]);
 
@@ -267,6 +280,24 @@ export default function AdminSystemSettingsPage() {
     onError: () => toast({ title: "Error", description: "Failed to save WhatsApp settings.", variant: "destructive" }),
   });
 
+  const airtimeBonusMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/enable_airtime_bonus", { value: String(airtimeBonusEnabled), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_amount", { value: String(airtimeBonusAmount), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_require_kyc", { value: String(airtimeBonusRequireKyc), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_require_email", { value: String(airtimeBonusRequireEmail), category: "general" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Airtime bonus settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save airtime bonus settings.", variant: "destructive" }),
+  });
+
   const appDownloadsMutation = useMutation({
     mutationFn: async () => {
       const requests = [
@@ -303,12 +334,13 @@ export default function AdminSystemSettingsPage() {
     <AdminShell title="System Settings">
       <div className="max-w-4xl">
         <Tabs defaultValue="fees" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 sm:grid-cols-6 rounded-xl bg-gray-100 p-1">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 rounded-xl bg-gray-100 p-1">
             <TabsTrigger value="fees">Fees</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+            <TabsTrigger value="notifications">Notifs</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+            <TabsTrigger value="airtime_bonus" data-testid="tab-airtime-bonus">Bonus</TabsTrigger>
             <TabsTrigger value="app_downloads" data-testid="tab-app-downloads">App Links</TabsTrigger>
           </TabsList>
 
@@ -416,8 +448,8 @@ export default function AdminSystemSettingsPage() {
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardHeader>
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-purple-50">
-                    <Bell className="w-5 h-5 text-purple-600" />
+                  <div className="p-2 rounded-xl bg-green-50">
+                    <Bell className="w-5 h-5 text-green-600" />
                   </div>
                   <div>
                     <CardTitle>Notification Settings</CardTitle>
@@ -444,7 +476,7 @@ export default function AdminSystemSettingsPage() {
                     <Switch checked={adminAlerts} onCheckedChange={setAdminAlerts} />
                   </div>
                 </div>
-                <Button onClick={() => notificationsMutation.mutate()} disabled={notificationsMutation.isPending} className="w-full rounded-xl bg-purple-600 hover:bg-purple-500">
+                <Button onClick={() => notificationsMutation.mutate()} disabled={notificationsMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
                   <Save className="w-4 h-4 mr-2" />
                   {notificationsMutation.isPending ? "Saving..." : "Save Notifications"}
                 </Button>
@@ -539,6 +571,74 @@ export default function AdminSystemSettingsPage() {
                 <Button onClick={() => whatsappMutation.mutate()} disabled={whatsappMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
                   <Save className="w-4 h-4 mr-2" />
                   {whatsappMutation.isPending ? "Saving..." : "Save WhatsApp"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="airtime_bonus" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-amber-50">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Welcome Airtime Bonus</CardTitle>
+                    <CardDescription>Configure the one-time KES bonus for new users. Set requirements to control who qualifies.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+                  <div>
+                    <Label className="text-sm font-medium">Enable Airtime Bonus</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Allow new users to claim a one-time welcome bonus</p>
+                  </div>
+                  <Switch checked={airtimeBonusEnabled} onCheckedChange={setAirtimeBonusEnabled} data-testid="toggle-airtime-bonus-enabled" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">Bonus Amount (KES)</Label>
+                  <Input
+                    type="number" min="0" step="1"
+                    value={airtimeBonusAmount}
+                    onChange={e => setAirtimeBonusAmount(e.target.value)}
+                    placeholder="10"
+                    className="rounded-xl"
+                    data-testid="input-airtime-bonus-amount"
+                  />
+                  <p className="text-xs text-muted-foreground">This amount in KES is credited to the user's KES balance when they claim the bonus.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">KYC Requirement</Label>
+                  <Select value={airtimeBonusRequireKyc} onValueChange={setAirtimeBonusRequireKyc} data-testid="select-airtime-kyc-requirement">
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No KYC required (anyone can claim)</SelectItem>
+                      <SelectItem value="basic">Basic KYC required (ID + selfie)</SelectItem>
+                      <SelectItem value="advanced">Advanced KYC required (face + address proof)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Set the minimum KYC level a user must have before claiming the bonus.</p>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+                  <div>
+                    <Label className="text-sm font-medium">Require Email Verification</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">User must verify their email before claiming</p>
+                  </div>
+                  <Switch checked={airtimeBonusRequireEmail} onCheckedChange={setAirtimeBonusRequireEmail} data-testid="toggle-airtime-require-email" />
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+                  Each user can only claim the bonus once. Once claimed, the <strong>hasClaimedAirtimeBonus</strong> flag is permanently set on their account.
+                </div>
+
+                <Button onClick={() => airtimeBonusMutation.mutate()} disabled={airtimeBonusMutation.isPending} className="w-full rounded-xl bg-amber-600 hover:bg-amber-500" data-testid="button-save-airtime-bonus">
+                  <Save className="w-4 h-4 mr-2" />
+                  {airtimeBonusMutation.isPending ? "Saving..." : "Save Bonus Settings"}
                 </Button>
               </CardContent>
             </Card>

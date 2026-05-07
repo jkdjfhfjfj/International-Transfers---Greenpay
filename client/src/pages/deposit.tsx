@@ -46,10 +46,10 @@ const METHOD_META: Record<string, { label: string; icon: any; color: string; des
   mpesa: { label: "M-Pesa", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Instant via PayHero STK Push" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
-  card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-purple-500 to-pink-600", description: "Visa, Mastercard via Paystack" },
+  card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
 };
 
-const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-purple-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
+const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
@@ -539,7 +539,7 @@ export default function DepositPage() {
 
               <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
                 <div className="flex items-center gap-3 pb-3 border-b border-border">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
                     <CreditCard className="w-5 h-5 text-white" />
                   </div>
                   <div>

@@ -13,7 +13,7 @@ export default function AirtimeLanding() {
         keywords="Kenya airtime, Safaricom airtime, Airtel Kenya top-up, Telkom Kenya, mobile airtime, buy airtime Kenya"
         canonical="https://greenpay.world/features/airtime"
       />
-      <div className="min-h-screen bg-gradient-to-b from-purple-50 to-white">
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="max-w-6xl mx-auto px-4 py-12">
         <header className="text-center mb-12">
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
@@ -23,7 +23,7 @@ export default function AirtimeLanding() {
             Top up mobile airtime instantly for Safaricom, Airtel, and Telkom Kenya
           </p>
           <Link href="/signup">
-            <Button size="lg" className="bg-purple-600 hover:bg-purple-700">
+            <Button size="lg" className="bg-green-600 hover:bg-green-700">
               Buy Airtime Now <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>
@@ -32,7 +32,7 @@ export default function AirtimeLanding() {
         <div className="grid md:grid-cols-3 gap-6 mb-12">
           <Card>
             <CardHeader>
-              <Zap className="h-10 w-10 text-purple-600 mb-2" />
+              <Zap className="h-10 w-10 text-green-600 mb-2" />
               <CardTitle>Instant Delivery</CardTitle>
               <CardDescription>
                 Airtime delivered in seconds directly to any Kenyan mobile number
@@ -42,7 +42,7 @@ export default function AirtimeLanding() {
           
           <Card>
             <CardHeader>
-              <Smartphone className="h-10 w-10 text-purple-600 mb-2" />
+              <Smartphone className="h-10 w-10 text-green-600 mb-2" />
               <CardTitle>All Networks</CardTitle>
               <CardDescription>
                 Support for Safaricom, Airtel Kenya, and Telkom Kenya
@@ -52,7 +52,7 @@ export default function AirtimeLanding() {
           
           <Card>
             <CardHeader>
-              <Check className="h-10 w-10 text-purple-600 mb-2" />
+              <Check className="h-10 w-10 text-green-600 mb-2" />
               <CardTitle>No Hidden Fees</CardTitle>
               <CardDescription>
                 Transparent pricing. Pay exactly what you see with no surprises.
@@ -61,22 +61,22 @@ export default function AirtimeLanding() {
           </Card>
         </div>
 
-        <Card className="bg-purple-50 border-purple-200">
+        <Card className="bg-green-50 border-green-200">
           <CardHeader>
             <CardTitle>Supported Networks</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-2">
               <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-purple-600" />
+                <Check className="h-5 w-5 text-green-600" />
                 <span><strong>Safaricom</strong> - Kenya's largest mobile network</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-purple-600" />
+                <Check className="h-5 w-5 text-green-600" />
                 <span><strong>Airtel Kenya</strong> - Fast and reliable service</span>
               </li>
               <li className="flex items-center gap-2">
-                <Check className="h-5 w-5 text-purple-600" />
+                <Check className="h-5 w-5 text-green-600" />
                 <span><strong>Telkom Kenya</strong> - Great coverage nationwide</span>
               </li>
             </ul>
@@ -85,7 +85,7 @@ export default function AirtimeLanding() {
 
         <div className="text-center mt-12">
           <Link href="/signup">
-            <Button size="lg" className="bg-purple-600 hover:bg-purple-700">
+            <Button size="lg" className="bg-green-600 hover:bg-green-700">
               Top Up Airtime <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
           </Link>

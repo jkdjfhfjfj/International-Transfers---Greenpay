@@ -15,7 +15,7 @@ import { CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown, Plus, Pencil, Tra
 
 const COIN_COLORS: Record<string, string> = {
   BTC: "text-orange-500",
-  ETH: "text-purple-500",
+  ETH: "text-blue-500",
   USDT: "text-green-500",
   USDC: "text-blue-500",
 };

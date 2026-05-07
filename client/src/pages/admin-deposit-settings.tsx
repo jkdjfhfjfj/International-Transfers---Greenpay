@@ -234,7 +234,7 @@ export default function AdminDepositSettingsPage() {
                   { key: "mpesa_enabled" as const, label: "M-Pesa (PayHero STK Push)", icon: Smartphone, desc: "Instant KES deposit with M-Pesa PIN prompt", color: "text-green-600" },
                   { key: "crypto_enabled" as const, label: "Cryptocurrency", icon: Bitcoin, desc: "BTC, ETH, USDT, USDC — admin-configured addresses", color: "text-orange-500" },
                   { key: "bank_transfer_enabled" as const, label: "Bank Transfer (SWIFT)", icon: Building2, desc: "International wire transfer with bank details", color: "text-blue-600" },
-                  { key: "card_enabled" as const, label: "Debit / Credit Card (Paystack)", icon: CreditCard, desc: "Visa & Mastercard via Paystack gateway", color: "text-purple-600" },
+                  { key: "card_enabled" as const, label: "Debit / Credit Card (Paystack)", icon: CreditCard, desc: "Visa & Mastercard via Paystack gateway", color: "text-blue-600" },
                 ].map(({ key, label, icon: Icon, desc, color }) => (
                   <div key={key} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-muted/40">
                     <div className="flex items-center gap-3">

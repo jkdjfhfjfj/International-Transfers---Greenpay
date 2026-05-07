@@ -47,6 +47,25 @@ async function alterMissingColumns() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
+    // Advanced KYC documents table
+    `CREATE TABLE IF NOT EXISTS advanced_kyc_documents (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      facial_photo_url TEXT,
+      address_proof_url TEXT,
+      address_proof_type TEXT,
+      full_address TEXT,
+      city TEXT,
+      postal_code TEXT,
+      country TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      verification_notes TEXT,
+      verified_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // Advanced KYC status column on users
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_status TEXT DEFAULT 'not_submitted'`,
   ];
 
   for (const sql of migrations) {

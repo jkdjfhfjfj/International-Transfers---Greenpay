@@ -46,7 +46,7 @@ export default function AdminDashboard() {
     {
       label: "Revenue", value: `$${(metrics?.totalRevenue ?? 0).toLocaleString()}`,
       sub: "Platform earnings",
-      icon: TrendingUp, color: "purple", href: "/admin/transactions",
+      icon: TrendingUp, color: "green", href: "/admin/transactions",
     },
     {
       label: "Pending KYC", value: metrics?.pendingKyc ?? 0,
@@ -58,7 +58,7 @@ export default function AdminDashboard() {
   const colorMap: Record<string, string> = {
     blue: "from-blue-500 to-blue-600",
     green: "from-emerald-500 to-green-600",
-    purple: "from-violet-500 to-purple-600",
+    purple: "from-emerald-500 to-teal-600",
     orange: "from-orange-500 to-amber-500",
   };
 
@@ -195,11 +195,11 @@ export default function AdminDashboard() {
             <CardContent className="space-y-2">
               {[
                 { label: "Review KYC", icon: UserCheck, href: "/admin/kyc", color: "text-blue-600 bg-blue-50 hover:bg-blue-100" },
-                { label: "Manage Users", icon: Users, href: "/admin/users", color: "text-purple-600 bg-purple-50 hover:bg-purple-100" },
+                { label: "Manage Users", icon: Users, href: "/admin/users", color: "text-green-600 bg-green-50 hover:bg-green-100" },
                 { label: "Withdrawals", icon: DollarSign, href: "/admin/withdrawals", color: "text-green-600 bg-green-50 hover:bg-green-100" },
                 { label: "Virtual Cards", icon: CreditCard, href: "/admin/cards", color: "text-orange-600 bg-orange-50 hover:bg-orange-100" },
                 { label: "System Logs", icon: Activity, href: "/admin/logs", color: "text-gray-600 bg-gray-50 hover:bg-gray-100" },
-                { label: "Analytics", icon: BarChart3, href: "/admin/analytics", color: "text-indigo-600 bg-indigo-50 hover:bg-indigo-100" },
+                { label: "Analytics", icon: BarChart3, href: "/admin/analytics", color: "text-teal-600 bg-teal-50 hover:bg-teal-100" },
               ].map((a) => {
                 const Icon = a.icon;
                 return (

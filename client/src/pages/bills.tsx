@@ -13,7 +13,7 @@ import { WavyHeader } from "@/components/wavy-header";
 
 const BILL_PROVIDERS = [
   { id: "KPLC", name: "KPLC", label: "KPLC (Electricity)", icon: "⚡", color: "from-yellow-500 to-yellow-600", needsId: "meterNumber" },
-  { id: "Zuku", name: "Zuku", label: "Zuku (Cable TV)", icon: "📺", color: "from-purple-500 to-purple-600", needsId: "accountNumber" },
+  { id: "Zuku", name: "Zuku", label: "Zuku (Cable TV)", icon: "📺", color: "from-teal-500 to-teal-600", needsId: "accountNumber" },
   { id: "StarimesTV", name: "StarimesTV", label: "StarimesTV (Cable)", icon: "📡", color: "from-orange-500 to-orange-600", needsId: "accountNumber" },
   { id: "Nairobi_Water", name: "Nairobi Water", label: "Nairobi Water", icon: "💧", color: "from-blue-500 to-blue-600", needsId: "meterNumber" },
   { id: "Kenya_Power", name: "Kenya Power", label: "Kenya Power", icon: "🔌", color: "from-red-500 to-red-600", needsId: "meterNumber" },

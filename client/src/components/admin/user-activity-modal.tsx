@@ -97,9 +97,9 @@ export function UserActivityModal({ userId }: { userId: string }) {
           <p className="text-xs text-gray-600">Failed</p>
           <p className="text-2xl font-bold text-red-600">{failedCount}</p>
         </div>
-        <div className="bg-purple-50 p-3 rounded-lg">
+        <div className="bg-green-50 p-3 rounded-lg">
           <p className="text-xs text-gray-600">Pages Visited</p>
-          <p className="text-2xl font-bold text-purple-600">{pageVisits}</p>
+          <p className="text-2xl font-bold text-green-600">{pageVisits}</p>
         </div>
       </div>
 

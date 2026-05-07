@@ -169,8 +169,8 @@ export default function DashboardPage() {
       icon: BarChart3,
       label: "Analytics",
       path: "/analytics",
-      color: "from-purple-500 to-indigo-500",
-      bgColor: "bg-purple-50 dark:bg-purple-950/20",
+      color: "from-emerald-500 to-teal-500",
+      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
       disabled: false,
       requiresCard: false
     },

@@ -55,7 +55,7 @@ export default function NotFound() {
                 repeat: Infinity,
                 ease: "easeInOut"
               }}
-              className="text-8xl md:text-9xl font-bold bg-gradient-to-br from-primary via-purple-500 to-pink-500 bg-clip-text text-transparent"
+              className="text-8xl md:text-9xl font-bold bg-gradient-to-br from-primary via-emerald-500 to-green-500 bg-clip-text text-transparent"
             >
               404
             </motion.div>
@@ -71,7 +71,7 @@ export default function NotFound() {
             transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
             className="flex justify-center py-8"
           >
-            <div className="w-32 h-32 md:w-48 md:h-48 rounded-full bg-gradient-to-br from-primary/10 to-purple-500/10 flex items-center justify-center">
+            <div className="w-32 h-32 md:w-48 md:h-48 rounded-full bg-gradient-to-br from-primary/10 to-emerald-500/10 flex items-center justify-center">
               <HelpCircle className="w-16 h-16 md:w-24 md:h-24 text-primary opacity-50" />
             </div>
           </motion.div>

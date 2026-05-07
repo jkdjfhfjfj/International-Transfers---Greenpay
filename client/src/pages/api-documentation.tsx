@@ -374,7 +374,7 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
               <div className="bg-card p-4 rounded-lg border border-border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
                     <span className="ml-3 font-mono">/api/transactions/send</span>
                   </div>
                 </div>
@@ -419,7 +419,7 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
               <div className="bg-card p-4 rounded-lg border border-border space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <span className="bg-purple-500/20 text-purple-600 dark:text-purple-400 px-2 py-1 rounded text-xs font-mono">POST</span>
+                    <span className="bg-blue-500/20 text-blue-600 dark:text-blue-400 px-2 py-1 rounded text-xs font-mono">POST</span>
                     <span className="ml-3 font-mono">/api/airtime/purchase</span>
                   </div>
                 </div>

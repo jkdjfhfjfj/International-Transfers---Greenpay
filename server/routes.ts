@@ -2471,12 +2471,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get bonus settings from system settings
       const bonusAmountSetting = await storage.getSystemSetting("general", "airtime_bonus_amount");
       const bonusEnabledSetting = await storage.getSystemSetting("general", "enable_airtime_bonus");
-      
-      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "15"));
+      const requireKycSetting = await storage.getSystemSetting("general", "airtime_bonus_require_kyc");
+      const requireEmailSetting = await storage.getSystemSetting("general", "airtime_bonus_require_email");
+
+      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "10"));
       const isEnabled = String(bonusEnabledSetting?.value) === "true";
+      const requireKyc = String(requireKycSetting?.value || "none"); // none, basic, advanced
+      const requireEmail = String(requireEmailSetting?.value) === "true";
 
       if (!isEnabled) {
         return res.status(400).json({ message: "Bonus claiming is currently disabled" });
+      }
+
+      // Check KYC requirement
+      if (requireKyc === "basic" && user.kycStatus !== "verified") {
+        return res.status(400).json({ message: "Basic KYC verification is required to claim this bonus" });
+      }
+      if (requireKyc === "advanced" && (user as any).advancedKycStatus !== "verified") {
+        return res.status(400).json({ message: "Advanced KYC verification is required to claim this bonus" });
+      }
+
+      // Check email verification requirement
+      if (requireEmail && !user.isEmailVerified) {
+        return res.status(400).json({ message: "Email verification is required to claim this bonus" });
       }
 
       // Add bonus to user's KES balance
@@ -4101,6 +4118,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Advanced KYC (user-facing) ────────────────────────────────────────────
+  app.post("/api/kyc/advanced/submit", requireAuth, upload.fields([
+    { name: 'facialPhoto', maxCount: 1 },
+    { name: 'addressProof', maxCount: 1 },
+  ]), async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      if (!sessionUserId) return res.status(401).json({ message: "Unauthorized" });
+
+      const files = req.files as { [fieldname: string]: Express.Multer.File[] };
+      const { addressProofType, fullAddress, city, postalCode, country } = req.body;
+
+      if (!files?.facialPhoto || !files?.addressProof) {
+        return res.status(400).json({ message: "Facial photo and address proof are required" });
+      }
+      if (!addressProofType || !fullAddress) {
+        return res.status(400).json({ message: "Address proof type and full address are required" });
+      }
+
+      // Check existing advanced KYC
+      const { advancedKycDocuments: advKycTable } = await import("@shared/schema");
+      const existing = await db.select().from(advKycTable).where(eq(advKycTable.userId, sessionUserId));
+      if (existing.length > 0 && existing[0].status === 'pending') {
+        return res.status(409).json({ message: "Your advanced KYC is currently under review" });
+      }
+      if (existing.length > 0 && existing[0].status === 'verified') {
+        return res.status(409).json({ message: "Your advanced KYC is already verified" });
+      }
+
+      let facialPhotoUrl: string | null = null;
+      let addressProofUrl: string | null = null;
+
+      try {
+        [facialPhotoUrl, addressProofUrl] = await Promise.all([
+          cloudinaryStorage.uploadKycDocument(files.facialPhoto[0].buffer, files.facialPhoto[0].originalname, files.facialPhoto[0].mimetype),
+          cloudinaryStorage.uploadKycDocument(files.addressProof[0].buffer, files.addressProof[0].originalname, files.addressProof[0].mimetype),
+        ]);
+      } catch (uploadErr) {
+        // Fallback to base64 if cloudinary not configured
+        const buf1 = files.facialPhoto[0].buffer;
+        facialPhotoUrl = `data:${files.facialPhoto[0].mimetype};base64,${buf1.toString('base64')}`;
+        const buf2 = files.addressProof[0].buffer;
+        addressProofUrl = `data:${files.addressProof[0].mimetype};base64,${buf2.toString('base64')}`;
+      }
+
+      if (existing.length > 0) {
+        // Update rejected submission
+        await db.update(advKycTable).set({
+          facialPhotoUrl, addressProofUrl, addressProofType, fullAddress, city, postalCode, country,
+          status: 'pending', verificationNotes: null, verifiedAt: null, updatedAt: new Date(),
+        }).where(eq(advKycTable.userId, sessionUserId));
+      } else {
+        await db.insert(advKycTable).values({
+          userId: sessionUserId, facialPhotoUrl, addressProofUrl, addressProofType, fullAddress, city, postalCode, country,
+        });
+      }
+
+      await storage.updateUser(sessionUserId, { advancedKycStatus: 'pending' } as any);
+
+      res.json({ success: true, message: "Advanced KYC submitted successfully" });
+    } catch (e: any) {
+      console.error('Advanced KYC submit error:', e);
+      res.status(500).json({ message: "Failed to submit advanced KYC" });
+    }
+  });
+
+  app.get("/api/kyc/advanced", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req as any).session?.userId;
+      if (!sessionUserId) return res.status(401).json({ message: "Unauthorized" });
+      const { advancedKycDocuments: advKycTable } = await import("@shared/schema");
+      const docs = await db.select().from(advKycTable).where(eq(advKycTable.userId, sessionUserId));
+      res.json({ advancedKyc: docs[0] || null });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch advanced KYC" });
+    }
+  });
+
+  // ── Admin Advanced KYC ────────────────────────────────────────────────────
+  app.get("/api/admin/kyc/advanced", requireAdminAuth, async (req, res) => {
+    try {
+      const { advancedKycDocuments: advKycTable } = await import("@shared/schema");
+      const docs = await db.select().from(advKycTable).orderBy(advKycTable.createdAt);
+      res.json({ advancedKycDocuments: docs });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch advanced KYC documents" });
+    }
+  });
+
+  app.put("/api/admin/kyc/advanced/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, verificationNotes } = req.body;
+      const { advancedKycDocuments: advKycTable } = await import("@shared/schema");
+      const [updated] = await db.update(advKycTable).set({
+        status, verificationNotes,
+        verifiedAt: status === 'verified' ? new Date() : null,
+        updatedAt: new Date(),
+      }).where(eq(advKycTable.id, id)).returning();
+
+      if (updated) {
+        await storage.updateUser(updated.userId, { advancedKycStatus: status } as any);
+      }
+
+      res.json({ advancedKyc: updated });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update advanced KYC" });
+    }
+  });
+
   // Admin Transaction Management
   app.get("/api/admin/transactions", async (req, res) => {
     try {
@@ -5639,7 +5766,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Determine category based on key
       let category = req.body.category || "messaging";
       if (!req.body.category) {
-        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus") {
+        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus" || key === "airtime_bonus_require_kyc" || key === "airtime_bonus_require_email") {
           category = "general";
         } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
           category = "fees";
@@ -6523,7 +6650,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const s = await storage.getSystemSetting("deposit_methods", key);
         result[key] = s ? String(s.value) : "";
       }
-      const bonuses = await db.select().from(depositBonuses);
+      let bonuses: any[] = [];
+      try {
+        bonuses = await db.select().from(depositBonuses);
+      } catch (_) {
+        // deposit_bonuses table may not exist yet in older deployments
+      }
       res.json({ methods: result, bonuses });
     } catch (e) { res.status(500).json({ message: "Failed to load deposit settings" }); }
   });
@@ -6531,6 +6663,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/deposit-settings", requireAdminAuth, async (req, res) => {
     try {
       const { methods } = req.body;
+      if (!methods || typeof methods !== "object") {
+        return res.status(400).json({ message: "Invalid methods object" });
+      }
       const allowedKeys = [
         "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled",
         "bank_name","bank_account_name","bank_account_number","bank_swift_code",

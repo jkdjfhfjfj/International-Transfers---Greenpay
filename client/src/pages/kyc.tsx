@@ -1,4 +1,4 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,12 +6,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import { CheckCircle, Clock, XCircle, Shield, ShieldCheck, ChevronRight, Upload, Camera, FileText, MapPin } from "lucide-react";
+
+type KycLevel = "basic" | "advanced";
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "verified") return <Badge className="bg-green-500 text-white gap-1"><CheckCircle className="w-3 h-3" /> Verified</Badge>;
+  if (status === "pending") return <Badge className="bg-amber-500 text-white gap-1"><Clock className="w-3 h-3" /> Under Review</Badge>;
+  if (status === "rejected") return <Badge variant="destructive" className="gap-1"><XCircle className="w-3 h-3" /> Rejected</Badge>;
+  return <Badge variant="outline" className="gap-1 text-muted-foreground">Not Submitted</Badge>;
+}
 
 export default function KYCPage() {
   const [, setLocation] = useLocation();
@@ -19,8 +30,11 @@ export default function KYCPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState({
+  const [activeLevel, setActiveLevel] = useState<KycLevel>("basic");
+
+  // Basic KYC state
+  const [basicStep, setBasicStep] = useState(1);
+  const [basicForm, setBasicForm] = useState({
     documentType: "national_id",
     dateOfBirth: "",
     address: "",
@@ -29,487 +43,432 @@ export default function KYCPage() {
     selfie: null as File | null,
   });
 
-  // Get existing KYC data
+  // Advanced KYC state
+  const [advStep, setAdvStep] = useState(1);
+  const [advForm, setAdvForm] = useState({
+    addressProofType: "",
+    fullAddress: "",
+    city: "",
+    postalCode: "",
+    country: user?.country || "",
+    facialPhoto: null as File | null,
+    addressProof: null as File | null,
+  });
+
   const { data: kycData, isLoading: kycLoading } = useQuery<{ kyc: any }>({
     queryKey: ["/api/kyc", user?.id],
     enabled: !!user?.id,
   });
 
-  const submitKYCMutation = useMutation({
-    mutationFn: async (data: FormData) => {
-      const response = await fetch("/api/kyc/submit", {
-        method: "POST",
-        body: data,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to submit KYC");
-      }
-      
-      return response.json();
-    },
-    onSuccess: (data) => {
-      if (user) {
-        login({ ...user, kycStatus: "pending" });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/kyc", user?.id] });
-      toast({
-        title: "KYC Submitted Successfully!",
-        description: "Your documents have been submitted for review. You will be notified once verified.",
-      });
-      setLocation("/dashboard");
-    },
-    onError: (error: any) => {
-      toast({
-        title: "KYC Submission Failed",
-        description: error.message || "Unable to submit KYC documents",
-        variant: "destructive",
-      });
-    },
+  const { data: advKycData, isLoading: advKycLoading } = useQuery<{ advancedKyc: any }>({
+    queryKey: ["/api/kyc/advanced"],
+    enabled: !!user?.id,
   });
 
-  const handleFileUpload = (field: string, file: File | null) => {
-    setFormData({ ...formData, [field]: file });
-  };
+  const basicStatus = user?.kycStatus || "not_submitted";
+  const advancedStatus = (user as any)?.advancedKycStatus || advKycData?.advancedKyc?.status || "not_submitted";
 
-  const handleSubmit = () => {
-    // Validate personal information
-    if (!formData.dateOfBirth || !formData.address) {
-      toast({
-        title: "Missing Information",
-        description: "Please fill in all required fields",
-        variant: "destructive",
-      });
-      return;
+  // Basic KYC submit
+  const submitBasicMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const response = await fetch("/api/kyc/submit", { method: "POST", body: data });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.message || "Failed"); }
+      return response.json();
+    },
+    onSuccess: () => {
+      if (user) login({ ...user, kycStatus: "pending" });
+      queryClient.invalidateQueries({ queryKey: ["/api/kyc", user?.id] });
+      toast({ title: "Basic KYC Submitted!", description: "We'll review your documents within 1-2 business days." });
+    },
+    onError: (e: any) => toast({ title: "Submission Failed", description: e.message, variant: "destructive" }),
+  });
+
+  // Advanced KYC submit
+  const submitAdvancedMutation = useMutation({
+    mutationFn: async (data: FormData) => {
+      const response = await fetch("/api/kyc/advanced/submit", { method: "POST", body: data });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.message || "Failed"); }
+      return response.json();
+    },
+    onSuccess: () => {
+      if (user) login({ ...user, advancedKycStatus: "pending" } as any);
+      queryClient.invalidateQueries({ queryKey: ["/api/kyc/advanced"] });
+      toast({ title: "Advanced KYC Submitted!", description: "We'll review your documents within 1-2 business days." });
+      setAdvStep(1);
+    },
+    onError: (e: any) => toast({ title: "Submission Failed", description: e.message, variant: "destructive" }),
+  });
+
+  const handleBasicSubmit = () => {
+    if (!basicForm.dateOfBirth || !basicForm.address) {
+      toast({ title: "Missing Info", description: "Fill in all required fields", variant: "destructive" }); return;
     }
-
-    // Validate all required files are uploaded
-    if (!formData.frontImage || !formData.backImage || !formData.selfie) {
-      toast({
-        title: "Missing Documents",
-        description: "Please upload all required documents: front of document, back of document, and selfie",
-        variant: "destructive",
-      });
-      return;
+    if (!basicForm.frontImage || !basicForm.backImage || !basicForm.selfie) {
+      toast({ title: "Missing Documents", description: "Upload all required images", variant: "destructive" }); return;
     }
-
-    const submitData = new FormData();
-    submitData.append("userId", user?.id || "");
-    submitData.append("documentType", formData.documentType);
-    submitData.append("dateOfBirth", formData.dateOfBirth);
-    submitData.append("address", formData.address);
-    submitData.append("frontImage", formData.frontImage);
-    submitData.append("backImage", formData.backImage);
-    submitData.append("selfie", formData.selfie);
-
-    submitKYCMutation.mutate(submitData);
+    const fd = new FormData();
+    fd.append("userId", user?.id || "");
+    fd.append("documentType", basicForm.documentType);
+    fd.append("dateOfBirth", basicForm.dateOfBirth);
+    fd.append("address", basicForm.address);
+    fd.append("frontImage", basicForm.frontImage);
+    fd.append("backImage", basicForm.backImage);
+    fd.append("selfie", basicForm.selfie);
+    submitBasicMutation.mutate(fd);
   };
 
-  const nextStep = () => {
-    // Validate step 2 - ensure documents are uploaded before moving to step 3
-    if (currentStep === 2) {
-      if (!formData.frontImage || !formData.backImage) {
-        toast({
-          title: "Missing Documents",
-          description: "Please upload both front and back of your document before continuing",
-          variant: "destructive",
-        });
-        return;
-      }
+  const handleAdvancedSubmit = () => {
+    if (!advForm.addressProofType || !advForm.fullAddress) {
+      toast({ title: "Missing Info", description: "Fill in all required fields", variant: "destructive" }); return;
     }
-    
-    if (currentStep < 3) setCurrentStep(currentStep + 1);
+    if (!advForm.facialPhoto || !advForm.addressProof) {
+      toast({ title: "Missing Documents", description: "Upload your facial photo and address proof", variant: "destructive" }); return;
+    }
+    const fd = new FormData();
+    fd.append("addressProofType", advForm.addressProofType);
+    fd.append("fullAddress", advForm.fullAddress);
+    fd.append("city", advForm.city);
+    fd.append("postalCode", advForm.postalCode);
+    fd.append("country", advForm.country);
+    fd.append("facialPhoto", advForm.facialPhoto);
+    fd.append("addressProof", advForm.addressProof);
+    submitAdvancedMutation.mutate(fd);
   };
 
-  const prevStep = () => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  };
-
-  // Loading state
-  if (kycLoading) {
-    return (
-      <div className="min-h-screen bg-background pb-20 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading KYC status...</p>
+  const FileUploadBox = ({ label, file, onFile, id, accept = "image/*", icon: Icon = Upload }: {
+    label: string; file: File | null; onFile: (f: File | null) => void; id: string; accept?: string; icon?: any;
+  }) => (
+    <div className="border-2 border-dashed border-muted rounded-xl p-5 text-center transition-colors hover:border-primary/40">
+      {file ? (
+        <div className="space-y-2">
+          <CheckCircle className="w-8 h-8 text-green-500 mx-auto" />
+          <p className="text-sm font-medium text-foreground truncate">{file.name}</p>
+          <Button variant="outline" size="sm" onClick={() => onFile(null)}>Remove</Button>
         </div>
+      ) : (
+        <div className="space-y-2">
+          <Icon className="w-8 h-8 text-muted-foreground mx-auto" />
+          <p className="text-sm text-muted-foreground">{label}</p>
+          <input type="file" accept={accept} onChange={e => onFile(e.target.files?.[0] || null)} className="hidden" id={id} />
+          <Button variant="outline" size="sm" asChild><label htmlFor={id} className="cursor-pointer">Choose File</label></Button>
+        </div>
+      )}
+    </div>
+  );
+
+  if (kycLoading || advKycLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
-
-  // Handle verified status
-  if (user?.kycStatus === "verified") {
-    return (
-      <div className="min-h-screen bg-background pb-20">
-        <WavyHeader
-          
-          
-          size="sm"
-        />
-
-        <div className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-            className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mb-6"
-          >
-            <span className="material-icons text-4xl text-green-600">verified_user</span>
-          </motion.div>
-          <h2 className="text-2xl font-bold text-center mb-4">Identity Verified!</h2>
-          <p className="text-muted-foreground text-center mb-8 max-w-sm">
-            Your identity has been successfully verified. You now have full access to all GreenPay features.
-          </p>
-          <Button onClick={() => setLocation("/dashboard")} className="px-8">
-            Continue to Dashboard
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // Handle users who have submitted documents and are awaiting review (only show if actual submission exists)
-  if (kycData?.kyc && user?.kycStatus === "pending") {
-    return (
-      <div className="min-h-screen bg-background pb-20">
-        <WavyHeader
-          
-          
-          size="sm"
-        />
-
-        <div className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
-          <motion.div
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", stiffness: 200 }}
-            className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mb-6"
-          >
-            <span className="material-icons text-4xl text-blue-600">hourglass_empty</span>
-          </motion.div>
-          <h2 className="text-2xl font-bold text-center mb-4">Documents Under Review</h2>
-          <p className="text-muted-foreground text-center mb-8 max-w-sm">
-            Your KYC documents have been submitted and are currently under review. 
-            You'll be notified once the verification is complete.
-          </p>
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-4 rounded-lg mb-6 max-w-sm w-full">
-            <h3 className="font-medium text-blue-800 dark:text-blue-100 mb-2 flex items-center">
-              <span className="material-icons text-sm mr-2">info</span>
-              What happens next?
-            </h3>
-            <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-              <li>• Our team will review your documents</li>
-              <li>• Verification typically takes 1-2 business days</li>
-              <li>• You'll receive an email notification</li>
-              <li>• Cannot resubmit while review is pending</li>
-            </ul>
-          </div>
-          <div className="flex gap-3 w-full max-w-sm">
-            <Button onClick={() => setLocation("/settings")} variant="outline" className="flex-1">
-              Back to Settings
-            </Button>
-            <Button onClick={() => setLocation("/dashboard")} className="flex-1">
-              Dashboard
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Show rejection notice if rejected - but still allow form access below
-  const showRejectionNotice = kycData?.kyc && user?.kycStatus === "rejected";
 
   return (
-    <div className="min-h-screen bg-background pb-20">
-      {/* Top Navigation */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="bg-card shadow-sm p-4 flex items-center elevation-1"
-      >
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setLocation("/settings")}
-          className="material-icons text-muted-foreground mr-3 p-2 rounded-full hover:bg-muted transition-colors"
-          data-testid="button-back"
-        >
-          arrow_back
-        </motion.button>
-        <h1 className="text-lg font-semibold">Identity Verification</h1>
+    <div className="min-h-screen bg-background pb-24">
+      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+        className="bg-card shadow-sm p-4 flex items-center gap-3 sticky top-0 z-10">
+        <button onClick={() => setLocation("/settings")} className="p-2 rounded-full hover:bg-muted transition-colors">
+          <span className="material-icons text-muted-foreground">arrow_back</span>
+        </button>
+        <div>
+          <h1 className="text-lg font-semibold">Identity Verification</h1>
+          <p className="text-xs text-muted-foreground">Verify your identity to unlock all features</p>
+        </div>
       </motion.div>
 
-      <div className="p-6">
-        {/* Rejection Notice - Show if documents were rejected */}
-        {showRejectionNotice && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-4 rounded-xl mb-6"
-          >
-            <div className="flex items-start">
-              <span className="material-icons text-red-600 mr-3 mt-0.5">error_outline</span>
-              <div className="flex-1">
-                <h3 className="font-semibold text-red-900 dark:text-red-200 mb-1">
-                  Previous Verification Unsuccessful
-                </h3>
-                <p className="text-sm text-red-700 dark:text-red-300 mb-2">
-                  {kycData?.kyc?.rejectionReason || "Your previous documents did not meet verification requirements. Please ensure they are clear and valid."}
-                </p>
-                <p className="text-xs text-red-600 dark:text-red-400 font-medium">
-                  Please resubmit new documents below
-                </p>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Progress Bar */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-8"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm text-muted-foreground">Step {currentStep} of 3</span>
-            <span className="text-sm text-muted-foreground">{Math.round((currentStep / 3) * 100)}%</span>
-          </div>
-          <Progress value={(currentStep / 3) * 100} className="h-2" />
-        </motion.div>
-
-        {/* Step 1: Document Type & Personal Info */}
-        {currentStep === 1 && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            <div className="bg-card p-6 rounded-xl border border-border elevation-1">
-              <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="documentType">Document Type</Label>
-                  <Select
-                    value={formData.documentType}
-                    onValueChange={(value) => setFormData({ ...formData, documentType: value })}
-                  >
-                    <SelectTrigger data-testid="select-document-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="national_id">National ID</SelectItem>
-                      <SelectItem value="passport">Passport</SelectItem>
-                      <SelectItem value="drivers_license">Driver's License</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                  <Input
-                    id="dateOfBirth"
-                    type="date"
-                    value={formData.dateOfBirth}
-                    onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                    data-testid="input-date-of-birth"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="address">Home Address</Label>
-                  <Textarea
-                    id="address"
-                    placeholder="Enter your full address"
-                    value={formData.address}
-                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    data-testid="textarea-address"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <Button onClick={nextStep} className="w-full" data-testid="button-next-step1">
-              Continue
-            </Button>
-          </motion.div>
-        )}
-
-        {/* Step 2: Document Upload */}
-        {currentStep === 2 && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            <div className="bg-card p-6 rounded-xl border border-border elevation-1">
-              <h2 className="text-xl font-semibold mb-4">Document Upload</h2>
-              
-              <div className="space-y-6">
-                {/* Front Image */}
-                <div>
-                  <Label>Front of Document</Label>
-                  <div className="mt-2 border-2 border-dashed border-muted rounded-lg p-6 text-center">
-                    {formData.frontImage ? (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-green-500">check_circle</span>
-                        <p className="text-sm font-medium">{formData.frontImage.name}</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleFileUpload("frontImage", null)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-muted-foreground">cloud_upload</span>
-                        <p className="text-sm text-muted-foreground">Upload front of your document</p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload("frontImage", e.target.files?.[0] || null)}
-                          className="hidden"
-                          id="front-upload"
-                        />
-                        <Button variant="outline" asChild>
-                          <label htmlFor="front-upload" data-testid="button-upload-front">
-                            Choose File
-                          </label>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Back Image */}
-                <div>
-                  <Label>Back of Document</Label>
-                  <div className="mt-2 border-2 border-dashed border-muted rounded-lg p-6 text-center">
-                    {formData.backImage ? (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-green-500">check_circle</span>
-                        <p className="text-sm font-medium">{formData.backImage.name}</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleFileUpload("backImage", null)}
-                        >
-                          Remove
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-muted-foreground">cloud_upload</span>
-                        <p className="text-sm text-muted-foreground">Upload back of your document</p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload("backImage", e.target.files?.[0] || null)}
-                          className="hidden"
-                          id="back-upload"
-                        />
-                        <Button variant="outline" asChild>
-                          <label htmlFor="back-upload" data-testid="button-upload-back">
-                            Choose File
-                          </label>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex space-x-4">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                Back
-              </Button>
-              <Button onClick={nextStep} className="flex-1" data-testid="button-next-step2">
-                Continue
-              </Button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Step 3: Selfie & Review */}
-        {currentStep === 3 && (
-          <motion.div
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="space-y-6"
-          >
-            <div className="bg-card p-6 rounded-xl border border-border elevation-1">
-              <h2 className="text-xl font-semibold mb-4">Selfie Verification</h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <Label>Take a Selfie</Label>
-                  <div className="mt-2 border-2 border-dashed border-muted rounded-lg p-6 text-center">
-                    {formData.selfie ? (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-green-500">check_circle</span>
-                        <p className="text-sm font-medium">{formData.selfie.name}</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleFileUpload("selfie", null)}
-                        >
-                          Retake
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <span className="material-icons text-4xl text-muted-foreground">face</span>
-                        <p className="text-sm text-muted-foreground">Take a clear photo of yourself</p>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleFileUpload("selfie", e.target.files?.[0] || null)}
-                          className="hidden"
-                          id="selfie-upload"
-                        />
-                        <Button variant="outline" asChild>
-                          <label htmlFor="selfie-upload" data-testid="button-upload-selfie">
-                            Take Selfie
-                          </label>
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
-              <div className="flex items-start">
-                <span className="material-icons text-blue-600 mr-2 mt-1">security</span>
-                <div>
-                  <h3 className="font-medium text-blue-800">Verification Process</h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Your documents will be securely reviewed by our verification team. You'll receive a notification once the review is complete.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex space-x-4">
-              <Button variant="outline" onClick={prevStep} className="flex-1">
-                Back
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                className="flex-1"
-                disabled={submitKYCMutation.isPending}
-                data-testid="button-submit-kyc"
+      <div className="max-w-md mx-auto px-4 pt-6 space-y-6">
+        {/* KYC Level Cards */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            {
+              level: "basic" as KycLevel,
+              label: "Basic KYC",
+              desc: "ID document + selfie",
+              status: basicStatus,
+              icon: Shield,
+              features: ["Send money", "Receive payments", "Virtual card"],
+            },
+            {
+              level: "advanced" as KycLevel,
+              label: "Advanced KYC",
+              desc: "Facial + address proof",
+              status: advancedStatus,
+              icon: ShieldCheck,
+              features: ["Higher limits", "All features", "Priority support"],
+              requiresBasic: true,
+            },
+          ].map(({ level, label, desc, status, icon: Icon, features, requiresBasic }) => {
+            const isLocked = requiresBasic && basicStatus !== "verified";
+            const isActive = activeLevel === level;
+            return (
+              <button
+                key={level}
+                onClick={() => !isLocked && setActiveLevel(level)}
+                className={`text-left p-4 rounded-2xl border-2 transition-all ${
+                  isActive ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/40"
+                } ${isLocked ? "opacity-60 cursor-not-allowed" : ""}`}
               >
-                {submitKYCMutation.isPending ? "Verifying..." : "Submit for Verification"}
-              </Button>
-            </div>
-          </motion.div>
-        )}
+                <div className="flex items-start justify-between mb-2">
+                  <div className={`p-2 rounded-xl ${isActive ? "bg-primary/10" : "bg-muted"}`}>
+                    <Icon className={`w-4 h-4 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                  </div>
+                  <StatusBadge status={status} />
+                </div>
+                <p className="text-sm font-semibold mt-2">{label}</p>
+                <p className="text-xs text-muted-foreground">{desc}</p>
+                {isLocked && <p className="text-xs text-amber-600 mt-1 font-medium">Requires Basic KYC first</p>}
+                <ul className="mt-3 space-y-1">
+                  {features.map(f => (
+                    <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Basic KYC Section */}
+        <AnimatePresence mode="wait">
+          {activeLevel === "basic" && (
+            <motion.div key="basic" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }}
+              className="space-y-4">
+              {basicStatus === "verified" && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center">
+                  <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-green-800 dark:text-green-200">Basic KYC Verified!</h3>
+                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">Your identity has been successfully verified.</p>
+                  <Button className="mt-4" variant="outline" onClick={() => setActiveLevel("advanced")}>
+                    Upgrade to Advanced KYC <ChevronRight className="w-4 h-4 ml-1" />
+                  </Button>
+                </div>
+              )}
+
+              {basicStatus === "pending" && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center">
+                  <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">Under Review</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">Your documents are being reviewed. This typically takes 1-2 business days.</p>
+                </div>
+              )}
+
+              {(basicStatus === "not_submitted" || basicStatus === "rejected") && (
+                <>
+                  {basicStatus === "rejected" && kycData?.kyc && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">Previous Submission Rejected</p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">{kycData.kyc.verificationNotes || "Please resubmit with clearer documents."}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="flex gap-2">
+                        {[1, 2, 3].map(s => (
+                          <div key={s} className={`h-1.5 w-8 rounded-full transition-colors ${s <= basicStep ? "bg-primary" : "bg-muted"}`} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-auto">Step {basicStep} of 3</span>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      {basicStep === 1 && (
+                        <motion.div key="b1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+                          <h2 className="text-base font-semibold">Personal Information</h2>
+                          <div className="space-y-1.5">
+                            <Label>Document Type</Label>
+                            <Select value={basicForm.documentType} onValueChange={v => setBasicForm(p => ({ ...p, documentType: v }))}>
+                              <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="national_id">National ID</SelectItem>
+                                <SelectItem value="passport">Passport</SelectItem>
+                                <SelectItem value="drivers_license">Driver's License</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Date of Birth</Label>
+                            <Input type="date" value={basicForm.dateOfBirth} onChange={e => setBasicForm(p => ({ ...p, dateOfBirth: e.target.value }))} className="rounded-xl" />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Home Address</Label>
+                            <Textarea placeholder="Enter your full address" value={basicForm.address} onChange={e => setBasicForm(p => ({ ...p, address: e.target.value }))} className="rounded-xl" rows={2} />
+                          </div>
+                          <Button className="w-full rounded-xl" onClick={() => {
+                            if (!basicForm.dateOfBirth || !basicForm.address) {
+                              toast({ title: "Missing fields", variant: "destructive" }); return;
+                            }
+                            setBasicStep(2);
+                          }}>Continue</Button>
+                        </motion.div>
+                      )}
+
+                      {basicStep === 2 && (
+                        <motion.div key="b2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+                          <h2 className="text-base font-semibold">Document Upload</h2>
+                          <FileUploadBox label="Front of document" file={basicForm.frontImage} onFile={f => setBasicForm(p => ({ ...p, frontImage: f }))} id="basic-front" />
+                          <FileUploadBox label="Back of document" file={basicForm.backImage} onFile={f => setBasicForm(p => ({ ...p, backImage: f }))} id="basic-back" />
+                          <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setBasicStep(1)}>Back</Button>
+                            <Button className="flex-1 rounded-xl" onClick={() => {
+                              if (!basicForm.frontImage || !basicForm.backImage) {
+                                toast({ title: "Upload both document sides", variant: "destructive" }); return;
+                              }
+                              setBasicStep(3);
+                            }}>Continue</Button>
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {basicStep === 3 && (
+                        <motion.div key="b3" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+                          <h2 className="text-base font-semibold">Selfie Verification</h2>
+                          <FileUploadBox label="Clear photo of your face" file={basicForm.selfie} onFile={f => setBasicForm(p => ({ ...p, selfie: f }))} id="basic-selfie" icon={Camera} />
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-300">
+                            Ensure your face is clearly visible, well-lit, and matches your ID document.
+                          </div>
+                          <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setBasicStep(2)}>Back</Button>
+                            <Button className="flex-1 rounded-xl" onClick={handleBasicSubmit} disabled={submitBasicMutation.isPending}>
+                              {submitBasicMutation.isPending ? "Submitting..." : "Submit"}
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+
+          {/* Advanced KYC Section */}
+          {activeLevel === "advanced" && (
+            <motion.div key="advanced" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+              className="space-y-4">
+              {basicStatus !== "verified" && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-5 text-center">
+                  <Shield className="w-10 h-10 text-amber-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">Basic KYC Required First</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">Complete your Basic KYC before applying for Advanced verification.</p>
+                  <Button className="mt-4" onClick={() => setActiveLevel("basic")}>Complete Basic KYC</Button>
+                </div>
+              )}
+
+              {basicStatus === "verified" && advancedStatus === "verified" && (
+                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center">
+                  <ShieldCheck className="w-12 h-12 text-green-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-green-800 dark:text-green-200">Fully Verified!</h3>
+                  <p className="text-sm text-green-700 dark:text-green-300 mt-1">Your advanced identity verification is complete. You have access to all features.</p>
+                </div>
+              )}
+
+              {basicStatus === "verified" && advancedStatus === "pending" && (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center">
+                  <Clock className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+                  <h3 className="font-semibold text-amber-800 dark:text-amber-200">Under Review</h3>
+                  <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">Your advanced KYC documents are being reviewed. This typically takes 1-2 business days.</p>
+                </div>
+              )}
+
+              {basicStatus === "verified" && (advancedStatus === "not_submitted" || advancedStatus === "rejected") && (
+                <>
+                  {advancedStatus === "rejected" && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-red-800 dark:text-red-200">Previous Submission Rejected</p>
+                      <p className="text-xs text-red-700 dark:text-red-300 mt-1">{advKycData?.advancedKyc?.verificationNotes || "Please resubmit with clearer documents."}</p>
+                    </div>
+                  )}
+
+                  <div className="bg-card border border-border rounded-2xl p-5 space-y-5">
+                    <div className="flex items-center gap-2">
+                      <div className="flex gap-2">
+                        {[1, 2].map(s => (
+                          <div key={s} className={`h-1.5 w-10 rounded-full transition-colors ${s <= advStep ? "bg-primary" : "bg-muted"}`} />
+                        ))}
+                      </div>
+                      <span className="text-xs text-muted-foreground ml-auto">Step {advStep} of 2</span>
+                    </div>
+
+                    <AnimatePresence mode="wait">
+                      {advStep === 1 && (
+                        <motion.div key="a1" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+                          <h2 className="text-base font-semibold">Address Verification</h2>
+                          <div className="space-y-1.5">
+                            <Label>Address Proof Document Type</Label>
+                            <Select value={advForm.addressProofType} onValueChange={v => setAdvForm(p => ({ ...p, addressProofType: v }))}>
+                              <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select document type" /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="utility_bill">Utility Bill (electricity, water, gas)</SelectItem>
+                                <SelectItem value="bank_statement">Bank Statement</SelectItem>
+                                <SelectItem value="lease">Lease / Rental Agreement</SelectItem>
+                                <SelectItem value="government_letter">Government Letter</SelectItem>
+                                <SelectItem value="other">Other Official Document</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Full Address</Label>
+                            <Textarea placeholder="Street, Estate, Area" value={advForm.fullAddress} onChange={e => setAdvForm(p => ({ ...p, fullAddress: e.target.value }))} className="rounded-xl" rows={2} />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <Label>City</Label>
+                              <Input placeholder="Nairobi" value={advForm.city} onChange={e => setAdvForm(p => ({ ...p, city: e.target.value }))} className="rounded-xl" />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Postal Code</Label>
+                              <Input placeholder="00100" value={advForm.postalCode} onChange={e => setAdvForm(p => ({ ...p, postalCode: e.target.value }))} className="rounded-xl" />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label>Country</Label>
+                            <Input placeholder="Kenya" value={advForm.country} onChange={e => setAdvForm(p => ({ ...p, country: e.target.value }))} className="rounded-xl" />
+                          </div>
+                          <Button className="w-full rounded-xl" onClick={() => {
+                            if (!advForm.addressProofType || !advForm.fullAddress) {
+                              toast({ title: "Fill in required fields", variant: "destructive" }); return;
+                            }
+                            setAdvStep(2);
+                          }}>Continue</Button>
+                        </motion.div>
+                      )}
+
+                      {advStep === 2 && (
+                        <motion.div key="a2" initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }} className="space-y-4">
+                          <h2 className="text-base font-semibold">Photo Verification</h2>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> Facial Photo (Liveness Check)</Label>
+                            <FileUploadBox label="Clear, well-lit photo of your face" file={advForm.facialPhoto} onFile={f => setAdvForm(p => ({ ...p, facialPhoto: f }))} id="adv-facial" icon={Camera} />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm font-medium flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Address Proof Document</Label>
+                            <FileUploadBox label="Upload your address proof document" file={advForm.addressProof} onFile={f => setAdvForm(p => ({ ...p, addressProof: f }))} id="adv-address" icon={MapPin} />
+                          </div>
+                          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-xl p-3 text-xs text-blue-700 dark:text-blue-300 space-y-1">
+                            <p className="font-medium">Tips for approval:</p>
+                            <p>• Document must be dated within the last 3 months</p>
+                            <p>• Your name and address must be clearly visible</p>
+                            <p>• Facial photo should match your ID on file</p>
+                          </div>
+                          <div className="flex gap-3">
+                            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setAdvStep(1)}>Back</Button>
+                            <Button className="flex-1 rounded-xl" onClick={handleAdvancedSubmit} disabled={submitAdvancedMutation.isPending}>
+                              {submitAdvancedMutation.isPending ? "Submitting..." : "Submit"}
+                            </Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

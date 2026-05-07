@@ -312,8 +312,8 @@ export default function AdminMessagingSMSPage() {
             <Card className="rounded-2xl border-0 shadow-sm">
               <CardHeader>
                 <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-purple-50">
-                    <AlertCircle className="w-5 h-5 text-purple-600" />
+                  <div className="p-2 rounded-xl bg-amber-50">
+                    <AlertCircle className="w-5 h-5 text-amber-600" />
                   </div>
                   <div>
                     <CardTitle>Message Type Configuration</CardTitle>
@@ -346,7 +346,7 @@ export default function AdminMessagingSMSPage() {
                   <Label className="text-sm font-medium">Login Alerts</Label>
                   <Switch checked={loginAlertEnabled} onCheckedChange={setLoginAlertEnabled} />
                 </div>
-                <Button onClick={() => togglesMutation.mutate()} disabled={togglesMutation.isPending} className="w-full rounded-xl bg-purple-600 hover:bg-purple-500">
+                <Button onClick={() => togglesMutation.mutate()} disabled={togglesMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
                   <Save className="w-4 h-4 mr-2" />
                   {togglesMutation.isPending ? "Saving..." : "Save Message Types"}
                 </Button>

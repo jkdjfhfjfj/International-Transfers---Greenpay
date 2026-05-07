@@ -653,7 +653,7 @@ export default function VirtualCardPage() {
               iconComponent: <ArrowRightLeft className="w-6 h-6 mb-1" />,
               label: "Transfer",
               sublabel: "Card ↔ Wallet",
-              color: "text-purple-500",
+              color: "text-teal-500",
               disabled: !isActive,
               action: () => {
                 if (!isActive) { toast({ title: "Card Unavailable", description: "Your card must be active to transfer.", variant: "destructive" }); return; }
@@ -713,7 +713,7 @@ export default function VirtualCardPage() {
             >
               <div className="bg-card rounded-2xl border border-border p-5 elevation-1 space-y-4">
                 <div className="flex items-center gap-2">
-                  <ArrowRightLeft className="w-4 h-4 text-purple-500" />
+                  <ArrowRightLeft className="w-4 h-4 text-teal-500" />
                   <h3 className="font-semibold text-sm">Transfer Funds</h3>
                 </div>
 
@@ -758,7 +758,7 @@ export default function VirtualCardPage() {
                 </div>
 
                 <Button
-                  className="w-full bg-purple-600 hover:bg-purple-700 text-white rounded-xl"
+                  className="w-full bg-teal-600 hover:bg-teal-700 text-white rounded-xl"
                   disabled={!transferAmount || parseFloat(transferAmount) <= 0 || transferMutation.isPending}
                   onClick={() => {
                     if (!card || !transferAmount) return;

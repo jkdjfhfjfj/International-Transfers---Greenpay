@@ -70,7 +70,7 @@ export default function TermsAndConditionsPage() {
           {[
             { icon: Lock, label: "Your Rights", color: "from-blue-500" },
             { icon: DollarSign, label: "Payment Terms", color: "from-indigo-500" },
-            { icon: Shield, label: "Security", color: "from-purple-500" },
+            { icon: Shield, label: "Security", color: "from-emerald-500" },
           ].map((item, idx) => (
             <motion.div
               key={idx}
