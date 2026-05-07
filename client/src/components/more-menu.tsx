@@ -243,7 +243,7 @@ export function MoreMenu() {
         animate={{ scale: 1 }}
         whileTap={{ scale: 0.92 }}
         onClick={() => setOpen(prev => !prev)}
-        className="fixed bottom-20 left-4 z-50 flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
+        className="fixed bottom-24 left-4 z-50 flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
       >
         <Grid className="w-4 h-4 text-emerald-500" />
         <span className="text-sm font-semibold">More</span>

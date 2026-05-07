@@ -2801,8 +2801,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/exchange-rates/:base", optionalApiKey, async (req, res) => {
     try {
       const { base } = req.params;
-      // Support bidirectional USD ↔ KES conversions
-      const targets = base.toUpperCase() === 'USD' ? ['KES'] : ['USD'];
+      const ALL_CURRENCIES = ['KES', 'EUR', 'GBP', 'NGN', 'GHS', 'TZS', 'UGX', 'ZAR', 'CAD', 'AUD', 'JPY', 'CNY', 'INR', 'AED', 'SAR', 'USD'];
+      const targets = ALL_CURRENCIES.filter(c => c !== base.toUpperCase());
       const rates = await exchangeRateService.getMultipleRates(base.toUpperCase(), targets);
       
       res.json({ 

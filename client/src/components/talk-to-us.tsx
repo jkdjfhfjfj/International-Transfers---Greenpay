@@ -2,8 +2,9 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, MessageCircle, Bot, ChevronUp, Mail } from 'lucide-react';
+import { X, MessageCircle, Bot, ChevronUp, Mail, Headphones } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
+import { useLocation } from 'wouter';
 
 interface Message {
   id: string;
@@ -21,6 +22,7 @@ interface ChatResponse {
 export function TalkToUs() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [, setLocation] = useLocation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -97,7 +99,7 @@ export function TalkToUs() {
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-28 right-4 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
+            className="fixed bottom-36 right-4 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
             style={{ height: '380px' }}
           >
             <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white p-4 rounded-t-2xl flex items-center justify-between flex-shrink-0">
@@ -187,7 +189,7 @@ export function TalkToUs() {
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="fixed bottom-28 right-4 z-50 flex flex-col gap-3 items-end"
+            className="fixed bottom-36 right-4 z-50 flex flex-col gap-3 items-end"
           >
             {/* AI option */}
             <motion.button
@@ -234,6 +236,20 @@ export function TalkToUs() {
                 <Mail className="w-5 h-5 text-white" />
               </div>
             </motion.a>
+
+            {/* Live Support option */}
+            <motion.button
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 }}
+              onClick={() => { setMenuOpen(false); setLocation('/live-chat'); }}
+              className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
+            >
+              <span className="text-sm font-medium">Live Support</span>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                <Headphones className="w-5 h-5 text-white" />
+              </div>
+            </motion.button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -250,7 +266,7 @@ export function TalkToUs() {
             setMenuOpen(prev => !prev);
           }
         }}
-        className="fixed bottom-20 right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
       >
         <motion.div
           animate={{ rotate: menuOpen ? 180 : 0 }}

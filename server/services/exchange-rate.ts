@@ -123,14 +123,35 @@ export class ExchangeRateService {
   }
 
   private getMultipleFallbackRates(base: string, targets: string[]): Record<string, number> {
-    // Return fallback rates for USD/KES only
-    const fallbackRates: Record<string, number> = {
-      'KES': 129,
-      'USD': 0.0077
+    // Approximate fallback rates relative to USD
+    const usdRates: Record<string, number> = {
+      'KES': 129.50,
+      'EUR': 0.9215,
+      'GBP': 0.7891,
+      'NGN': 1601.00,
+      'GHS': 15.60,
+      'TZS': 2645.00,
+      'UGX': 3720.00,
+      'ZAR': 18.63,
+      'CAD': 1.3615,
+      'AUD': 1.5430,
+      'JPY': 154.80,
+      'CNY': 7.2410,
+      'INR': 83.45,
+      'AED': 3.6725,
+      'SAR': 3.7500,
+      'USD': 1.0,
     };
-    
+
+    if (base === 'USD') {
+      return Object.fromEntries(
+        targets.map(target => [target, usdRates[target] ?? 1])
+      );
+    }
+
+    const baseToUsd = usdRates[base] ? 1 / usdRates[base] : 1;
     return Object.fromEntries(
-      targets.map(target => [target, fallbackRates[target] || 1])
+      targets.map(target => [target, parseFloat(((usdRates[target] ?? 1) * baseToUsd).toFixed(6))])
     );
   }
 }
