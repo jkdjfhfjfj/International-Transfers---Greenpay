@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses } from "@shared/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -1610,7 +1610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // PayHero callback to handle card activation and transaction status
+  // PayHero callback to handle card activation, deposits, and transaction status
   app.post("/api/payments/payhero/callback", async (req, res) => {
     try {
       const { CheckoutRequestID, ResultCode, ResultDesc, ExternalReference } = req.body;
@@ -1636,13 +1636,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { virtualCardService } = await import('./services/virtual-card');
           await virtualCardService.generateCard(transaction.userId);
           await storage.updateUser(transaction.userId, { hasVirtualCard: true });
-          
           notificationService.sendNotification({
             userId: transaction.userId,
             title: "Virtual Card Activated",
             message: "Your virtual card has been successfully generated and is ready for use.",
             type: "success"
           }).catch(err => console.error('Notification error:', err));
+        }
+
+        if (transaction.type === 'deposit') {
+          // Credit user balance
+          const user = await storage.getUser(transaction.userId);
+          if (user) {
+            const depositAmount = parseFloat(transaction.amount);
+            const currentBalance = parseFloat(user.balance || "0");
+            const newBalance = (currentBalance + depositAmount).toFixed(2);
+            await storage.updateUser(transaction.userId, { balance: newBalance });
+
+            notificationService.sendNotification({
+              userId: transaction.userId,
+              title: "Deposit Successful",
+              message: `Your M-Pesa deposit of $${depositAmount.toFixed(2)} has been credited to your wallet.`,
+              type: "success"
+            }).catch(err => console.error('Notification error:', err));
+
+            // Check for applicable deposit bonuses
+            try {
+              const activeBonuses = await db.select().from(depositBonuses)
+                .where(eq(depositBonuses.isActive, true));
+              for (const bonus of activeBonuses) {
+                const bonusMethod = bonus.method;
+                if (bonusMethod !== 'mpesa' && bonusMethod !== 'any') continue;
+                if (depositAmount < parseFloat(bonus.minAmount)) continue;
+                const bonusValue = bonus.bonusType === 'percentage'
+                  ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
+                  : parseFloat(bonus.bonusAmount);
+                if (bonusValue <= 0) continue;
+                const balanceAfterDeposit = parseFloat(newBalance);
+                const balanceWithBonus = (balanceAfterDeposit + bonusValue).toFixed(2);
+                await storage.updateUser(transaction.userId, { balance: balanceWithBonus });
+                await storage.createTransaction({
+                  userId: transaction.userId,
+                  type: 'deposit',
+                  amount: bonusValue.toFixed(2),
+                  currency: 'USD',
+                  status: 'completed',
+                  description: `Deposit bonus: ${bonus.description || `+$${bonusValue.toFixed(2)} for depositing via M-Pesa`}`,
+                  fee: '0.00',
+                  metadata: { bonusId: bonus.id, bonusType: 'deposit_bonus', triggerMethod: 'mpesa' }
+                });
+                notificationService.sendNotification({
+                  userId: transaction.userId,
+                  title: "Deposit Bonus Credited!",
+                  message: `You received a $${bonusValue.toFixed(2)} bonus for your M-Pesa deposit!`,
+                  type: "success"
+                }).catch(err => console.error('Bonus notification error:', err));
+                break; // Apply only the first matching bonus
+              }
+            } catch (bonusErr) {
+              console.error('[PayHero Bonus Error]:', bonusErr);
+            }
+          }
         }
       } else {
         await storage.updateTransactionStatus(transaction.id, "failed");
@@ -1655,7 +1709,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notificationService.sendNotification({
           userId: transaction.userId,
           title: "Payment Failed",
-          message: `Your card purchase payment failed: ${ResultDesc}`,
+          message: `Your ${transaction.type === 'deposit' ? 'deposit' : 'card purchase'} payment failed: ${ResultDesc}`,
           type: "error"
         }).catch(err => console.error('Notification error:', err));
       }
@@ -1664,6 +1718,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('[PayHero Callback Error]:', error);
       res.sendStatus(500);
+    }
+  });
+
+  // ── M-Pesa deposit via PayHero STK Push ─────────────────────────────────────
+  app.post("/api/deposit/mpesa", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { amount, phone } = req.body;
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "Valid amount required" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const phoneToUse = phone || user.phone;
+      if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
+
+      let exchangeRate = 129;
+      try {
+        const rateService = await createExchangeRateService();
+        exchangeRate = await rateService.getRate("USD", "KES");
+      } catch (e) { console.warn("[Deposit/Mpesa] Using fallback rate"); }
+
+      const kesAmount = parseFloat(amount) * exchangeRate;
+      const reference = `DEP-${Date.now()}-${userId.slice(-6)}`;
+      const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/payhero/callback`;
+
+      const paymentData = await payHeroService.initiateMpesaPayment(
+        Math.round(kesAmount),
+        phoneToUse,
+        reference,
+        user.fullName,
+        callbackUrl
+      );
+
+      if (!paymentData.success) {
+        if (paymentData.status === 'INVALID_PHONE_NUMBER' || paymentData.status === 'INVALID_PHONE_FORMAT') {
+          return res.status(400).json({ message: "Invalid phone number. Use format: 07XXXXXXXX or +2547XXXXXXXX", status: paymentData.status });
+        }
+        return res.status(400).json({ message: "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
+      }
+
+      await storage.createTransaction({
+        userId,
+        type: 'deposit',
+        amount: parseFloat(amount).toFixed(2),
+        currency: 'USD',
+        status: 'pending',
+        description: `M-Pesa deposit via PayHero`,
+        fee: '0.00',
+        exchangeRate: exchangeRate.toString(),
+        paystackReference: paymentData.reference || reference,
+        metadata: { paymentMethod: 'mpesa', phoneNumber: phoneToUse, kesAmount: kesAmount.toFixed(2), exchangeRate }
+      });
+
+      res.json({
+        success: true,
+        reference: paymentData.reference || reference,
+        checkoutRequestId: paymentData.CheckoutRequestID,
+        message: "STK Push sent to your phone. Enter your M-Pesa PIN to complete payment."
+      });
+    } catch (error) {
+      console.error('[Deposit/Mpesa Error]:', error);
+      res.status(500).json({ message: "Error initiating M-Pesa deposit" });
+    }
+  });
+
+  // Poll M-Pesa deposit status
+  app.get("/api/deposit/mpesa/status/:reference", requireAuth, async (req, res) => {
+    try {
+      const { reference } = req.params;
+      const transaction = await db.query.transactions.findFirst({
+        where: eq(transactions.paystackReference, reference)
+      });
+      if (!transaction) return res.status(404).json({ message: "Transaction not found" });
+      res.json({ status: transaction.status, amount: transaction.amount, description: transaction.description });
+    } catch (error) {
+      res.status(500).json({ message: "Error checking status" });
+    }
+  });
+
+  // ── Public deposit config (enabled methods, bank details, active bonuses) ───
+  app.get("/api/deposit/config", requireAuth, async (req, res) => {
+    try {
+      const keys = [
+        "mpesa_enabled", "crypto_enabled", "bank_transfer_enabled", "card_enabled",
+        "bank_name", "bank_account_name", "bank_account_number", "bank_swift_code",
+        "bank_branch", "bank_currency", "bank_routing_number", "bank_additional_info"
+      ];
+      const settingsMap: Record<string, string> = {};
+      for (const key of keys) {
+        const s = await storage.getSystemSetting("deposit_methods", key);
+        if (s) settingsMap[key] = String(s.value);
+      }
+      const activeBonuses = await db.select().from(depositBonuses)
+        .where(eq(depositBonuses.isActive, true));
+      res.json({ methods: settingsMap, bonuses: activeBonuses });
+    } catch (error) {
+      console.error("[Deposit Config Error]:", error);
+      res.status(500).json({ message: "Error loading deposit config" });
     }
   });
 
@@ -6356,6 +6508,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error('Error fetching manual payment settings:', error);
       res.status(500).json({ message: "Error fetching manual payment settings" });
     }
+  });
+
+  // ── Admin deposit method settings ─────────────────────────────────────────
+  app.get("/api/admin/deposit-settings", requireAdminAuth, async (req, res) => {
+    try {
+      const keys = [
+        "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled",
+        "bank_name","bank_account_name","bank_account_number","bank_swift_code",
+        "bank_branch","bank_currency","bank_routing_number","bank_additional_info"
+      ];
+      const result: Record<string, string> = {};
+      for (const key of keys) {
+        const s = await storage.getSystemSetting("deposit_methods", key);
+        result[key] = s ? String(s.value) : "";
+      }
+      const bonuses = await db.select().from(depositBonuses);
+      res.json({ methods: result, bonuses });
+    } catch (e) { res.status(500).json({ message: "Failed to load deposit settings" }); }
+  });
+
+  app.put("/api/admin/deposit-settings", requireAdminAuth, async (req, res) => {
+    try {
+      const { methods } = req.body;
+      const allowedKeys = [
+        "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled",
+        "bank_name","bank_account_name","bank_account_number","bank_swift_code",
+        "bank_branch","bank_currency","bank_routing_number","bank_additional_info"
+      ];
+      for (const key of allowedKeys) {
+        if (key in methods) {
+          await storage.setSystemSetting({ category: "deposit_methods", key, value: String(methods[key]), description: `Deposit method setting: ${key}` });
+        }
+      }
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ message: "Failed to save deposit settings" }); }
+  });
+
+  // ── Admin deposit bonuses CRUD ─────────────────────────────────────────────
+  app.get("/api/admin/deposit-bonuses", requireAdminAuth, async (req, res) => {
+    try {
+      const bonuses = await db.select().from(depositBonuses);
+      res.json(bonuses);
+    } catch (e) { res.status(500).json({ message: "Failed to load bonuses" }); }
+  });
+
+  app.post("/api/admin/deposit-bonuses", requireAdminAuth, async (req, res) => {
+    try {
+      const { method, minAmount, bonusAmount, bonusType, description, isActive } = req.body;
+      const [bonus] = await db.insert(depositBonuses).values({
+        method, minAmount: String(minAmount), bonusAmount: String(bonusAmount),
+        bonusType: bonusType || "fixed", description, isActive: isActive !== false
+      }).returning();
+      res.json(bonus);
+    } catch (e) { res.status(500).json({ message: "Failed to create bonus" }); }
+  });
+
+  app.put("/api/admin/deposit-bonuses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { method, minAmount, bonusAmount, bonusType, description, isActive } = req.body;
+      const [bonus] = await db.update(depositBonuses).set({
+        method, minAmount: String(minAmount), bonusAmount: String(bonusAmount),
+        bonusType: bonusType || "fixed", description, isActive,
+        updatedAt: new Date()
+      }).where(eq(depositBonuses.id, id)).returning();
+      res.json(bonus);
+    } catch (e) { res.status(500).json({ message: "Failed to update bonus" }); }
+  });
+
+  app.delete("/api/admin/deposit-bonuses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await db.delete(depositBonuses).where(eq(depositBonuses.id, req.params.id));
+      res.json({ success: true });
+    } catch (e) { res.status(500).json({ message: "Failed to delete bonus" }); }
   });
 
   // Messaging settings endpoints

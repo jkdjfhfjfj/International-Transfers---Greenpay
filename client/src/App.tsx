@@ -84,6 +84,7 @@ import CryptoPage from "@/pages/crypto";
 import AnalyticsPage from "@/pages/analytics";
 import AdminDisputesPage from "@/pages/admin-disputes";
 import AdminCryptoPage from "@/pages/admin-crypto";
+import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
 import { useFCM } from "@/hooks/use-fcm";
 
 // User Route Guard Component
@@ -196,6 +197,7 @@ function Router() {
       <Route path="/admin/profile" component={AdminProfilePage} />
       <Route path="/admin/disputes" component={AdminDisputesPage} />
       <Route path="/admin/crypto" component={AdminCryptoPage} />
+      <Route path="/admin/deposit-settings" component={AdminDepositSettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

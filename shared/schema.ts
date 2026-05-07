@@ -808,3 +808,20 @@ export const cryptoDepositAddresses = pgTable("crypto_deposit_addresses", {
 export const insertCryptoDepositAddressSchema = createInsertSchema(cryptoDepositAddresses).omit({ id: true, createdAt: true, updatedAt: true });
 export type CryptoDepositAddress = typeof cryptoDepositAddresses.$inferSelect;
 export type InsertCryptoDepositAddress = z.infer<typeof insertCryptoDepositAddressSchema>;
+
+// Deposit bonuses — admin-configured offers (e.g. deposit $100+ via mpesa → get $10 bonus)
+export const depositBonuses = pgTable("deposit_bonuses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  method: text("method").notNull(), // mpesa | crypto | bank_transfer | card | any
+  minAmount: decimal("min_amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  bonusAmount: decimal("bonus_amount", { precision: 18, scale: 2 }).notNull(),
+  bonusType: text("bonus_type").notNull().default("fixed"), // fixed | percentage
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDepositBonusSchema = createInsertSchema(depositBonuses).omit({ id: true, createdAt: true, updatedAt: true });
+export type DepositBonus = typeof depositBonuses.$inferSelect;
+export type InsertDepositBonus = z.infer<typeof insertDepositBonusSchema>;

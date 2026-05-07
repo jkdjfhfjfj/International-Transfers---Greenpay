@@ -35,6 +35,18 @@ async function alterMissingColumns() {
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
+    // Deposit bonuses table (admin-configured bonus offers per deposit method)
+    `CREATE TABLE IF NOT EXISTS deposit_bonuses (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      method TEXT NOT NULL,
+      min_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+      bonus_amount DECIMAL(18,2) NOT NULL,
+      bonus_type TEXT NOT NULL DEFAULT 'fixed',
+      description TEXT,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
   ];
 
   for (const sql of migrations) {
