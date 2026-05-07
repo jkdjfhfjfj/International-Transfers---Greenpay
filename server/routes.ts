@@ -2212,7 +2212,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Verify deposit payment initialization
   app.post("/api/deposit/initialize-payment", requireAuth, async (req, res) => {
     try {
-      const { amount, currency, paymentMethod } = req.body;
+      const { amount, currency, paymentMethod, billingAddress, billingCity, billingCountry } = req.body;
       const userId = (req.session as any).userId;
       
       console.log('Deposit payment request - userId:', userId, 'amount:', amount, 'currency:', currency, 'method:', paymentMethod);
@@ -2255,13 +2255,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (paymentMethod === 'card') channels = ['card'];
       if (paymentMethod === 'mpesa' || paymentMethod === 'airtel') channels = ['mobile_money'];
 
+      const paymentMetadata: Record<string, any> = { paymentMethod };
+      if (billingAddress) paymentMetadata.billing_address = billingAddress;
+      if (billingCity) paymentMetadata.billing_city = billingCity;
+      if (billingCountry) paymentMetadata.billing_country = billingCountry;
+
       const paymentData = await paystackService.initializePayment(
         user.email,
         parseFloat(finalAmountKes.toFixed(2)),
         reference,
         'KES',
         user.phone || undefined,
-        callbackUrl
+        callbackUrl,
+        paymentMetadata
       );
       
       if (!paymentData.status) {

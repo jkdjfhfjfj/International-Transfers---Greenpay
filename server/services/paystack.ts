@@ -24,7 +24,7 @@ export class PaystackService {
     }
   }
 
-  async initializePayment(email: string, amount: number, reference: string, currency: string = 'KES', phoneNumber?: string, callbackUrl?: string): Promise<PaystackResponse> {
+  async initializePayment(email: string, amount: number, reference: string, currency: string = 'KES', phoneNumber?: string, callbackUrl?: string, metadata?: Record<string, any>): Promise<PaystackResponse> {
     if (!this.isConfigured) {
       return {
         status: false,
@@ -53,6 +53,11 @@ export class PaystackService {
           phone: phoneNumber,
           provider: 'mpesa'
         };
+      }
+
+      // Add custom metadata (billing address, payment method, etc.)
+      if (metadata && Object.keys(metadata).length > 0) {
+        payload.metadata = { custom_fields: Object.entries(metadata).map(([key, value]) => ({ display_name: key, variable_name: key, value })) };
       }
 
       const response = await fetch(url, {

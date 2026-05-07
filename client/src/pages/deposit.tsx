@@ -71,11 +71,20 @@ export default function DepositPage() {
   const [mpesaRef, setMpesaRef] = useState<string | null>(null);
   const [mpesaStatus, setMpesaStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
   const [selectedCoin, setSelectedCoin] = useState("USDT");
+  const [billingAddress, setBillingAddress] = useState("");
+  const [billingCity, setBillingCity] = useState("");
+  const [billingCountry, setBillingCountry] = useState("");
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
 
   useEffect(() => { refreshUser(); }, []);
+
+  useEffect(() => {
+    if (selectedMethod === "card" && user) {
+      if (!billingCountry) setBillingCountry(user.country || "");
+    }
+  }, [selectedMethod, user]);
 
   const { data: config, isLoading: configLoading } = useQuery<DepositConfig>({
     queryKey: ["/api/deposit/config"],
@@ -561,6 +570,43 @@ export default function DepositPage() {
                   </div>
                 </div>
 
+                {/* Billing Address */}
+                <div className="space-y-3 pt-1">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Billing Address</p>
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Street Address</label>
+                    <Input
+                      value={billingAddress}
+                      onChange={e => setBillingAddress(e.target.value)}
+                      placeholder="e.g. 123 Main Street, Apt 4B"
+                      className="text-sm"
+                      data-testid="input-billing-address"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">City</label>
+                      <Input
+                        value={billingCity}
+                        onChange={e => setBillingCity(e.target.value)}
+                        placeholder="e.g. Nairobi"
+                        className="text-sm"
+                        data-testid="input-billing-city"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-muted-foreground">Country</label>
+                      <Input
+                        value={billingCountry}
+                        onChange={e => setBillingCountry(e.target.value)}
+                        placeholder="e.g. Kenya"
+                        className="text-sm"
+                        data-testid="input-billing-country"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <Button
                   onClick={async () => {
                     if (!amount || parseFloat(amount) < 10) {
@@ -568,7 +614,12 @@ export default function DepositPage() {
                       return;
                     }
                     try {
-                      const r = await apiRequest("POST", "/api/deposit/initialize-payment", { amount, currency: "USD", paymentMethod: "card" });
+                      const r = await apiRequest("POST", "/api/deposit/initialize-payment", {
+                        amount, currency: "USD", paymentMethod: "card",
+                        billingAddress: billingAddress || undefined,
+                        billingCity: billingCity || undefined,
+                        billingCountry: billingCountry || undefined,
+                      });
                       const data = await r.json();
                       if (data.authorizationUrl) window.location.href = data.authorizationUrl;
                       else toast({ title: "Error", description: data.message || "Failed to initialize", variant: "destructive" });
