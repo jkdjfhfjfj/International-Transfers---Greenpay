@@ -360,9 +360,6 @@ export default function KycManagement() {
         </CardContent>
       </Card>
 
-      {/* Advanced KYC Section */}
-      <AdvancedKycSection />
-
       {/* View-only KYC details dialog (for reviewed/verified docs) */}
       <Dialog open={!!viewKyc} onOpenChange={(open) => { if (!open) setViewKyc(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -453,25 +450,29 @@ export default function KycManagement() {
 }
 
 interface AdvancedKycDoc {
-  id: number;
+  id: string;
   userId: string;
-  faceScanUrl: string | null;
+  facialPhotoUrl: string | null;
   addressProofUrl: string | null;
-  addressText: string | null;
+  addressProofType: string | null;
+  fullAddress: string | null;
+  city: string | null;
+  postalCode: string | null;
+  country: string | null;
   status: string;
-  reviewNotes: string | null;
-  reviewedAt: string | null;
+  verificationNotes: string | null;
+  verifiedAt: string | null;
   createdAt: string;
 }
 
-function AdvancedKycSection() {
+export function AdvancedKycSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<AdvancedKycDoc | null>(null);
   const [reviewStatus, setReviewStatus] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
 
-  const { data, isLoading } = useQuery<{ submissions: AdvancedKycDoc[] }>({
+  const { data, isLoading } = useQuery<{ advancedKycDocuments: AdvancedKycDoc[] }>({
     queryKey: ["/api/admin/kyc/advanced"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/admin/kyc/advanced");
@@ -480,8 +481,8 @@ function AdvancedKycSection() {
   });
 
   const reviewMutation = useMutation({
-    mutationFn: async ({ id, status, notes }: { id: number; status: string; notes: string }) => {
-      const res = await apiRequest("PUT", `/api/admin/kyc/advanced/${id}`, { status, reviewNotes: notes });
+    mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
+      const res = await apiRequest("PUT", `/api/admin/kyc/advanced/${id}`, { status, verificationNotes: notes });
       return res.json();
     },
     onSuccess: () => {
@@ -494,127 +495,189 @@ function AdvancedKycSection() {
     onError: () => toast({ title: "Error", description: "Failed to update advanced KYC.", variant: "destructive" }),
   });
 
-  const submissions = data?.submissions || [];
+  const submissions = data?.advancedKycDocuments || [];
   const pending = submissions.filter(s => s.status === "pending");
+  const verified = submissions.filter(s => s.status === "verified");
+  const rejected = submissions.filter(s => s.status === "rejected");
 
   const statusBadge = (s: string) => {
-    if (s === "approved") return <Badge className="bg-green-500 text-white">Approved</Badge>;
+    if (s === "verified") return <Badge className="bg-green-500 text-white">Verified</Badge>;
     if (s === "rejected") return <Badge variant="destructive">Rejected</Badge>;
     return <Badge variant="secondary">Pending</Badge>;
   };
 
+  const addressProofLabel = (type: string | null) => {
+    const map: Record<string, string> = {
+      utility_bill: "Utility Bill", bank_statement: "Bank Statement",
+      lease: "Lease Agreement", government_letter: "Government Letter", other: "Other",
+    };
+    return type ? (map[type] || type) : "Address Proof";
+  };
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <FileCheck className="w-5 h-5 text-blue-500" />
-          Advanced KYC Review
-          {pending.length > 0 && <Badge className="bg-yellow-500 text-white ml-2">{pending.length} pending</Badge>}
-        </CardTitle>
-        <CardDescription>Review facial verification and address proof documents for advanced KYC tier</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+    <div className="space-y-6">
+      {/* Stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="w-5 h-5 text-blue-500" />
+            Advanced KYC Review
+            {pending.length > 0 && <Badge className="bg-yellow-500 text-white ml-2">{pending.length} pending</Badge>}
+          </CardTitle>
+          <CardDescription>Review facial photo and address proof for advanced identity verification</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-yellow-600">{pending.length}</p>
+              <p className="text-sm text-yellow-600">Pending Review</p>
+            </div>
+            <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-green-600">{verified.length}</p>
+              <p className="text-sm text-green-600">Verified</p>
+            </div>
+            <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-red-600">{rejected.length}</p>
+              <p className="text-sm text-red-600">Rejected</p>
+            </div>
           </div>
-        ) : submissions.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">No advanced KYC submissions yet.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User ID</TableHead>
-                <TableHead>Documents</TableHead>
-                <TableHead>Address</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Submitted</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {submissions.map((sub) => (
-                <TableRow key={sub.id}>
-                  <TableCell><span className="font-mono text-sm">{sub.userId.slice(0, 8)}...</span></TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {sub.faceScanUrl && <Badge variant="outline" className="text-xs">Face Scan</Badge>}
-                      {sub.addressProofUrl && <Badge variant="outline" className="text-xs">Address Proof</Badge>}
-                    </div>
-                  </TableCell>
-                  <TableCell><span className="text-sm max-w-32 truncate block">{sub.addressText || "-"}</span></TableCell>
-                  <TableCell>{statusBadge(sub.status)}</TableCell>
-                  <TableCell><span className="text-sm">{format(new Date(sub.createdAt), "MMM dd, yyyy")}</span></TableCell>
-                  <TableCell>
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="ghost" size="sm" onClick={() => { setSelected(sub); setReviewStatus(""); setReviewNotes(sub.reviewNotes || ""); }}>
-                          <Eye className="w-4 h-4 mr-1" />
-                          Review
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                          <DialogTitle>Advanced KYC Review</DialogTitle>
-                          <DialogDescription>User {sub.userId.slice(0, 8)}... — {statusBadge(sub.status)}</DialogDescription>
-                        </DialogHeader>
-                        {selected && selected.id === sub.id && (
-                          <div className="space-y-5">
-                            <div className="grid grid-cols-2 gap-4">
-                              {selected.faceScanUrl && (
-                                <div className="space-y-2">
-                                  <p className="text-sm font-medium">Face Scan</p>
-                                  <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                    <img src={selected.faceScanUrl} alt="Face scan" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.faceScanUrl!, "_blank")} />
-                                    <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
-                                  </div>
-                                </div>
-                              )}
-                              {selected.addressProofUrl && (
-                                <div className="space-y-2">
-                                  <p className="text-sm font-medium">Address Proof</p>
-                                  <div className="border rounded-lg overflow-hidden bg-gray-50">
-                                    <img src={selected.addressProofUrl} alt="Address proof" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.addressProofUrl!, "_blank")} />
-                                    <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            {selected.addressText && (
-                              <div className="p-3 rounded-lg bg-muted text-sm">
-                                <p className="font-medium mb-1 flex items-center gap-2"><MapPin className="w-4 h-4" /> Declared Address</p>
-                                <p>{selected.addressText}</p>
-                              </div>
-                            )}
-                            <div className="space-y-3">
-                              <Select value={reviewStatus} onValueChange={setReviewStatus}>
-                                <SelectTrigger className="rounded-xl"><SelectValue placeholder="Select decision..." /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="approved">Approve</SelectItem>
-                                  <SelectItem value="rejected">Reject</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Textarea value={reviewNotes} onChange={e => setReviewNotes(e.target.value)} placeholder="Review notes (optional)..." className="rounded-xl" rows={3} />
-                              <Button
-                                className="w-full rounded-xl bg-blue-600 hover:bg-blue-700"
-                                disabled={!reviewStatus || reviewMutation.isPending}
-                                onClick={() => reviewMutation.mutate({ id: selected.id, status: reviewStatus, notes: reviewNotes })}
-                              >
-                                {reviewMutation.isPending ? "Submitting..." : "Submit Review"}
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </DialogContent>
-                    </Dialog>
-                  </TableCell>
+        </CardContent>
+      </Card>
+
+      {/* Submissions table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>All Submissions</CardTitle>
+          <CardDescription>Complete list of advanced KYC submissions</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : submissions.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-6">No advanced KYC submissions yet.</p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User ID</TableHead>
+                  <TableHead>Documents</TableHead>
+                  <TableHead>Location</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Submitted</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
+              </TableHeader>
+              <TableBody>
+                {submissions.map((sub) => (
+                  <TableRow key={sub.id}>
+                    <TableCell><span className="font-mono text-sm">{sub.userId.slice(0, 8)}...</span></TableCell>
+                    <TableCell>
+                      <div className="flex gap-1 flex-wrap">
+                        {sub.facialPhotoUrl && <Badge variant="outline" className="text-xs">Facial Photo</Badge>}
+                        {sub.addressProofUrl && <Badge variant="outline" className="text-xs">{addressProofLabel(sub.addressProofType)}</Badge>}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {[sub.city, sub.country].filter(Boolean).join(", ") || "-"}
+                      </span>
+                    </TableCell>
+                    <TableCell>{statusBadge(sub.status)}</TableCell>
+                    <TableCell><span className="text-sm">{format(new Date(sub.createdAt), "MMM dd, yyyy")}</span></TableCell>
+                    <TableCell>
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => { setSelected(sub); setReviewStatus(""); setReviewNotes(sub.verificationNotes || ""); }}>
+                            <Eye className="w-4 h-4 mr-1" />
+                            Review
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                          <DialogHeader>
+                            <DialogTitle>Advanced KYC Review</DialogTitle>
+                            <DialogDescription>User {sub.userId.slice(0, 8)}... — {statusBadge(sub.status)}</DialogDescription>
+                          </DialogHeader>
+                          {selected && selected.id === sub.id && (
+                            <div className="space-y-5">
+                              {/* Document images */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {selected.facialPhotoUrl && (
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium">Facial Photo</p>
+                                    <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                                      <img src={selected.facialPhotoUrl} alt="Facial photo" className="w-full h-52 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.facialPhotoUrl!, "_blank")} />
+                                      <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
+                                    </div>
+                                  </div>
+                                )}
+                                {selected.addressProofUrl && (
+                                  <div className="space-y-2">
+                                    <p className="text-sm font-medium">{addressProofLabel(selected.addressProofType)}</p>
+                                    <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
+                                      <img src={selected.addressProofUrl} alt="Address proof" className="w-full h-52 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.addressProofUrl!, "_blank")} />
+                                      <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Address details */}
+                              {(selected.fullAddress || selected.city || selected.country) && (
+                                <div className="p-3 rounded-lg bg-muted text-sm space-y-1">
+                                  <p className="font-medium flex items-center gap-2"><MapPin className="w-4 h-4" /> Declared Address</p>
+                                  {selected.fullAddress && <p className="text-muted-foreground">{selected.fullAddress}</p>}
+                                  <p className="text-muted-foreground">
+                                    {[selected.city, selected.postalCode, selected.country].filter(Boolean).join(", ")}
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* Review form */}
+                              <div className="space-y-3 pt-2 border-t">
+                                <h4 className="font-medium">Review Decision</h4>
+                                <Select value={reviewStatus} onValueChange={setReviewStatus}>
+                                  <SelectTrigger><SelectValue placeholder="Select decision..." /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="verified">
+                                      <div className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-600" /> Approve & Verify</div>
+                                    </SelectItem>
+                                    <SelectItem value="rejected">
+                                      <div className="flex items-center gap-2"><XCircle className="w-4 h-4 text-red-600" /> Reject</div>
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Textarea value={reviewNotes} onChange={e => setReviewNotes(e.target.value)} placeholder="Review notes (optional)..." rows={3} />
+                                <Button
+                                  className="w-full"
+                                  disabled={!reviewStatus || reviewMutation.isPending}
+                                  onClick={() => reviewMutation.mutate({ id: selected.id, status: reviewStatus, notes: reviewNotes })}
+                                >
+                                  {reviewMutation.isPending ? "Submitting..." : "Submit Review"}
+                                </Button>
+                              </div>
+
+                              {/* Existing notes */}
+                              {selected.verificationNotes && (
+                                <div className="p-3 bg-muted rounded-lg text-sm">
+                                  <p className="font-medium mb-1">Previous Review Notes</p>
+                                  <p className="text-muted-foreground">{selected.verificationNotes}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </DialogContent>
+                      </Dialog>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

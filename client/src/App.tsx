@@ -45,6 +45,7 @@ import AdminDashboard from "@/pages/admin-dashboard-new";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminKycPage from "@/pages/admin-kyc";
+import AdminAdvancedKycPage from "@/pages/admin-advanced-kyc";
 import AdminTransactionsPage from "@/pages/admin-transactions";
 import AdminWithdrawalsPage from "@/pages/admin-withdrawals";
 import AdminCardsPage from "@/pages/admin-cards";
@@ -175,6 +176,7 @@ function Router() {
       <Route path="/admin/home" component={AdminDashboardPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
       <Route path="/admin/kyc" component={AdminKycPage} />
+      <Route path="/admin/advanced-kyc" component={AdminAdvancedKycPage} />
       <Route path="/admin/transactions" component={AdminTransactionsPage} />
       <Route path="/admin/withdrawals" component={AdminWithdrawalsPage} />
       <Route path="/admin/cards" component={AdminCardsPage} />

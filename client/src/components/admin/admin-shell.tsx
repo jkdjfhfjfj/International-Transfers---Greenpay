@@ -35,6 +35,7 @@ const navSections = [
     items: [
       { href: "/admin/users", label: "User Management", icon: Users },
       { href: "/admin/kyc", label: "KYC Review", icon: FileCheck },
+      { href: "/admin/advanced-kyc", label: "Advanced KYC", icon: Shield },
     ],
   },
   {
