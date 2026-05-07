@@ -67,6 +67,7 @@ export default function KYCPage() {
 
   const basicStatus = user?.kycStatus || "not_submitted";
   const advancedStatus = (user as any)?.advancedKycStatus || advKycData?.advancedKyc?.status || "not_submitted";
+  const advancedKycRequested = (user as any)?.advancedKycRequested === true;
 
   // Basic KYC submit
   const submitBasicMutation = useMutation({
@@ -178,6 +179,37 @@ export default function KYCPage() {
       </motion.div>
 
       <div className="max-w-md mx-auto px-4 pt-6 space-y-6">
+        {/* Admin-requested Advanced KYC banner */}
+        {advancedKycRequested && advancedStatus === "not_submitted" && basicStatus === "verified" && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl p-4 flex gap-3 items-start">
+            <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Advanced Verification Required</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                Our team has requested you complete Advanced KYC to continue using all features. Please submit your facial scan and address proof below.
+              </p>
+              <Button size="sm" className="mt-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl"
+                onClick={() => setActiveLevel("advanced")}>
+                Complete Advanced KYC
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {advancedKycRequested && advancedStatus === "not_submitted" && basicStatus !== "verified" && (
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-4 flex gap-3 items-start">
+            <ShieldCheck className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">Advanced Verification Requested</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                Our team has requested Advanced KYC. Please complete Basic KYC first, then return here to submit advanced documents.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         {/* KYC Level Cards */}
         <div className="grid grid-cols-2 gap-3">
           {[

@@ -15,6 +15,7 @@ export const users = pgTable("users", {
   isPhoneVerified: boolean("is_phone_verified").default(false),
   kycStatus: text("kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
   advancedKycStatus: text("advanced_kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
+  advancedKycRequested: boolean("advanced_kyc_requested").default(false), // admin-requested advanced KYC
   hasVirtualCard: boolean("has_virtual_card").default(false),
   twoFactorSecret: text("two_factor_secret"),
   twoFactorEnabled: boolean("two_factor_enabled").default(false),

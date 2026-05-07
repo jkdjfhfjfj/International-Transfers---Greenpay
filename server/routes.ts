@@ -4380,6 +4380,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Request Advanced KYC from a user
+  app.post("/api/admin/users/:id/request-advanced-kyc", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      await storage.updateUser(id, { advancedKycRequested: true } as any);
+      res.json({ message: "Advanced KYC requested successfully" });
+    } catch (error) {
+      console.error("Request advanced KYC error:", error);
+      res.status(500).json({ message: "Failed to request advanced KYC" });
+    }
+  });
+
+  // Admin: Cancel Advanced KYC request
+  app.post("/api/admin/users/:id/cancel-advanced-kyc-request", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      await storage.updateUser(id, { advancedKycRequested: false } as any);
+      res.json({ message: "Advanced KYC request cancelled" });
+    } catch (error) {
+      console.error("Cancel advanced KYC request error:", error);
+      res.status(500).json({ message: "Failed to cancel request" });
+    }
+  });
+
   // Admin User Account Management
   app.put("/api/admin/users/:id/account", async (req, res) => {
     try {

@@ -72,6 +72,8 @@ import {
   Smartphone,
   Tablet,
   Globe,
+  ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -101,6 +103,8 @@ interface User {
   suspendedAt?: string;
   lastLoginAt?: string;
   totalTransactions?: number;
+  advancedKycStatus?: string;
+  advancedKycRequested?: boolean;
 }
 
 interface UsersResponse {
@@ -183,6 +187,30 @@ export default function UserManagement() {
         variant: "destructive",
       });
     },
+  });
+
+  const requestAdvancedKycMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("POST", `/api/admin/users/${userId}/request-advanced-kyc`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Advanced KYC Requested", description: "User will be prompted to complete advanced KYC." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to request advanced KYC.", variant: "destructive" }),
+  });
+
+  const cancelAdvancedKycRequestMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("POST", `/api/admin/users/${userId}/cancel-advanced-kyc-request`, {});
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Request Cancelled", description: "Advanced KYC request has been removed." });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to cancel request.", variant: "destructive" }),
   });
 
   const deleteUserMutation = useMutation({
@@ -409,6 +437,33 @@ export default function UserManagement() {
                               <UserActivityModal userId={user.id} />
                             </DialogContent>
                           </Dialog>
+
+                          {/* Request / Cancel Advanced KYC */}
+                          {user.advancedKycStatus !== "verified" && (
+                            user.advancedKycRequested ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => cancelAdvancedKycRequestMutation.mutate(user.id)}
+                                disabled={cancelAdvancedKycRequestMutation.isPending}
+                                title="Cancel Advanced KYC Request"
+                                data-testid={`button-cancel-adv-kyc-${user.id}`}
+                              >
+                                <ShieldCheck className="w-4 h-4 text-blue-500" />
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => requestAdvancedKycMutation.mutate(user.id)}
+                                disabled={requestAdvancedKycMutation.isPending}
+                                title="Request Advanced KYC from user"
+                                data-testid={`button-request-adv-kyc-${user.id}`}
+                              >
+                                <ShieldAlert className="w-4 h-4 text-amber-500" />
+                              </Button>
+                            )
+                          )}
 
                           {isUserBlocked(user) ? (
                             <Button
