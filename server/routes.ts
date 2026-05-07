@@ -4670,6 +4670,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get user's crypto transactions
+  app.get("/api/admin/users/:id/crypto-transactions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const txns = await db.select().from(cryptoTransactions)
+        .where(eq(cryptoTransactions.userId, id))
+        .orderBy(desc(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+
+  // Admin: Full edit of a regular transaction
+  app.put("/api/admin/transactions/:id/edit", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, currency, type, description, status, createdAt, fee } = req.body;
+      const existing = await storage.getTransaction(id);
+      if (!existing) return res.status(404).json({ message: "Transaction not found" });
+
+      const updates: any = {};
+      if (amount !== undefined) updates.amount = String(amount);
+      if (currency !== undefined) updates.currency = currency;
+      if (type !== undefined) updates.type = type;
+      if (description !== undefined) updates.description = description;
+      if (fee !== undefined) updates.fee = String(fee);
+      if (status !== undefined) updates.status = status;
+      if (createdAt !== undefined) updates.createdAt = new Date(createdAt);
+      updates.updatedAt = new Date();
+
+      const updated = await storage.updateTransaction(id, updates);
+      res.json({ transaction: updated, message: "Transaction updated" });
+    } catch (error) {
+      console.error('Admin edit transaction error:', error);
+      res.status(500).json({ message: "Failed to update transaction" });
+    }
+  });
+
+  // Admin: Delete a regular transaction
+  app.delete("/api/admin/transactions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getTransaction(id);
+      if (!existing) return res.status(404).json({ message: "Transaction not found" });
+      await db.delete(transactions).where(eq(transactions.id, id));
+      res.json({ message: "Transaction deleted" });
+    } catch (error) {
+      console.error('Admin delete transaction error:', error);
+      res.status(500).json({ message: "Failed to delete transaction" });
+    }
+  });
+
+  // Admin: Full edit of a crypto transaction
+  app.put("/api/admin/crypto/transactions/:id/edit", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, txHash, adminNotes, amount, usdValue, coin, network, createdAt } = req.body;
+      const updateData: any = { updatedAt: new Date() };
+      if (status !== undefined) updateData.status = status;
+      if (txHash !== undefined) updateData.txHash = txHash;
+      if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
+      if (amount !== undefined) updateData.amount = String(amount);
+      if (usdValue !== undefined) updateData.usdValue = String(usdValue);
+      if (coin !== undefined) updateData.coin = coin;
+      if (network !== undefined) updateData.network = network;
+      if (createdAt !== undefined) updateData.createdAt = new Date(createdAt);
+      if (status === "completed") updateData.completedAt = new Date();
+
+      await db.update(cryptoTransactions).set(updateData)
+        .where(eq(cryptoTransactions.id, id));
+      const [updated] = await db.select().from(cryptoTransactions)
+        .where(eq(cryptoTransactions.id, id));
+      res.json({ transaction: updated, message: "Crypto transaction updated" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update crypto transaction" });
+    }
+  });
+
+  // Admin: Delete a crypto transaction
+  app.delete("/api/admin/crypto/transactions/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(cryptoTransactions).where(eq(cryptoTransactions.id, id));
+      res.json({ message: "Crypto transaction deleted" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete crypto transaction" });
+    }
+  });
+
   // Admin: Update a specific transaction status
   app.put("/api/admin/transactions/:txId/status", async (req, res) => {
     try {

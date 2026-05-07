@@ -612,6 +612,15 @@ function UserDetailsDialog({ user }: { user: User }) {
   const [smsMessage, setSmsMessage] = useState("");
   const [smsSending, setSmsSending] = useState(false);
 
+  // Transaction CRUD state
+  const [editingTxId, setEditingTxId] = useState<string | null>(null);
+  const [editTxData, setEditTxData] = useState<any>({});
+  const [deletingTxId, setDeletingTxId] = useState<string | null>(null);
+  const [editingCryptoTxId, setEditingCryptoTxId] = useState<string | null>(null);
+  const [editCryptoTxData, setEditCryptoTxData] = useState<any>({});
+  const [deletingCryptoTxId, setDeletingCryptoTxId] = useState<string | null>(null);
+  const [txTab, setTxTab] = useState<"regular" | "crypto">("regular");
+
   // Edit profile state
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState(user.fullName);
@@ -664,6 +673,94 @@ function UserDetailsDialog({ user }: { user: User }) {
   const txList = (userTransactions as any)?.transactions || [];
   const card = (userCard as any)?.card || null;
   const allCards: any[] = (userCardsData as any)?.cards || [];
+
+  const { data: userCryptoTxData, isLoading: cryptoTxLoading } = useQuery({
+    queryKey: ["/api/admin/users", user.id, "crypto-transactions"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", `/api/admin/users/${user.id}/crypto-transactions`);
+      return r.json();
+    },
+  });
+  const cryptoTxList: any[] = (userCryptoTxData as any)?.transactions || [];
+
+  const editTxMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const r = await apiRequest("PUT", `/api/admin/transactions/${id}/edit`, data);
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Transaction updated successfully" });
+      setEditingTxId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "transactions"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update transaction", variant: "destructive" }),
+  });
+
+  const deleteTxMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("DELETE", `/api/admin/transactions/${id}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Deleted", description: "Transaction deleted" });
+      setDeletingTxId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "transactions"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete transaction", variant: "destructive" }),
+  });
+
+  const editCryptoTxMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: any }) => {
+      const r = await apiRequest("PUT", `/api/admin/crypto/transactions/${id}/edit`, data);
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Crypto transaction updated" });
+      setEditingCryptoTxId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "crypto-transactions"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to update crypto transaction", variant: "destructive" }),
+  });
+
+  const deleteCryptoTxMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await apiRequest("DELETE", `/api/admin/crypto/transactions/${id}`);
+      return r.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Deleted", description: "Crypto transaction deleted" });
+      setDeletingCryptoTxId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users", user.id, "crypto-transactions"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to delete crypto transaction", variant: "destructive" }),
+  });
+
+  const startEditTx = (tx: any) => {
+    setEditingTxId(tx.id);
+    setEditTxData({
+      type: tx.type || "",
+      amount: tx.amount || "",
+      currency: tx.currency || "USD",
+      fee: tx.fee || "0.00",
+      status: tx.status || "pending",
+      description: tx.description || "",
+      createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString().slice(0, 16) : "",
+    });
+  };
+
+  const startEditCryptoTx = (tx: any) => {
+    setEditingCryptoTxId(tx.id);
+    setEditCryptoTxData({
+      coin: tx.coin || "",
+      network: tx.network || "",
+      amount: tx.amount || "",
+      usdValue: tx.usdValue || "",
+      status: tx.status || "pending",
+      txHash: tx.txHash || "",
+      adminNotes: tx.adminNotes || "",
+      createdAt: tx.createdAt ? new Date(tx.createdAt).toISOString().slice(0, 16) : "",
+    });
+  };
 
   const { data: userDevicesData, isLoading: devicesLoading, refetch: refetchDevices } = useQuery({
     queryKey: ["/api/admin/users", user.id, "devices"],
@@ -1176,54 +1273,253 @@ function UserDetailsDialog({ user }: { user: User }) {
         </TabsContent>
 
         {/* ─── TRANSACTIONS TAB ─── */}
-        <TabsContent value="transactions" className="mt-4">
-          {txLoading ? (
-            <div className="flex justify-center py-8">
-              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : txList.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground text-sm">No transactions found</div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {txList.map((tx: any) => (
-                <div key={tx.id} className="bg-muted/40 rounded-xl p-3 flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${
-                      tx.type === "receive" || tx.type === "deposit" ? "bg-primary/10" : "bg-muted"
-                    }`}>
-                      {tx.type === "receive" || tx.type === "deposit"
-                        ? <ArrowDownLeft className="w-4 h-4 text-primary" />
-                        : <ArrowUpRight className="w-4 h-4 text-muted-foreground" />}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold capitalize truncate">{tx.type?.replace("_", " ")}</p>
-                      <p className="text-[10px] text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), "MMM dd, HH:mm") : ""}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${txStatusColor(tx.status)}`}>
-                        {tx.status}
-                      </span>
-                    </div>
+        <TabsContent value="transactions" className="mt-4 space-y-3">
+          {/* Sub-tabs: Regular / Crypto */}
+          <div className="flex gap-1 bg-muted/50 rounded-lg p-1">
+            <button
+              onClick={() => setTxTab("regular")}
+              className={`flex-1 text-xs py-1 rounded-md font-medium transition-colors ${txTab === "regular" ? "bg-white dark:bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              data-testid="button-tx-tab-regular"
+            >
+              Regular ({txList.length})
+            </button>
+            <button
+              onClick={() => setTxTab("crypto")}
+              className={`flex-1 text-xs py-1 rounded-md font-medium transition-colors ${txTab === "crypto" ? "bg-white dark:bg-card shadow text-primary" : "text-muted-foreground hover:text-foreground"}`}
+              data-testid="button-tx-tab-crypto"
+            >
+              Crypto ({cryptoTxList.length})
+            </button>
+          </div>
+
+          {/* ── Regular transactions ── */}
+          {txTab === "regular" && (
+            txLoading ? (
+              <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+            ) : txList.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">No transactions found</div>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {txList.map((tx: any) => (
+                  <div key={tx.id} className="bg-muted/40 rounded-xl overflow-hidden" data-testid={`card-tx-${tx.id}`}>
+                    {editingTxId === tx.id ? (
+                      /* ── Edit form ── */
+                      <div className="p-3 space-y-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Editing transaction</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Type</label>
+                            <Select value={editTxData.type} onValueChange={v => setEditTxData((d: any) => ({ ...d, type: v }))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["deposit","withdraw","send","receive","exchange","airtime","bills","card_purchase"].map(t => (
+                                  <SelectItem key={t} value={t} className="text-xs capitalize">{t.replace("_"," ")}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Status</label>
+                            <Select value={editTxData.status} onValueChange={v => setEditTxData((d: any) => ({ ...d, status: v }))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["pending","processing","completed","failed","cancelled"].map(s => (
+                                  <SelectItem key={s} value={s} className="text-xs capitalize">{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Amount</label>
+                            <Input className="h-7 text-xs" value={editTxData.amount} onChange={e => setEditTxData((d: any) => ({ ...d, amount: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Currency</label>
+                            <Select value={editTxData.currency} onValueChange={v => setEditTxData((d: any) => ({ ...d, currency: v }))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["USD","KES","EUR","GBP","NGN"].map(c => (
+                                  <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Fee</label>
+                            <Input className="h-7 text-xs" value={editTxData.fee} onChange={e => setEditTxData((d: any) => ({ ...d, fee: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Date & Time</label>
+                            <Input type="datetime-local" className="h-7 text-xs" value={editTxData.createdAt} onChange={e => setEditTxData((d: any) => ({ ...d, createdAt: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Description</label>
+                          <Input className="h-7 text-xs" value={editTxData.description} onChange={e => setEditTxData((d: any) => ({ ...d, description: e.target.value }))} />
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button size="sm" className="h-7 text-xs flex-1" onClick={() => editTxMutation.mutate({ id: tx.id, data: editTxData })} disabled={editTxMutation.isPending}>
+                            <Save className="w-3 h-3 mr-1" />{editTxMutation.isPending ? "Saving…" : "Save"}
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingTxId(null)}><X className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ) : deletingTxId === tx.id ? (
+                      /* ── Delete confirm ── */
+                      <div className="p-3 space-y-2">
+                        <p className="text-xs font-semibold text-destructive">Delete this transaction?</p>
+                        <p className="text-[10px] text-muted-foreground">This action cannot be undone.</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="destructive" className="h-7 text-xs flex-1" onClick={() => deleteTxMutation.mutate(tx.id)} disabled={deleteTxMutation.isPending}>
+                            <Trash2 className="w-3 h-3 mr-1" />{deleteTxMutation.isPending ? "Deleting…" : "Confirm Delete"}
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDeletingTxId(null)}><X className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Normal row ── */
+                      <div className="p-3 flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${tx.type === "receive" || tx.type === "deposit" ? "bg-primary/10" : "bg-muted"}`}>
+                            {tx.type === "receive" || tx.type === "deposit"
+                              ? <ArrowDownLeft className="w-4 h-4 text-primary" />
+                              : <ArrowUpRight className="w-4 h-4 text-muted-foreground" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold capitalize truncate">{tx.type?.replace("_", " ")}</p>
+                            <p className="text-[10px] text-muted-foreground">{tx.createdAt ? format(new Date(tx.createdAt), "MMM dd, yyyy HH:mm") : ""}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{tx.description}</p>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${txStatusColor(tx.status)}`}>{tx.status}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-xs font-bold">{tx.currency === "KES" ? "KSh" : "$"}{parseFloat(tx.amount || "0").toFixed(2)}</span>
+                          {tx.fee && parseFloat(tx.fee) > 0 && <span className="text-[10px] text-muted-foreground">Fee: {tx.currency === "KES" ? "KSh" : "$"}{parseFloat(tx.fee).toFixed(2)}</span>}
+                          <div className="flex gap-1 mt-1">
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => startEditTx(tx)} data-testid={`button-edit-tx-${tx.id}`}>
+                              <Pencil className="w-3 h-3 mr-1" />Edit
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-destructive hover:text-destructive" onClick={() => setDeletingTxId(tx.id)} data-testid={`button-delete-tx-${tx.id}`}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="text-xs font-bold">
-                      {tx.currency === "KES" ? "KSh" : "$"}{parseFloat(tx.amount || "0").toFixed(2)}
-                    </span>
-                    <Select
-                      value={tx.status}
-                      onValueChange={(s) => updateTxStatus(tx.id, s)}
-                    >
-                      <SelectTrigger className="h-7 w-28 text-[10px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {["pending", "processing", "completed", "failed", "cancelled"].map(s => (
-                          <SelectItem key={s} value={s} className="text-xs capitalize">{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                ))}
+              </div>
+            )
+          )}
+
+          {/* ── Crypto transactions ── */}
+          {txTab === "crypto" && (
+            cryptoTxLoading ? (
+              <div className="flex justify-center py-8"><div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" /></div>
+            ) : cryptoTxList.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground text-sm">No crypto transactions found</div>
+            ) : (
+              <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
+                {cryptoTxList.map((tx: any) => (
+                  <div key={tx.id} className="bg-muted/40 rounded-xl overflow-hidden" data-testid={`card-crypto-tx-${tx.id}`}>
+                    {editingCryptoTxId === tx.id ? (
+                      /* ── Edit form ── */
+                      <div className="p-3 space-y-2">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Editing crypto transaction</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Coin</label>
+                            <Input className="h-7 text-xs" value={editCryptoTxData.coin} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, coin: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Network</label>
+                            <Input className="h-7 text-xs" value={editCryptoTxData.network} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, network: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Amount (crypto)</label>
+                            <Input className="h-7 text-xs" value={editCryptoTxData.amount} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, amount: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">USD Value</label>
+                            <Input className="h-7 text-xs" value={editCryptoTxData.usdValue} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, usdValue: e.target.value }))} />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Status</label>
+                            <Select value={editCryptoTxData.status} onValueChange={v => setEditCryptoTxData((d: any) => ({ ...d, status: v }))}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {["pending","confirming","completed","failed","cancelled"].map(s => (
+                                  <SelectItem key={s} value={s} className="text-xs capitalize">{s}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground">Date & Time</label>
+                            <Input type="datetime-local" className="h-7 text-xs" value={editCryptoTxData.createdAt} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, createdAt: e.target.value }))} />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] text-muted-foreground">TX Hash</label>
+                            <Input className="h-7 text-xs font-mono" value={editCryptoTxData.txHash} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, txHash: e.target.value }))} />
+                          </div>
+                          <div className="col-span-2">
+                            <label className="text-[10px] text-muted-foreground">Admin Notes</label>
+                            <Input className="h-7 text-xs" value={editCryptoTxData.adminNotes} onChange={e => setEditCryptoTxData((d: any) => ({ ...d, adminNotes: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2 pt-1">
+                          <Button size="sm" className="h-7 text-xs flex-1" onClick={() => editCryptoTxMutation.mutate({ id: tx.id, data: editCryptoTxData })} disabled={editCryptoTxMutation.isPending}>
+                            <Save className="w-3 h-3 mr-1" />{editCryptoTxMutation.isPending ? "Saving…" : "Save"}
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditingCryptoTxId(null)}><X className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ) : deletingCryptoTxId === tx.id ? (
+                      /* ── Delete confirm ── */
+                      <div className="p-3 space-y-2">
+                        <p className="text-xs font-semibold text-destructive">Delete this crypto transaction?</p>
+                        <p className="text-[10px] text-muted-foreground">This action cannot be undone.</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="destructive" className="h-7 text-xs flex-1" onClick={() => deleteCryptoTxMutation.mutate(tx.id)} disabled={deleteCryptoTxMutation.isPending}>
+                            <Trash2 className="w-3 h-3 mr-1" />{deleteCryptoTxMutation.isPending ? "Deleting…" : "Confirm Delete"}
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setDeletingCryptoTxId(null)}><X className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── Normal crypto row ── */
+                      <div className="p-3 flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${tx.type === "deposit" ? "bg-primary/10" : "bg-muted"}`}>
+                            {tx.type === "deposit"
+                              ? <ArrowDownLeft className="w-4 h-4 text-primary" />
+                              : <ArrowUpRight className="w-4 h-4 text-muted-foreground" />}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold capitalize truncate">{tx.coin} {tx.type}</p>
+                            <p className="text-[10px] text-muted-foreground">{tx.network} · {tx.createdAt ? format(new Date(tx.createdAt), "MMM dd, yyyy HH:mm") : ""}</p>
+                            {tx.txHash && <p className="text-[10px] text-muted-foreground font-mono truncate">TX: {tx.txHash.slice(0, 16)}…</p>}
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${txStatusColor(tx.status)}`}>{tx.status}</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="text-xs font-bold">{tx.amount} {tx.coin}</span>
+                          <span className="text-[10px] text-muted-foreground">${parseFloat(tx.usdValue || "0").toFixed(2)} USD</span>
+                          <div className="flex gap-1 mt-1">
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-[10px]" onClick={() => startEditCryptoTx(tx)} data-testid={`button-edit-crypto-tx-${tx.id}`}>
+                              <Pencil className="w-3 h-3 mr-1" />Edit
+                            </Button>
+                            <Button size="sm" variant="outline" className="h-6 px-2 text-[10px] text-destructive hover:text-destructive" onClick={() => setDeletingCryptoTxId(tx.id)} data-testid={`button-delete-crypto-tx-${tx.id}`}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )
           )}
         </TabsContent>
 
