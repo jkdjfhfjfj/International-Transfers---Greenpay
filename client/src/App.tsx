@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
-import { WhatsAppSupportFAB } from "@/components/whatsapp-support-fab";
+import { TalkToUs } from "@/components/talk-to-us";
 import NotFound from "@/pages/not-found";
 import SplashPage from "@/pages/splash";
 import LoginPage from "@/pages/auth/login";
@@ -34,7 +34,6 @@ import StatusPage from "@/pages/status";
 import LoadingScreen from "@/components/loading-screen";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PWAInstallPrompt } from "@/components/pwa-install";
-import { AIChatWidget } from "@/components/ai-chat-widget";
 import { OfflineIndicator } from "@/components/offline-indicator";
 import PaymentCallbackPage from "@/pages/payment-callback";
 import PaymentSuccessPage from "@/pages/payment-success";
@@ -227,12 +226,7 @@ function AppContent() {
       <Router />
       {!isAdminPage && <BottomNavigation />}
       {!isAdminPage && <PWAInstallPrompt />}
-      {shouldShowWidgets && (
-        <>
-          <WhatsAppSupportFAB />
-          <AIChatWidget />
-        </>
-      )}
+      {shouldShowWidgets && <TalkToUs />}
     </TooltipProvider>
   );
 }
