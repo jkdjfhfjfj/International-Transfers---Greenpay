@@ -17,6 +17,7 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   fund_receipt: '5e2a2ec4-37fb-4178-96c4-598977065f9c',
   card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
   transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
+  transaction_completed: '',
 };
 
 export class MailtrapService {
@@ -184,6 +185,39 @@ export class MailtrapService {
     toEmail: string, templateUuid: string, variables: Record<string, string>
   ): Promise<boolean> {
     return this.sendTemplate(toEmail, templateUuid, variables);
+  }
+
+  async sendTransactionCompleted(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    amount: string,
+    currency: string,
+    transactionType: string,
+    transactionId: string,
+    date?: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('transaction_completed');
+    if (!uuid) {
+      console.warn('[Mailtrap] transaction_completed template UUID not configured — skipping email');
+      return false;
+    }
+    const typeLabel =
+      transactionType === 'deposit' ? 'Deposit' :
+      transactionType === 'withdraw' ? 'Withdrawal' :
+      transactionType === 'send' ? 'Transfer Sent' :
+      transactionType === 'receive' ? 'Transfer Received' : 'Transaction';
+
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      amount,
+      currency,
+      transaction_type: typeLabel,
+      transaction_id: transactionId,
+      status: 'Completed',
+      date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    });
   }
 
   async sendTransactionExport(

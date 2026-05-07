@@ -1665,11 +1665,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
               type: "success"
             }).catch(err => console.error('Notification error:', err));
 
-            // Send deposit confirmation SMS
+            // Send deposit confirmation SMS + transaction completed email
             try {
               const { messagingService: depositSms } = await import('./services/messaging');
+              const { mailtrapService: depositMailtrap } = await import('./services/mailtrap');
               if (user.phone) {
                 depositSms.sendDepositConfirmation(user.phone, depositAmount.toFixed(2), 'USD', 'M-Pesa', user.email, user.fullName).catch(() => {});
+              }
+              if (user.email) {
+                depositMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(' ')[0] || 'User',
+                  user.lastName || user.fullName?.split(' ')[1] || '',
+                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
+                ).catch(() => {});
               }
             } catch (_) {}
 
@@ -2206,13 +2215,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
             
             await storage.updateUser(user.id, { balance: newBalance });
             
-            // 3. Send notification
+            // 3. Send in-app notification
             await notificationService.sendNotification({
               userId: user.id,
               title: "Deposit Successful",
               message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
               type: "transaction"
             });
+
+            // 4. Send SMS + email on transaction completed
+            try {
+              const { messagingService: psTxSms } = await import('./services/messaging');
+              const { mailtrapService: psTxMailtrap } = await import('./services/mailtrap');
+              if (user.phone) {
+                psTxSms.sendTransactionNotification(user.phone, 'deposit', depositAmount.toFixed(2), 'USD', 'completed', transaction.id)
+                  .catch(() => {});
+              }
+              if (user.email) {
+                psTxMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(' ')[0] || 'User',
+                  user.lastName || user.fullName?.split(' ')[1] || '',
+                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
+                ).catch(() => {});
+              }
+            } catch (_) {}
             
             console.log(`User ${user.id} credited with $${depositAmount}. New balance: ${newBalance}`);
           }
@@ -2351,6 +2378,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
               type: "transaction"
             });
+
+            // SMS + email on transaction completed
+            try {
+              const { messagingService: ps2TxSms } = await import('./services/messaging');
+              const { mailtrapService: ps2TxMailtrap } = await import('./services/mailtrap');
+              if (user.phone) {
+                ps2TxSms.sendTransactionNotification(user.phone, 'deposit', depositAmount.toFixed(2), 'USD', 'completed', transaction.id)
+                  .catch(() => {});
+              }
+              if (user.email) {
+                ps2TxMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(' ')[0] || 'User',
+                  user.lastName || user.fullName?.split(' ')[1] || '',
+                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
+                ).catch(() => {});
+              }
+            } catch (_) {}
           }
         }
         
@@ -2898,10 +2943,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: "completed"
           });
           
-          // Send transaction notification via SMS and WhatsApp
+          // Send transaction notification via SMS, WhatsApp and Email
           const { messagingService } = await import('./services/messaging');
-          messagingService.sendTransactionNotification(user.phone, 'send', amount, currency, 'completed')
+          const { mailtrapService: sendMailtrap } = await import('./services/mailtrap');
+          messagingService.sendTransactionNotification(user.phone, 'send', amount, currency, 'completed', transaction.id)
             .catch(err => console.error('Transaction notification error:', err));
+          if (user.email) {
+            sendMailtrap.sendTransactionCompleted(
+              user.email,
+              user.firstName || user.fullName?.split(' ')[0] || 'User',
+              user.lastName || user.fullName?.split(' ')[1] || '',
+              amount, currency, 'send', transaction.id
+            ).catch(err => console.error('Transaction completed email error:', err));
+          }
         } catch (error) {
           console.error('Transaction completion error:', error);
         }

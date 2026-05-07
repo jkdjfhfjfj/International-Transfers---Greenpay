@@ -20,6 +20,7 @@ const TEMPLATE_LABELS: Record<string, { label: string; description: string }> = 
   fund_receipt: { label: "Fund Receipt", description: "Sent when user receives funds" },
   card_activation: { label: "Card Activation", description: "Sent when virtual card is issued" },
   transaction_export: { label: "Transaction Export", description: "Sent when user exports transaction history" },
+  transaction_completed: { label: "Transaction Completed", description: "Sent via email + SMS when any transaction status becomes completed" },
 };
 
 interface MailtrapSettings {
