@@ -913,9 +913,14 @@ function UserDetailsDialog({ user }: { user: User }) {
           description: actionMessages[action] || "Action completed successfully",
         });
 
-        // Invalidate and refetch to get updated user
-        await queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-        await queryClient.refetchQueries({ queryKey: ["/api/admin/users"] });
+        // Immediately apply the updated user from the response so the dialog reflects
+        // the new state without waiting for the background query refetch cycle.
+        if (data.user && selectedUser?.id === data.user.id) {
+          setSelectedUser(data.user);
+        }
+
+        // Also refresh the list in the background
+        queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       }
     } catch (error) {
       toast({
