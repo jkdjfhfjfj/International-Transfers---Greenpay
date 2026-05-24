@@ -599,6 +599,10 @@ export default function UserManagement() {
 }
 
 function UserDetailsDialog({ user }: { user: User }) {
+  // Local copy of user so account actions (suspend/unsuspend/block/unblock) update
+  // the dialog immediately without waiting for a background query refetch.
+  const [localUser, setLocalUser] = useState<User>(user);
+
   const [balanceUpdate, setBalanceUpdate] = useState("");
   const [kesBalanceUpdate, setKesBalanceUpdate] = useState("");
   const [selectedCurrency, setSelectedCurrency] = useState<"USD" | "KES">("USD");
@@ -913,10 +917,10 @@ function UserDetailsDialog({ user }: { user: User }) {
           description: actionMessages[action] || "Action completed successfully",
         });
 
-        // Immediately apply the updated user from the response so the dialog reflects
-        // the new state without waiting for the background query refetch cycle.
-        if (data.user && selectedUser?.id === data.user.id) {
-          setSelectedUser(data.user);
+        // Immediately apply the updated user so the dialog reflects the new state
+        // without waiting for the background query refetch cycle.
+        if (data.user) {
+          setLocalUser(data.user);
         }
 
         // Also refresh the list in the background
@@ -1656,12 +1660,12 @@ function UserDetailsDialog({ user }: { user: User }) {
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-2">
               <Ban className="w-3 h-3" /> Account Suspension
             </p>
-            {user.isSuspended ? (
+            {localUser.isSuspended ? (
               <div className="space-y-2">
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 text-xs">
                   <p className="font-semibold text-destructive">Account is suspended</p>
-                  {user.suspensionReason && <p className="text-muted-foreground mt-1">Reason: {user.suspensionReason}</p>}
-                  {user.suspendedAt && <p className="text-muted-foreground">Since: {format(new Date(user.suspendedAt), "MMM dd, yyyy HH:mm")}</p>}
+                  {localUser.suspensionReason && <p className="text-muted-foreground mt-1">Reason: {localUser.suspensionReason}</p>}
+                  {localUser.suspendedAt && <p className="text-muted-foreground">Since: {format(new Date(localUser.suspendedAt), "MMM dd, yyyy HH:mm")}</p>}
                 </div>
                 <Button
                   size="sm"
