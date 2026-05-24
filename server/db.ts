@@ -28,6 +28,7 @@ export const db = connectionString ? drizzle({ client: pool, schema }) : null as
 // Safely add new columns to existing tables — never drops or recreates anything
 async function alterMissingColumns() {
   const migrations = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,

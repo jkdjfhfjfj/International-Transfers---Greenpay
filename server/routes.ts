@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses } from "@shared/schema";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -432,8 +432,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid credentials" });
       }
 
-      // Check if account is suspended
-      if ((user as any).isSuspended) {
+      // Check if account is suspended — use === true to guard against undefined/null
+      if ((user as any).isSuspended === true) {
         return res.status(403).json({
           message: "Your account has been suspended. Please contact support for assistance.",
           accountSuspended: true,
@@ -4513,7 +4513,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           break;
         }
         case "unsuspend":
-          updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          // Use direct SQL to guarantee all suspension fields are cleared atomically
+          if (pool) {
+            await pool.query(
+              `UPDATE users SET is_suspended = false, suspended_at = NULL, suspension_reason = NULL, updated_at = NOW() WHERE id = $1`,
+              [id]
+            );
+          } else {
+            updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          }
           logMessage = `Admin unsuspended user account: ${user.email}`;
           break;
         case "force_logout":
