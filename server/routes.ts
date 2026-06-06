@@ -6832,11 +6832,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/manual-payment-settings", async (req, res) => {
     try {
       const paybillSetting = await storage.getSystemSetting("manual_mpesa", "paybill");
-      const accountSetting = await storage.getSystemSetting("manual_mpesa", "account");
       
       res.json({
         paybill: paybillSetting?.value || "247",
-        account: accountSetting?.value || "4664",
+        account: "440200259037",
       });
     } catch (error) {
       console.error('Error fetching manual payment settings:', error);

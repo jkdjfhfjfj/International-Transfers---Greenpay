@@ -360,7 +360,7 @@ export default function VirtualCardPurchasePage() {
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
                     <span className="text-muted-foreground">Account Number:</span>
-                    <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.account || "4664"}</span>
+                    <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.account || "440200259037"}</span>
                   </div>
                   <div className="flex justify-between items-center py-2">
                     <span className="text-muted-foreground">Amount (KES):</span>

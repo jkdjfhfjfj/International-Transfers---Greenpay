@@ -316,7 +316,7 @@ export default function VirtualCardPage() {
                       { step: 1, text: "Open M-Pesa on your phone and select Lipa na M-Pesa" },
                       { step: 2, text: "Select Pay Bill" },
                       { step: 3, text: `Enter Business No: ${(manualPaymentSettings as any)?.paybill || "—"}` },
-                      { step: 4, text: `Enter Account No: ${(manualPaymentSettings as any)?.account || "—"}` },
+                      { step: 4, text: `Enter Account No: ${(manualPaymentSettings as any)?.account || "440200259037"}` },
                       { step: 5, text: `Enter Amount: KES ${(kesAmountData as any)?.kesAmount || "..."}` },
                       { step: 6, text: "Enter your M-Pesa PIN and confirm" },
                     ].map(({ step, text }) => (
