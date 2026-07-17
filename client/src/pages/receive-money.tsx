@@ -134,7 +134,7 @@ export default function ReceiveMoneyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}
       <WavyHeader
         

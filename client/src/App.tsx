@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { TalkToUs } from "@/components/talk-to-us";
 import { MoreMenu } from "@/components/more-menu";
 import NotFound from "@/pages/not-found";
+import DesktopSidebar from "@/components/desktop-sidebar";
 import SplashPage from "@/pages/splash";
 import LoginPage from "@/pages/auth/login";
 import SignupPage from "@/pages/auth/signup";
@@ -225,11 +226,16 @@ function AppContent() {
   // Only show user widgets on authenticated non-admin pages
   const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage;
 
+  const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage;
+
   return (
     <TooltipProvider>
       <Toaster />
       <OfflineIndicator />
-      <Router />
+      {showAppShell && <DesktopSidebar />}
+      <div className={showAppShell ? "md:pl-64" : ""}>
+        <Router />
+      </div>
       {!isAdminPage && <BottomNavigation />}
       {!isAdminPage && <PWAInstallPrompt />}
       {shouldShowWidgets && <TalkToUs />}

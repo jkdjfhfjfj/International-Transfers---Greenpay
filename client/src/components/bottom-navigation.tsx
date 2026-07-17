@@ -59,7 +59,7 @@ export default function BottomNavigation() {
       initial={{ y: 100 }}
       animate={{ y: 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="fixed bottom-0 left-0 right-0 z-50"
+      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
       style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
       data-testid="bottom-navigation"
     >

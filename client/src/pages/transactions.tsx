@@ -220,7 +220,7 @@ export default function TransactionsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -229,7 +229,7 @@ export default function TransactionsPage() {
       />
 
       {/* Toolbar */}
-      <div className="bg-background px-3 md:px-6 py-4 border-b border-border">
+      <div className="bg-background px-3 md:px-6 py-4 border-b border-border max-w-5xl mx-auto w-full">
         <div className="flex items-center gap-2 flex-wrap justify-end mb-4">
           <motion.button
             whileTap={{ scale: 0.95 }}

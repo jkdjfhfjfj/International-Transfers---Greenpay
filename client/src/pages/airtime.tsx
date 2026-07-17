@@ -130,7 +130,7 @@ export default function AirtimePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -138,7 +138,7 @@ export default function AirtimePage() {
         size="sm"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="max-w-2xl mx-auto p-6 space-y-6">
         {/* Network Provider Selection */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

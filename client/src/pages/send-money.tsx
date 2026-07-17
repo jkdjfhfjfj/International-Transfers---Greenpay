@@ -222,7 +222,7 @@ export default function SendMoneyPage() {
   // Check if user has virtual card requirement (use real card data, not just user flag)
   if (!cardLoading && !hasActiveCard) {
     return (
-      <div className="min-h-screen bg-background pb-20">
+      <div className="min-h-screen bg-background pb-20 md:pb-6">
         <WavyHeader  size="sm" />
 
         <div className="flex items-center justify-center p-4">
@@ -465,7 +465,7 @@ export default function SendMoneyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}
       <WavyHeader
         

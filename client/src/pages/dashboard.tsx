@@ -217,7 +217,7 @@ export default function DashboardPage() {
   const announcementText = settings?.general?.dashboard_announcement;
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-8">
       <AnnouncementSlide announcements={announcementsList} />
       <div className="max-w-md mx-auto px-4">
         {/* Dashboard Announcement (System Setting Legacy) */}
@@ -457,7 +457,7 @@ export default function DashboardPage() {
       </motion.div>
       </div>
 
-      <div className="px-4 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6">
         {/* KYC Status Alert - Different messages based on status */}
         {!isKYCVerified && user?.kycStatus === 'pending' && (
           <motion.div
@@ -620,7 +620,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (
@@ -657,7 +657,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation("/virtual-card")}
@@ -778,6 +778,8 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
+        {/* Recent Transactions + Login History — side by side on desktop */}
+        <div className="md:grid md:grid-cols-2 md:gap-6 space-y-6 md:space-y-0">
         {/* Recent Transactions */}
         {transactions.length > 0 && (
           <motion.div
@@ -851,7 +853,7 @@ export default function DashboardPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.5 }}
-            className="bg-card rounded-2xl border border-border shadow-sm"
+            className="bg-card rounded-2xl border border-border shadow-sm md:self-start"
           >
             <div className="p-4 border-b border-border">
               <h3 className="font-bold text-base">Recent Logins</h3>
@@ -892,8 +894,8 @@ export default function DashboardPage() {
             </div>
           </motion.div>
         )}
+        </div>{/* end side-by-side grid */}
       </div>
-
       {/* Discount modal removed - users can access virtual card directly from menu/dashboard */}
     </div>
   );

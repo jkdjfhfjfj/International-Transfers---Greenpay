@@ -552,7 +552,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -560,7 +560,7 @@ export default function SettingsPage() {
         size="sm"
       />
 
-      <div className="p-6 space-y-6">
+      <div className="max-w-4xl mx-auto p-6 space-y-6">
         {/* Profile Section */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
