@@ -69,6 +69,8 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_status TEXT DEFAULT 'not_submitted'`,
     // Admin-requested advanced KYC flag
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_requested BOOLEAN DEFAULT false`,
+    // Google OAuth
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT`,
   ];
 
   for (const sql of migrations) {

@@ -407,6 +407,159 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ── Google OAuth ─────────────────────────────────────────────────────────
+
+  function getGoogleRedirectUri(req: any): string {
+    if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+    const domains = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN;
+    if (domains) return `https://${domains.split(',')[0]}/auth/google/callback`;
+    return `${req.protocol}://${req.get('host')}/auth/google/callback`;
+  }
+
+  app.get("/auth/google", (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      return res.redirect("/login?error=google_not_configured");
+    }
+    const state = Math.random().toString(36).substring(2, 18);
+    (req.session as any).googleOAuthState = state;
+    const redirectUri = getGoogleRedirectUri(req);
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      access_type: "offline",
+      prompt: "select_account",
+      state,
+    });
+    req.session.save(() => {
+      res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+    });
+  });
+
+  app.get("/auth/google/callback", async (req, res) => {
+    const { code, state, error } = req.query as Record<string, string>;
+    if (error || !code) return res.redirect("/login?error=google_cancelled");
+
+    const sessionState = (req.session as any).googleOAuthState;
+    if (!sessionState || sessionState !== state) {
+      return res.redirect("/login?error=google_state_mismatch");
+    }
+
+    try {
+      const clientId = process.env.GOOGLE_CLIENT_ID!;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
+      const redirectUri = getGoogleRedirectUri(req);
+
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+      });
+      const tokenData = await tokenRes.json() as any;
+      if (!tokenData.access_token) {
+        console.error("[Google OAuth] Token exchange failed:", tokenData);
+        return res.redirect("/login?error=google_token_failed");
+      }
+
+      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      });
+      const profile = await userInfoRes.json() as any;
+
+      delete (req.session as any).googleOAuthState;
+
+      const existingUser = await storage.getUserByEmail(profile.email);
+      if (existingUser) {
+        if ((existingUser as any).isSuspended) {
+          return res.redirect("/login?error=account_suspended");
+        }
+        if (!(existingUser as any).googleId) {
+          await storage.updateUser(existingUser.id, { googleId: profile.id } as any);
+        }
+        await storage.updateUser(existingUser.id, { lastLoginAt: new Date() });
+        (req.session as any).userId = existingUser.id;
+        (req.session as any).user = { id: existingUser.id, email: existingUser.email };
+        req.session.save(() => res.redirect("/dashboard"));
+      } else {
+        (req.session as any).googlePending = {
+          googleId: profile.id,
+          email: profile.email,
+          fullName: profile.name,
+          profilePhotoUrl: profile.picture,
+        };
+        req.session.save(() => res.redirect("/auth/google/complete"));
+      }
+    } catch (err) {
+      console.error("[Google OAuth] Callback error:", err);
+      res.redirect("/login?error=google_failed");
+    }
+  });
+
+  app.get("/api/auth/google/pending", (req, res) => {
+    const pending = (req.session as any).googlePending;
+    if (!pending) return res.json({ pending: false });
+    res.json({ pending: true, fullName: pending.fullName, email: pending.email, profilePhotoUrl: pending.profilePhotoUrl });
+  });
+
+  app.post("/api/auth/google/complete", async (req, res) => {
+    const pending = (req.session as any).googlePending;
+    if (!pending) return res.status(400).json({ message: "No pending Google registration. Please sign in with Google again." });
+
+    const { phone, country } = req.body;
+    if (!phone || !country) return res.status(400).json({ message: "Phone and country are required" });
+
+    try {
+      const { messagingService } = await import('./services/messaging');
+      const formattedPhone = messagingService.formatPhoneNumber(phone);
+
+      const existing = await storage.getUserByEmail(pending.email);
+      if (existing) return res.status(400).json({ message: "An account with this email already exists. Please log in." });
+
+      const { db: database } = await import('./db');
+      const { eq } = await import('drizzle-orm');
+      const phoneCheck = await database.select().from(users).where(eq(users.phone, formattedPhone));
+      if (phoneCheck.length > 0) return res.status(400).json({ message: "This phone number is already registered." });
+
+      const bcrypt = await import('bcrypt');
+      const randomPassword = await bcrypt.hash(Math.random().toString(36) + Date.now().toString(), 10);
+
+      const user = await storage.createUser({
+        fullName: pending.fullName,
+        email: pending.email,
+        phone: formattedPhone,
+        country,
+        password: randomPassword,
+      });
+
+      await storage.updateUser(user.id, {
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        googleId: pending.googleId,
+        profilePhotoUrl: pending.profilePhotoUrl,
+      } as any);
+
+      delete (req.session as any).googlePending;
+      (req.session as any).userId = user.id;
+      (req.session as any).user = { id: user.id, email: user.email };
+
+      // Send welcome notifications
+      const { whatsappService } = await import('./services/whatsapp');
+      const { mailtrapService } = await import('./services/mailtrap');
+      whatsappService.sendAccountCreation(formattedPhone, pending.fullName).catch(() => {});
+      mailtrapService.sendWelcome(pending.email, pending.fullName?.split(' ')[0] || 'User', pending.fullName?.split(' ')[1] || '').catch(() => {});
+
+      const { password: _, ...userResponse } = user;
+      req.session.save(() => {
+        res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true, googleId: pending.googleId } });
+      });
+    } catch (err) {
+      console.error("[Google OAuth] Complete error:", err);
+      res.status(500).json({ message: "Failed to create account. Please try again." });
+    }
+  });
+
   app.post("/api/auth/login", optionalApiKey, async (req, res) => {
     try {
       // Check maintenance mode FIRST - block all login attempts

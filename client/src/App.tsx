@@ -11,6 +11,7 @@ import SplashPage from "@/pages/splash";
 import LoginPage from "@/pages/auth/login";
 import SignupPage from "@/pages/auth/signup";
 import OtpVerificationPage from "@/pages/auth/otp-verification";
+import GoogleCompletePage from "@/pages/auth/google-complete";
 import KycVerificationPage from "@/pages/auth/kyc-verification";
 import VirtualCardPurchasePage from "@/pages/auth/virtual-card-purchase";
 import ForgotPasswordPage from "@/pages/auth/forgot-password";
@@ -115,6 +116,7 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/auth/otp-verification" component={OtpVerificationPage} />
+      <Route path="/auth/google/complete" component={GoogleCompletePage} />
       <Route path="/auth/kyc-verification" component={KycVerificationPage} />
       <Route path="/auth/virtual-card-purchase" component={VirtualCardPurchasePage} />
       <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
