@@ -67,6 +67,7 @@ import AdminPayHeroSettingsPage from "@/pages/admin-payhero-fresh";
 import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
 import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
 import AdminProfilePage from "@/pages/admin-profile";
+import LandingPage from "@/pages/landing/index";
 import SendMoneyLanding from "@/pages/landing/send-money";
 import VirtualCardsLanding from "@/pages/landing/virtual-cards";
 import ExchangeLanding from "@/pages/landing/exchange";
@@ -150,6 +151,8 @@ function Router() {
       <Route path="/payment-success" component={PaymentSuccessPage} />
       <Route path="/payment-failed" component={PaymentFailedPage} />
       <Route path="/payment-processing" component={PaymentProcessingPage} />
+      {/* Main marketing landing page */}
+      <Route path="/landing" component={LandingPage} />
       {/* Public SEO landing pages */}
       <Route path="/features/send-money" component={SendMoneyLanding} />
       <Route path="/features/virtual-cards" component={VirtualCardsLanding} />
@@ -215,7 +218,7 @@ function AppContent() {
   useFCM();
   
   // Landing/public pages and admin pages that should not show user widgets
-  const landingPages = ['/', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
+  const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
   const isAdminPage = location.startsWith('/admin');
 
