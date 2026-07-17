@@ -340,7 +340,25 @@ export default function SignupPage() {
             <Button
               variant="outline"
               className="w-full flex items-center justify-center gap-3 h-11"
-              onClick={() => { window.location.href = "/auth/google"; }}
+              onClick={() => {
+                const popup = window.open("/auth/google", "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
+                const handler = (e: MessageEvent) => {
+                  if (!e.data?.googleAuth) return;
+                  window.removeEventListener("message", handler);
+                  const r = e.data.googleAuth;
+                  if (r === "login") {
+                    window.location.href = "/dashboard";
+                  } else if (r === "new_user") {
+                    window.location.href = "/auth/google/complete";
+                  } else if (r === "suspended") {
+                    toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
+                  } else if (r === "error") {
+                    toast({ title: "Sign-in failed", description: "Could not sign up with Google. Please try again.", variant: "destructive" });
+                  }
+                };
+                window.addEventListener("message", handler);
+                const t = setInterval(() => { if (popup?.closed) { clearInterval(t); window.removeEventListener("message", handler); } }, 1000);
+              }}
               type="button"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">

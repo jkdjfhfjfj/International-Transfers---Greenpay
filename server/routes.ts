@@ -408,6 +408,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ── Google OAuth ─────────────────────────────────────────────────────────
+  // Uses in-memory state map (avoids session persistence issues through cross-origin redirects)
+  // Uses popup window approach (avoids "desktop mode" by keeping the parent app in the iframe)
+
+  const googleOAuthStates = new Map<string, number>(); // state → expiry timestamp
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of googleOAuthStates) { if (now > v) googleOAuthStates.delete(k); }
+  }, 60_000);
 
   function getGoogleRedirectUri(req: any): string {
     if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
@@ -416,36 +424,64 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return `${req.protocol}://${req.get('host')}/auth/google/callback`;
   }
 
+  function googlePopupHtml(result: string, message: string): string {
+    const redirectMap: Record<string, string> = {
+      login: '/dashboard',
+      new_user: '/auth/google/complete',
+      cancelled: '/login',
+      suspended: '/login',
+      error: '/login',
+    };
+    const fallback = redirectMap[result] || '/login';
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GreenPay</title>
+<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0fdf4;}
+.card{background:#fff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.dot{width:40px;height:40px;border-radius:50%;background:#22c55e;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;}
+p{color:#6b7280;font-size:14px;}</style>
+</head><body>
+<div class="card">
+  <div class="dot"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <p>${message}</p>
+</div>
+<script>
+(function(){
+  var result='${result}';
+  function done(){
+    if(window.opener&&!window.opener.closed){
+      try{window.opener.postMessage({googleAuth:result},'*');}catch(e){}
+      setTimeout(function(){window.close();},300);
+    } else {
+      window.location.href='${fallback}';
+    }
+  }
+  done();
+})();
+</script></body></html>`;
+  }
+
   app.get("/auth/google", (req, res) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
-    if (!clientId) {
-      return res.redirect("/login?error=google_not_configured");
-    }
+    if (!clientId) return res.send(googlePopupHtml("error", "Google sign-in is not configured."));
     const state = Math.random().toString(36).substring(2, 18);
-    (req.session as any).googleOAuthState = state;
+    googleOAuthStates.set(state, Date.now() + 10 * 60 * 1000);
     const redirectUri = getGoogleRedirectUri(req);
     const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "openid email profile",
-      access_type: "offline",
-      prompt: "select_account",
-      state,
+      client_id: clientId, redirect_uri: redirectUri,
+      response_type: "code", scope: "openid email profile",
+      access_type: "offline", prompt: "select_account", state,
     });
-    req.session.save(() => {
-      res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
-    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
   });
 
   app.get("/auth/google/callback", async (req, res) => {
     const { code, state, error } = req.query as Record<string, string>;
-    if (error || !code) return res.redirect("/login?error=google_cancelled");
+    if (error || !code) return res.send(googlePopupHtml("cancelled", "Sign-in was cancelled."));
 
-    const sessionState = (req.session as any).googleOAuthState;
-    if (!sessionState || sessionState !== state) {
-      return res.redirect("/login?error=google_state_mismatch");
-    }
+    const expiry = googleOAuthStates.get(state);
+    if (!expiry || Date.now() > expiry) return res.send(googlePopupHtml("error", "Session expired, please try again."));
+    googleOAuthStates.delete(state);
 
     try {
       const clientId = process.env.GOOGLE_CLIENT_ID!;
@@ -460,7 +496,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tokenData = await tokenRes.json() as any;
       if (!tokenData.access_token) {
         console.error("[Google OAuth] Token exchange failed:", tokenData);
-        return res.redirect("/login?error=google_token_failed");
+        return res.send(googlePopupHtml("error", "Could not authenticate with Google."));
       }
 
       const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -468,32 +504,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
       const profile = await userInfoRes.json() as any;
 
-      delete (req.session as any).googleOAuthState;
-
       const existingUser = await storage.getUserByEmail(profile.email);
       if (existingUser) {
-        if ((existingUser as any).isSuspended) {
-          return res.redirect("/login?error=account_suspended");
-        }
+        if ((existingUser as any).isSuspended) return res.send(googlePopupHtml("suspended", "This account has been suspended."));
         if (!(existingUser as any).googleId) {
           await storage.updateUser(existingUser.id, { googleId: profile.id } as any);
         }
         await storage.updateUser(existingUser.id, { lastLoginAt: new Date() });
         (req.session as any).userId = existingUser.id;
         (req.session as any).user = { id: existingUser.id, email: existingUser.email };
-        req.session.save(() => res.redirect("/dashboard"));
+        await new Promise<void>(r => req.session.save(() => r()));
+        return res.send(googlePopupHtml("login", "Signed in! Redirecting..."));
       } else {
         (req.session as any).googlePending = {
-          googleId: profile.id,
-          email: profile.email,
-          fullName: profile.name,
-          profilePhotoUrl: profile.picture,
+          googleId: profile.id, email: profile.email,
+          fullName: profile.name, profilePhotoUrl: profile.picture,
         };
-        req.session.save(() => res.redirect("/auth/google/complete"));
+        await new Promise<void>(r => req.session.save(() => r()));
+        return res.send(googlePopupHtml("new_user", "Almost there! Setting up your account..."));
       }
     } catch (err) {
       console.error("[Google OAuth] Callback error:", err);
-      res.redirect("/login?error=google_failed");
+      return res.send(googlePopupHtml("error", "Something went wrong. Please try again."));
     }
   });
 
@@ -505,10 +537,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/google/complete", async (req, res) => {
     const pending = (req.session as any).googlePending;
-    if (!pending) return res.status(400).json({ message: "No pending Google registration. Please sign in with Google again." });
+    if (!pending) return res.status(400).json({ message: "Session expired. Please sign in with Google again." });
 
-    const { phone, country } = req.body;
-    if (!phone || !country) return res.status(400).json({ message: "Phone and country are required" });
+    const { fullName, phone, country } = req.body;
+    if (!fullName || !phone || !country) return res.status(400).json({ message: "Full name, phone and country are required" });
 
     try {
       const { messagingService } = await import('./services/messaging');
@@ -526,7 +558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const randomPassword = await bcrypt.hash(Math.random().toString(36) + Date.now().toString(), 10);
 
       const user = await storage.createUser({
-        fullName: pending.fullName,
+        fullName: fullName.trim(),
         email: pending.email,
         phone: formattedPhone,
         country,
@@ -534,26 +566,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       await storage.updateUser(user.id, {
-        isEmailVerified: true,
-        isPhoneVerified: true,
-        googleId: pending.googleId,
-        profilePhotoUrl: pending.profilePhotoUrl,
+        isEmailVerified: true, isPhoneVerified: true,
+        googleId: pending.googleId, profilePhotoUrl: pending.profilePhotoUrl,
       } as any);
 
       delete (req.session as any).googlePending;
       (req.session as any).userId = user.id;
       (req.session as any).user = { id: user.id, email: user.email };
 
-      // Send welcome notifications
       const { whatsappService } = await import('./services/whatsapp');
       const { mailtrapService } = await import('./services/mailtrap');
-      whatsappService.sendAccountCreation(formattedPhone, pending.fullName).catch(() => {});
-      mailtrapService.sendWelcome(pending.email, pending.fullName?.split(' ')[0] || 'User', pending.fullName?.split(' ')[1] || '').catch(() => {});
+      whatsappService.sendAccountCreation(formattedPhone, fullName).catch(() => {});
+      mailtrapService.sendWelcome(pending.email, fullName.split(' ')[0] || 'User', fullName.split(' ')[1] || '').catch(() => {});
 
       const { password: _, ...userResponse } = user;
-      req.session.save(() => {
-        res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true, googleId: pending.googleId } });
-      });
+      await new Promise<void>(r => req.session.save(() => r()));
+      res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true } });
     } catch (err) {
       console.error("[Google OAuth] Complete error:", err);
       res.status(500).json({ message: "Failed to create account. Please try again." });
