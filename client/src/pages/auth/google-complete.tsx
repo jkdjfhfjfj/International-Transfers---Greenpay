@@ -292,8 +292,8 @@ export default function GoogleCompletePage() {
                       <SelectValue placeholder="Select your country..." />
                     </SelectTrigger>
                     <SelectContent className="max-h-60">
-                      {mockCountries.map((c: string) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      {mockCountries.map((c) => (
+                        <SelectItem key={c.code} value={c.name}>{c.flag} {c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
