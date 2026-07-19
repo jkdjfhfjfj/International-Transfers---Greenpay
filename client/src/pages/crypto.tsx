@@ -191,8 +191,8 @@ export default function CryptoPage() {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold border-2"
-                        style={{ background: coinMeta.tint, borderColor: coinMeta.accent, color: coinMeta.accent }}
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold"
+                        style={{ background: coinMeta.tint, color: coinMeta.accent }}
                       >
                         {COIN_ICONS[wallet.coin] || wallet.coin[0]}
                       </div>
@@ -210,7 +210,7 @@ export default function CryptoPage() {
                   <button
                     onClick={() => { setSelectedCoin(wallet.coin); setActiveTab("deposit"); }}
                     className="w-full rounded-xl p-3 flex items-center justify-between transition-colors"
-                    style={{ background: coinMeta.tint, border: `1px solid ${coinMeta.accent}` }}
+                    style={{ background: coinMeta.tint }}
                     data-testid={`button-deposit-${wallet.coin}`}
                   >
                     <span className="text-xs font-medium" style={{ color: coinMeta.accent }}>
@@ -248,7 +248,7 @@ export default function CryptoPage() {
                           className="py-2 rounded-xl text-sm font-bold transition-all"
                           style={active
                             ? { background: cm.accent, color: '#fff' }
-                            : { background: cm.tint, color: cm.accent, border: `1.5px solid ${cm.accent}` }
+                            : { background: cm.tint, color: cm.accent }
                           }
                         >
                           {coin}
@@ -356,7 +356,7 @@ export default function CryptoPage() {
                           className="py-2 rounded-xl text-sm font-bold transition-all"
                           style={active
                             ? { background: cm.accent, color: '#fff' }
-                            : { background: cm.tint, color: cm.accent, border: `1.5px solid ${cm.accent}` }
+                            : { background: cm.tint, color: cm.accent }
                           }
                         >
                           {coin}

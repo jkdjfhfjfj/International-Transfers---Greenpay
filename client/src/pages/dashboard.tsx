@@ -637,10 +637,7 @@ export default function DashboardPage() {
                 >
                   <div
                     className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                    style={{
-                      background: action.tint,
-                      border: `2px solid ${action.accent}`,
-                    }}
+                    style={{ background: action.tint }}
                   >
                     <Icon className="w-6 h-6" strokeWidth={2} style={{ color: action.accent }} />
                   </div>
@@ -716,7 +713,7 @@ export default function DashboardPage() {
               >
                 <div
                   className="w-14 h-14 rounded-2xl flex items-center justify-center relative"
-                  style={{ background: service.tint, border: `2px solid ${service.accent}` }}
+                  style={{ background: service.tint }}
                 >
                   <span className="material-icons text-2xl leading-none" style={{ color: service.accent }}>
                     {service.icon}
@@ -742,7 +739,7 @@ export default function DashboardPage() {
             >
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                style={{ background: 'rgba(71,85,105,0.08)', border: '2px solid #475569' }}
+                style={{ background: 'rgba(71,85,105,0.08)' }}
               >
                 <Grid className="w-6 h-6" style={{ color: '#475569' }} />
               </div>
