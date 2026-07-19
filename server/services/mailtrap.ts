@@ -27,7 +27,8 @@ export class MailtrapService {
   private fromName = 'GreenPay';
 
   constructor() {
-    this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
+    // Load API key from environment only; do not fall back to a hard-coded key.
+    this.apiKey = process.env.MAILTRAP_API_KEY || null;
     this.loadApiKey().catch(err => console.error('[Mailtrap] Background load error:', err));
   }
 
@@ -36,12 +37,14 @@ export class MailtrapService {
       const setting = await storage.getSystemSetting('email', 'mailtrap_api_key');
       if (setting?.value) {
         this.apiKey = setting.value;
+        // Keep env in sync for current process/session
         process.env.MAILTRAP_API_KEY = setting.value;
       } else {
-        this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
+        // If DB setting missing, rely on environment only (no hard-coded fallback)
+        this.apiKey = process.env.MAILTRAP_API_KEY || null;
       }
     } catch {
-      this.apiKey = process.env.MAILTRAP_API_KEY || '3aac21f265f8750724b1d9bfeff9a712';
+      this.apiKey = process.env.MAILTRAP_API_KEY || null;
     }
   }
 
