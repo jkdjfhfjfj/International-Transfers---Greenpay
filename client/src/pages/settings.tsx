@@ -930,7 +930,7 @@ export default function SettingsPage() {
             className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
           >
             <div className="flex items-center">
-              <span className="material-icons text-secondary mr-3">security</span>
+              <span className="material-icons mr-3" style={{ color: '#16a34a' }}>security</span>
               <div>
                 <p className="font-medium">Two-Factor Authentication</p>
                 <p className="text-sm text-muted-foreground">Add extra security to your account</p>
@@ -960,7 +960,7 @@ export default function SettingsPage() {
             className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
           >
             <div className="flex items-center flex-1">
-              <span className="material-icons text-accent mr-3">lock</span>
+              <span className="material-icons mr-3" style={{ color: '#2563eb' }}>lock</span>
               <div className="flex-1">
                 <p className="font-medium">PIN Code</p>
                 <p className="text-sm text-muted-foreground">
@@ -1107,7 +1107,7 @@ export default function SettingsPage() {
             className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
           >
             <div className="flex items-center">
-              <span className="material-icons text-accent mr-3">fingerprint</span>
+              <span className="material-icons mr-3" style={{ color: '#7c3aed' }}>fingerprint</span>
               <div>
                 <p className="font-medium">Biometric Authentication</p>
                 <p className="text-sm text-muted-foreground">Fingerprint, face, or device unlock</p>
@@ -1136,7 +1136,7 @@ export default function SettingsPage() {
             className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
           >
             <div className="flex items-center">
-              <span className="material-icons text-accent mr-3">dark_mode</span>
+              <span className="material-icons mr-3" style={{ color: '#475569' }}>dark_mode</span>
               <div>
                 <p className="font-medium">Dark Mode</p>
                 <p className="text-sm text-muted-foreground">Use dark theme</p>

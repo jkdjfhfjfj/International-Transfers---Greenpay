@@ -112,8 +112,8 @@ export default function DashboardPage() {
       icon: Send, 
       label: "Send Money", 
       path: "/send-money", 
-      color: "from-emerald-500 to-green-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -122,8 +122,8 @@ export default function DashboardPage() {
       icon: Download, 
       label: "Receive", 
       path: "/receive-money", 
-      color: "from-emerald-500 to-green-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -132,8 +132,8 @@ export default function DashboardPage() {
       icon: Smartphone, 
       label: "Buy Airtime", 
       path: "/airtime", 
-      color: "from-emerald-500 to-green-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#0ea5e9',
+      tint: 'rgba(14,165,233,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -142,8 +142,8 @@ export default function DashboardPage() {
       icon: Receipt, 
       label: "Pay Bills", 
       path: "/bills", 
-      color: "from-emerald-500 to-green-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#8b5cf6',
+      tint: 'rgba(139,92,246,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -152,8 +152,8 @@ export default function DashboardPage() {
       icon: TrendingUp, 
       label: "Add Money", 
       path: "/deposit", 
-      color: "from-emerald-500 to-green-600",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#f59e0b',
+      tint: 'rgba(245,158,11,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -162,8 +162,8 @@ export default function DashboardPage() {
       icon: Bitcoin,
       label: "Crypto",
       path: "/crypto",
-      color: "from-orange-500 to-yellow-500",
-      bgColor: "bg-orange-50 dark:bg-orange-950/20",
+      accent: '#f97316',
+      tint: 'rgba(249,115,22,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -172,8 +172,8 @@ export default function DashboardPage() {
       icon: BarChart3,
       label: "Analytics",
       path: "/analytics",
-      color: "from-emerald-500 to-teal-500",
-      bgColor: "bg-emerald-50 dark:bg-emerald-950/20",
+      accent: '#06b6d4',
+      tint: 'rgba(6,182,212,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -193,7 +193,7 @@ export default function DashboardPage() {
   };
 
   const handleCopyAccountNumber = async () => {
-    const accNum = (user as any)?.accountNumber || user?.id;
+    const accNum = (user as any)?.accountNumber;
     if (accNum) {
       await navigator.clipboard.writeText(String(accNum));
       setCopiedAccountNumber(true);
@@ -633,17 +633,18 @@ export default function DashboardPage() {
                   transition={{ delay: 0.05 * index }}
                   whileTap={{ scale: action.disabled ? 1 : 0.88 }}
                   onClick={() => handleActionClick(action)}
-                  className={`flex flex-col items-center gap-2 ${action.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`flex flex-col items-center gap-1.5 ${action.disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
                 >
                   <div
-                    className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${action.color} flex items-center justify-center`}
+                    className="w-14 h-14 rounded-2xl flex items-center justify-center"
                     style={{
-                      boxShadow: action.disabled ? 'none' : '0 6px 18px rgba(5,150,105,0.28)',
+                      background: action.tint,
+                      border: `2px solid ${action.accent}`,
                     }}
                   >
-                    <Icon className="w-6 h-6 text-white" strokeWidth={2} />
+                    <Icon className="w-6 h-6" strokeWidth={2} style={{ color: action.accent }} />
                   </div>
-                  <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+                  <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: action.accent }}>
                     {action.label}
                   </span>
                 </motion.button>
@@ -663,52 +664,44 @@ export default function DashboardPage() {
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
-                gradient: 'from-violet-500 to-purple-600',
-                shadow: '0 6px 18px rgba(139,92,246,0.30)',
-                icon: <span className="material-icons text-white text-2xl leading-none">credit_card</span>,
-                badge: cardStatus === 'active' ? '● Active' : null,
+                accent: '#7c3aed', tint: 'rgba(124,58,237,0.08)',
+                icon: 'credit_card',
+                badge: cardStatus === 'active',
               },
               {
                 id: 'history', label: 'History', path: '/transactions', testId: 'button-transactions',
-                gradient: 'from-blue-500 to-indigo-600',
-                shadow: '0 6px 18px rgba(59,130,246,0.28)',
-                icon: <span className="material-icons text-white text-2xl leading-none">receipt_long</span>,
+                accent: '#2563eb', tint: 'rgba(37,99,235,0.08)',
+                icon: 'receipt_long',
               },
               {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
-                gradient: 'from-amber-500 to-orange-500',
-                shadow: '0 6px 18px rgba(245,158,11,0.28)',
-                icon: <span className="material-icons text-white text-2xl leading-none">currency_exchange</span>,
+                accent: '#d97706', tint: 'rgba(217,119,6,0.08)',
+                icon: 'currency_exchange',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
-                gradient: 'from-emerald-500 to-teal-600',
-                shadow: '0 6px 18px rgba(5,150,105,0.28)',
-                icon: <span className="material-icons text-white text-2xl leading-none">support_agent</span>,
+                accent: '#059669', tint: 'rgba(5,150,105,0.08)',
+                icon: 'support_agent',
               },
               {
                 id: 'status', label: 'Status', path: '/status', testId: '',
-                gradient: 'from-cyan-500 to-sky-600',
-                shadow: '0 6px 18px rgba(6,182,212,0.28)',
-                icon: <span className="material-icons text-white text-2xl leading-none">health_and_safety</span>,
+                accent: '#0891b2', tint: 'rgba(8,145,178,0.08)',
+                icon: 'health_and_safety',
               },
               {
                 id: 'settings', label: 'Settings', path: '/settings', testId: 'button-settings',
-                gradient: 'from-slate-500 to-gray-600',
-                shadow: '0 6px 18px rgba(100,116,139,0.28)',
-                icon: <span className="material-icons text-white text-2xl leading-none">settings</span>,
+                accent: '#475569', tint: 'rgba(71,85,105,0.08)',
+                icon: 'settings',
               },
               {
                 id: 'loans', label: 'Loans', path: '/loans', testId: '',
-                gradient: 'from-pink-500 to-rose-600',
-                shadow: '0 6px 18px rgba(236,72,153,0.28)',
-                icon: <DollarSign className="w-6 h-6 text-white" />,
+                accent: '#db2777', tint: 'rgba(219,39,119,0.08)',
+                icon: 'payments',
               },
               {
                 id: 'api', label: 'API', path: '/api-service', testId: '',
-                gradient: 'from-fuchsia-500 to-violet-600',
-                shadow: '0 6px 18px rgba(217,70,239,0.28)',
-                icon: <Zap className="w-6 h-6 text-white" />,
+                accent: '#9333ea', tint: 'rgba(147,51,234,0.08)',
+                icon: 'bolt',
               },
             ].map((service, index) => (
               <motion.button
@@ -718,19 +711,21 @@ export default function DashboardPage() {
                 transition={{ delay: 0.05 * index }}
                 whileTap={{ scale: 0.88 }}
                 onClick={() => setLocation(service.path)}
-                className="flex flex-col items-center gap-2"
+                className="flex flex-col items-center gap-1.5"
                 data-testid={service.testId || undefined}
               >
                 <div
-                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${service.gradient} flex items-center justify-center relative`}
-                  style={{ boxShadow: service.shadow }}
+                  className="w-14 h-14 rounded-2xl flex items-center justify-center relative"
+                  style={{ background: service.tint, border: `2px solid ${service.accent}` }}
                 >
-                  {service.icon}
+                  <span className="material-icons text-2xl leading-none" style={{ color: service.accent }}>
+                    {service.icon}
+                  </span>
                   {service.badge && (
                     <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-background" />
                   )}
                 </div>
-                <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+                <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: service.accent }}>
                   {service.label}
                 </span>
               </motion.button>
@@ -743,15 +738,15 @@ export default function DashboardPage() {
               transition={{ delay: 0.45 }}
               whileTap={{ scale: 0.88 }}
               onClick={() => setShowMoreMenu(true)}
-              className="flex flex-col items-center gap-2"
+              className="flex flex-col items-center gap-1.5"
             >
               <div
-                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-gray-500 to-gray-700 flex items-center justify-center"
-                style={{ boxShadow: '0 6px 18px rgba(75,85,99,0.28)' }}
+                className="w-14 h-14 rounded-2xl flex items-center justify-center"
+                style={{ background: 'rgba(71,85,105,0.08)', border: '2px solid #475569' }}
               >
-                <Grid className="w-6 h-6 text-white" />
+                <Grid className="w-6 h-6" style={{ color: '#475569' }} />
               </div>
-              <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#475569' }}>
                 More
               </span>
             </motion.button>

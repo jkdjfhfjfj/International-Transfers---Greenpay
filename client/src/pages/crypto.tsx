@@ -7,11 +7,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
 import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
-const COIN_COLORS: Record<string, string> = {
-  BTC: "from-orange-500 to-yellow-500",
-  ETH: "from-blue-500 to-indigo-500",
-  USDT: "from-green-500 to-teal-500",
-  USDC: "from-blue-500 to-cyan-500",
+const COIN_COLORS: Record<string, { accent: string; tint: string }> = {
+  BTC: { accent: '#f97316', tint: 'rgba(249,115,22,0.10)' },
+  ETH: { accent: '#6366f1', tint: 'rgba(99,102,241,0.10)' },
+  USDT: { accent: '#16a34a', tint: 'rgba(22,163,74,0.10)' },
+  USDC: { accent: '#2563eb', tint: 'rgba(37,99,235,0.10)' },
 };
 
 const COIN_ICONS: Record<string, string> = {
@@ -152,9 +152,10 @@ export default function CryptoPage() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-gradient-to-br from-indigo-600 via-blue-600 to-cyan-600 rounded-2xl p-5 text-white"
+          className="rounded-2xl p-5 text-white"
+          style={{ background: 'linear-gradient(160deg, #16a34a 0%, #22c55e 100%)' }}
         >
-          <p className="text-sm text-white/70 mb-1">Crypto Portfolio</p>
+          <p className="text-sm text-white/80 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>
           <p className="text-xs text-white/60 mt-1">{wallets.length} wallets · {Object.keys(rates).length} supported coins</p>
         </motion.div>
@@ -179,40 +180,49 @@ export default function CryptoPage() {
             <motion.div key="wallets" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
               {walletsLoading ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">Loading wallets...</div>
-              ) : wallets.map((wallet: any) => (
+              ) : wallets.map((wallet: any) => {
+                const coinMeta = COIN_COLORS[wallet.coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
+                return (
                 <motion.div
                   key={wallet.id}
                   whileHover={{ scale: 1.01 }}
-                  className={`bg-gradient-to-r ${COIN_COLORS[wallet.coin] || "from-gray-500 to-gray-600"} p-4 rounded-2xl text-white`}
+                  className="bg-card border border-border p-4 rounded-2xl"
                 >
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-lg font-bold">
+                      <div
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl font-bold border-2"
+                        style={{ background: coinMeta.tint, borderColor: coinMeta.accent, color: coinMeta.accent }}
+                      >
                         {COIN_ICONS[wallet.coin] || wallet.coin[0]}
                       </div>
                       <div>
-                        <p className="font-bold">{wallet.coin}</p>
-                        <p className="text-xs text-white/70">{COIN_NAMES[wallet.coin] || wallet.coin}</p>
+                        <p className="font-bold text-foreground">{wallet.coin}</p>
+                        <p className="text-xs text-muted-foreground">{COIN_NAMES[wallet.coin] || wallet.coin}</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold">{parseFloat(wallet.balance || "0").toFixed(6)}</p>
-                      <p className="text-xs text-white/70">≈ ${wallet.usdBalance}</p>
+                      <p className="font-bold text-foreground">{parseFloat(wallet.balance || "0").toFixed(6)}</p>
+                      <p className="text-xs text-muted-foreground">≈ ${wallet.usdBalance}</p>
                     </div>
                   </div>
 
                   <button
                     onClick={() => { setSelectedCoin(wallet.coin); setActiveTab("deposit"); }}
-                    className="w-full bg-white/10 hover:bg-white/20 rounded-xl p-3 flex items-center justify-between transition-colors"
+                    className="w-full rounded-xl p-3 flex items-center justify-between transition-colors"
+                    style={{ background: coinMeta.tint, border: `1px solid ${coinMeta.accent}` }}
                     data-testid={`button-deposit-${wallet.coin}`}
                   >
-                    <span className="text-xs text-white/80">View Deposit Addresses ({(addressesByCoin[wallet.coin] || []).length} networks)</span>
-                    <ArrowDownToLine className="w-4 h-4 text-white/80" />
+                    <span className="text-xs font-medium" style={{ color: coinMeta.accent }}>
+                      View Deposit Addresses ({(addressesByCoin[wallet.coin] || []).length} networks)
+                    </span>
+                    <ArrowDownToLine className="w-4 h-4" style={{ color: coinMeta.accent }} />
                   </button>
 
-                  <p className="text-xs text-white/50 mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString()}</p>
                 </motion.div>
-              ))}
+                );
+              })}
             </motion.div>
           )}
 
@@ -228,15 +238,23 @@ export default function CryptoPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Select Coin</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {["BTC", "ETH", "USDT", "USDC"].map(coin => (
-                      <button
-                        key={coin}
-                        onClick={() => setSelectedCoin(coin)}
-                        className={`py-2 rounded-xl text-sm font-bold transition-all ${selectedCoin === coin ? `bg-gradient-to-r ${COIN_COLORS[coin]} text-white shadow-md` : "bg-muted text-muted-foreground"}`}
-                      >
-                        {coin}
-                      </button>
-                    ))}
+                    {["BTC", "ETH", "USDT", "USDC"].map(coin => {
+                      const cm = COIN_COLORS[coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
+                      const active = selectedCoin === coin;
+                      return (
+                        <button
+                          key={coin}
+                          onClick={() => setSelectedCoin(coin)}
+                          className="py-2 rounded-xl text-sm font-bold transition-all"
+                          style={active
+                            ? { background: cm.accent, color: '#fff' }
+                            : { background: cm.tint, color: cm.accent, border: `1.5px solid ${cm.accent}` }
+                          }
+                        >
+                          {coin}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -328,15 +346,23 @@ export default function CryptoPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Select Coin</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {["BTC", "ETH", "USDT", "USDC"].map(coin => (
-                      <button
-                        key={coin}
-                        onClick={() => setSelectedCoin(coin)}
-                        className={`py-2 rounded-xl text-sm font-bold transition-all ${selectedCoin === coin ? `bg-gradient-to-r ${COIN_COLORS[coin]} text-white shadow-md` : "bg-muted text-muted-foreground"}`}
-                      >
-                        {coin}
-                      </button>
-                    ))}
+                    {["BTC", "ETH", "USDT", "USDC"].map(coin => {
+                      const cm = COIN_COLORS[coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
+                      const active = selectedCoin === coin;
+                      return (
+                        <button
+                          key={coin}
+                          onClick={() => setSelectedCoin(coin)}
+                          className="py-2 rounded-xl text-sm font-bold transition-all"
+                          style={active
+                            ? { background: cm.accent, color: '#fff' }
+                            : { background: cm.tint, color: cm.accent, border: `1.5px solid ${cm.accent}` }
+                          }
+                        >
+                          {coin}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
