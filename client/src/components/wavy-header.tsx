@@ -74,9 +74,9 @@ export function WavyHeader({
         style={{ height: heightMap[size], overflow: 'visible', display: 'block' }}
       >
         <defs>
-          <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%"   style={{ stopColor: '#15803d', stopOpacity: 1 }} />
-            <stop offset="100%" style={{ stopColor: '#16a34a', stopOpacity: 1 }} />
+          <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%"   style={{ stopColor: '#16a34a', stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: '#22c55e', stopOpacity: 1 }} />
           </linearGradient>
         </defs>
 
