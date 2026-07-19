@@ -1,14 +1,14 @@
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, CreditCard, ArrowLeftRight, ClipboardList, User } from "lucide-react";
+import { Home, CreditCard, ArrowLeftRight, ClipboardList, LayoutGrid } from "lucide-react";
 
 const navItems = [
   { id: "dashboard",    Icon: Home,            label: "Home",     path: "/dashboard" },
   { id: "virtual-card", Icon: CreditCard,       label: "Card",     path: "/virtual-card" },
-  { id: "send",         Icon: ArrowLeftRight,   label: "Transfer", path: "/send-money",    isCenter: true },
+  { id: "send",         Icon: ArrowLeftRight,   label: "Transfer", path: "/send-money",  isCenter: true },
   { id: "transactions", Icon: ClipboardList,    label: "History",  path: "/transactions" },
-  { id: "settings",     Icon: User,             label: "Profile",  path: "/settings" },
+  { id: "settings",     Icon: LayoutGrid,       label: "More",     path: "/settings" },
 ];
 
 export default function BottomNavigation() {
