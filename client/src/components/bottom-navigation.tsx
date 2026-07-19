@@ -40,7 +40,12 @@ export default function BottomNavigation() {
     location.startsWith('/analytics') ||
     location.startsWith('/payment-processing') ||
     location.startsWith('/payment-success') ||
-    location.startsWith('/payment-failed')
+    location.startsWith('/payment-failed') ||
+    location.startsWith('/kyc') ||
+    location.startsWith('/payment-requests') ||
+    location.startsWith('/live-chat') ||
+    location.startsWith('/user-support') ||
+    location.startsWith('/receive-money')
   );
 
   if (!showBottomNav) return null;

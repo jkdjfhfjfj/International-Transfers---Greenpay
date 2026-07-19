@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import BottomNavigation from "@/components/bottom-navigation";
 import { CheckCircle, Clock, XCircle, Shield, ShieldCheck, ChevronRight, Upload, Camera, FileText, MapPin } from "lucide-react";
 
 type KycLevel = "basic" | "advanced";
@@ -166,17 +167,13 @@ export default function KYCPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
-        className="bg-card shadow-sm p-4 flex items-center gap-3 sticky top-0 z-10">
-        <button onClick={() => setLocation("/settings")} className="p-2 rounded-full hover:bg-muted transition-colors">
-          <span className="material-icons text-muted-foreground">arrow_back</span>
-        </button>
-        <div>
-          <h1 className="text-lg font-semibold">Identity Verification</h1>
-          <p className="text-xs text-muted-foreground">Verify your identity to unlock all features</p>
-        </div>
-      </motion.div>
+    <div className="min-h-screen bg-background pb-28">
+      <WavyHeader
+        title="Verify Identity"
+        subtitle="Unlock all features securely"
+        onBack={() => setLocation("/settings")}
+        size="md"
+      />
 
       <div className="max-w-md mx-auto px-4 pt-6 space-y-6">
         {/* Admin-requested Advanced KYC banner */}
@@ -502,6 +499,7 @@ export default function KYCPage() {
           )}
         </AnimatePresence>
       </div>
+      <BottomNavigation />
     </div>
   );
 }

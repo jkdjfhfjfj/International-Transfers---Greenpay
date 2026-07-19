@@ -190,8 +190,9 @@ export default function DashboardPage() {
   };
 
   const handleCopyAccountNumber = async () => {
-    if (user?.id) {
-      await navigator.clipboard.writeText(user.id);
+    const accNum = (user as any)?.accountNumber || user?.id;
+    if (accNum) {
+      await navigator.clipboard.writeText(String(accNum));
       setCopiedAccountNumber(true);
       toast({
         title: "Copied!",
@@ -618,30 +619,30 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (
                 <motion.button
                   key={action.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.1 * index }}
-                  whileTap={{ scale: action.disabled ? 1 : 0.95 }}
+                  initial={{ opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.05 * index }}
+                  whileTap={{ scale: action.disabled ? 1 : 0.88 }}
                   onClick={() => handleActionClick(action)}
-                  className={`${action.bgColor} p-5 rounded-2xl border border-border hover:shadow-lg transition-all ${
-                    action.disabled ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'
-                  }`}
+                  className={`flex flex-col items-center gap-2 ${action.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${action.color} flex items-center justify-center mb-3 shadow-md`}>
-                    <Icon className="w-6 h-6 text-white" />
+                  <div
+                    className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${action.color} flex items-center justify-center`}
+                    style={{
+                      boxShadow: action.disabled ? 'none' : '0 6px 18px rgba(5,150,105,0.28)',
+                    }}
+                  >
+                    <Icon className="w-6 h-6 text-white" strokeWidth={2} />
                   </div>
-                  <div className="text-left">
-                    <p className="font-semibold text-sm">{action.label}</p>
-                    {action.disabled && action.requiresCard && (
-                      <p className="text-xs text-muted-foreground mt-0.5">Card required</p>
-                    )}
-                  </div>
+                  <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+                    {action.label}
+                  </span>
                 </motion.button>
               );
             })}
@@ -655,124 +656,82 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/virtual-card")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-              data-testid="button-virtual-card"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">credit_card</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">Virtual Card</p>
-                <p className={`text-xs font-medium ${cardStatus === 'active' ? 'text-primary' : 'text-muted-foreground'}`}>
-                  {cardStatus === 'active' ? '● Active' : '● Inactive'}
-                </p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/transactions")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-              data-testid="button-transactions"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">receipt_long</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">History</p>
-                <p className="text-xs text-muted-foreground">{transactions.length} records</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/exchange")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">currency_exchange</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">Exchange</p>
-                <p className="text-xs text-muted-foreground">Multi-currency</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/support")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-              data-testid="button-support"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">support_agent</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">Support</p>
-                <p className="text-xs text-muted-foreground">24/7 help</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/status")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">health_and_safety</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">System Status</p>
-                <p className="text-xs text-muted-foreground">Service health</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/settings")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-              data-testid="button-settings"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <span className="material-icons text-white text-2xl leading-none">settings</span>
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">Settings</p>
-                <p className="text-xs text-muted-foreground">Preferences & security</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/loans")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">Loans</p>
-                <p className="text-xs text-muted-foreground">Borrow easily</p>
-              </div>
-            </motion.button>
-
-            <motion.button
-              whileTap={{ scale: 0.95 }}
-              onClick={() => setLocation("/api-service")}
-              className="bg-card p-5 rounded-2xl border border-border hover:shadow-lg transition-all hover:scale-105"
-            >
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center mb-3 shadow-md">
-                <Zap className="w-6 h-6 text-white" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold text-sm mb-1">API Services</p>
-                <p className="text-xs text-muted-foreground">Generate & manage keys</p>
-              </div>
-            </motion.button>
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5">
+            {[
+              {
+                id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
+                gradient: 'from-violet-500 to-purple-600',
+                shadow: '0 6px 18px rgba(139,92,246,0.30)',
+                icon: <span className="material-icons text-white text-2xl leading-none">credit_card</span>,
+                badge: cardStatus === 'active' ? '● Active' : null,
+              },
+              {
+                id: 'history', label: 'History', path: '/transactions', testId: 'button-transactions',
+                gradient: 'from-blue-500 to-indigo-600',
+                shadow: '0 6px 18px rgba(59,130,246,0.28)',
+                icon: <span className="material-icons text-white text-2xl leading-none">receipt_long</span>,
+              },
+              {
+                id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
+                gradient: 'from-amber-500 to-orange-500',
+                shadow: '0 6px 18px rgba(245,158,11,0.28)',
+                icon: <span className="material-icons text-white text-2xl leading-none">currency_exchange</span>,
+              },
+              {
+                id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
+                gradient: 'from-emerald-500 to-teal-600',
+                shadow: '0 6px 18px rgba(5,150,105,0.28)',
+                icon: <span className="material-icons text-white text-2xl leading-none">support_agent</span>,
+              },
+              {
+                id: 'status', label: 'Status', path: '/status', testId: '',
+                gradient: 'from-cyan-500 to-sky-600',
+                shadow: '0 6px 18px rgba(6,182,212,0.28)',
+                icon: <span className="material-icons text-white text-2xl leading-none">health_and_safety</span>,
+              },
+              {
+                id: 'settings', label: 'Settings', path: '/settings', testId: 'button-settings',
+                gradient: 'from-slate-500 to-gray-600',
+                shadow: '0 6px 18px rgba(100,116,139,0.28)',
+                icon: <span className="material-icons text-white text-2xl leading-none">settings</span>,
+              },
+              {
+                id: 'loans', label: 'Loans', path: '/loans', testId: '',
+                gradient: 'from-pink-500 to-rose-600',
+                shadow: '0 6px 18px rgba(236,72,153,0.28)',
+                icon: <DollarSign className="w-6 h-6 text-white" />,
+              },
+              {
+                id: 'api', label: 'API', path: '/api-service', testId: '',
+                gradient: 'from-fuchsia-500 to-violet-600',
+                shadow: '0 6px 18px rgba(217,70,239,0.28)',
+                icon: <Zap className="w-6 h-6 text-white" />,
+              },
+            ].map((service, index) => (
+              <motion.button
+                key={service.id}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.05 * index }}
+                whileTap={{ scale: 0.88 }}
+                onClick={() => setLocation(service.path)}
+                className="flex flex-col items-center gap-2"
+                data-testid={service.testId || undefined}
+              >
+                <div
+                  className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${service.gradient} flex items-center justify-center relative`}
+                  style={{ boxShadow: service.shadow }}
+                >
+                  {service.icon}
+                  {service.badge && (
+                    <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-background" />
+                  )}
+                </div>
+                <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+                  {service.label}
+                </span>
+              </motion.button>
+            ))}
           </div>
         </motion.div>
 
