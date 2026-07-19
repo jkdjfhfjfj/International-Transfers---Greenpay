@@ -36,9 +36,12 @@ export default function BottomNavigation() {
     location.startsWith('/status') ||
     location.startsWith('/loans') ||
     location.startsWith('/api-documentation') ||
+    location.startsWith('/api-service') ||
     location.startsWith('/admin-notifications') ||
     location.startsWith('/crypto') ||
     location.startsWith('/analytics') ||
+    location.startsWith('/kyc') ||
+    location.startsWith('/payment-requests') ||
     location.startsWith('/payment-processing') ||
     location.startsWith('/payment-success') ||
     location.startsWith('/payment-failed') ||

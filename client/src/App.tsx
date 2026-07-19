@@ -6,7 +6,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { TalkToUs } from "@/components/talk-to-us";
-import { MoreMenu } from "@/components/more-menu";
 import NotFound from "@/pages/not-found";
 import DesktopSidebar from "@/components/desktop-sidebar";
 import SplashPage from "@/pages/splash";
@@ -259,7 +258,6 @@ function AppContent() {
       {!isAdminPage && <BottomNavigation />}
       {!isAdminPage && <PWAInstallPrompt />}
       {shouldShowWidgets && <TalkToUs />}
-      {shouldShowWidgets && <MoreMenu />}
     </TooltipProvider>
   );
 }
