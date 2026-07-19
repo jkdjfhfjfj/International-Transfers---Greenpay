@@ -240,11 +240,11 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </div>
-      {/* Gemini Gradient Header */}
+      {/* Dashboard Header — matches #16a34a meta theme */}
       <div
         className="sticky top-0 z-50"
         style={{
-          background: 'linear-gradient(135deg, #0f766e 0%, #16a34a 100%)',
+          background: 'linear-gradient(160deg, #15803d 0%, #16a34a 55%, #22c55e 100%)',
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
           padding: '16px 16px 20px',
