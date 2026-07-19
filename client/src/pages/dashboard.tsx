@@ -239,222 +239,220 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </div>
-      {/* Top Navigation with Wavy Background */}
-      <div className="relative overflow-hidden rounded-b-3xl sticky top-0 z-50">
-        {/* Layered Wavy Background SVG - Green top, Dark bottom */}
-        <svg
-          className="absolute inset-0 w-full h-full"
-          viewBox="0 0 1440 600"
-          preserveAspectRatio="none"
-          style={{ height: '100%' }}
-        >
-          {/* Background Dark */}
-          <rect width="1440" height="600" fill="#0f1a14" />
-          
-          {/* Top Green Fill - bright green at top */}
-          <path
-            d="M 0,0 L 1440,0 L 1440,180 Q 1080,140 720,180 Q 360,140 0,180 Z"
-            fill="#4CAF50"
-          />
-          
-          {/* Upper Green Wave - smooth transition */}
-          <path
-            d="M 0,180 Q 360,220 720,180 Q 1080,140 1440,180 L 1440,280 Q 1080,240 720,280 Q 360,240 0,280 Z"
-            fill="#3a9940"
-            opacity="0.8"
-          />
-          
-          {/* Middle transition wave */}
-          <path
-            d="M 0,280 Q 360,320 720,280 Q 1080,240 1440,280 L 1440,380 Q 1080,340 720,380 Q 360,340 0,380 Z"
-            fill="#2a7f30"
-            opacity="0.7"
-          />
-          
-          {/* Lower dark wave */}
-          <path
-            d="M 0,380 Q 360,420 720,380 Q 1080,340 1440,380 L 1440,480 Q 1080,440 720,480 Q 360,440 0,480 Z"
-            fill="#1a5a20"
-            opacity="0.8"
-          />
-          
-          {/* Bottom dark wave with rounded corners */}
-          <path
-            d="M 20,480 Q 360,520 720,480 Q 1080,440 1420,480 Q 1430,480 1440,490 L 1440,600 L 0,600 L 0,490 Q 10,480 20,480 Z"
-            fill="#0f3a14"
-            opacity="0.9"
-          />
-        </svg>
-        
-        {/* Content */}
+      {/* Gemini Gradient Header */}
+      <div
+        className="sticky top-0 z-50"
+        style={{
+          background: 'linear-gradient(135deg, #0f766e 0%, #16a34a 100%)',
+          borderBottomLeftRadius: 24,
+          borderBottomRightRadius: 24,
+          padding: '16px 16px 20px',
+          color: 'white',
+        }}
+      >
+        {/* Profile bar */}
         <motion.div
-          initial={{ opacity: 0, y: -20 }}
+          initial={{ opacity: 0, y: -12 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative z-10 bg-gradient-to-br from-primary/30 via-primary/20 to-secondary/30 backdrop-blur-sm p-6 text-white"
+          className="flex items-center justify-between mb-2"
         >
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center flex-1">
+          <div className="flex items-center gap-3 flex-1 min-w-0">
             {user?.profilePhotoUrl ? (
-              <img 
-                src={user.profilePhotoUrl} 
-                alt="Profile" 
-                className="w-12 h-12 rounded-full object-cover mr-3 border-2 border-white/30 shadow-lg"
+              <img
+                src={user.profilePhotoUrl}
+                alt="Profile"
+                className="w-10 h-10 rounded-full object-cover border-2 border-white/30 shadow-lg flex-shrink-0"
               />
             ) : (
-              <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mr-3 border-2 border-white/30 shadow-lg">
-                <span className="text-white font-bold text-lg">
-                  {user?.fullName?.split(' ').map(n => n[0]).join('') || 'JD'}
+              <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center border-2 border-white/30 shadow-lg flex-shrink-0">
+                <span className="text-white font-bold text-sm">
+                  {user?.fullName?.split(' ').map((n: string) => n[0]).join('') || 'GP'}
                 </span>
               </div>
             )}
-            <div>
-              <h1 className="font-bold text-lg">Hi, {user?.fullName?.split(' ')[0] || 'John'}!</h1>
-              <p className="text-xs text-white/80">Welcome back 👋</p>
+            <div className="min-w-0">
+              <h1 className="font-bold text-base leading-tight truncate">
+                Hi, {user?.fullName?.split(' ')[0] || 'there'}!
+              </h1>
+              <p className="text-xs text-white/75">Welcome back 👋</p>
             </div>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-1 flex-shrink-0">
             <Notifications />
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.92 }}
               onClick={() => setLocation('/live-chat')}
-              className="p-2 rounded-full hover:opacity-80 transition-opacity"
+              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 transition-colors"
               title="Contact Support"
               data-testid="button-support"
             >
-              <span className="material-icons text-white text-xl">headset_mic</span>
+              <span className="material-icons text-white" style={{ fontSize: 18 }}>headset_mic</span>
             </motion.button>
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.92 }}
               onClick={toggleDarkMode}
-              className="p-2 rounded-full hover:opacity-80 transition-opacity mr-2"
+              className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 transition-colors"
               data-testid="button-dark-mode"
             >
-              <span className="material-icons text-white text-xl">brightness_6</span>
+              <span className="material-icons text-white" style={{ fontSize: 18 }}>brightness_6</span>
             </motion.button>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Logged In + Country Location */}
+        {/* Location tag */}
         {user?.country && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
             transition={{ delay: 0.05 }}
-            className="flex items-center gap-2 mb-3 justify-start"
+            className="flex items-center gap-1.5 mb-3"
           >
-            <MapPin className="w-3.5 h-3.5 text-white/70" />
-            <span className="text-white/70 text-xs">Logged in</span>
-            <span className="text-white/70 text-xs font-medium">{user.country}</span>
+            <div
+              className="flex items-center gap-1.5 text-white/70 text-xs"
+              style={{
+                background: 'rgba(255,255,255,0.10)',
+                borderRadius: 20,
+                padding: '3px 10px',
+                display: 'inline-flex',
+              }}
+            >
+              <MapPin className="w-2.5 h-2.5" />
+              <span>Logged in · {user.country}</span>
+            </div>
           </motion.div>
         )}
 
-        {/* Wallet Balance Card - Dual Wallet */}
+        {/* Glassmorphism Balance Card */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
+          initial={{ opacity: 0, scale: 0.97 }}
           animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/20 shadow-xl"
+          transition={{ delay: 0.08 }}
+          style={{
+            background: 'rgba(255,255,255,0.12)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255,255,255,0.18)',
+            borderRadius: 16,
+            padding: '14px 16px',
+          }}
         >
-          {/* Wallet Switcher */}
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex bg-white/10 rounded-lg p-1 backdrop-blur-sm">
-              <button
-                onClick={() => setActiveWallet('USD')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  activeWallet === 'USD'
-                    ? 'bg-white text-primary shadow-md'
-                    : 'text-white/70 hover:text-white'
-                }`}
-              >
-                USD
-              </button>
-              <button
-                onClick={() => setActiveWallet('KES')}
-                className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                  activeWallet === 'KES'
-                    ? 'bg-white text-primary shadow-md'
-                    : 'text-white/70 hover:text-white'
-                }`}
-              >
-                KES
-              </button>
+          {/* Top row: currency switcher + eye */}
+          <div className="flex items-center justify-between mb-2">
+            <div
+              className="flex"
+              style={{
+                background: 'rgba(0,0,0,0.20)',
+                borderRadius: 8,
+                padding: 2,
+                gap: 2,
+              }}
+            >
+              {(['USD', 'KES'] as const).map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setActiveWallet(c)}
+                  style={{
+                    padding: '3px 12px',
+                    borderRadius: 6,
+                    border: 'none',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    background: activeWallet === c ? 'white' : 'transparent',
+                    color: activeWallet === c ? '#059669' : 'rgba(255,255,255,0.65)',
+                  }}
+                >
+                  {c}
+                </button>
+              ))}
             </div>
             <motion.button
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.92 }}
               onClick={() => setShowBalance(!showBalance)}
-              className="p-2 rounded-full hover:opacity-80 transition-opacity"
+              className="opacity-80 hover:opacity-100 transition-opacity"
               data-testid="button-toggle-balance"
             >
-              <span className="material-icons text-white text-lg">
-                {showBalance ? "visibility" : "visibility_off"}
+              <span className="material-icons text-white" style={{ fontSize: 18 }}>
+                {showBalance ? 'visibility' : 'visibility_off'}
               </span>
             </motion.button>
           </div>
 
-          {/* Balance Display */}
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-white/70 text-xs flex items-center">
-                  {activeWallet} Balance
-                  {isKYCVerified && (
-                    <span className="material-icons text-green-300 ml-1 text-sm">verified</span>
-                  )}
-                </p>
-              </div>
-              <p className="text-3xl font-bold mb-2" data-testid="text-balance">
-                {showBalance 
-                  ? activeWallet === 'USD' 
-                    ? `$${formatNumber(activeBalance)}`
-                    : `KSh ${formatNumber(activeBalance)}`
-                  : "••••••"}
-              </p>
-              {/* Show other wallet balance and action buttons */}
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <p className="text-white/60 text-xs">
-                  {activeWallet === 'USD' ? (
-                    <>Other: KSh {showBalance ? formatNumber(kesBalance) : '••••'}</>
-                  ) : (
-                    <>Other: ${showBalance ? formatNumber(usdBalance) : '••••'}</>
-                  )}
-                </p>
-                <div className="flex items-center gap-2">
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={handleCopyAccountNumber}
-                    className={`flex items-center px-2.5 py-1.5 rounded-lg transition-colors ${
-                      copiedAccountNumber 
-                        ? 'bg-green-500/20 text-green-300' 
-                        : 'bg-white/10 hover:bg-white/20 text-white'
-                    }`}
-                    title="Copy Account Number"
-                  >
-                    {copiedAccountNumber ? (
-                      <>
-                        <Check className="w-3 h-3 mr-1" />
-                        <span className="text-white text-xs font-medium">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3 h-3 mr-1" />
-                        <span className="text-white text-xs font-medium">Copy</span>
-                      </>
-                    )}
-                  </motion.button>
-                  <motion.button
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setLocation("/exchange")}
-                    className="flex items-center bg-white/10 hover:bg-white/20 px-2.5 py-1.5 rounded-lg transition-colors"
-                  >
-                    <span className="material-icons text-white text-sm mr-1">currency_exchange</span>
-                    <span className="text-white text-xs font-medium">Exchange</span>
-                  </motion.button>
-                </div>
-              </div>
-            </div>
+          {/* Balance */}
+          <p className="text-xs text-white/70 mb-0.5 flex items-center gap-1">
+            {activeWallet} Balance
+            {isKYCVerified && (
+              <span className="material-icons text-green-300" style={{ fontSize: 13 }}>verified</span>
+            )}
+          </p>
+          <p className="font-bold mb-1" style={{ fontSize: 28, letterSpacing: '-0.5px' }} data-testid="text-balance">
+            {showBalance
+              ? activeWallet === 'USD'
+                ? `$${formatNumber(activeBalance)}`
+                : `KSh ${formatNumber(activeBalance)}`
+              : '••••••'}
+          </p>
+          <p className="text-xs text-white/60 mb-3">
+            {activeWallet === 'USD'
+              ? <>Other: KSh {showBalance ? formatNumber(kesBalance) : '••••'}</>
+              : <>Other: ${showBalance ? formatNumber(usdBalance) : '••••'}</>}
+          </p>
+
+          {/* Action buttons */}
+          <div className="flex gap-2">
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={handleCopyAccountNumber}
+              style={{
+                flex: 1,
+                padding: '8px 0',
+                borderRadius: 10,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
+                background: copiedAccountNumber ? 'rgba(74,222,128,0.20)' : 'rgba(255,255,255,0.18)',
+                color: 'white',
+              }}
+              title="Copy Account Number"
+            >
+              {copiedAccountNumber ? (
+                <><Check className="w-3 h-3" /> Copied</>
+              ) : (
+                <><Copy className="w-3 h-3" /> Copy Acc No</>
+              )}
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setLocation('/exchange')}
+              style={{
+                flex: 1,
+                padding: '8px 0',
+                borderRadius: 10,
+                border: 'none',
+                fontSize: 12,
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                cursor: 'pointer',
+                transition: 'opacity 0.15s',
+                background: 'white',
+                color: '#059669',
+              }}
+            >
+              <span className="material-icons" style={{ fontSize: 14 }}>currency_exchange</span>
+              Exchange
+            </motion.button>
           </div>
         </motion.div>
-      </motion.div>
       </div>
 
       <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6">

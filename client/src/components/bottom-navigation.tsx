@@ -1,31 +1,22 @@
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
+import { Home, CreditCard, ArrowLeftRight, ClipboardList, User } from "lucide-react";
 
-interface NavItem {
-  id: string;
-  icon: string;
-  label: string;
-  path: string;
-  isCenter?: boolean;
-}
-
-const navItems: NavItem[] = [
-  { id: "dashboard", icon: "home", label: "Home", path: "/dashboard" },
-  { id: "virtual-card", icon: "credit_card", label: "Card", path: "/virtual-card" },
-  { id: "send", icon: "swap_horiz", label: "Transfer", path: "/send-money", isCenter: true },
-  { id: "transactions", icon: "receipt_long", label: "History", path: "/transactions" },
-  { id: "settings", icon: "person", label: "Profile", path: "/settings" },
+const navItems = [
+  { id: "dashboard",    Icon: Home,            label: "Home",     path: "/dashboard" },
+  { id: "virtual-card", Icon: CreditCard,       label: "Card",     path: "/virtual-card" },
+  { id: "send",         Icon: ArrowLeftRight,   label: "Transfer", path: "/send-money",    isCenter: true },
+  { id: "transactions", Icon: ClipboardList,    label: "History",  path: "/transactions" },
+  { id: "settings",     Icon: User,             label: "Profile",  path: "/settings" },
 ];
 
 export default function BottomNavigation() {
   const [location, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
 
-  // Hide bottom navigation in external windows and non-authenticated pages
   const isExternal = window.opener !== null || window.parent !== window;
-  
-  // Only show bottom navigation on authenticated pages and not in external view
+
   const showBottomNav = !isExternal && isAuthenticated && (
     location.startsWith('/dashboard') ||
     location.startsWith('/transactions') ||
@@ -63,88 +54,97 @@ export default function BottomNavigation() {
       style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
       data-testid="bottom-navigation"
     >
-      <div className="bg-background/80 backdrop-blur-md border-t border-border/40 pb-safe">
-        <div className="flex justify-around items-end max-w-lg mx-auto px-4 py-2 relative">
-          {navItems.map((item, index) => {
-            const isActive = location === item.path || 
-              (item.path === '/send-money' && (location.startsWith('/send-money') || location.startsWith('/send-amount') || location.startsWith('/send-confirm')));
-            
+      <div
+        className="bg-background border-t border-border"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 64 }}>
+          {navItems.map((item) => {
+            const { Icon } = item;
+            const isActive =
+              location === item.path ||
+              (item.path === '/send-money' &&
+                (location.startsWith('/send-money') ||
+                  location.startsWith('/send-amount') ||
+                  location.startsWith('/send-confirm')));
+
             if (item.isCenter) {
-              // Large center button
               return (
-                <motion.button
-                  key={item.id}
-                  onClick={() => setLocation(item.path)}
-                  whileTap={{ scale: 0.9 }}
-                  className="relative -mt-8"
-                  data-testid={`nav-${item.id}`}
-                >
-                  <div className="relative">
-                    {/* Elevated circular button with gradient */}
-                    <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary via-emerald-500 to-secondary shadow-xl flex items-center justify-center relative overflow-hidden">
-                      {/* Animated glow effect */}
-                      <motion.div
-                        className="absolute inset-0 bg-gradient-to-r from-primary/50 to-secondary/50 rounded-full"
-                        animate={{
-                          scale: [1, 1.2, 1],
-                          opacity: [0.5, 0.2, 0.5],
-                        }}
-                        transition={{
-                          duration: 2,
-                          repeat: Infinity,
-                          ease: "easeInOut"
-                        }}
-                      />
-                      <span className="material-icons text-white text-3xl relative z-10">
-                        {item.icon}
-                      </span>
-                    </div>
-                    {/* Label below */}
-                    <p className="text-xs font-medium text-foreground/70 mt-2 text-center">
-                      {item.label}
-                    </p>
-                  </div>
-                </motion.button>
+                <div key={item.id} className="flex flex-col items-center justify-end pb-2 relative" style={{ flex: 1 }}>
+                  <motion.button
+                    onClick={() => setLocation(item.path)}
+                    whileTap={{ scale: 0.92 }}
+                    data-testid={`nav-${item.id}`}
+                    style={{
+                      position: 'absolute',
+                      top: -26,
+                      width: 52,
+                      height: 52,
+                      borderRadius: '50%',
+                      background: 'linear-gradient(135deg, #0f766e 0%, #16a34a 100%)',
+                      border: '3px solid white',
+                      boxShadow: '0 6px 20px rgba(5, 150, 105, 0.40)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                    }}
+                  >
+                    <Icon size={22} strokeWidth={2.2} />
+                  </motion.button>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: isActive ? '#059669' : '#64748b',
+                      marginTop: 32,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {item.label}
+                  </span>
+                </div>
               );
             }
 
-            // Regular nav items
             return (
               <motion.button
                 key={item.id}
                 onClick={() => setLocation(item.path)}
-                whileTap={{ scale: 0.85 }}
-                className="flex flex-col items-center py-2 px-3 min-w-[60px] relative"
+                whileTap={{ scale: 0.88 }}
                 data-testid={`nav-${item.id}`}
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  paddingBottom: 8,
+                  gap: 3,
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: isActive ? '#059669' : '#64748b',
+                  position: 'relative',
+                }}
               >
-                <div className="relative">
-                  <span 
-                    className={`material-icons transition-all duration-200 ${
-                      isActive 
-                        ? 'text-primary text-2xl' 
-                        : 'text-muted-foreground text-xl'
-                    }`}
-                  >
-                    {item.icon}
-                  </span>
-                  {/* Active indicator dot */}
-                  {isActive && (
-                    <motion.div
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-primary rounded-full"
-                    />
-                  )}
-                </div>
-                <span 
-                  className={`text-xs font-medium mt-1 transition-all duration-200 ${
-                    isActive 
-                      ? 'text-primary' 
-                      : 'text-muted-foreground'
-                  }`}
-                >
+                <Icon size={21} strokeWidth={isActive ? 2.3 : 1.8} />
+                <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 500, lineHeight: 1 }}>
                   {item.label}
                 </span>
+                {isActive && (
+                  <motion.div
+                    layoutId="nav-active-dot"
+                    style={{
+                      position: 'absolute',
+                      bottom: 2,
+                      width: 4,
+                      height: 4,
+                      borderRadius: '50%',
+                      background: '#059669',
+                    }}
+                  />
+                )}
               </motion.button>
             );
           })}
