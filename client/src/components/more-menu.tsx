@@ -129,8 +129,12 @@ function RatesPanel() {
   );
 }
 
-export function MoreMenu() {
-  const [open, setOpen] = useState(false);
+interface MoreMenuProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+export function MoreMenu({ open, onClose }: MoreMenuProps) {
   const [activeTab, setActiveTab] = useState<'rates' | 'features'>('rates');
 
   return (
@@ -142,7 +146,7 @@ export function MoreMenu() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => setOpen(false)}
+            onClick={onClose}
             className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
           />
         )}
@@ -171,7 +175,7 @@ export function MoreMenu() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">Explore GreenPay features</p>
               </div>
               <button
-                onClick={() => setOpen(false)}
+                onClick={onClose}
                 className="w-8 h-8 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 <X className="w-4 h-4 text-gray-600 dark:text-gray-300" />
@@ -236,18 +240,6 @@ export function MoreMenu() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Floating More Button */}
-      <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileTap={{ scale: 0.92 }}
-        onClick={() => setOpen(prev => !prev)}
-        className="fixed bottom-24 left-4 z-50 flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-700 dark:text-white border border-gray-200 dark:border-gray-700 px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-200"
-      >
-        <Grid className="w-4 h-4 text-emerald-500" />
-        <span className="text-sm font-semibold">More</span>
-      </motion.button>
     </>
   );
 }

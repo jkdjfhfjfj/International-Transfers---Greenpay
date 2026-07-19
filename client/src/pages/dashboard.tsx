@@ -12,6 +12,8 @@ import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, Doll
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
+import { MoreMenu } from "@/components/more-menu";
+import { Grid } from "lucide-react";
 
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
@@ -20,6 +22,7 @@ export default function DashboardPage() {
   const [activeWallet, setActiveWallet] = useState<'USD' | 'KES'>('USD');
   const [maintenanceAlertShown, setMaintenanceAlertShown] = useState(false);
   const [copiedAccountNumber, setCopiedAccountNumber] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const { user, logout, refreshUser } = useAuth();
   const { toast } = useToast();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
@@ -732,6 +735,26 @@ export default function DashboardPage() {
                 </span>
               </motion.button>
             ))}
+
+            {/* More tile — opens bottom sheet */}
+            <motion.button
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.45 }}
+              whileTap={{ scale: 0.88 }}
+              onClick={() => setShowMoreMenu(true)}
+              className="flex flex-col items-center gap-2"
+            >
+              <div
+                className="w-14 h-14 rounded-2xl bg-gradient-to-br from-gray-500 to-gray-700 flex items-center justify-center"
+                style={{ boxShadow: '0 6px 18px rgba(75,85,99,0.28)' }}
+              >
+                <Grid className="w-6 h-6 text-white" />
+              </div>
+              <span className="font-semibold text-center leading-tight text-foreground" style={{ fontSize: 10 }}>
+                More
+              </span>
+            </motion.button>
           </div>
         </motion.div>
 
@@ -854,6 +877,9 @@ export default function DashboardPage() {
         </div>{/* end side-by-side grid */}
       </div>
       {/* Discount modal removed - users can access virtual card directly from menu/dashboard */}
+
+      {/* More bottom sheet */}
+      <MoreMenu open={showMoreMenu} onClose={() => setShowMoreMenu(false)} />
     </div>
   );
 }
