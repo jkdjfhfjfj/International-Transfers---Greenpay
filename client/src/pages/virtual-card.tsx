@@ -1,21 +1,19 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Eye, EyeOff, Copy, Check, ShieldOff, Sparkles, X } from "lucide-react";
+import { X, Sparkles } from "lucide-react";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function VirtualCardPage() {
   const [, setLocation] = useLocation();
   const [showCardDetails, setShowCardDetails] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [forceRepurchase, setForceRepurchase] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
   const { user } = useAuth();
   const { toast } = useToast();
@@ -26,15 +24,18 @@ export default function VirtualCardPage() {
     enabled: !!user?.id,
   });
 
+  // Get transactions for real-time balance calculation
   const { data: transactionData } = useQuery({
     queryKey: ["/api/transactions", user?.id],
     enabled: !!user?.id,
   });
 
+  // Get current card price from system settings
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
   });
 
+  // Get KES amount for manual payment
   const { data: kesAmountData } = useQuery({
     queryKey: ["/api/convert-to-kes", settingsData],
     queryFn: async () => {
@@ -45,6 +46,7 @@ export default function VirtualCardPage() {
     enabled: !!settingsData,
   });
 
+  // Fetch manual payment settings
   const { data: manualPaymentSettings } = useQuery({
     queryKey: ["/api/manual-payment-settings"],
     queryFn: async () => {
@@ -54,39 +56,38 @@ export default function VirtualCardPage() {
   });
 
   const card = (cardData as any)?.card;
-  const hasCard = (user?.hasVirtualCard || !!card) && !forceRepurchase;
+  const hasCard = user?.hasVirtualCard || !!card;
+  const transactions = (transactionData as any)?.transactions || [];
+  
+  // Get current card price (fallback to $60.00)
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const discountPrice = currentCardPrice;
+  
+  // Use the actual stored balance from server (already includes all completed transactions)  
+  // Server maintains balance accuracy by updating it directly when transactions complete
   const realTimeBalance = parseFloat(user?.balance || '0');
 
-  const isBlocked = card?.status === 'blocked';
-  const isFrozen = card?.status === 'frozen';
-  const isExpired = card?.status === 'expired';
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
 
   const purchaseCardMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", {
-        userId: user?.id,
+        userId: user?.id
       });
       return response.json();
     },
     onSuccess: (data) => {
       if (data.success) {
+        // PayHero STK Push initiated successfully
         toast({
           title: "STK Push Sent!",
           description: data.message || "Check your phone and enter your M-Pesa PIN to complete the payment.",
         });
+        
+        // Redirect to processing page for status tracking
         setTimeout(() => {
           setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`);
-        }, 2000);
+        }, 2000); // Brief delay to show success message
       } else {
         throw new Error(data.message || "Unable to initialize M-Pesa payment");
       }
@@ -101,14 +102,14 @@ export default function VirtualCardPage() {
   });
 
   const maskCardNumber = (number: string) => {
-    if (showCardDetails) return number.replace(/(.{4})/g, "$1 ").trim();
-    return "•••• •••• •••• " + number.slice(-4);
+    return showCardDetails ? number : "•••• •••• •••• " + number.slice(-4);
   };
 
-  // ─── PURCHASE SCREEN ────────────────────────────────────────────────────────
+  // If user doesn't have a card, show purchase screen
   if (!hasCard) {
     return (
       <div className="min-h-screen bg-background pb-20">
+        {/* Top Navigation */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -116,7 +117,7 @@ export default function VirtualCardPage() {
         >
           <motion.button
             whileTap={{ scale: 0.95 }}
-            onClick={() => forceRepurchase ? setForceRepurchase(false) : setLocation("/dashboard")}
+            onClick={() => setLocation("/dashboard")}
             className="material-icons text-muted-foreground mr-3 p-2 rounded-full hover:bg-muted transition-colors"
             data-testid="button-back"
           >
@@ -143,11 +144,13 @@ export default function VirtualCardPage() {
                 <div className="w-5 h-5 bg-white/50 rounded-full"></div>
               </div>
             </div>
+            
             <div className="mb-6">
               <p className="text-2xl font-mono tracking-wider text-green-200">
                 •••• •••• •••• ••••
               </p>
             </div>
+            
             <div className="flex justify-between items-end">
               <div>
                 <p className="text-green-200 text-xs">CARDHOLDER</p>
@@ -164,24 +167,6 @@ export default function VirtualCardPage() {
             </div>
           </motion.div>
 
-          {/* Repurchase notice if coming from blocked card */}
-          {forceRepurchase && card?.blockReason && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-xl p-4"
-            >
-              <div className="flex items-start gap-3">
-                <ShieldOff className="w-5 h-5 text-red-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold text-red-700 dark:text-red-400">Your previous card was blocked</p>
-                  <p className="text-xs text-red-600 dark:text-red-300 mt-0.5">{card.blockReason}</p>
-                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">Purchase a new card below to continue transacting.</p>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
           {/* Purchase Information */}
           <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -193,6 +178,7 @@ export default function VirtualCardPage() {
               <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
                 <span className="material-icons text-primary text-2xl">credit_card</span>
               </div>
+              
               <div>
                 <h2 className="text-xl font-semibold mb-2">Get Your Virtual Card</h2>
                 <p className="text-muted-foreground">
@@ -206,7 +192,9 @@ export default function VirtualCardPage() {
                   <div className="flex items-center space-x-2">
                     <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
                     <span className="text-xl font-bold text-green-600">${discountPrice}</span>
-                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">75% OFF</div>
+                    <div className="bg-red-500 text-white text-xs px-2 py-1 rounded-full font-bold">
+                      75% OFF
+                    </div>
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground text-left">
@@ -233,7 +221,7 @@ export default function VirtualCardPage() {
                 </div>
               </div>
 
-              {/* Payment Methods Info */}
+              {/* Available Payment Methods Info */}
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -241,7 +229,7 @@ export default function VirtualCardPage() {
                 className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4"
               >
                 <div className="flex items-center gap-3">
-                  <motion.span
+                  <motion.span 
                     initial={{ rotate: -10 }}
                     animate={{ rotate: 0 }}
                     transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
@@ -258,14 +246,14 @@ export default function VirtualCardPage() {
               {/* Payment Method Selection */}
               <div className="space-y-3 mt-4">
                 <h3 className="font-semibold text-sm">Choose Payment Method</h3>
-
-                {/* Auto Payment Option */}
+                
+                {/* Auto Payment Option (Recommended) */}
                 <motion.div
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setPaymentMethod('auto')}
                   className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'auto'
-                      ? 'border-primary bg-primary/5'
+                    paymentMethod === 'auto' 
+                      ? 'border-primary bg-primary/5' 
                       : 'border-border bg-muted/50 hover:border-primary/50'
                   }`}
                 >
@@ -291,7 +279,7 @@ export default function VirtualCardPage() {
                   </div>
                 </motion.div>
 
-                {/* Purchase Button for Auto */}
+                {/* Purchase Button for Automatic Payment */}
                 {paymentMethod === 'auto' && (
                   <Button
                     className="w-full py-6 text-lg font-bold shadow-lg bg-primary hover:bg-primary/90 transition-all"
@@ -318,8 +306,8 @@ export default function VirtualCardPage() {
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setPaymentMethod('manual')}
                   className={`relative p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === 'manual'
-                      ? 'border-primary bg-primary/5'
+                    paymentMethod === 'manual' 
+                      ? 'border-primary bg-primary/5' 
                       : 'border-border bg-muted/50 hover:border-primary/50'
                   }`}
                 >
@@ -356,14 +344,14 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Paybill Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybill || "—"}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
+                        <span className="font-mono font-semibold">{manualPaymentSettings?.paybill || "—"}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6" 
                           onClick={() => {
-                            if ((manualPaymentSettings as any)?.paybill) {
-                              navigator.clipboard.writeText((manualPaymentSettings as any).paybill);
+                            if (manualPaymentSettings?.paybill) {
+                              navigator.clipboard.writeText(manualPaymentSettings.paybill);
                               toast({ title: "Copied", description: "Paybill number copied" });
                             }
                           }}
@@ -375,14 +363,14 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2 border-b border-border">
                       <span className="text-muted-foreground">Account Number:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.account || "—"}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
+                        <span className="font-mono font-semibold">{manualPaymentSettings?.account || "—"}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6" 
                           onClick={() => {
-                            if ((manualPaymentSettings as any)?.account) {
-                              navigator.clipboard.writeText((manualPaymentSettings as any).account);
+                            if (manualPaymentSettings?.account) {
+                              navigator.clipboard.writeText(manualPaymentSettings.account);
                               toast({ title: "Copied", description: "Account number copied" });
                             }
                           }}
@@ -394,16 +382,14 @@ export default function VirtualCardPage() {
                     <div className="flex justify-between items-center py-2">
                       <span className="text-muted-foreground">Amount:</span>
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold">
-                          KES {(kesAmountData as any)?.kesAmount ? Math.round((kesAmountData as any).kesAmount).toLocaleString() : '...'}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
+                        <span className="font-semibold">KES {kesAmountData?.kesAmount ? Math.round(kesAmountData.kesAmount).toLocaleString() : '...'}</span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-6 w-6" 
                           onClick={() => {
-                            if ((kesAmountData as any)?.kesAmount) {
-                              navigator.clipboard.writeText(Math.round((kesAmountData as any).kesAmount).toString());
+                            if (kesAmountData?.kesAmount) {
+                              navigator.clipboard.writeText(Math.round(kesAmountData.kesAmount).toString());
                               toast({ title: "Copied", description: "Amount copied" });
                             }
                           }}
@@ -430,7 +416,7 @@ export default function VirtualCardPage() {
                 </motion.div>
               )}
 
-              {/* Partner Logos */}
+              {/* Partner Logos and Info */}
               <div className="mt-6 pt-6 border-t border-border">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-4">Our Trusted Partners In Kenya</p>
                 <div className="flex items-center justify-center gap-6 transition-all duration-300">
@@ -440,7 +426,7 @@ export default function VirtualCardPage() {
                   <img src="https://res.cloudinary.com/dyzalgxnu/image/upload/v1766714659/images_5_oo3tuy.png" alt="NCBA" className="h-5 w-auto object-contain" />
                 </div>
                 <p className="mt-4 text-[10px] text-muted-foreground leading-relaxed">
-                  We partner with industry leaders to ensure your transactions are safe,
+                  We partner with industry leaders to ensure your transactions are safe, 
                   encrypted, and processed instantly across 200+ countries.
                 </p>
               </div>
@@ -451,104 +437,86 @@ export default function VirtualCardPage() {
     );
   }
 
-  // ─── ACTIVE / ISSUED CARD SCREEN ─────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background pb-20">
-      <WavyHeader size="sm" />
+      {/* Header */}
+      <WavyHeader
+        
+        
+        size="sm"
+      />
 
       <div className="p-6 space-y-6">
-        {/* Card Visual */}
+        {/* Virtual Card Display */}
         <motion.div
           initial={{ opacity: 0, y: 30, rotateY: -15 }}
           animate={{ opacity: 1, y: 0, rotateY: 0 }}
           transition={{ delay: 0.1, duration: 0.6 }}
           className="relative"
         >
-          {/* Premium card with new design */}
-          <div className="bg-gradient-to-br from-green-600 via-emerald-700 to-green-900 p-6 rounded-2xl text-white elevation-3 relative overflow-hidden">
-            {/* Decorative circles */}
-            <div className="absolute top-0 right-0 w-56 h-56 bg-white/5 rounded-full -translate-y-16 translate-x-16 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-12 -translate-x-8 pointer-events-none" />
-
-            {/* Status badge top-left */}
-            <div className="absolute top-4 left-4">
-              <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wide ${
-                !card ? 'bg-gray-500' :
-                card.status === 'active' ? 'bg-green-500/80 border border-green-300/40' :
-                card.status === 'frozen' ? 'bg-orange-500/80 border border-orange-300/40' :
-                card.status === 'blocked' ? 'bg-red-500/80 border border-red-400/40' :
-                'bg-gray-500/80 border border-gray-400/40'
-              }`}>
-                <span className="text-white">
-                  {!card ? 'LOADING...' : card.status === 'active' ? 'ACTIVE' : card.status === 'frozen' ? 'FROZEN' : card.status === 'blocked' ? 'BLOCKED' : 'EXPIRED'}
-                </span>
+          <div className="bg-gradient-to-br from-primary to-secondary p-6 rounded-2xl text-white elevation-3">
+            <div className="flex items-center justify-between mb-8">
+              <div>
+                <p className="text-green-200 text-sm">GreenPay Card</p>
+                <p className="text-xs text-green-200">Virtual</p>
+              </div>
+              <div className="flex space-x-2">
+                <div className="w-8 h-5 bg-white/30 rounded"></div>
+                <div className="w-5 h-5 bg-white/50 rounded-full"></div>
               </div>
             </div>
-
-            <div className="relative z-10 mt-2">
-              <div className="flex items-center justify-between mb-6 pt-4">
-                <div>
-                  <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
-                  <p className="text-white/40 text-[10px]">Virtual</p>
-                </div>
-                <div className="flex gap-1.5">
-                  <div className="w-8 h-5 rounded bg-white/25" />
-                  <div className="w-5 h-5 rounded-full bg-white/40" />
-                </div>
-              </div>
-
-              {/* Card Number */}
-              <p className="text-xl font-mono tracking-widest mb-6 text-green-50" data-testid="text-card-number">
-                {card ? maskCardNumber(card.cardNumber || "4567123456784567") : "•••• •••• •••• ••••"}
+            
+            <div className="mb-6">
+              <p className="text-2xl font-mono tracking-wider" data-testid="text-card-number">
+                {maskCardNumber(card?.cardNumber || "4567123456784567")}
               </p>
-
-              {/* Bottom row */}
-              <div className="flex justify-between items-end">
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Cardholder</p>
-                  <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
-                </div>
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">Expires</p>
-                  <p className="text-sm font-semibold">{showCardDetails ? (card?.expiryDate || "12/27") : "••/••"}</p>
-                </div>
-                <div>
-                  <p className="text-green-300 text-[10px] uppercase tracking-widest mb-0.5">CVV</p>
-                  <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "•••") : "•••"}</p>
-                </div>
+            </div>
+            
+            <div className="flex justify-between items-end">
+              <div>
+                <p className="text-green-200 text-xs">CARDHOLDER</p>
+                <p className="text-sm font-semibold">{user?.fullName?.toUpperCase() || "JOHN DOE"}</p>
+              </div>
+              <div>
+                <p className="text-green-200 text-xs">EXPIRES</p>
+                <p className="text-sm font-semibold">{card?.expiryDate || "12/27"}</p>
+              </div>
+              <div>
+                <p className="text-green-200 text-xs">CVV</p>
+                <p className="text-sm font-semibold">{showCardDetails ? (card?.cvv || "123") : "•••"}</p>
               </div>
             </div>
           </div>
-
-          {/* Show/Hide + Copy — OUTSIDE the card */}
-          <div className="flex items-center justify-between mt-3 px-1">
+          
+          {/* Card Actions */}
+          <div className="absolute top-4 right-4">
             <motion.button
-              whileTap={{ scale: 0.97 }}
+              whileTap={{ scale: 0.95 }}
               onClick={() => setShowCardDetails(!showCardDetails)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
+              className="bg-white/20 backdrop-blur-sm p-2 rounded-full"
               data-testid="button-toggle-card-details"
             >
-              {showCardDetails
-                ? <><EyeOff className="w-4 h-4 text-muted-foreground" /> Hide Details</>
-                : <><Eye className="w-4 h-4 text-primary" /> Show Details</>
-              }
+              <span className="material-icons text-white text-sm">
+                {showCardDetails ? "visibility_off" : "visibility"}
+              </span>
             </motion.button>
+          </div>
 
-            {card && showCardDetails && (
-              <motion.button
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={() => copyToClipboard(card.cardNumber)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-card border border-border text-sm font-medium shadow-sm hover:bg-muted transition-colors"
-                data-testid="button-copy-card-number"
-              >
-                {copied
-                  ? <><Check className="w-4 h-4 text-green-500" /> Copied!</>
-                  : <><Copy className="w-4 h-4 text-muted-foreground" /> Copy Number</>
-                }
-              </motion.button>
-            )}
+          {/* Card status badge - only show when card data is loaded */}
+          <div className="absolute top-4 left-4">
+            <div className={`px-2 py-1 rounded-full ${
+              !card ? 'bg-gray-500' : card.status === 'active'
+                ? 'bg-green-500' 
+                : card.status === 'frozen'
+                ? 'bg-orange-500'
+                : card.status === 'expired'
+                ? 'bg-gray-500'
+                : 'bg-red-500'
+            }`}>
+              <span className="text-xs font-semibold text-white">
+                {!card ? 'LOADING...' : card.status === 'active' ? 'ACTIVE' : card.status === 'frozen' ? 'FROZEN' : card.status === 'expired' ? 'EXPIRED' : 'BLOCKED'}
+              </span>
+            </div>
           </div>
         </motion.div>
 
@@ -568,69 +536,67 @@ export default function VirtualCardPage() {
           </div>
         </motion.div>
 
-        {/* Card Status Warning */}
+        {/* Card Status Warning - only show when card data is loaded and card is not active */}
         {card && card.status !== 'active' && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
-            className={`rounded-2xl p-5 border ${
-              isFrozen ? 'bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800' :
-              isBlocked ? 'bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800' :
-              'bg-muted border-border'
+            transition={{ delay: 0.3 }}
+            className={`p-4 rounded-xl space-y-3 ${
+              card.status === 'frozen'
+                ? 'bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800'
+                : card.status === 'expired'
+                ? 'bg-gray-50 dark:bg-gray-900/40 border border-gray-200 dark:border-gray-700'
+                : 'bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800'
             }`}
           >
-            <div className="flex items-start gap-3 mb-4">
+            <div className="flex items-start gap-3">
               <span className={`material-icons mt-0.5 ${
-                isFrozen ? 'text-orange-500' : isExpired ? 'text-gray-500' : 'text-red-500'
-              }`}>
-                {isFrozen ? 'pause_circle_filled' : isExpired ? 'schedule' : 'block'}
-              </span>
+                card.status === 'frozen' ? 'text-orange-500' : card.status === 'expired' ? 'text-gray-500' : 'text-red-500'
+              }`}>{card.status === 'frozen' ? 'pause_circle_filled' : card.status === 'expired' ? 'schedule' : 'block'}</span>
               <div className="flex-1">
                 <h3 className={`font-semibold ${
-                  isFrozen ? 'text-orange-700 dark:text-orange-400' :
-                  isBlocked ? 'text-red-700 dark:text-red-400' :
-                  'text-foreground'
+                  card.status === 'frozen' ? 'text-orange-700 dark:text-orange-400' : card.status === 'expired' ? 'text-gray-700 dark:text-gray-300' : 'text-red-700 dark:text-red-400'
                 }`}>
-                  {isFrozen ? 'Card Frozen' : isExpired ? 'Card Expired' : 'Card Blocked'}
+                  {card.status === 'frozen' ? 'Card Frozen' : card.status === 'expired' ? 'Card Expired' : 'Card Blocked'}
                 </h3>
 
-                {isFrozen && (
+                {card.status === 'frozen' && (
                   <>
                     <p className="text-sm text-orange-600 dark:text-orange-300 mt-1">
-                      Your virtual card has been temporarily frozen by an administrator.
+                      Your virtual card has been frozen by an administrator.
                     </p>
-                    {card.freezeReason && (
-                      <div className="mt-2 p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
-                        <p className="text-xs font-medium text-orange-700 dark:text-orange-300 uppercase tracking-wide">Reason</p>
-                        <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">{card.freezeReason}</p>
-                      </div>
-                    )}
+                    <div className="mt-2 p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
+                      <p className="text-xs font-medium text-orange-700 dark:text-orange-300 uppercase tracking-wide">Reason</p>
+                      <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                        {(card as any).freezeReason || 'Frozen by administrator'}
+                      </p>
+                    </div>
                     <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
-                      Contact support to resolve this issue.
+                      Contact support to resolve this issue or purchase a new card.
                     </p>
                   </>
                 )}
 
-                {isExpired && (
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Your virtual card has expired. Purchase a new card to continue making transactions.
+                {card.status === 'expired' && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    Your virtual card has expired and can no longer be used. Purchase a new card to continue making transactions.
                   </p>
                 )}
 
-                {isBlocked && (
+                {card.status !== 'frozen' && card.status !== 'expired' && (
                   <>
                     <p className="text-sm text-red-600 dark:text-red-300 mt-1">
-                      Your virtual card has been permanently blocked by an administrator.
+                      Your virtual card has been blocked by an administrator.
                     </p>
-                    {card.blockReason && (
+                    {(card as any).freezeReason && (
                       <div className="mt-2 p-2 bg-red-100 dark:bg-red-900/40 rounded-lg">
                         <p className="text-xs font-medium text-red-700 dark:text-red-300 uppercase tracking-wide">Reason</p>
-                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">{card.blockReason}</p>
+                        <p className="text-sm font-semibold text-red-800 dark:text-red-200">{(card as any).freezeReason}</p>
                       </div>
                     )}
                     <p className="text-xs text-red-500 dark:text-red-400 mt-2">
-                      Contact support or purchase a new card below.
+                      Contact support to resolve this issue or purchase a new card.
                     </p>
                   </>
                 )}
@@ -638,17 +604,16 @@ export default function VirtualCardPage() {
             </div>
 
             <div className="flex gap-2 flex-wrap">
-              {(isBlocked || isExpired) && (
-                <Button
-                  onClick={() => setForceRepurchase(true)}
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700 text-white"
-                  data-testid="button-purchase-new-card"
-                >
-                  <Sparkles className="w-4 h-4 mr-1" />
-                  Get New Card
-                </Button>
-              )}
+              <Button
+                onClick={() => purchaseCardMutation.mutate()}
+                disabled={purchaseCardMutation.isPending}
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                data-testid="button-purchase-new-card"
+              >
+                <Sparkles className="w-4 h-4 mr-1" />
+                {purchaseCardMutation.isPending ? "Processing..." : "Get New Card"}
+              </Button>
               <Button
                 onClick={() => setLocation('/support')}
                 variant="outline"
@@ -669,22 +634,30 @@ export default function VirtualCardPage() {
           className="grid grid-cols-2 gap-4"
         >
           <motion.button
-            whileHover={card?.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card?.status === 'active' ? { scale: 0.98 } : {}}
+            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
+            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
             onClick={() => {
-              if (!card) return;
+              if (!card) return; // Still loading
               if (card.status === 'active') {
                 setLocation("/deposit");
               } else {
+                const statusMap = {
+                  frozen: { title: "Card Frozen", desc: "frozen" },
+                  expired: { title: "Card Expired", desc: "expired. Purchase a new card to continue" },
+                  default: { title: "Card Blocked", desc: "blocked" }
+                };
+                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
                 toast({
-                  title: `Card ${card.status === 'frozen' ? 'Frozen' : card.status === 'expired' ? 'Expired' : 'Blocked'}`,
-                  description: `Cannot top up — your card has been ${card.status}. Please contact support.`,
+                  title: status.title,
+                  description: `Cannot top up - your card has been ${status.desc}. Please contact support.`,
                   variant: "destructive",
                 });
               }
             }}
             className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active' ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
+                ? 'hover:bg-muted cursor-pointer' 
+                : 'opacity-50 cursor-not-allowed'
             }`}
             data-testid="button-top-up"
           >
@@ -694,22 +667,30 @@ export default function VirtualCardPage() {
           </motion.button>
 
           <motion.button
-            whileHover={card?.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card?.status === 'active' ? { scale: 0.98 } : {}}
+            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
+            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
             onClick={() => {
-              if (!card) return;
+              if (!card) return; // Still loading
               if (card.status === 'active') {
                 setLocation("/withdraw");
               } else {
+                const statusMap = {
+                  frozen: { title: "Card Frozen", desc: "frozen" },
+                  expired: { title: "Card Expired", desc: "expired. Purchase a new card to continue" },
+                  default: { title: "Card Blocked", desc: "blocked" }
+                };
+                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
                 toast({
-                  title: `Card ${card.status === 'frozen' ? 'Frozen' : card.status === 'expired' ? 'Expired' : 'Blocked'}`,
-                  description: `Cannot withdraw — your card has been ${card.status}. Please contact support.`,
+                  title: status.title,
+                  description: `Cannot withdraw - your card has been ${status.desc}. Please contact support.`,
                   variant: "destructive",
                 });
               }
             }}
             className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active' ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
+                ? 'hover:bg-muted cursor-pointer' 
+                : 'opacity-50 cursor-not-allowed'
             }`}
             data-testid="button-withdraw"
           >
@@ -719,18 +700,39 @@ export default function VirtualCardPage() {
           </motion.button>
 
           <motion.button
-            whileHover={card?.status === 'active' ? { scale: 1.02 } : {}}
-            whileTap={card?.status === 'active' ? { scale: 0.98 } : {}}
+            whileHover={card && card.status === 'active' ? { scale: 1.02 } : {}}
+            whileTap={card && card.status === 'active' ? { scale: 0.98 } : {}}
             onClick={() => {
-              if (!card) return;
+              if (!card) return; // Still loading
               if (card.status === 'active') {
-                toast({ title: "Freeze Card", description: "Card freeze functionality — contact support for assistance." });
+                // Show freeze confirmation
+                toast({
+                  title: "Freeze Card Feature",
+                  description: "Card freeze functionality will be implemented in a future update.",
+                });
+              } else if (card.status === 'expired') {
+                toast({
+                  title: "Cannot Freeze Expired Card",
+                  description: "Your card has expired. Purchase a new card to continue using our services.",
+                  variant: "destructive",
+                });
               } else {
-                toast({ title: `Card ${card.status}`, description: `Your card is already ${card.status}. Please contact support.`, variant: "destructive" });
+                const statusMap = {
+                  frozen: { title: "Card Already Frozen", status: "frozen" },
+                  default: { title: "Card Already Blocked", status: "blocked" }
+                };
+                const status = statusMap[card.status as keyof typeof statusMap] || statusMap.default;
+                toast({
+                  title: status.title,
+                  description: `Your card is already ${status.status}. Please contact support for assistance.`,
+                  variant: "destructive",
+                });
               }
             }}
             className={`bg-card p-4 rounded-xl border border-border text-center transition-colors elevation-1 ${
-              !card ? 'opacity-30 cursor-wait' : card.status === 'active' ? 'hover:bg-muted cursor-pointer' : 'opacity-50 cursor-not-allowed'
+              !card ? 'opacity-30 cursor-wait' : card.status === 'active'
+                ? 'hover:bg-muted cursor-pointer' 
+                : 'opacity-50 cursor-not-allowed'
             }`}
             data-testid="button-freeze-card"
           >
@@ -751,7 +753,7 @@ export default function VirtualCardPage() {
           </motion.button>
         </motion.div>
 
-        {/* Card Information */}
+        {/* Card Details */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -765,11 +767,13 @@ export default function VirtualCardPage() {
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Card Status</span>
               <span className={`px-2 py-1 text-xs rounded-full ${
-                !card ? 'bg-gray-100 text-gray-600' :
-                card.status === 'active' ? 'bg-green-100 text-green-600' :
-                card.status === 'frozen' ? 'bg-orange-100 text-orange-600' :
-                card.status === 'expired' ? 'bg-gray-100 text-gray-600' :
-                'bg-red-100 text-red-600'
+                !card ? 'bg-gray-100 text-gray-600' : card.status === 'active'
+                  ? 'bg-green-100 text-green-600' 
+                  : card.status === 'frozen'
+                  ? 'bg-orange-100 text-orange-600'
+                  : card.status === 'expired'
+                  ? 'bg-gray-100 text-gray-600'
+                  : 'bg-red-100 text-red-600'
               }`}>
                 {!card ? 'Loading...' : card.status === 'active' ? 'Active' : card.status === 'frozen' ? 'Frozen' : card.status === 'expired' ? 'Expired' : 'Blocked'}
               </span>
@@ -789,6 +793,7 @@ export default function VirtualCardPage() {
           </div>
         </motion.div>
       </div>
+
     </div>
   );
 }

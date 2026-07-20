@@ -1,0 +1,1 @@
+- [NexusPay multi-currency integration](nexuspay.md) — wallets/currencyRates/nexuspayTransactions tables added; routes in routes.ts before return httpServer; admin page at /admin/wallet-rates

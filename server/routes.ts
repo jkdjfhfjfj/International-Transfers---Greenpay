@@ -11400,5 +11400,399 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // NEXUSPAY MULTI-CURRENCY ROUTES
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // GET /api/nexuspay/countries — list supported countries & networks
+  app.get("/api/nexuspay/countries", async (_req, res) => {
+    try {
+      const { nexuspayService } = await import("./services/nexuspay");
+      if (!nexuspayService.isConfigured()) {
+        return res.json({ countries: [], configured: false, message: "NexusPay not configured" });
+      }
+      const countries = await nexuspayService.getCountries();
+      res.json({ countries, configured: true });
+    } catch (err: any) {
+      console.error("[NexusPay] countries error:", err.message);
+      res.json({ countries: [], configured: false, message: err.message });
+    }
+  });
+
+  // POST /api/nexuspay/deposit — initiate a deposit via NexusPay
+  app.post("/api/nexuspay/deposit", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const { amount, currency, channel, phone, correspondent, email, description } = req.body;
+      if (!amount || !currency || !channel) {
+        return res.status(400).json({ error: "amount, currency and channel are required" });
+      }
+
+      const { nexuspayService } = await import("./services/nexuspay");
+      if (!nexuspayService.isConfigured()) {
+        return res.status(503).json({ error: "NexusPay not configured — set NEXUSPAY_API_KEY" });
+      }
+
+      const result = await nexuspayService.checkout({
+        amount: parseFloat(amount),
+        currency,
+        channel,
+        phone,
+        correspondent,
+        email,
+        description: description || `GreenPay deposit — ${currency}`,
+      });
+
+      // Record the pending transaction
+      await storage.createNexuspayTransaction({
+        userId: sessionUserId,
+        reference: result.reference,
+        gateway: null,
+        amount: amount.toString(),
+        currency,
+        channel,
+        phone: phone || null,
+        correspondent: correspondent || null,
+        status: "pending",
+        completedAt: null,
+      });
+
+      res.json({ ...result, configured: true });
+    } catch (err: any) {
+      console.error("[NexusPay] deposit error:", err.message);
+      res.status(500).json({ error: err.message || "Failed to initiate deposit" });
+    }
+  });
+
+  // GET /api/nexuspay/status/:reference — poll NexusPay status and credit wallet on completion
+  app.get("/api/nexuspay/status/:reference", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const { reference } = req.params;
+
+      const { nexuspayService } = await import("./services/nexuspay");
+      const result = await nexuspayService.getStatus(reference);
+
+      const nxTx = await storage.getNexuspayTransaction(reference);
+
+      if (result.status === "completed" && nxTx && nxTx.status !== "completed") {
+        // Credit the wallet
+        const amount = parseFloat(result.amount);
+        const currency = result.currency;
+
+        if (currency === "USD") {
+          const user = await storage.getUser(sessionUserId);
+          if (user) {
+            const newBal = (parseFloat(user.balance || "0") + amount).toFixed(2);
+            await storage.updateUser(sessionUserId, { balance: newBal });
+          }
+        } else if (currency === "KES") {
+          const user = await storage.getUser(sessionUserId);
+          if (user) {
+            const newBal = (parseFloat(user.kesBalance || "0") + amount).toFixed(2);
+            await storage.updateUser(sessionUserId, { kesBalance: newBal });
+          }
+        } else {
+          // Credit multi-currency wallet
+          let wallet = await storage.getWallet(sessionUserId, currency);
+          if (!wallet) {
+            wallet = await storage.createWallet({ userId: sessionUserId, currency, balance: "0", isDefault: false });
+          }
+          const newBal = (parseFloat(wallet.balance || "0") + amount).toFixed(4);
+          await storage.updateWallet(wallet.id, { balance: newBal });
+        }
+
+        // Record as transaction
+        await storage.createTransaction({
+          userId: sessionUserId,
+          type: "deposit",
+          amount: amount.toFixed(2),
+          currency,
+          status: "completed",
+          description: `NexusPay deposit (${result.gateway || currency})`,
+          reference,
+          metadata: { gateway: result.gateway, nexuspayRef: reference },
+          completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+        });
+
+        await storage.updateNexuspayTransaction(reference, {
+          status: "completed",
+          gateway: result.gateway || null,
+          completedAt: result.completedAt ? new Date(result.completedAt) : new Date(),
+        });
+      } else if (result.status === "failed" && nxTx && nxTx.status !== "failed") {
+        await storage.updateNexuspayTransaction(reference, { status: "failed" });
+      }
+
+      res.json(result);
+    } catch (err: any) {
+      console.error("[NexusPay] status error:", err.message);
+      res.status(500).json({ error: err.message || "Failed to check status" });
+    }
+  });
+
+  // ── User Wallet Endpoints ──────────────────────────────────────────────────
+
+  // GET /api/wallets — all wallets for the logged-in user
+  app.get("/api/wallets", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const user = await storage.getUser(sessionUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const extraWallets = await storage.getWalletsByUserId(sessionUserId);
+
+      // Build a unified list including built-in USD + KES
+      const builtIn = [
+        { id: "usd", userId: sessionUserId, currency: "USD", balance: user.balance || "0.00", isDefault: user.defaultCurrency === "USD" },
+        { id: "kes", userId: sessionUserId, currency: "KES", balance: user.kesBalance || "0.00", isDefault: user.defaultCurrency === "KES" },
+      ];
+
+      const extraCurrencies = extraWallets.map(w => ({ ...w, isDefault: user.defaultCurrency === w.currency }));
+      const allWallets = [...builtIn, ...extraCurrencies];
+
+      res.json({ wallets: allWallets, defaultCurrency: user.defaultCurrency || "KES" });
+    } catch (err: any) {
+      console.error("[Wallets] fetch error:", err.message);
+      res.status(500).json({ error: "Failed to fetch wallets" });
+    }
+  });
+
+  // POST /api/wallets/create — create a new currency wallet
+  app.post("/api/wallets/create", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ error: "currency is required" });
+
+      const builtIn = ["USD", "KES"];
+      if (builtIn.includes(currency.toUpperCase())) {
+        return res.status(400).json({ error: "USD and KES wallets are built-in" });
+      }
+
+      const existing = await storage.getWallet(sessionUserId, currency.toUpperCase());
+      if (existing) return res.status(409).json({ error: "Wallet already exists" });
+
+      const wallet = await storage.createWallet({ userId: sessionUserId, currency: currency.toUpperCase(), balance: "0", isDefault: false });
+      res.json({ wallet });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/user/default-currency — update user's default currency
+  app.put("/api/user/default-currency", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ error: "currency is required" });
+      await storage.updateUser(sessionUserId, { defaultCurrency: currency.toUpperCase() });
+      res.json({ success: true, defaultCurrency: currency.toUpperCase() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Currency Rate Endpoints ────────────────────────────────────────────────
+
+  // GET /api/currency-rates — all stored rates (admin manual + live seed)
+  app.get("/api/currency-rates", async (_req, res) => {
+    try {
+      const rates = await storage.getCurrencyRates();
+      res.json({ rates });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/exchange/convert-multi — exchange between any two currency wallets
+  app.post("/api/exchange/convert-multi", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = (req.session as any).userId;
+      const { fromCurrency, toCurrency, amount } = req.body;
+      if (!fromCurrency || !toCurrency || !amount) {
+        return res.status(400).json({ error: "fromCurrency, toCurrency and amount are required" });
+      }
+      if (fromCurrency === toCurrency) {
+        return res.status(400).json({ error: "Cannot exchange the same currency" });
+      }
+
+      const user = await storage.getUser(sessionUserId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const amountNum = parseFloat(amount);
+      const fee = amountNum * 0.015; // 1.5% fee
+      const totalDebit = amountNum + fee;
+
+      // Check and debit source balance
+      const getBalance = async (currency: string): Promise<number> => {
+        if (currency === "USD") return parseFloat(user.balance || "0");
+        if (currency === "KES") return parseFloat(user.kesBalance || "0");
+        const w = await storage.getWallet(sessionUserId, currency);
+        return parseFloat(w?.balance || "0");
+      };
+
+      const debitBalance = async (currency: string, debit: number) => {
+        if (currency === "USD") {
+          const nb = (parseFloat(user.balance || "0") - debit).toFixed(2);
+          await storage.updateUser(sessionUserId, { balance: nb });
+        } else if (currency === "KES") {
+          const nb = (parseFloat(user.kesBalance || "0") - debit).toFixed(2);
+          await storage.updateUser(sessionUserId, { kesBalance: nb });
+        } else {
+          const w = await storage.getWallet(sessionUserId, currency);
+          if (w) await storage.updateWallet(w.id, { balance: (parseFloat(w.balance || "0") - debit).toFixed(4) });
+        }
+      };
+
+      const creditBalance = async (currency: string, credit: number) => {
+        if (currency === "USD") {
+          const nb = (parseFloat(user.balance || "0") - (fromCurrency === "USD" ? totalDebit : 0) + (toCurrency === "USD" ? credit : 0)).toFixed(2);
+          await storage.updateUser(sessionUserId, { balance: nb });
+        } else if (currency === "KES") {
+          const freshUser = await storage.getUser(sessionUserId);
+          const nb = (parseFloat(freshUser?.kesBalance || "0") + credit).toFixed(2);
+          await storage.updateUser(sessionUserId, { kesBalance: nb });
+        } else {
+          let w = await storage.getWallet(sessionUserId, currency);
+          if (!w) w = await storage.createWallet({ userId: sessionUserId, currency, balance: "0", isDefault: false });
+          await storage.updateWallet(w.id, { balance: (parseFloat(w.balance || "0") + credit).toFixed(4) });
+        }
+      };
+
+      const srcBalance = await getBalance(fromCurrency);
+      if (srcBalance < totalDebit) {
+        return res.status(400).json({ error: `Insufficient ${fromCurrency} balance. Need ${totalDebit.toFixed(4)}, have ${srcBalance.toFixed(4)}` });
+      }
+
+      // Get exchange rate — prefer admin-set manual rate, then live
+      let rate: number;
+      const storedRate = await storage.getCurrencyRate(fromCurrency, toCurrency);
+      if (storedRate && storedRate.isManual) {
+        rate = parseFloat(storedRate.rate);
+      } else {
+        // Try live rate service
+        try {
+          const { exchangeRateService } = await import("./services/exchange-rate");
+          const rateData = await exchangeRateService.getRate(fromCurrency, toCurrency);
+          rate = rateData?.rate || 1;
+          // Seed the rate for future reference
+          await storage.upsertCurrencyRate(fromCurrency, toCurrency, rate, false, "live");
+        } catch {
+          rate = storedRate ? parseFloat(storedRate.rate) : 1;
+        }
+      }
+
+      const credited = amountNum * rate;
+
+      await debitBalance(fromCurrency, totalDebit);
+      await creditBalance(toCurrency, credited);
+
+      await storage.createTransaction({
+        userId: sessionUserId,
+        type: "exchange",
+        amount: amountNum.toFixed(2),
+        currency: fromCurrency,
+        status: "completed",
+        fee: fee.toFixed(2),
+        exchangeRate: rate.toFixed(6),
+        description: `Exchange ${fromCurrency} → ${toCurrency}`,
+        completedAt: new Date(),
+      });
+
+      res.json({
+        success: true,
+        fromCurrency,
+        toCurrency,
+        amountDebited: totalDebit.toFixed(4),
+        amountCredited: credited.toFixed(4),
+        rate,
+        fee: fee.toFixed(4),
+      });
+    } catch (err: any) {
+      console.error("[Exchange] multi error:", err.message);
+      res.status(500).json({ error: err.message || "Exchange failed" });
+    }
+  });
+
+  // ── Admin Wallet & Rate Management ────────────────────────────────────────
+
+  // GET /api/admin/wallets — all user wallets
+  app.get("/api/admin/wallets", requireAdminAuth, async (_req, res) => {
+    try {
+      const allWallets = await storage.getAllUserWallets();
+      res.json({ wallets: allWallets });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/admin/wallets/:id — adjust a wallet balance
+  app.put("/api/admin/wallets/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { balance, userId, currency, operation } = req.body;
+
+      if (id === "usd" || id === "kes") {
+        // built-in wallet — update user column
+        const user = await storage.getUser(userId);
+        if (!user) return res.status(404).json({ error: "User not found" });
+        const current = id === "usd" ? parseFloat(user.balance || "0") : parseFloat(user.kesBalance || "0");
+        const newBal = operation === "add" ? (current + parseFloat(balance)).toFixed(2)
+          : operation === "subtract" ? Math.max(0, current - parseFloat(balance)).toFixed(2)
+          : parseFloat(balance).toFixed(2);
+        const upd = id === "usd" ? { balance: newBal } : { kesBalance: newBal };
+        await storage.updateUser(userId, upd);
+        return res.json({ success: true, newBalance: newBal, currency: id === "usd" ? "USD" : "KES" });
+      }
+
+      const wallet = await storage.updateWallet(id, { balance: parseFloat(balance).toFixed(4) });
+      res.json({ success: true, wallet });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/currency-rates
+  app.get("/api/admin/currency-rates", requireAdminAuth, async (_req, res) => {
+    try {
+      const rates = await storage.getCurrencyRates();
+      res.json({ rates });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/currency-rates — set/update a rate
+  app.post("/api/admin/currency-rates", requireAdminAuth, async (req, res) => {
+    try {
+      const { fromCurrency, toCurrency, rate, isManual } = req.body;
+      const admin = (req.session as any).admin;
+      if (!fromCurrency || !toCurrency || !rate) {
+        return res.status(400).json({ error: "fromCurrency, toCurrency and rate are required" });
+      }
+      const updated = await storage.upsertCurrencyRate(
+        fromCurrency.toUpperCase(),
+        toCurrency.toUpperCase(),
+        parseFloat(rate),
+        isManual !== false,
+        admin?.username || "admin"
+      );
+      res.json({ rate: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/admin/currency-rates/:id
+  app.delete("/api/admin/currency-rates/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await storage.deleteCurrencyRate(req.params.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }

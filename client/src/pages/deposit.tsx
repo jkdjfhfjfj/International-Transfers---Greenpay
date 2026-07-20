@@ -16,7 +16,7 @@ import {
   RefreshCw, ExternalLink, Info, Loader2
 } from "lucide-react";
 
-type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | null;
+type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "mobile_money" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
@@ -47,10 +47,119 @@ const METHOD_META: Record<string, { label: string; icon: any; color: string; des
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
+  mobile_money: { label: "Mobile Money (Africa)", icon: Smartphone, color: "from-purple-500 to-indigo-600", description: "UGX, NGN, GHS, ZAR, XOF & more" },
 };
 
 const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
+
+const NEXUSPAY_CURRENCIES: { currency: string; flag: string; name: string; channels: { value: string; label: string }[] }[] = [
+  { currency: "UGX", flag: "🇺🇬", name: "Uganda", channels: [{ value: "MTNUG", label: "MTN Mobile Money" }, { value: "AIRTELUG", label: "Airtel Money" }] },
+  { currency: "NGN", flag: "🇳🇬", name: "Nigeria", channels: [{ value: "GTBANK", label: "GTBank" }, { value: "FIRSTBANK", label: "First Bank" }, { value: "OPAY", label: "OPay" }] },
+  { currency: "GHS", flag: "🇬🇭", name: "Ghana", channels: [{ value: "MTNGH", label: "MTN Mobile Money" }, { value: "VODAFONECASH", label: "Vodafone Cash" }] },
+  { currency: "ZAR", flag: "🇿🇦", name: "South Africa", channels: [{ value: "MASTERPASS", label: "Masterpass" }, { value: "SNAPSCAN", label: "SnapScan" }] },
+  { currency: "TZS", flag: "🇹🇿", name: "Tanzania", channels: [{ value: "MTNTZ", label: "M-Pesa Tanzania" }, { value: "AIRTELTZ", label: "Airtel Money TZ" }] },
+  { currency: "RWF", flag: "🇷🇼", name: "Rwanda", channels: [{ value: "MTNRW", label: "MTN Mobile Money" }, { value: "AIRTELRW", label: "Airtel Money RW" }] },
+  { currency: "XOF", flag: "🌍", name: "West Africa (CFA)", channels: [{ value: "ORANGEMONEY", label: "Orange Money" }, { value: "MOOVMONEY", label: "Moov Money" }] },
+  { currency: "ZMW", flag: "🇿🇲", name: "Zambia", channels: [{ value: "MTNZM", label: "MTN Mobile Money ZM" }, { value: "AIRTELZM", label: "Airtel Money ZM" }] },
+  { currency: "ETB", flag: "🇪🇹", name: "Ethiopia", channels: [{ value: "TELEBIRR", label: "Telebirr" }, { value: "CBE", label: "CBE Birr" }] },
+  { currency: "KES", flag: "🇰🇪", name: "Kenya (NexusPay)", channels: [{ value: "MPESA_KE", label: "M-Pesa Kenya" }] },
+];
+
+function NexusPayForm({ amount, setAmount, currency, setCurrency, channel, setChannel, phone, setPhone, onSubmit }: {
+  amount: string; setAmount: (v: string) => void;
+  currency: string; setCurrency: (v: string) => void;
+  channel: string; setChannel: (v: string) => void;
+  phone: string; setPhone: (v: string) => void;
+  onSubmit: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [configured, setConfigured] = useState<boolean | null>(null);
+
+  const selectedCurrencyData = NEXUSPAY_CURRENCIES.find(c => c.currency === currency);
+  const channels = selectedCurrencyData?.channels || [];
+
+  // Check if NexusPay is configured
+  useState(() => {
+    apiRequest("GET", "/api/nexuspay/countries").then(r => r.json()).then(d => setConfigured(d.configured));
+  });
+
+  const handleCurrencyChange = (c: string) => {
+    setCurrency(c);
+    setChannel("");
+    const data = NEXUSPAY_CURRENCIES.find(x => x.currency === c);
+    if (data?.channels?.[0]) setChannel(data.channels[0].value);
+  };
+
+  if (!channel && channels.length > 0 && !channel) {
+    setChannel(channels[0].value);
+  }
+
+  return (
+    <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+      <div className="flex items-center gap-3 pb-3 border-b border-border">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+          <Smartphone className="w-5 h-5 text-white" />
+        </div>
+        <div>
+          <p className="font-semibold text-sm">Mobile Money (Africa)</p>
+          <p className="text-xs text-muted-foreground">Deposit via local mobile networks</p>
+        </div>
+      </div>
+
+      {configured === false && (
+        <div className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 rounded-xl p-3">
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <p>NexusPay is not configured. Set the NEXUSPAY_API_KEY environment variable to enable mobile money deposits.</p>
+        </div>
+      )}
+
+      {/* Currency selector */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Country / Currency</label>
+        <select value={currency} onChange={e => handleCurrencyChange(e.target.value)}
+          className="w-full border border-border rounded-xl px-4 py-3 text-sm font-medium bg-background appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
+          {NEXUSPAY_CURRENCIES.map(c => (
+            <option key={c.currency} value={c.currency}>{c.flag} {c.name} ({c.currency})</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Channel selector */}
+      {channels.length > 0 && (
+        <div className="space-y-1.5">
+          <label className="text-xs font-medium text-muted-foreground">Payment Channel</label>
+          <select value={channel} onChange={e => setChannel(e.target.value)}
+            className="w-full border border-border rounded-xl px-4 py-3 text-sm font-medium bg-background appearance-none focus:outline-none focus:ring-2 focus:ring-primary/30">
+            {channels.map(ch => <option key={ch.value} value={ch.value}>{ch.label}</option>)}
+          </select>
+        </div>
+      )}
+
+      {/* Phone */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Phone Number</label>
+        <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="e.g. 256712345678" data-testid="input-nexuspay-phone" />
+        <p className="text-xs text-muted-foreground">Include country code without +</p>
+      </div>
+
+      {/* Amount */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-muted-foreground">Amount ({currency})</label>
+        <Input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" data-testid="input-nexuspay-amount" />
+      </div>
+
+      <Button
+        className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500"
+        onClick={async () => { setLoading(true); try { await onSubmit(); } finally { setLoading(false); } }}
+        disabled={!amount || !channel || !phone || loading || configured === false}
+        data-testid="button-nexuspay-deposit"
+      >
+        {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing…</> : `Deposit ${currency}`}
+      </Button>
+    </div>
+  );
+}
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -71,6 +180,13 @@ export default function DepositPage() {
   const [mpesaRef, setMpesaRef] = useState<string | null>(null);
   const [mpesaStatus, setMpesaStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
   const [selectedCoin, setSelectedCoin] = useState("USDT");
+  // NexusPay / Mobile Money state
+  const [nxAmount, setNxAmount] = useState("");
+  const [nxCurrency, setNxCurrency] = useState("UGX");
+  const [nxChannel, setNxChannel] = useState("");
+  const [nxPhone, setNxPhone] = useState("");
+  const [nxRef, setNxRef] = useState<string | null>(null);
+  const [nxStatus, setNxStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
@@ -93,7 +209,9 @@ export default function DepositPage() {
   const methods = config?.methods || {};
   const isEnabled = (m: string) => methods[`${m}_enabled`] === "true";
 
-  const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card"] as const).filter(m => isEnabled(m));
+  const enabledMethods = (["mpesa", "mobile_money", "crypto", "bank_transfer", "card"] as const).filter(m =>
+    m === "mobile_money" ? true : isEnabled(m)
+  );
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {
@@ -224,9 +342,9 @@ export default function DepositPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {(["mpesa", "crypto", "bank_transfer", "card"] as const).map(method => {
+                {(["mpesa", "mobile_money", "crypto", "bank_transfer", "card"] as const).map(method => {
                   const meta = METHOD_META[method];
-                  const enabled = isEnabled(method);
+                  const enabled = method === "mobile_money" ? true : isEnabled(method);
                   const Icon = meta.icon;
                   const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
                   return (
@@ -591,6 +709,93 @@ export default function DepositPage() {
             </motion.div>
           )}
         </AnimatePresence>
+
+          {/* MOBILE MONEY (NEXUSPAY) FLOW */}
+          {selectedMethod === "mobile_money" && (
+            <motion.div key="mobile_money" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+              <button onClick={() => { setSelectedMethod(null); setNxStatus("idle"); setNxRef(null); setNxAmount(""); setNxChannel(""); setNxPhone(""); }}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-4 h-4" /> Back to methods
+              </button>
+
+              {nxStatus === "idle" && (
+                <NexusPayForm
+                  amount={nxAmount} setAmount={setNxAmount}
+                  currency={nxCurrency} setCurrency={setNxCurrency}
+                  channel={nxChannel} setChannel={setNxChannel}
+                  phone={nxPhone} setPhone={setNxPhone}
+                  onSubmit={async () => {
+                    try {
+                      const r = await apiRequest("POST", "/api/nexuspay/deposit", {
+                        amount: nxAmount, currency: nxCurrency, channel: nxChannel, phone: nxPhone,
+                      });
+                      const d = await r.json();
+                      if (d.error) { toast({ title: "Error", description: d.error, variant: "destructive" }); return; }
+                      setNxRef(d.reference);
+                      setNxStatus("pending");
+                    } catch (e: any) {
+                      toast({ title: "Error", description: e.message, variant: "destructive" });
+                    }
+                  }}
+                />
+              )}
+
+              {nxStatus === "pending" && nxRef && (
+                <div className="bg-card border border-border rounded-2xl p-6 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto">
+                    <Smartphone className="w-8 h-8 text-purple-600 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">Confirm on Your Phone</p>
+                    <p className="text-sm text-muted-foreground mt-1">Approve the {nxCurrency} {nxAmount} payment prompt on your device.</p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" /><span>Waiting for confirmation…</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" className="flex-1 text-sm" onClick={async () => {
+                      try {
+                        const r = await apiRequest("GET", `/api/nexuspay/status/${nxRef}`);
+                        const d = await r.json();
+                        if (d.status === "completed") { setNxStatus("completed"); refreshUser(); queryClient.invalidateQueries({ queryKey: ["/api/wallets"] }); }
+                        else if (d.status === "failed") { setNxStatus("failed"); }
+                        else toast({ title: "Still processing…", description: "Please wait a moment and try again." });
+                      } catch (e: any) { toast({ title: "Check failed", description: e.message, variant: "destructive" }); }
+                    }}>Check Status</Button>
+                    <Button variant="ghost" className="flex-1 text-sm text-destructive" onClick={() => { setNxStatus("idle"); setNxRef(null); }}>Cancel</Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Ref: <span className="font-mono">{nxRef}</span></p>
+                </div>
+              )}
+
+              {nxStatus === "completed" && (
+                <div className="bg-card border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-green-700 dark:text-green-400">Deposit Successful!</p>
+                    <p className="text-sm text-muted-foreground mt-1">{nxCurrency} {nxAmount} has been credited to your {nxCurrency} wallet.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-green-600 hover:bg-green-500" onClick={() => setLocation("/dashboard")}>Go to Dashboard</Button>
+                    <Button variant="outline" className="flex-1" onClick={() => { setNxStatus("idle"); setNxRef(null); setNxAmount(""); setNxChannel(""); }}>New Deposit</Button>
+                  </div>
+                </div>
+              )}
+
+              {nxStatus === "failed" && (
+                <div className="bg-card border border-red-200 dark:border-red-800 rounded-2xl p-6 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mx-auto">
+                    <AlertCircle className="w-8 h-8 text-red-600" />
+                  </div>
+                  <p className="font-semibold">Deposit Failed</p>
+                  <p className="text-sm text-muted-foreground">The payment was not completed. Please try again.</p>
+                  <Button variant="outline" onClick={() => { setNxStatus("idle"); setNxRef(null); }}>Try Again</Button>
+                </div>
+              )}
+            </motion.div>
+          )}
 
         {/* Transaction history shortcut */}
         {!selectedMethod && (
