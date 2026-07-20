@@ -858,6 +858,10 @@ export const wallets = pgTable("wallets", {
   currency: text("currency").notNull(),
   balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
   isDefault: boolean("is_default").default(false),
+  isSuspended: boolean("is_suspended").default(false),
+  suspendedAt: timestamp("suspended_at"),
+  suspendReason: text("suspend_reason"),
+  suspendedBy: text("suspended_by"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

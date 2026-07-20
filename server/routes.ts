@@ -11794,5 +11794,104 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     }
   });
 
+  // GET /api/admin/users/:userId/wallets — all wallets for a specific user (admin view)
+  app.get("/api/admin/users/:userId/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ error: "User not found" });
+
+      const extraWallets = await storage.getWalletsByUserId(userId);
+      // Build a unified list including built-in USD + KES
+      const builtInCurrencies = ["USD", "KES"];
+      const builtIn = builtInCurrencies.map(cur => {
+        // Check if there's a wallet record for this built-in currency (used for suspension)
+        const record = extraWallets.find(w => w.currency === cur);
+        return {
+          id: cur.toLowerCase(),
+          userId,
+          currency: cur,
+          balance: cur === "USD" ? (user.balance || "0.00") : (user.kesBalance || "0.00"),
+          isDefault: user.defaultCurrency === cur,
+          isSuspended: record?.isSuspended || false,
+          suspendedAt: record?.suspendedAt || null,
+          suspendReason: record?.suspendReason || null,
+          suspendedBy: record?.suspendedBy || null,
+          isBuiltIn: true,
+          walletRecordId: record?.id || null,
+        };
+      });
+
+      const extra = extraWallets
+        .filter(w => !builtInCurrencies.includes(w.currency))
+        .map(w => ({ ...w, isBuiltIn: false, walletRecordId: w.id }));
+
+      res.json({
+        wallets: [...builtIn, ...extra],
+        user: { id: user.id, email: user.email, fullName: user.fullName },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/admin/wallets/:id/suspend — suspend or unsuspend a wallet
+  app.put("/api/admin/wallets/:id/suspend", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { suspend, reason, userId, currency } = req.body;
+      const admin = (req.session as any).admin;
+      const adminName = admin?.username || "admin";
+
+      // Built-in wallets (id === "usd" or "kes") — create/update wallet record for suspension
+      if (id === "usd" || id === "kes") {
+        if (!userId || !currency) return res.status(400).json({ error: "userId and currency required for built-in wallets" });
+
+        let existingRecord = await storage.getWallet(userId, currency.toUpperCase());
+        if (!existingRecord) {
+          // Create a placeholder wallet record just for suspension tracking
+          existingRecord = await storage.createWallet({
+            userId,
+            currency: currency.toUpperCase(),
+            balance: "0", // balance not used — real balance is in users table
+            isDefault: false,
+          });
+        }
+        await storage.updateWallet(existingRecord.id, {
+          isSuspended: !!suspend,
+          suspendedAt: suspend ? new Date() : null,
+          suspendReason: suspend ? (reason || null) : null,
+          suspendedBy: suspend ? adminName : null,
+        });
+        await storage.createSystemLog({
+          level: "warning",
+          message: suspend ? `Wallet ${currency} suspended for user ${userId}` : `Wallet ${currency} unsuspended for user ${userId}`,
+          source: "admin",
+          metadata: { userId, currency, reason, adminName },
+        });
+        return res.json({ success: true, suspended: !!suspend });
+      }
+
+      // Extra currency wallet
+      const wallet = await storage.updateWallet(id, {
+        isSuspended: !!suspend,
+        suspendedAt: suspend ? new Date() : null,
+        suspendReason: suspend ? (reason || null) : null,
+        suspendedBy: suspend ? adminName : null,
+      });
+      if (!wallet) return res.status(404).json({ error: "Wallet not found" });
+
+      await storage.createSystemLog({
+        level: "warning",
+        message: suspend ? `Wallet ${wallet.currency} suspended` : `Wallet ${wallet.currency} unsuspended`,
+        source: "admin",
+        metadata: { walletId: id, reason, adminName },
+      });
+      res.json({ success: true, suspended: !!suspend, wallet });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }
