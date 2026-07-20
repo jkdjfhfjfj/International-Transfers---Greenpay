@@ -28,6 +28,34 @@ export const db = connectionString ? drizzle({ client: pool, schema }) : null as
 // Safely add new columns to existing tables — never drops or recreates anything
 async function alterMissingColumns() {
   const migrations = [
+    // Multi-currency wallets table
+    `CREATE TABLE IF NOT EXISTS wallets (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      label TEXT,
+      balance DECIMAL(18,4) DEFAULT 0.0000,
+      hold_amount DECIMAL(18,4) DEFAULT 0.0000,
+      is_default BOOLEAN DEFAULT false,
+      is_active BOOLEAN DEFAULT true,
+      is_suspended BOOLEAN DEFAULT false,
+      suspend_reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+    // Migrate existing USD balances to wallets
+    `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+     SELECT id, 'USD', COALESCE(balance, 0), true, true FROM users
+     WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'USD')
+     ON CONFLICT DO NOTHING`,
+    // Migrate existing KES balances to wallets
+    `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+     SELECT id, 'KES', COALESCE(kes_balance, 0), false, true FROM users
+     WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'KES')
+     ON CONFLICT DO NOTHING`,
+    // NexusPay API key in api_configurations table (safe fallback)
+    `INSERT INTO api_configurations (service_name, config_key, config_value, is_active) VALUES ('nexuspay', 'api_key', '""', true) ON CONFLICT (service_name, config_key) DO NOTHING`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,

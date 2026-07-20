@@ -13,10 +13,12 @@ import { WavyHeader } from "@/components/wavy-header";
 import {
   Smartphone, Bitcoin, Building2, CreditCard, Copy, Check,
   ChevronRight, AlertCircle, CheckCircle2, Clock, Gift, ArrowLeft,
-  RefreshCw, ExternalLink, Info, Loader2
+  RefreshCw, ExternalLink, Info, Loader2, Globe
 } from "lucide-react";
+import { useWallets, useNexusDeposit } from "@/hooks/use-wallets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | null;
+type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
@@ -47,7 +49,16 @@ const METHOD_META: Record<string, { label: string; icon: any; color: string; des
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
+  nexuspay: { label: "NexusPay (Multi-Currency)", icon: Globe, color: "from-purple-500 to-violet-600", description: "Mobile money & cards — 15 currencies" },
 };
+
+const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
+  USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
+  ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
+  RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
+};
+
+const NEXUS_MOBILE_MONEY_CURRENCIES = ['KES', 'UGX', 'GHS', 'TZS', 'XOF', 'CDF', 'XAF', 'RWF', 'SLE', 'ZMW'];
 
 const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
@@ -71,9 +82,17 @@ export default function DepositPage() {
   const [mpesaRef, setMpesaRef] = useState<string | null>(null);
   const [mpesaStatus, setMpesaStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
   const [selectedCoin, setSelectedCoin] = useState("USDT");
+  const [nexusWalletId, setNexusWalletId] = useState<string | null>(null);
+  const [nexusCurrency, setNexusCurrency] = useState("KES");
+  const [nexusPhone, setNexusPhone] = useState("");
+  const [nexusRef, setNexusRef] = useState<string | null>(null);
+  const [nexusStatus, setNexusStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
+  const [nexusRedirectUrl, setNexusRedirectUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
+  const { wallets: userWallets } = useWallets();
+  const { initiate: initiateNexus, isInitiating: nexusInitiating, pollStatus: pollNexusStatus } = useNexusDeposit();
 
   useEffect(() => { refreshUser(); }, []);
 
@@ -94,6 +113,7 @@ export default function DepositPage() {
   const isEnabled = (m: string) => methods[`${m}_enabled`] === "true";
 
   const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card"] as const).filter(m => isEnabled(m));
+  const nexuspayAlwaysEnabled = true;
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {
@@ -160,6 +180,43 @@ export default function DepositPage() {
   };
 
   function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); }
+  function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); setNexusPhone(""); setNexusRedirectUrl(null); }
+
+  // Initialize nexus wallet from user's wallets
+  useEffect(() => {
+    if (userWallets.length > 0 && !nexusWalletId) {
+      const target = userWallets.find(w => w.currency === nexusCurrency) || userWallets[0];
+      setNexusWalletId(target?.id || null);
+    }
+  }, [userWallets, nexusCurrency]);
+
+  // Update nexusWalletId when currency changes
+  useEffect(() => {
+    const target = userWallets.find(w => w.currency === nexusCurrency);
+    if (target) setNexusWalletId(target.id);
+    else setNexusWalletId(userWallets[0]?.id || null);
+  }, [nexusCurrency, userWallets]);
+
+  // Poll NexusPay status
+  useEffect(() => {
+    if (nexusStatus !== "pending" || !nexusRef) return;
+    const interval = setInterval(async () => {
+      try {
+        const data = await pollNexusStatus(nexusRef);
+        if (data.status === "completed") {
+          setNexusStatus("completed");
+          refreshUser();
+          queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+          toast({ title: "Deposit Successful!", description: `${nexusCurrency} wallet credited.` });
+        } else if (data.status === "failed") {
+          setNexusStatus("failed");
+          toast({ title: "Payment Failed", description: "Payment was declined or cancelled.", variant: "destructive" });
+        }
+      } catch {}
+    }, 5000);
+    const timeout = setTimeout(() => { clearInterval(interval); if (nexusStatus === "pending") setNexusStatus("failed"); }, 180000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, [nexusStatus, nexusRef]);
 
   if (configLoading) {
     return (

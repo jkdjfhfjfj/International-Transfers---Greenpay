@@ -1,283 +1,333 @@
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useAuth } from "@/hooks/use-auth";
-import { useExchangeRates } from "@/hooks/use-exchange-rates";
-import { useCurrencyExchange } from "@/hooks/use-currency-exchange";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
+import { useWallets, useWalletExchange } from "@/hooks/use-wallets";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { ArrowLeft, ArrowRight, ArrowLeftRight, RefreshCw, Loader2, CheckCircle2, ChevronDown } from "lucide-react";
+
+const CURRENCY_FLAGS: Record<string, string> = {
+  USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
+  ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
+  RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
+};
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: '$', KES: 'KSh', UGX: 'UGX', GHS: '₵', NGN: '₦',
+  ZAR: 'R', TZS: 'TSh', XOF: 'CFA', CDF: 'FC', XAF: 'FCFA',
+  RWF: 'RF', SLE: 'Le', ZMW: 'ZK', EUR: '€', GBP: '£',
+};
 
 export default function ExchangePage() {
   const [, setLocation] = useLocation();
   const [amount, setAmount] = useState("");
-  const [fromCurrency, setFromCurrency] = useState("USD");
-  const [toCurrency, setToCurrency] = useState("KES");
-  const { user } = useAuth();
+  const [fromWalletId, setFromWalletId] = useState<string | null>(null);
+  const [toWalletId, setToWalletId] = useState<string | null>(null);
+  const [exchangeRate, setExchangeRate] = useState<number | null>(null);
+  const [rateLoading, setRateLoading] = useState(false);
+  const [success, setSuccess] = useState<any>(null);
   const { toast } = useToast();
-  const { data: exchangeRates } = useExchangeRates(fromCurrency);
-  const exchangeMutation = useCurrencyExchange();
+  const { wallets, isLoading } = useWallets();
+  const { exchange, isExchanging } = useWalletExchange();
 
-  const currencies = [
-    { code: "USD", name: "US Dollar", symbol: "$", flag: "🇺🇸" },
-    { code: "KES", name: "Kenyan Shilling", symbol: "KSh", flag: "🇰🇪" },
-  ];
+  const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);
 
-  const exchangeRate = exchangeRates?.rates?.[toCurrency] || 1;
-  const amountNum = amount ? parseFloat(amount) : 0;
-  const convertedAmountNum = amountNum * exchangeRate;
-  const feeNum = amountNum * 0.015; // 1.5% fee
-  const totalNum = amountNum + feeNum;
-  
-  const convertedAmount = amountNum ? formatNumber(convertedAmountNum) : "0.00";
-  const fee = amountNum ? formatNumber(feeNum) : "0.00";
-  const total = amountNum ? formatNumber(totalNum) : "0.00";
-
-  const handleExchange = () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      toast({
-        title: "Invalid Amount",
-        description: "Please enter a valid amount to exchange",
-        variant: "destructive",
-      });
-      return;
+  useEffect(() => {
+    if (activeWallets.length >= 2 && !fromWalletId) {
+      const def = activeWallets.find(w => w.isDefault) || activeWallets[0];
+      setFromWalletId(def.id);
+      const other = activeWallets.find(w => w.id !== def.id);
+      if (other) setToWalletId(other.id);
     }
+  }, [activeWallets.length]);
 
-    if (!user?.hasVirtualCard) {
-      toast({
-        title: "Virtual Card Required",
-        description: "You need a virtual card to perform currency exchanges",
-        variant: "destructive",
-      });
-      return;
-    }
+  const fromWallet = activeWallets.find(w => w.id === fromWalletId);
+  const toWallet = activeWallets.find(w => w.id === toWalletId);
 
-    exchangeMutation.mutate({
-      amount,
-      fromCurrency,
-      toCurrency,
-    }, {
-      onSuccess: () => {
-        setAmount("");
-      }
-    });
+  useEffect(() => {
+    if (!fromWallet || !toWallet || fromWallet.currency === toWallet.currency) { setExchangeRate(null); return; }
+    setRateLoading(true);
+    apiRequest("GET", `/api/exchange-rates/${fromWallet.currency}`)
+      .then(r => r.json())
+      .then(data => {
+        const rate = data?.rates?.[toWallet.currency] || data?.rate;
+        setExchangeRate(rate || null);
+      })
+      .catch(() => setExchangeRate(null))
+      .finally(() => setRateLoading(false));
+  }, [fromWallet?.currency, toWallet?.currency]);
+
+  const amountNum = parseFloat(amount) || 0;
+  const FEE_RATE = 0.015;
+  const feeNum = amountNum * FEE_RATE;
+  const netAmount = amountNum - feeNum;
+  const receiveAmount = exchangeRate ? netAmount * exchangeRate : 0;
+
+  const fromBalance = fromWallet ? parseFloat(fromWallet.balance || "0") - parseFloat(fromWallet.holdAmount || "0") : 0;
+
+  const handleSwap = () => {
+    const tmp = fromWalletId;
+    setFromWalletId(toWalletId);
+    setToWalletId(tmp);
+    setAmount("");
+    setSuccess(null);
   };
 
-  return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
-      {/* Header */}
-      <WavyHeader
-        
-        
-        size="sm"
-      />
+  const handleExchange = async () => {
+    if (!fromWalletId || !toWalletId) {
+      toast({ title: "Select wallets", description: "Choose source and destination wallets", variant: "destructive" });
+      return;
+    }
+    if (!amount || amountNum <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a valid amount to exchange", variant: "destructive" });
+      return;
+    }
+    if (amountNum > fromBalance) {
+      toast({ title: "Insufficient balance", description: `Available: ${CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}${formatNumber(fromBalance)}`, variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await exchange({ fromWalletId, toWalletId, amount: amountNum });
+      setSuccess(result);
+      setAmount("");
+      toast({ title: "Exchange successful!", description: `${result.fromAmount} ${result.fromCurrency} → ${parseFloat(result.toAmount).toFixed(4)} ${result.toCurrency}` });
+    } catch (e: any) {
+      toast({ title: "Exchange failed", description: e.message, variant: "destructive" });
+    }
+  };
 
-      <div className="max-w-2xl mx-auto p-6 space-y-6">
-        {/* Dual Wallet Balances */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 gap-4"
-        >
-          <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 p-4 rounded-xl border border-blue-200 dark:border-blue-800">
-            <p className="text-xs text-blue-700 dark:text-blue-300 mb-1">USD Balance</p>
-            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">${formatNumber(parseFloat(user?.balance || "0"))}</p>
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pb-20 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (activeWallets.length < 2) {
+    return (
+      <div className="min-h-screen bg-background pb-20">
+        <WavyHeader size="sm" />
+        <div className="max-w-lg mx-auto p-6 text-center py-16">
+          <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+            <ArrowLeftRight className="w-8 h-8 text-muted-foreground" />
           </div>
-          <div className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-4 rounded-xl border border-green-200 dark:border-green-800">
-            <p className="text-xs text-green-700 dark:text-green-300 mb-1">KES Balance</p>
-            <p className="text-2xl font-bold text-green-900 dark:text-green-100">KSh {formatNumber(parseFloat(user?.kesBalance || "0"))}</p>
-          </div>
-        </motion.div>
-
-        {/* Quick Conversion Suggestions */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="bg-card p-4 rounded-xl border border-border"
-        >
-          <h3 className="text-sm font-semibold mb-3">Quick Convert to KES</h3>
-          <div className="grid grid-cols-4 gap-2">
-            {[5, 10, 20, 50].map((value) => (
-              <button
-                key={value}
-                onClick={() => {
-                  setAmount(value.toString());
-                  setFromCurrency("USD");
-                  setToCurrency("KES");
-                }}
-                className="bg-primary/10 hover:bg-primary/20 text-primary py-2 px-3 rounded-lg text-sm font-semibold transition-colors"
-              >
-                ${value}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs text-muted-foreground mt-2">
-            💡 Tip: Convert USD to KES to buy airtime and withdraw
-          </p>
-        </motion.div>
-
-        {/* Exchange Form */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-card p-6 rounded-xl border border-border elevation-1"
-        >
-          <h3 className="font-semibold mb-4">Exchange Currency</h3>
-          
-          <div className="space-y-4">
-            {/* From Currency */}
-            <div>
-              <label className="text-sm font-medium mb-2 block">You pay</label>
-              <div className="flex space-x-2">
-                <Input
-                  type="number"
-                  placeholder="0.00"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="flex-1"
-                  data-testid="input-amount"
-                />
-                <Select value={fromCurrency} onValueChange={setFromCurrency}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code}>
-                        <div className="flex items-center space-x-2">
-                          <span>{currency.flag}</span>
-                          <span>{currency.code}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Exchange Rate */}
-            <div className="text-center py-2">
-              <div className="flex items-center justify-center text-sm text-muted-foreground">
-                <span className="material-icons mr-1 text-sm">sync_alt</span>
-                1 {fromCurrency} = {exchangeRate.toFixed(4)} {toCurrency}
-              </div>
-            </div>
-
-            {/* To Currency */}
-            <div>
-              <label className="text-sm font-medium mb-2 block">You receive</label>
-              <div className="flex space-x-2">
-                <Input
-                  value={convertedAmount}
-                  disabled
-                  className="flex-1 bg-muted/50"
-                  data-testid="text-converted-amount"
-                />
-                <Select value={toCurrency} onValueChange={setToCurrency}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currencies.map((currency) => (
-                      <SelectItem key={currency.code} value={currency.code}>
-                        <div className="flex items-center space-x-2">
-                          <span>{currency.flag}</span>
-                          <span>{currency.code}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Fee Breakdown */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-card p-4 rounded-xl border border-border elevation-1"
-        >
-          <h4 className="font-medium mb-3">Exchange breakdown</h4>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span>Exchange amount</span>
-              <span>{amount || "0.00"} {fromCurrency}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Exchange fee (1.5%)</span>
-              <span>{fee} {fromCurrency}</span>
-            </div>
-            <div className="border-t border-border pt-2 mt-2">
-              <div className="flex justify-between font-medium">
-                <span>Total deducted</span>
-                <span>{total} {fromCurrency}</span>
-              </div>
-            </div>
-            <div className="bg-green-50 dark:bg-green-950 p-2 rounded text-green-700 dark:text-green-300">
-              <div className="flex justify-between font-medium">
-                <span>You will receive</span>
-                <span>{convertedAmount} {toCurrency}</span>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Exchange Button */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-        >
-          <Button
-            onClick={handleExchange}
-            className="w-full"
-            disabled={!amount || parseFloat(amount) <= 0 || exchangeMutation.isPending}
-            data-testid="button-exchange"
-          >
-            {exchangeMutation.isPending ? (
-              <div className="flex items-center">
-                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                Processing Exchange...
-              </div>
-            ) : (
-              "Exchange Currency"
-            )}
-          </Button>
-        </motion.div>
-
-        {/* Exchange History Preview */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="bg-card p-4 rounded-xl border border-border elevation-1"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium">Recent Exchanges</h4>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setLocation("/transactions")}
-              className="text-primary hover:text-primary"
-            >
-              View All
+          <h2 className="text-lg font-bold mb-2">Two Wallets Needed</h2>
+          <p className="text-sm text-muted-foreground mb-6">You need at least two active wallets to exchange currencies. Add another wallet in Settings.</p>
+          <div className="flex gap-3 justify-center">
+            <Button variant="outline" onClick={() => setLocation("/dashboard")}>
+              <ArrowLeft className="w-4 h-4 mr-2" /> Dashboard
             </Button>
+            <Button onClick={() => setLocation("/settings")}>Add Wallet</Button>
           </div>
-          <div className="text-center py-6 text-muted-foreground">
-            <span className="material-icons text-3xl mb-2">swap_horiz</span>
-            <p className="text-sm">No recent exchanges</p>
-            <p className="text-xs">Your currency exchanges will appear here</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-24">
+      <WavyHeader size="sm" />
+
+      <div className="max-w-lg mx-auto p-4 space-y-4">
+        <div className="flex items-center gap-2">
+          <button onClick={() => setLocation("/dashboard")} className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h1 className="font-bold text-lg">Exchange</h1>
+            <p className="text-xs text-muted-foreground">Swap between your wallets · 1.5% fee</p>
           </div>
-        </motion.div>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {success ? (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="bg-card border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center space-y-4"
+            >
+              <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+                <CheckCircle2 className="w-8 h-8 text-green-600" />
+              </div>
+              <div>
+                <p className="font-bold text-green-700 dark:text-green-400 text-lg">Exchange Complete!</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {CURRENCY_FLAGS[success.fromCurrency]} {parseFloat(success.fromAmount).toFixed(4)} {success.fromCurrency}
+                  {" → "}
+                  {CURRENCY_FLAGS[success.toCurrency]} {parseFloat(success.toAmount).toFixed(4)} {success.toCurrency}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">Rate: 1 {success.fromCurrency} = {parseFloat(success.rate).toFixed(4)} {success.toCurrency}</p>
+                <p className="text-xs text-muted-foreground">Fee: {parseFloat(success.fee).toFixed(4)} {success.fromCurrency}</p>
+                <p className="text-xs font-mono text-muted-foreground/60 mt-1">Ref: {success.reference}</p>
+              </div>
+              <div className="flex gap-2">
+                <Button className="flex-1 bg-green-600 hover:bg-green-500" onClick={() => { setSuccess(null); setAmount(""); }}>
+                  New Exchange
+                </Button>
+                <Button variant="outline" className="flex-1" onClick={() => setLocation("/transactions")}>
+                  View History
+                </Button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div key="form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+              {/* From Wallet */}
+              <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">You Pay</label>
+                  <span className="text-xs text-muted-foreground">
+                    Available: {CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(fromBalance, 4)}
+                  </span>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="0.00"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      className="text-xl font-bold h-12 border-0 bg-muted/40 focus-visible:ring-1"
+                    />
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={fromWalletId || ""}
+                      onChange={e => { setFromWalletId(e.target.value); setAmount(""); setSuccess(null); }}
+                      className="h-12 pl-3 pr-8 rounded-xl border border-border bg-background text-sm font-semibold appearance-none cursor-pointer"
+                    >
+                      {activeWallets.filter(w => w.id !== toWalletId).map(w => (
+                        <option key={w.id} value={w.id}>
+                          {CURRENCY_FLAGS[w.currency]} {w.currency}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+
+                {[25, 50, 75, 100].map(pct => (
+                  <button
+                    key={pct}
+                    onClick={() => setAmount((fromBalance * pct / 100).toFixed(4))}
+                    className="text-xs px-2.5 py-1 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors mr-1.5"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+
+              {/* Swap Button + Rate */}
+              <div className="flex items-center gap-3">
+                <div className="flex-1 border-t border-dashed border-border" />
+                <div className="flex flex-col items-center gap-1">
+                  <button
+                    onClick={handleSwap}
+                    className="w-10 h-10 rounded-full bg-primary/10 hover:bg-primary/20 flex items-center justify-center transition-all hover:scale-110 active:scale-95"
+                  >
+                    <ArrowLeftRight className="w-4 h-4 text-primary" />
+                  </button>
+                  {rateLoading ? (
+                    <RefreshCw className="w-3 h-3 animate-spin text-muted-foreground" />
+                  ) : exchangeRate ? (
+                    <p className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
+                      1 {fromWallet?.currency} = {exchangeRate.toFixed(4)} {toWallet?.currency}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex-1 border-t border-dashed border-border" />
+              </div>
+
+              {/* To Wallet */}
+              <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">You Receive</label>
+                  <span className="text-xs text-muted-foreground">
+                    Current: {CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatNumber(parseFloat(toWallet?.balance || "0") - parseFloat(toWallet?.holdAmount || "0"), 4)}
+                  </span>
+                </div>
+
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <div className="h-12 px-3 rounded-xl bg-muted/40 flex items-center">
+                      <span className="text-xl font-bold text-muted-foreground">
+                        {receiveAmount > 0 ? formatNumber(receiveAmount, 4) : "0.0000"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <select
+                      value={toWalletId || ""}
+                      onChange={e => { setToWalletId(e.target.value); setAmount(""); setSuccess(null); }}
+                      className="h-12 pl-3 pr-8 rounded-xl border border-border bg-background text-sm font-semibold appearance-none cursor-pointer"
+                    >
+                      {activeWallets.filter(w => w.id !== fromWalletId).map(w => (
+                        <option key={w.id} value={w.id}>
+                          {CURRENCY_FLAGS[w.currency]} {w.currency}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fee breakdown */}
+              {amountNum > 0 && exchangeRate && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="bg-muted/40 rounded-xl p-3 space-y-1.5 text-xs"
+                >
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Exchange amount</span>
+                    <span>{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(amountNum, 4)} {fromWallet?.currency}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Fee (1.5%)</span>
+                    <span>−{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(feeNum, 4)} {fromWallet?.currency}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Net amount</span>
+                    <span>{formatNumber(netAmount, 4)} {fromWallet?.currency}</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Rate</span>
+                    <span>1 {fromWallet?.currency} = {exchangeRate.toFixed(4)} {toWallet?.currency}</span>
+                  </div>
+                  <div className="border-t border-border pt-1.5 flex justify-between font-semibold text-foreground">
+                    <span>You receive</span>
+                    <span>{CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatNumber(receiveAmount, 4)} {toWallet?.currency}</span>
+                  </div>
+                </motion.div>
+              )}
+
+              <Button
+                onClick={handleExchange}
+                disabled={isExchanging || !amount || amountNum <= 0 || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
+                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90"
+              >
+                {isExchanging ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+                ) : (
+                  <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
+                )}
+              </Button>
+
+              <p className="text-center text-xs text-muted-foreground">
+                Exchange rates are live. 1.5% fee applies to all exchanges.
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

@@ -850,3 +850,23 @@ export const advancedKycDocuments = pgTable("advanced_kyc_documents", {
 export const insertAdvancedKycSchema = createInsertSchema(advancedKycDocuments).omit({ id: true, createdAt: true, updatedAt: true });
 export type AdvancedKycDocument = typeof advancedKycDocuments.$inferSelect;
 export type InsertAdvancedKyc = z.infer<typeof insertAdvancedKycSchema>;
+
+// Multi-currency wallets — one per currency per user, admin-controlled
+export const wallets = pgTable("wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),           // 'USD', 'KES', 'UGX', etc.
+  label: text("label"),                           // Optional custom name
+  balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+  holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  isDefault: boolean("is_default").default(false),
+  isActive: boolean("is_active").default(true),
+  isSuspended: boolean("is_suspended").default(false),
+  suspendReason: text("suspend_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;

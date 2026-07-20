@@ -4,7 +4,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets } from "@shared/schema";
+import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -11398,6 +11399,267 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       console.error("Analytics error:", error);
       res.status(500).json({ message: "Failed to fetch analytics" });
     }
+  });
+
+  // ========== MULTI-CURRENCY WALLET ROUTES ==========
+
+  app.get("/api/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map(c => [c.code, c]));
+      const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      const enriched = userWallets.map(w => ({
+        ...w,
+        availableBalance: parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0"),
+        currencyMeta: currencyMeta[w.currency] || null,
+      }));
+      res.json({ wallets: enriched });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ message: "currency required" });
+      const setting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+      const enabled = (setting.rows[0]?.value || "USD,KES").split(",");
+      if (!enabled.includes(currency)) return res.status(400).json({ message: `${currency} wallet not available` });
+      const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      if (existing.some(w => w.currency === currency)) return res.status(400).json({ message: `You already have a ${currency} wallet` });
+      const isDefault = existing.length === 0;
+      const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault, isActive: true }).returning();
+      res.json({ wallet: newWallet });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/wallets/:id/default", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { id } = req.params;
+      await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
+      await db.update(wallets).set({ isDefault: true, updatedAt: new Date() }).where(eq(wallets.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/currencies", async (req, res) => {
+    try {
+      const setting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+      const enabled = (setting.rows[0]?.value || "USD,KES,UGX,GHS,NGN,ZAR,TZS,XOF,CDF,XAF,RWF,SLE,ZMW,EUR,GBP").split(",");
+      const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+      const defaultCurrency = defSetting.rows[0]?.value || "USD";
+      const currencies = NEXUSPAY_CURRENCIES.filter(c => enabled.includes(c.code));
+      res.json({ currencies, defaultCurrency, enabled });
+    } catch (e: any) {
+      res.json({ currencies: NEXUSPAY_CURRENCIES, defaultCurrency: "USD", enabled: NEXUSPAY_CURRENCIES.map(c => c.code) });
+    }
+  });
+
+  app.post("/api/deposit/nexuspay", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
+      if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
+      if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
+      const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
+      if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
+      if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
+      const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === currency);
+      const channel = currencyMeta?.channel || "card";
+      const result = await nexusPayService.checkout({ amount: parseFloat(amount), currency, channel, phone, email, correspondent, description: description || `Deposit to ${currency} wallet` });
+      await db.insert(transactions).values({
+        userId, type: "deposit", amount: String(amount), currency, status: "pending",
+        reference: result.reference, description: `NexusPay ${currency} deposit`,
+        metadata: { walletId, channel, gateway: currencyMeta?.gateway, redirectUrl: result.redirectUrl } as any,
+      });
+      res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
+    } catch (e: any) { console.error("NexusPay deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
+  });
+
+  app.get("/api/deposit/nexuspay/status/:reference", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { reference } = req.params;
+      const status = await nexusPayService.getStatus(reference);
+      if (status.status === "completed") {
+        const [txn] = await db.select().from(transactions).where(eq(transactions.reference, reference));
+        if (txn && txn.status !== "completed") {
+          const meta = txn.metadata as any;
+          const walletId = meta?.walletId;
+          if (walletId) {
+            await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [parseFloat(status.amount), walletId, userId]);
+          }
+          await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.reference, reference));
+        }
+      } else if (status.status === "failed") {
+        await db.update(transactions).set({ status: "failed", updatedAt: new Date() }).where(eq(transactions.reference, reference));
+      }
+      res.json({ status: status.status, reference, amount: status.amount, currency: status.currency });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/exchange/swap", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).user.id;
+      const { fromWalletId, toWalletId, amount } = req.body;
+      if (!fromWalletId || !toWalletId || !amount) return res.status(400).json({ message: "fromWalletId, toWalletId, and amount are required" });
+      const fromAmt = parseFloat(amount);
+      if (fromAmt <= 0) return res.status(400).json({ message: "Amount must be > 0" });
+      const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      const fromWallet = userWallets.find(w => w.id === fromWalletId);
+      const toWallet = userWallets.find(w => w.id === toWalletId);
+      if (!fromWallet || !toWallet) return res.status(404).json({ message: "Wallet not found" });
+      if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
+      const fromBalance = parseFloat(fromWallet.balance || "0") - parseFloat(fromWallet.holdAmount || "0");
+      if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
+      const exchangeRateSvc = createExchangeRateService(storage);
+      const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
+      const FEE_RATE = 0.015;
+      const fee = fromAmt * FEE_RATE;
+      const toAmount = (fromAmt - fee) * rate;
+      await pool.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [fromAmt, fromWalletId]);
+      await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [toAmount, toWalletId]);
+      const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      await db.insert(transactions).values({
+        userId, type: "exchange", amount: String(fromAmt), currency: fromWallet.currency,
+        fee: String(fee.toFixed(4)), exchangeRate: String(rate.toFixed(6)),
+        status: "completed", reference: ref, completedAt: new Date(),
+        description: `Exchange ${fromWallet.currency} → ${toWallet.currency}`,
+        metadata: { fromWalletId, toWalletId, toCurrency: toWallet.currency, toAmount: toAmount.toFixed(4) } as any,
+      });
+      res.json({ success: true, fromAmount: fromAmt.toFixed(4), fromCurrency: fromWallet.currency, toAmount: toAmount.toFixed(4), toCurrency: toWallet.currency, rate: rate.toFixed(6), fee: fee.toFixed(4), reference: ref });
+    } catch (e: any) { console.error("Exchange error:", e); res.status(500).json({ message: e.message || "Exchange failed" }); }
+  });
+
+  // ========== ADMIN WALLET ROUTES ==========
+
+  app.get("/api/admin/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const search = ((req.query.search as string) || "").toLowerCase();
+      const allWallets = await pool.query(`
+        SELECT w.*, u.full_name, u.email, u.phone
+        FROM wallets w JOIN users u ON w.user_id = u.id
+        WHERE ($1 = '' OR LOWER(u.full_name) LIKE '%' || $1 || '%'
+           OR LOWER(u.email) LIKE '%' || $1 || '%' OR LOWER(u.phone) LIKE '%' || $1 || '%')
+        ORDER BY u.full_name ASC, w.currency ASC
+      `, [search]);
+      const grouped: Record<string, any[]> = {};
+      for (const row of allWallets.rows) {
+        if (!grouped[row.user_id]) grouped[row.user_id] = [];
+        grouped[row.user_id].push({
+          id: row.id, userId: row.user_id, currency: row.currency, label: row.label,
+          balance: row.balance, holdAmount: row.hold_amount, isDefault: row.is_default,
+          isActive: row.is_active, isSuspended: row.is_suspended, suspendReason: row.suspend_reason,
+          createdAt: row.created_at, user: { fullName: row.full_name, email: row.email, phone: row.phone },
+        });
+      }
+      res.json({ wallets: allWallets.rows, grouped });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/admin/users/:userId/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      res.json({ wallets: userWallets });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.post("/api/admin/users/:userId/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ message: "currency required" });
+      const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      if (existing.some((w: any) => w.currency === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
+      const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault: existing.length === 0, isActive: true }).returning();
+      res.json({ wallet: newWallet });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/admin/wallets/:id/suspend", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      await db.update(wallets).set({ isSuspended: true, suspendReason: reason || null, updatedAt: new Date() }).where(eq(wallets.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/admin/wallets/:id/unsuspend", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.update(wallets).set({ isSuspended: false, suspendReason: null, updatedAt: new Date() }).where(eq(wallets.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/admin/wallets/:id/hold", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount } = req.body;
+      await db.update(wallets).set({ holdAmount: String(parseFloat(amount || "0")), updatedAt: new Date() }).where(eq(wallets.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/admin/wallets/:id/balance", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, type } = req.body;
+      const adj = parseFloat(amount || "0");
+      if (adj <= 0) return res.status(400).json({ message: "Amount must be > 0" });
+      if (type === "credit") {
+        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [adj, id]);
+      } else if (type === "debit") {
+        await pool.query(`UPDATE wallets SET balance = GREATEST(0, balance - $1), updated_at = NOW() WHERE id = $2`, [adj, id]);
+      } else { return res.status(400).json({ message: "type must be 'credit' or 'debit'" }); }
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.delete("/api/admin/wallets/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(wallets).where(eq(wallets.id, id));
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key')`);
+      const map: Record<string, string> = {};
+      for (const row of result.rows) map[row.key] = row.value;
+      const fallbackResult = await pool.query(`SELECT key, value FROM system_settings WHERE category = 'exchange_rate_fallback'`);
+      const fallbackRates: Record<string, string> = {};
+      for (const row of fallbackResult.rows) fallbackRates[row.key] = row.value;
+      res.json({
+        defaultCurrency: map.default_currency || "USD",
+        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(","),
+        nexusApiKey: map.nexuspay_api_key || "",
+        fallbackRates,
+      });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.put("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const { defaultCurrency, enabledCurrencies, nexusApiKey, fallbackRates } = req.body;
+      const upsert = async (key: string, value: string, category: string) => {
+        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), updated_at = NOW()`, [key, value, category]);
+      };
+      if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
+      if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
+      if (nexusApiKey !== undefined) { await upsert("nexuspay_api_key", nexusApiKey, "payment"); if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey; }
+      if (fallbackRates && typeof fallbackRates === "object") {
+        for (const [code, rate] of Object.entries(fallbackRates)) {
+          if (rate) await upsert(code, String(rate), "exchange_rate_fallback");
+        }
+      }
+      res.json({ success: true });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   return httpServer;

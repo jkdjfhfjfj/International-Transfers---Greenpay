@@ -4,28 +4,52 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check, Bitcoin, BarChart3 } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
 import { MoreMenu } from "@/components/more-menu";
 import { Grid } from "lucide-react";
+import WalletCards from "@/components/wallet-cards";
+import { useWallets } from "@/hooks/use-wallets";
+import type { Wallet as WalletType } from "@/hooks/use-wallets";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const [showBalance, setShowBalance] = useState(true);
-  const [showDiscountModal] = useState(false); // Modal disabled - kept for future use
+  const [showDiscountModal] = useState(false);
   const [activeWallet, setActiveWallet] = useState<'USD' | 'KES'>('USD');
   const [maintenanceAlertShown, setMaintenanceAlertShown] = useState(false);
   const [copiedAccountNumber, setCopiedAccountNumber] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
+  const [addWalletOpen, setAddWalletOpen] = useState(false);
+  const [addWalletCurrency, setAddWalletCurrency] = useState("UGX");
   const { user, logout, refreshUser } = useAuth();
   const { toast } = useToast();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
+  const queryClient = useQueryClient();
+  const { wallets: userWallets, isLoading: walletsLoading } = useWallets();
+
+  const addWalletMutation = useMutation({
+    mutationFn: async (currency: string) => {
+      const r = await apiRequest("POST", "/api/wallets", { currency });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || "Failed to add wallet");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      setAddWalletOpen(false);
+      toast({ title: "Wallet added!", description: `Your new ${addWalletCurrency} wallet is ready.` });
+    },
+    onError: (e: any) => toast({ title: "Error", description: e.message, variant: "destructive" }),
+  });
 
   // Refresh user data when dashboard loads to get latest balance
   useEffect(() => {
@@ -326,130 +350,52 @@ export default function DashboardPage() {
           </motion.div>
         )}
 
-        {/* Glassmorphism Balance Card */}
+        {/* Wallet Cards Carousel */}
         <motion.div
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
-          style={{
-            background: 'rgba(255,255,255,0.12)',
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: '1px solid rgba(255,255,255,0.18)',
-            borderRadius: 16,
-            padding: '14px 16px',
-          }}
         >
-          {/* Top row: currency switcher + eye */}
-          <div className="flex items-center justify-between mb-2">
-            <div
-              className="flex"
-              style={{
-                background: 'rgba(0,0,0,0.20)',
-                borderRadius: 8,
-                padding: 2,
-                gap: 2,
-              }}
-            >
-              {(['USD', 'KES'] as const).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setActiveWallet(c)}
-                  style={{
-                    padding: '3px 12px',
-                    borderRadius: 6,
-                    border: 'none',
-                    fontSize: 11,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                    background: activeWallet === c ? 'white' : 'transparent',
-                    color: activeWallet === c ? '#059669' : 'rgba(255,255,255,0.65)',
-                  }}
-                >
-                  {c}
-                </button>
-              ))}
+          {userWallets.length > 0 ? (
+            <WalletCards
+              wallets={userWallets}
+              showBalance={showBalance}
+              onToggleBalance={() => setShowBalance(!showBalance)}
+              onWalletSelect={setSelectedWallet}
+              selectedWalletId={selectedWallet?.id}
+              onAddWallet={() => setAddWalletOpen(true)}
+              showAdd={true}
+            />
+          ) : (
+            <div className="bg-white/10 rounded-2xl p-4 text-center">
+              <p className="text-white/60 text-sm">Loading wallets...</p>
             </div>
-            <motion.button
-              whileTap={{ scale: 0.92 }}
-              onClick={() => setShowBalance(!showBalance)}
-              className="opacity-80 hover:opacity-100 transition-opacity"
-              data-testid="button-toggle-balance"
-            >
-              <span className="material-icons text-white" style={{ fontSize: 18 }}>
-                {showBalance ? 'visibility' : 'visibility_off'}
-              </span>
-            </motion.button>
-          </div>
+          )}
 
-          {/* Balance */}
-          <p className="text-xs text-white/70 mb-0.5 flex items-center gap-1">
-            {activeWallet} Balance
-            {isKYCVerified && (
-              <span className="material-icons text-green-300" style={{ fontSize: 13 }}>verified</span>
-            )}
-          </p>
-          <p className="font-bold mb-1" style={{ fontSize: 28, letterSpacing: '-0.5px' }} data-testid="text-balance">
-            {showBalance
-              ? activeWallet === 'USD'
-                ? `$${formatNumber(activeBalance)}`
-                : `KSh ${formatNumber(activeBalance)}`
-              : '••••••'}
-          </p>
-          <p className="text-xs text-white/60 mb-3">
-            {activeWallet === 'USD'
-              ? <>Other: KSh {showBalance ? formatNumber(kesBalance) : '••••'}</>
-              : <>Other: ${showBalance ? formatNumber(usdBalance) : '••••'}</>}
-          </p>
-
-          {/* Action buttons */}
-          <div className="flex gap-2">
+          {/* Copy / Exchange quick actions */}
+          <div className="flex gap-2 mt-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={handleCopyAccountNumber}
               style={{
-                flex: 1,
-                padding: '8px 0',
-                borderRadius: 10,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 5,
-                cursor: 'pointer',
-                transition: 'opacity 0.15s',
+                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
+                fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'opacity 0.15s',
                 background: copiedAccountNumber ? 'rgba(74,222,128,0.20)' : 'rgba(255,255,255,0.18)',
                 color: 'white',
               }}
               title="Copy Account Number"
             >
-              {copiedAccountNumber ? (
-                <><Check className="w-3 h-3" /> Copied</>
-              ) : (
-                <><Copy className="w-3 h-3" /> Copy Acc No</>
-              )}
+              {copiedAccountNumber ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy Acc No</>}
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation('/exchange')}
               style={{
-                flex: 1,
-                padding: '8px 0',
-                borderRadius: 10,
-                border: 'none',
-                fontSize: 12,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 5,
-                cursor: 'pointer',
-                transition: 'opacity 0.15s',
-                background: 'white',
-                color: '#059669',
+                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
+                fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'opacity 0.15s',
+                background: 'white', color: '#059669',
               }}
             >
               <span className="material-icons" style={{ fontSize: 14 }}>currency_exchange</span>
@@ -872,6 +818,64 @@ export default function DashboardPage() {
 
       {/* More bottom sheet */}
       <MoreMenu open={showMoreMenu} onClose={() => setShowMoreMenu(false)} />
+
+      {/* Add Wallet Dialog */}
+      <Dialog open={addWalletOpen} onOpenChange={setAddWalletOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-primary" />
+              Add a Wallet
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">Choose a currency to create a new wallet. You can have one wallet per currency.</p>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Currency</label>
+              <Select value={addWalletCurrency} onValueChange={setAddWalletCurrency}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    { code: "UGX", flag: "🇺🇬", name: "Ugandan Shilling" },
+                    { code: "GHS", flag: "🇬🇭", name: "Ghanaian Cedi" },
+                    { code: "NGN", flag: "🇳🇬", name: "Nigerian Naira" },
+                    { code: "ZAR", flag: "🇿🇦", name: "South African Rand" },
+                    { code: "TZS", flag: "🇹🇿", name: "Tanzanian Shilling" },
+                    { code: "XOF", flag: "🌍", name: "West African CFA" },
+                    { code: "CDF", flag: "🇨🇩", name: "Congolese Franc" },
+                    { code: "XAF", flag: "🌍", name: "Central African CFA" },
+                    { code: "RWF", flag: "🇷🇼", name: "Rwandan Franc" },
+                    { code: "SLE", flag: "🇸🇱", name: "Sierra Leonean Leone" },
+                    { code: "ZMW", flag: "🇿🇲", name: "Zambian Kwacha" },
+                    { code: "EUR", flag: "🇪🇺", name: "Euro" },
+                    { code: "GBP", flag: "🇬🇧", name: "British Pound" },
+                  ].filter(c => !userWallets.some(w => w.currency === c.code)).map(c => (
+                    <SelectItem key={c.code} value={c.code}>
+                      {c.flag} {c.code} — {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" className="flex-1" onClick={() => setAddWalletOpen(false)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                onClick={() => addWalletMutation.mutate(addWalletCurrency)}
+                disabled={addWalletMutation.isPending}
+              >
+                {addWalletMutation.isPending ? (
+                  <><span className="animate-spin mr-2">⟳</span> Adding...</>
+                ) : (
+                  <>Add {addWalletCurrency} Wallet</>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
