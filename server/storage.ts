@@ -76,15 +76,6 @@ import {
   userActivityLog,
   billPayments,
   announcements,
-  wallets,
-  currencyRates,
-  nexuspayTransactions,
-  type Wallet,
-  type InsertWallet,
-  type CurrencyRate,
-  type InsertCurrencyRate,
-  type NexuspayTransaction,
-  type InsertNexuspayTransaction,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 import { db } from "./db";
@@ -266,24 +257,6 @@ export interface IStorage {
   getActiveAnnouncements(): Promise<Announcement[]>;
   updateAnnouncement(id: string, updates: Partial<Announcement>): Promise<Announcement | undefined>;
   deleteAnnouncement(id: string): Promise<void>;
-
-  // Multi-currency wallet operations
-  getWalletsByUserId(userId: string): Promise<Wallet[]>;
-  getWallet(userId: string, currency: string): Promise<Wallet | undefined>;
-  createWallet(data: InsertWallet): Promise<Wallet>;
-  updateWallet(id: string, updates: Partial<Wallet>): Promise<Wallet | undefined>;
-  getAllUserWallets(): Promise<(Wallet & { userEmail?: string; userName?: string })[]>;
-
-  // Currency rate operations
-  getCurrencyRates(): Promise<CurrencyRate[]>;
-  getCurrencyRate(from: string, to: string): Promise<CurrencyRate | undefined>;
-  upsertCurrencyRate(from: string, to: string, rate: number, isManual: boolean, updatedBy?: string): Promise<CurrencyRate>;
-  deleteCurrencyRate(id: string): Promise<void>;
-
-  // NexusPay transaction operations
-  createNexuspayTransaction(data: InsertNexuspayTransaction): Promise<NexuspayTransaction>;
-  getNexuspayTransaction(reference: string): Promise<NexuspayTransaction | undefined>;
-  updateNexuspayTransaction(reference: string, updates: Partial<NexuspayTransaction>): Promise<NexuspayTransaction | undefined>;
 }
 
 export class MemStorage implements IStorage {
@@ -1195,20 +1168,6 @@ export class MemStorage implements IStorage {
   async createApiConfiguration(): Promise<ApiConfiguration> { throw new Error('Not implemented'); }
   async updateApiConfiguration(): Promise<ApiConfiguration | undefined> { return undefined; }
   async deleteApiConfiguration(): Promise<void> {}
-
-  // Wallet stubs
-  async getWalletsByUserId(_userId: string): Promise<Wallet[]> { return []; }
-  async getWallet(_userId: string, _currency: string): Promise<Wallet | undefined> { return undefined; }
-  async createWallet(data: InsertWallet): Promise<Wallet> { return { ...data, id: Math.random().toString(), createdAt: new Date(), updatedAt: new Date() } as Wallet; }
-  async updateWallet(_id: string, _updates: Partial<Wallet>): Promise<Wallet | undefined> { return undefined; }
-  async getAllUserWallets(): Promise<(Wallet & { userEmail?: string; userName?: string })[]> { return []; }
-  async getCurrencyRates(): Promise<CurrencyRate[]> { return []; }
-  async getCurrencyRate(_from: string, _to: string): Promise<CurrencyRate | undefined> { return undefined; }
-  async upsertCurrencyRate(from: string, to: string, rate: number, isManual: boolean, updatedBy?: string): Promise<CurrencyRate> { return { id: Math.random().toString(), fromCurrency: from, toCurrency: to, rate: rate.toString(), isManual, source: isManual ? 'manual' : 'live', updatedBy: updatedBy || null, updatedAt: new Date() }; }
-  async deleteCurrencyRate(_id: string): Promise<void> {}
-  async createNexuspayTransaction(data: InsertNexuspayTransaction): Promise<NexuspayTransaction> { return { ...data, id: Math.random().toString(), createdAt: new Date(), updatedAt: new Date() } as NexuspayTransaction; }
-  async getNexuspayTransaction(_reference: string): Promise<NexuspayTransaction | undefined> { return undefined; }
-  async updateNexuspayTransaction(_reference: string, _updates: Partial<NexuspayTransaction>): Promise<NexuspayTransaction | undefined> { return undefined; }
 }
 
 // Database Storage Implementation
@@ -2305,92 +2264,6 @@ export class DatabaseStorage implements IStorage {
 
   async deleteAnnouncement(id: string): Promise<void> {
     await db.delete(announcements).where(eq(announcements.id, id));
-  }
-
-  // ── Multi-currency wallet ──────────────────────────────────────────────────
-  async getWalletsByUserId(userId: string): Promise<Wallet[]> {
-    return db.select().from(wallets).where(eq(wallets.userId, userId));
-  }
-
-  async getWallet(userId: string, currency: string): Promise<Wallet | undefined> {
-    const [w] = await db.select().from(wallets)
-      .where(and(eq(wallets.userId, userId), eq(wallets.currency, currency)));
-    return w || undefined;
-  }
-
-  async createWallet(data: InsertWallet): Promise<Wallet> {
-    const [w] = await db.insert(wallets).values(data).returning();
-    return w;
-  }
-
-  async updateWallet(id: string, updates: Partial<Wallet>): Promise<Wallet | undefined> {
-    const [w] = await db.update(wallets)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(wallets.id, id))
-      .returning();
-    return w || undefined;
-  }
-
-  async getAllUserWallets(): Promise<(Wallet & { userEmail?: string; userName?: string })[]> {
-    const rows = await db
-      .select({
-        id: wallets.id, userId: wallets.userId, currency: wallets.currency,
-        balance: wallets.balance, isDefault: wallets.isDefault,
-        createdAt: wallets.createdAt, updatedAt: wallets.updatedAt,
-        userEmail: users.email, userName: users.fullName,
-      })
-      .from(wallets)
-      .leftJoin(users, eq(wallets.userId, users.id));
-    return rows as (Wallet & { userEmail?: string; userName?: string })[];
-  }
-
-  // ── Currency rates ─────────────────────────────────────────────────────────
-  async getCurrencyRates(): Promise<CurrencyRate[]> {
-    return db.select().from(currencyRates);
-  }
-
-  async getCurrencyRate(from: string, to: string): Promise<CurrencyRate | undefined> {
-    const [r] = await db.select().from(currencyRates)
-      .where(and(eq(currencyRates.fromCurrency, from), eq(currencyRates.toCurrency, to)));
-    return r || undefined;
-  }
-
-  async upsertCurrencyRate(from: string, to: string, rate: number, isManual: boolean, updatedBy?: string): Promise<CurrencyRate> {
-    const existing = await this.getCurrencyRate(from, to);
-    if (existing) {
-      const [r] = await db.update(currencyRates)
-        .set({ rate: rate.toString(), isManual, source: isManual ? 'manual' : 'live', updatedBy: updatedBy || null, updatedAt: new Date() })
-        .where(eq(currencyRates.id, existing.id))
-        .returning();
-      return r;
-    }
-    const [r] = await db.insert(currencyRates)
-      .values({ fromCurrency: from, toCurrency: to, rate: rate.toString(), isManual, source: isManual ? 'manual' : 'live', updatedBy: updatedBy || null })
-      .returning();
-    return r;
-  }
-
-  async deleteCurrencyRate(id: string): Promise<void> {
-    await db.delete(currencyRates).where(eq(currencyRates.id, id));
-  }
-
-  // ── NexusPay transactions ──────────────────────────────────────────────────
-  async createNexuspayTransaction(data: InsertNexuspayTransaction): Promise<NexuspayTransaction> {
-    const [t] = await db.insert(nexuspayTransactions).values(data).returning();
-    return t;
-  }
-
-  async getNexuspayTransaction(reference: string): Promise<NexuspayTransaction | undefined> {
-    const [t] = await db.select().from(nexuspayTransactions).where(eq(nexuspayTransactions.reference, reference));
-    return t || undefined;
-  }
-
-  async updateNexuspayTransaction(reference: string, updates: Partial<NexuspayTransaction>): Promise<NexuspayTransaction | undefined> {
-    const [t] = await db.update(nexuspayTransactions)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(nexuspayTransactions.reference, reference))
-      .returning();
-    return t || undefined;
   }
 }
 
