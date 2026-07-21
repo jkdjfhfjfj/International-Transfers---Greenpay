@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -523,6 +523,18 @@ p{color:#6b7280;font-size:14px;}</style>
         await storage.updateUser(existingUser.id, { lastLoginAt: new Date() });
         (req.session as any).userId = existingUser.id;
         (req.session as any).user = { id: existingUser.id, email: existingUser.email };
+        // Track login device
+        try {
+          const ua = req.headers['user-agent'] || 'Unknown';
+          await db.insert(loginHistory).values({
+            userId: existingUser.id,
+            ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || 'Unknown',
+            userAgent: ua,
+            deviceType: ua.toLowerCase().includes('mobile') ? 'mobile' : 'desktop',
+            browser: 'Google OAuth',
+            status: 'success',
+          });
+        } catch (_) {}
         await new Promise<void>(r => req.session.save(() => r()));
         return res.send(googlePopupHtml("login", "Signed in! Redirecting..."));
       } else {
@@ -583,6 +595,26 @@ p{color:#6b7280;font-size:14px;}</style>
       delete (req.session as any).googlePending;
       (req.session as any).userId = user.id;
       (req.session as any).user = { id: user.id, email: user.email };
+
+      // Track new Google signup as first login device
+      try {
+        const ua = req.headers['user-agent'] || 'Unknown';
+        await db.insert(loginHistory).values({
+          userId: user.id,
+          ipAddress: (req.headers['x-forwarded-for'] as string)?.split(',')[0].trim() || req.ip || 'Unknown',
+          userAgent: ua,
+          deviceType: ua.toLowerCase().includes('mobile') ? 'mobile' : 'desktop',
+          browser: 'Google OAuth',
+          status: 'success',
+        });
+      } catch (_) {}
+
+      // Auto-create default wallet for new Google user
+      try {
+        const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const defCurrency = (defCurrencySetting.rows[0]?.value || 'USD').replace(/['"]/g, '').trim();
+        await db.insert(wallets).values({ userId: user.id, currency: defCurrency, isDefault: true, isActive: true });
+      } catch (_) {}
 
       const { whatsappService } = await import('./services/whatsapp');
       const { mailtrapService } = await import('./services/mailtrap');
@@ -11437,7 +11469,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.get("/api/wallets", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map(c => [c.code, c]));
       let userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
 
@@ -11465,11 +11497,11 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.post("/api/wallets", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const { currency } = req.body;
       if (!currency) return res.status(400).json({ message: "currency required" });
       const setting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
-      const enabled = (setting.rows[0]?.value || "USD,KES").split(",");
+      const enabled = (setting.rows[0]?.value || "USD,KES").replace(/['"]/g, '').split(",").map((s: string) => s.trim()).filter(Boolean);
       if (!enabled.includes(currency)) return res.status(400).json({ message: `${currency} wallet not available` });
       const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
       if (existing.some(w => w.currency === currency)) return res.status(400).json({ message: `You already have a ${currency} wallet` });
@@ -11481,7 +11513,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.put("/api/wallets/:id/default", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const { id } = req.params;
       await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
       await db.update(wallets).set({ isDefault: true, updatedAt: new Date() }).where(eq(wallets.id, id));
@@ -11492,9 +11524,9 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   app.get("/api/currencies", async (req, res) => {
     try {
       const setting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
-      const enabled = (setting.rows[0]?.value || "USD,KES,UGX,GHS,NGN,ZAR,TZS,XOF,CDF,XAF,RWF,SLE,ZMW,EUR,GBP").split(",");
+      const enabled = (setting.rows[0]?.value || "USD,KES,UGX,GHS,NGN,ZAR,TZS,XOF,CDF,XAF,RWF,SLE,ZMW,EUR,GBP").replace(/['"]/g, '').split(",").map((s: string) => s.trim()).filter(Boolean);
       const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
-      const defaultCurrency = defSetting.rows[0]?.value || "USD";
+      const defaultCurrency = (defSetting.rows[0]?.value || "USD").replace(/['"]/g, '').trim();
       const currencies = NEXUSPAY_CURRENCIES.filter(c => enabled.includes(c.code));
       res.json({ currencies, defaultCurrency, enabled });
     } catch (e: any) {
@@ -11504,7 +11536,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.post("/api/deposit/nexuspay", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
       if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
@@ -11525,7 +11557,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.get("/api/deposit/nexuspay/status/:reference", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const { reference } = req.params;
       const status = await nexusPayService.getStatus(reference);
       if (status.status === "completed") {
@@ -11547,7 +11579,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.post("/api/exchange/swap", requireAuth, async (req, res) => {
     try {
-      const userId = (req as any).user.id;
+      const userId = (req.session as any).userId;
       const { fromWalletId, toWalletId, amount } = req.body;
       if (!fromWalletId || !toWalletId || !amount) return res.status(400).json({ message: "fromWalletId, toWalletId, and amount are required" });
       const fromAmt = parseFloat(amount);
