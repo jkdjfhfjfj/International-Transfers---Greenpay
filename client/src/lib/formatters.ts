@@ -27,6 +27,6 @@ export function getCurrencySymbol(currency: string): string {
     case "USD":
       return "$";
     default:
-      return "$";
+      return currency ? currency.toUpperCase() + " " : "";
   }
 }

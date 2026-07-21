@@ -70,30 +70,25 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
     doc.text(`Email: ${userData.email}`, 14, 77);
   }
   
-  // Summary Statistics
-  const usdTransactions = transactions.filter(t => t.currency?.toUpperCase() !== 'KES');
-  const kesTransactions = transactions.filter(t => t.currency?.toUpperCase() === 'KES');
+  // Summary Statistics - group by all currencies present
+  const currencies = [...new Set(transactions.map(t => t.currency?.toUpperCase() || 'USD'))];
   
-  const totalUsdIn = usdTransactions
-    .filter(t => (t.type === 'receive' || t.type === 'deposit') && t.status === 'completed')
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-    
-  const totalUsdOut = usdTransactions
-    .filter(t => (t.type === 'send' || t.type === 'withdraw' || t.type === 'card_purchase') && t.status === 'completed')
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+  const currencyStats = currencies.map(cur => {
+    const curTxns = transactions.filter(t => (t.currency?.toUpperCase() || 'USD') === cur);
+    const totalIn = curTxns
+      .filter(t => (t.type === 'receive' || t.type === 'deposit') && t.status === 'completed')
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    const totalOut = curTxns
+      .filter(t => (t.type === 'send' || t.type === 'withdraw' || t.type === 'card_purchase') && t.status === 'completed')
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    return { cur, sym: getCurrencySymbol(cur), totalIn, totalOut };
+  });
   
-  const totalKesIn = kesTransactions
-    .filter(t => (t.type === 'receive' || t.type === 'deposit') && t.status === 'completed')
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-    
-  const totalKesOut = kesTransactions
-    .filter(t => (t.type === 'send' || t.type === 'withdraw' || t.type === 'card_purchase') && t.status === 'completed')
-    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-  
-  // Summary Box
+  // Summary Box — height grows with number of currencies
+  const summaryBoxH = Math.max(35, 20 + currencyStats.length * 8);
   doc.setDrawColor(greenColor[0], greenColor[1], greenColor[2]);
   doc.setLineWidth(0.5);
-  doc.rect(14, 85, pageWidth - 28, 35);
+  doc.rect(14, 85, pageWidth - 28, summaryBoxH);
   
   doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
@@ -105,23 +100,14 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
   
   let yPos = 100;
   
-  if (usdTransactions.length > 0) {
+  for (const { cur, sym, totalIn, totalOut } of currencyStats) {
     doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-    doc.text('USD:', 18, yPos);
+    doc.text(`${cur}:`, 18, yPos);
     doc.setTextColor(34, 197, 94); // Green for income
-    doc.text(`+$${formatNumber(totalUsdIn)}`, 50, yPos);
+    doc.text(`+${sym}${formatNumber(totalIn)}`, 50, yPos);
     doc.setTextColor(239, 68, 68); // Red for expenses
-    doc.text(`-$${formatNumber(totalUsdOut)}`, 90, yPos);
+    doc.text(`-${sym}${formatNumber(totalOut)}`, 90, yPos);
     yPos += 6;
-  }
-  
-  if (kesTransactions.length > 0) {
-    doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-    doc.text('KES:', 18, yPos);
-    doc.setTextColor(34, 197, 94);
-    doc.text(`+KSh ${formatNumber(totalKesIn)}`, 50, yPos);
-    doc.setTextColor(239, 68, 68);
-    doc.text(`-KSh ${formatNumber(totalKesOut)}`, 90, yPos);
   }
   
   // Transaction Table
