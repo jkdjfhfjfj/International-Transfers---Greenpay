@@ -99,6 +99,10 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_requested BOOLEAN DEFAULT false`,
     // Google OAuth
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT`,
+    // Didit.me KYC integration
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_session_id TEXT`,
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_status TEXT`,
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_decision JSONB`,
   ];
 
   for (const sql of migrations) {

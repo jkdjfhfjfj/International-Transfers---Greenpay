@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { ExternalLink, Shield } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +57,8 @@ interface KycDocument {
   verifiedAt: string | null;
   createdAt: string;
   updatedAt: string | null;
+  diditSessionId: string | null;
+  diditStatus: string | null;
 }
 
 interface KycResponse {
@@ -216,7 +219,7 @@ export default function KycManagement() {
                     <TableHead>User ID</TableHead>
                     <TableHead>Document Type</TableHead>
                     <TableHead>Submitted</TableHead>
-                    <TableHead>Documents</TableHead>
+                    <TableHead>Didit Status</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -236,17 +239,24 @@ export default function KycManagement() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          {kyc.frontImageUrl && (
-                            <Badge variant="outline" className="text-xs">Front</Badge>
-                          )}
-                          {kyc.backImageUrl && (
-                            <Badge variant="outline" className="text-xs">Back</Badge>
-                          )}
-                          {kyc.selfieUrl && (
-                            <Badge variant="outline" className="text-xs">Selfie</Badge>
-                          )}
-                        </div>
+                        {kyc.diditSessionId ? (
+                          <div className="space-y-1">
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                              {kyc.diditStatus || "Not Started"}
+                            </Badge>
+                            <a
+                              href={`https://business.didit.me`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              {kyc.diditSessionId.slice(0, 8)}...
+                            </a>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Manual</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {getStatusBadge(kyc.status)}
@@ -313,6 +323,7 @@ export default function KycManagement() {
                 <TableRow>
                   <TableHead>User ID</TableHead>
                   <TableHead>Document Type</TableHead>
+                  <TableHead>Didit Status</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Submitted</TableHead>
                   <TableHead>Verified</TableHead>
@@ -327,6 +338,18 @@ export default function KycManagement() {
                     </TableCell>
                     <TableCell>
                       <span className="font-medium">{getDocumentTypeName(kyc.documentType)}</span>
+                    </TableCell>
+                    <TableCell>
+                      {kyc.diditSessionId ? (
+                        <div className="space-y-1">
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                            {kyc.diditStatus || "Initiated"}
+                          </Badge>
+                          <p className="font-mono text-xs text-muted-foreground">{kyc.diditSessionId.slice(0, 8)}...</p>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Manual</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {getStatusBadge(kyc.status)}
@@ -386,6 +409,18 @@ export default function KycManagement() {
                   <div className="space-y-2 text-sm">
                     <div className="flex items-center gap-2"><User className="w-4 h-4" /><span>User: {viewKyc.userId.slice(0, 8)}...</span></div>
                     <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Submitted: {format(new Date(viewKyc.createdAt), "MMM dd, yyyy HH:mm")}</span></div>
+                    {viewKyc.diditSessionId && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
+                          <Shield className="w-3 h-3" /> Didit Automated Verification
+                        </p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">Session: <span className="font-mono">{viewKyc.diditSessionId}</span></p>
+                        {viewKyc.diditStatus && <p className="text-xs text-blue-600 dark:text-blue-400">Status: <strong>{viewKyc.diditStatus}</strong></p>}
+                        <a href="https://business.didit.me" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-500 hover:underline mt-1">
+                          <ExternalLink className="w-3 h-3" /> View in Didit Dashboard
+                        </a>
+                      </div>
+                    )}
                     {viewKyc.verifiedAt && (
                       <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Reviewed: {format(new Date(viewKyc.verifiedAt), "MMM dd, yyyy HH:mm")}</span></div>
                     )}
