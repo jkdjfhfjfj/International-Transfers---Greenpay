@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, X, AlertCircle, CheckCircle, Info, AlertTriangle } from "lucide-react";
+import { Bell, X, AlertCircle, CheckCircle, Info, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -36,6 +36,15 @@ export default function Notifications() {
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
       return apiRequest('POST', `/api/notifications/${notificationId}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/notifications', user?.id] });
+    },
+  });
+
+  const deleteNotificationMutation = useMutation({
+    mutationFn: async (notificationId: string) => {
+      return apiRequest('DELETE', `/api/notifications/${notificationId}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/notifications', user?.id] });
@@ -197,20 +206,34 @@ export default function Notifications() {
                                 <span className="text-xs text-muted-foreground/80">
                                   {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                                 </span>
-                                {!notification.isRead && (
+                                <div className="flex items-center gap-1">
+                                  {!notification.isRead && (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleMarkAsRead(notification.id);
+                                      }}
+                                      className="text-xs h-7 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
+                                      data-testid={`button-mark-read-${notification.id}`}
+                                    >
+                                      Mark as read
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="ghost"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleMarkAsRead(notification.id);
+                                      deleteNotificationMutation.mutate(notification.id);
                                     }}
-                                    className="text-xs h-7 px-2 hover:bg-primary/10 hover:text-primary transition-colors"
-                                    data-testid={`button-mark-read-${notification.id}`}
+                                    className="h-7 w-7 p-0 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                                    data-testid={`button-delete-${notification.id}`}
                                   >
-                                    Mark as read
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </Button>
-                                )}
+                                </div>
                               </div>
                             </div>
                           </div>

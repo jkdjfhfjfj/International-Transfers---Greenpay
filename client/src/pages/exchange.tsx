@@ -131,18 +131,12 @@ export default function ExchangePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-40">
       <WavyHeader size="sm" />
 
       <div className="max-w-lg mx-auto p-4 space-y-4">
         <div className="flex items-center gap-2">
-          <button onClick={() => setLocation("/dashboard")} className="text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <h1 className="font-bold text-lg">Exchange</h1>
-            <p className="text-xs text-muted-foreground">Swap between your wallets · 1.5% fee</p>
-          </div>
+          <h1 className="font-bold text-lg">Exchange</h1>
         </div>
 
         <AnimatePresence mode="wait">
@@ -310,25 +304,33 @@ export default function ExchangePage() {
                 </motion.div>
               )}
 
-              <Button
-                onClick={handleExchange}
-                disabled={isExchanging || !amount || amountNum <= 0 || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
-                className="w-full h-12 text-base font-semibold bg-primary hover:bg-primary/90"
-              >
-                {isExchanging ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
-                ) : (
-                  <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
-                )}
-              </Button>
-
-              <p className="text-center text-xs text-muted-foreground">
+              <p className="text-center text-xs text-muted-foreground pb-2">
                 Exchange rates are live. 1.5% fee applies to all exchanges.
               </p>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
+
+      {/* Fixed bottom Exchange button — Android style, above bottom nav */}
+      {!success && (
+        <div className="fixed bottom-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border md:bottom-0">
+          <div className="max-w-lg mx-auto p-4">
+            <Button
+              onClick={handleExchange}
+              disabled={isExchanging || !amount || amountNum <= 0 || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
+              className="w-full h-13 text-base font-semibold bg-primary hover:bg-primary/90"
+              style={{ height: 52 }}
+            >
+              {isExchanging ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+              ) : (
+                <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

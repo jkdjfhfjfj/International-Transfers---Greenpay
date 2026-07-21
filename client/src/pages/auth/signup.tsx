@@ -94,13 +94,9 @@ export default function SignupPage() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col bg-background pb-20">
-      <WavyHeader
-        
-        
-        size="sm"
-      />
-      <div className="flex-1 p-6">
+    <div className="min-h-screen flex flex-col bg-background">
+      <WavyHeader size="sm" />
+      <div className="flex-1 p-6 pb-36 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -316,14 +312,6 @@ export default function SignupPage() {
                 )}
               />
 
-              <Button
-                type="submit"
-                className="w-full ripple"
-                disabled={signupMutation.isPending}
-                data-testid="button-create-account"
-              >
-                {signupMutation.isPending ? "Creating Account..." : "Create Account"}
-              </Button>
             </form>
           </Form>
 
@@ -396,6 +384,21 @@ export default function SignupPage() {
             </p>
           </div>
         </motion.div>
+      </div>
+
+      {/* Fixed bottom Create Account button — Android feel */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="max-w-sm mx-auto p-4">
+          <Button
+            onClick={form.handleSubmit(onSubmit)}
+            className="w-full ripple"
+            style={{ height: 52 }}
+            disabled={signupMutation.isPending}
+            data-testid="button-create-account"
+          >
+            {signupMutation.isPending ? "Creating Account..." : "Create Account"}
+          </Button>
+        </div>
       </div>
     </div>
   );

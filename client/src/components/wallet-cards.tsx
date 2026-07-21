@@ -66,7 +66,10 @@ export default function WalletCards({
   const [activeIndex, setActiveIndex] = useState(0);
   const [, setLocation] = useLocation();
 
-  const activeWallets = wallets.filter(w => w.isActive);
+  // Sort: default wallet first, then rest
+  const activeWallets = wallets
+    .filter(w => w.isActive)
+    .sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
 
   useEffect(() => {
     if (selectedWalletId) {

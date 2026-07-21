@@ -303,13 +303,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background pb-20">
-      <WavyHeader
-        
-        
-        size="sm"
-      />
-      <div className="flex-1 p-6">
+    <div className="min-h-screen flex flex-col bg-background">
+      <WavyHeader size="sm" />
+      <div className="flex-1 p-6 pb-32 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -405,14 +401,6 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <Button
-                type="submit"
-                className="w-full ripple"
-                disabled={loginMutation.isPending}
-                data-testid="button-signin-submit"
-              >
-                {loginMutation.isPending ? "Signing In..." : "Sign In"}
-              </Button>
             </form>
           </Form>
 
@@ -440,62 +428,6 @@ export default function LoginPage() {
               </button>
             </p>
           </div>
-
-          {/* PIN Verification Dialog */}
-          {requiresPin && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-              onClick={() => {
-                setRequiresPin(false);
-                setPinCode("");
-                setTempLoginData(null);
-              }}
-            >
-              <motion.div
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                className="bg-background p-6 rounded-lg border border-border max-w-sm w-full shadow-lg"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <h3 className="text-lg font-semibold mb-2">Enter PIN</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Your account has PIN protection enabled. Please enter your 4-6 digit PIN to continue.
-                </p>
-                <div className="space-y-4">
-                  <Input
-                    type="password"
-                    placeholder="Enter PIN"
-                    value={pinCode}
-                    onChange={(e) => setPinCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
-                    maxLength={6}
-                    className="text-center text-2xl tracking-widest font-bold"
-                  />
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => {
-                        setRequiresPin(false);
-                        setPinCode("");
-                        setTempLoginData(null);
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      className="flex-1"
-                      disabled={pinCode.length < 4 || verifyPinMutation.isPending}
-                      onClick={() => verifyPinMutation.mutate()}
-                    >
-                      {verifyPinMutation.isPending ? "Verifying..." : "Verify"}
-                    </Button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
 
           <div className="mt-8">
             <div className="relative">
@@ -558,6 +490,64 @@ export default function LoginPage() {
             </div>
           </div>
         </motion.div>
+      </div>
+
+      {/* PIN Verification Dialog — fixed overlay */}
+      {requiresPin && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => { setRequiresPin(false); setPinCode(""); setTempLoginData(null); }}
+        >
+          <motion.div
+            initial={{ scale: 0.9, y: 20 }}
+            animate={{ scale: 1, y: 0 }}
+            className="bg-background p-6 rounded-lg border border-border max-w-sm w-full shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2">Enter PIN</h3>
+            <p className="text-sm text-muted-foreground mb-4">
+              Your account has PIN protection enabled. Please enter your 4-6 digit PIN to continue.
+            </p>
+            <div className="space-y-4">
+              <Input
+                type="password"
+                placeholder="Enter PIN"
+                value={pinCode}
+                onChange={(e) => setPinCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                maxLength={6}
+                className="text-center text-2xl tracking-widest font-bold"
+              />
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1"
+                  onClick={() => { setRequiresPin(false); setPinCode(""); setTempLoginData(null); }}>
+                  Cancel
+                </Button>
+                <Button className="flex-1"
+                  disabled={pinCode.length < 4 || verifyPinMutation.isPending}
+                  onClick={() => verifyPinMutation.mutate()}>
+                  {verifyPinMutation.isPending ? "Verifying..." : "Verify"}
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+
+      {/* Fixed bottom Sign In button — Android feel */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="max-w-sm mx-auto p-4">
+          <Button
+            onClick={form.handleSubmit(onSubmit)}
+            className="w-full ripple"
+            style={{ height: 52 }}
+            disabled={loginMutation.isPending}
+            data-testid="button-signin-submit"
+          >
+            {loginMutation.isPending ? "Signing In..." : "Sign In"}
+          </Button>
+        </div>
       </div>
     </div>
   );

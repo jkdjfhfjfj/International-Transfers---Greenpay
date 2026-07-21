@@ -182,6 +182,39 @@ export default function DepositPage() {
   function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); }
   function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); setNexusPhone(""); setNexusRedirectUrl(null); }
 
+  const handleNexusDeposit = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a valid amount", variant: "destructive" });
+      return;
+    }
+    if (NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency) && !nexusPhone) {
+      toast({ title: "Phone required", description: "Enter your mobile money phone number", variant: "destructive" });
+      return;
+    }
+    if (!nexusWalletId) {
+      toast({ title: "Wallet not found", description: `No ${nexusCurrency} wallet. Add one in Settings.`, variant: "destructive" });
+      return;
+    }
+    try {
+      const result = await initiateNexus({
+        walletId: nexusWalletId,
+        currency: nexusCurrency,
+        amount: parseFloat(amount),
+        phone: nexusPhone || undefined,
+        email: user?.email || undefined,
+      });
+      if (result.redirectUrl) {
+        setNexusRedirectUrl(result.redirectUrl);
+        window.open(result.redirectUrl, "_blank");
+      }
+      setNexusRef(result.reference);
+      setNexusStatus("pending");
+      toast({ title: "Payment initiated", description: result.description || "Complete your payment to credit the wallet" });
+    } catch (e: any) {
+      toast({ title: "Deposit failed", description: e.message, variant: "destructive" });
+    }
+  };
+
   // Initialize nexus wallet from user's wallets
   useEffect(() => {
     if (userWallets.length > 0 && !nexusWalletId) {
@@ -273,17 +306,10 @@ export default function DepositPage() {
         {!selectedMethod && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <p className="text-sm font-semibold text-muted-foreground mb-3">Available Deposit Methods</p>
-            {enabledMethods.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <AlertCircle className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                <p className="text-sm">No deposit methods configured yet.</p>
-                <p className="text-xs mt-1">Please contact support.</p>
-              </div>
-            ) : (
               <div className="space-y-3">
                 {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
                   const meta = METHOD_META[method];
-                  const enabled = isEnabled(method);
+                  const enabled = method === "nexuspay" ? true : isEnabled(method);
                   const Icon = meta.icon;
                   const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
                   return (
@@ -319,7 +345,6 @@ export default function DepositPage() {
                   );
                 })}
               </div>
-            )}
           </motion.div>
         )}
 
@@ -587,6 +612,145 @@ export default function DepositPage() {
                   <Button variant="outline" className="mt-4" onClick={() => setLocation("/live-chat")}>
                     Contact Support
                   </Button>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* NEXUSPAY FLOW */}
+          {selectedMethod === "nexuspay" && (
+            <motion.div key="nexuspay" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+              <button onClick={() => { setSelectedMethod(null); resetNexus(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-4 h-4" /> Back to methods
+              </button>
+
+              {nexusStatus === "idle" && (
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-border">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-violet-600 flex items-center justify-center">
+                      <Globe className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">NexusPay Deposit</p>
+                      <p className="text-xs text-muted-foreground">Mobile money & cards — 15 currencies</p>
+                    </div>
+                  </div>
+
+                  {/* Currency selector */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Select Currency</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {Object.keys(NEXUS_CURRENCY_FLAGS).map(currency => (
+                        <button
+                          key={currency}
+                          onClick={() => setNexusCurrency(currency)}
+                          className={`py-2.5 px-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 border transition-all active:scale-95 ${
+                            nexusCurrency === currency
+                              ? "bg-purple-600 text-white border-purple-600 shadow-md scale-105"
+                              : "bg-background border-border text-foreground hover:border-purple-400"
+                          }`}
+                        >
+                          <span>{NEXUS_CURRENCY_FLAGS[currency]}</span>
+                          <span className="text-xs">{currency}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency)
+                        ? "📱 Mobile money payment"
+                        : "💳 Card / bank payment"}
+                    </p>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Amount ({nexusCurrency})</label>
+                    <Input
+                      type="number" step="any"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="text-base"
+                    />
+                  </div>
+
+                  {/* Phone — mobile money only */}
+                  {NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency) && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Mobile Money Phone</label>
+                      <Input
+                        type="tel"
+                        value={nexusPhone}
+                        onChange={e => setNexusPhone(e.target.value)}
+                        placeholder={user?.phone || "e.g. +254712345678"}
+                      />
+                      <p className="text-xs text-muted-foreground">Phone registered with your mobile money provider</p>
+                    </div>
+                  )}
+
+                  <Button
+                    onClick={handleNexusDeposit}
+                    disabled={nexusInitiating || !amount || parseFloat(amount) <= 0}
+                    className="w-full bg-gradient-to-r from-purple-600 to-violet-600 hover:from-purple-500 hover:to-violet-500"
+                  >
+                    {nexusInitiating
+                      ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Processing...</>
+                      : `Deposit ${nexusCurrency}`}
+                  </Button>
+                </div>
+              )}
+
+              {nexusStatus === "pending" && (
+                <div className="bg-card border border-border rounded-2xl p-6 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto">
+                    <Globe className="w-8 h-8 text-purple-600 animate-pulse" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">Payment Initiated</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {nexusRedirectUrl
+                        ? "Complete payment in the tab that opened."
+                        : `Complete the ${nexusCurrency} prompt on your phone.`}
+                    </p>
+                  </div>
+                  {nexusRedirectUrl && (
+                    <Button variant="outline" size="sm" onClick={() => window.open(nexusRedirectUrl, "_blank")}>
+                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Open Payment Link
+                    </Button>
+                  )}
+                  <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span>Waiting for confirmation...</span>
+                  </div>
+                  <Button variant="ghost" className="w-full text-sm text-destructive" onClick={resetNexus}>Cancel</Button>
+                  <p className="text-xs text-muted-foreground">Ref: <span className="font-mono">{nexusRef}</span></p>
+                </div>
+              )}
+
+              {nexusStatus === "completed" && (
+                <div className="bg-card border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
+                    <CheckCircle2 className="w-8 h-8 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-green-700 dark:text-green-400">Deposit Successful!</p>
+                    <p className="text-sm text-muted-foreground mt-1">{nexusCurrency} wallet credited.</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button className="flex-1 bg-green-600 hover:bg-green-500" onClick={() => setLocation("/dashboard")}>Go to Dashboard</Button>
+                    <Button variant="outline" className="flex-1" onClick={resetNexus}>New Deposit</Button>
+                  </div>
+                </div>
+              )}
+
+              {nexusStatus === "failed" && (
+                <div className="bg-card border border-red-200 dark:border-red-800 rounded-2xl p-6 text-center space-y-4">
+                  <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+                  <div>
+                    <p className="font-semibold text-red-600">Payment Failed</p>
+                    <p className="text-sm text-muted-foreground mt-1">The payment was declined or timed out.</p>
+                  </div>
+                  <Button className="w-full" onClick={resetNexus}>Try Again</Button>
                 </div>
               )}
             </motion.div>

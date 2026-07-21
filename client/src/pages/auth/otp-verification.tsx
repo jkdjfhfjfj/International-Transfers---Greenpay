@@ -139,7 +139,7 @@ export default function OtpVerificationPage() {
     <div className="min-h-screen flex flex-col bg-background">
       <WavyHeader size="sm" />
 
-      <div className="flex-1 p-6 flex items-center justify-center">
+      <div className="flex-1 p-6 pb-32 flex items-center justify-center">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -193,14 +193,24 @@ export default function OtpVerificationPage() {
               ))}
             </div>
 
-            <Button
-              type="submit"
-              className="w-full ripple mb-4"
-              disabled={verifyOtpMutation.isPending || otp.join("").length !== 6}
-            >
-              {verifyOtpMutation.isPending ? "Verifying..." : "Verify Code"}
-            </Button>
           </form>
+
+          {/* Fixed bottom Verify button — Android feel */}
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <div className="max-w-sm mx-auto p-4">
+              <Button
+                onClick={() => {
+                  const otpCode = otp.join("");
+                  if (otpCode.length === 6) verifyOtpMutation.mutate(otpCode);
+                }}
+                className="w-full ripple"
+                style={{ height: 52 }}
+                disabled={verifyOtpMutation.isPending || otp.join("").length !== 6}
+              >
+                {verifyOtpMutation.isPending ? "Verifying..." : "Verify Code"}
+              </Button>
+            </div>
+          </div>
 
           <p className="text-muted-foreground text-sm">
             Didn't receive a code?{" "}

@@ -149,7 +149,7 @@ export default function GoogleCompletePage() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <WavyHeader size="sm" />
-      <div className="flex-1 p-5 max-w-sm mx-auto w-full">
+      <div className="flex-1 p-5 pb-28 max-w-sm mx-auto w-full overflow-y-auto">
 
         {/* Progress steps */}
         <div className="flex items-center justify-center gap-1 mb-6">
@@ -214,9 +214,6 @@ export default function GoogleCompletePage() {
                 />
                 <p className="text-xs text-muted-foreground">Pre-filled from Google — edit if needed</p>
               </div>
-              <Button className="w-full rounded-xl" onClick={goNext}>
-                Continue <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
             </motion.div>
           )}
 
@@ -262,14 +259,6 @@ export default function GoogleCompletePage() {
                   <p className="text-xs text-muted-foreground mt-1">Enter without the country code</p>
                 </div>
               </div>
-              <div className="flex gap-3">
-                <Button variant="outline" className="rounded-xl" onClick={() => setStep(1)}>
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                </Button>
-                <Button className="flex-1 rounded-xl" onClick={goNext}>
-                  Continue <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
             </motion.div>
           )}
 
@@ -314,18 +303,6 @@ export default function GoogleCompletePage() {
                   </span>
                 </label>
               </div>
-              <div className="flex gap-3">
-                <Button variant="outline" className="rounded-xl" onClick={() => setStep(2)}>
-                  <ArrowLeft className="w-4 h-4 mr-1" /> Back
-                </Button>
-                <Button className="flex-1 rounded-xl"
-                  onClick={goNext}
-                  disabled={completeMutation.isPending}>
-                  {completeMutation.isPending
-                    ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
-                    : <>Create Account <ArrowRight className="w-4 h-4 ml-2" /></>}
-                </Button>
-              </div>
             </motion.div>
           )}
 
@@ -348,6 +325,31 @@ export default function GoogleCompletePage() {
 
         </AnimatePresence>
       </div>
+
+      {/* Fixed bottom action buttons — Android feel */}
+      {step < 4 && (
+        <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+          <div className="max-w-sm mx-auto p-4 flex gap-3">
+            {step > 1 && (
+              <Button variant="outline" className="rounded-xl" onClick={() => setStep(step - 1)}>
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+            )}
+            <Button
+              className="flex-1 rounded-xl"
+              style={{ height: 52 }}
+              onClick={goNext}
+              disabled={completeMutation.isPending}
+            >
+              {step === 3
+                ? completeMutation.isPending
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
+                  : <>Create Account <ArrowRight className="w-4 h-4 ml-2" /></>
+                : <>Continue <ArrowRight className="w-4 h-4 ml-2" /></>}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

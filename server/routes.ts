@@ -8102,6 +8102,17 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  app.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteNotification(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting notification:', error);
+      res.status(500).json({ message: "Error deleting notification" });
+    }
+  });
+
   // Admin withdrawal management endpoints
   app.get("/api/admin/withdrawals", async (req, res) => {
     try {
