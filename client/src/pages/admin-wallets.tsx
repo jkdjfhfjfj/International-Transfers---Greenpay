@@ -174,7 +174,9 @@ export default function AdminWalletsPage() {
         nexusApiKey,
         fallbackRates,
       });
-      return r.json();
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.message || "Failed to save settings");
+      return data;
     },
     onSuccess: () => {
       toast({ title: "Settings saved" });

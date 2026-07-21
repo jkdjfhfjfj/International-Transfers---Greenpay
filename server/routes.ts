@@ -382,6 +382,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
+      // Auto-create default wallet for new user
+      try {
+        const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, '') || "USD";
+        await db.insert(wallets).values({ userId: user.id, currency: defCurrency, isDefault: true, isActive: true });
+      } catch (walletErr) {
+        console.error('[Signup] Wallet auto-create error:', walletErr);
+      }
+
       // Remove password from response
       const { password, ...userResponse } = user;
       
@@ -3712,10 +3721,10 @@ p{color:#6b7280;font-size:14px;}</style>
   app.put("/api/users/:userId/settings", async (req, res) => {
     try {
       const { userId } = req.params;
-      const { defaultCurrency, pushNotificationsEnabled, twoFactorEnabled, biometricEnabled, ...settings } = req.body;
+      const { defaultCurrency, pushNotificationsEnabled, twoFactorEnabled, biometricEnabled, darkMode, ...settings } = req.body;
       
       // Save settings to user profile
-      const updateData = { ...settings };
+      const updateData: Record<string, any> = { ...settings };
       if (defaultCurrency) updateData.defaultCurrency = defaultCurrency;
       if (pushNotificationsEnabled !== undefined) updateData.pushNotificationsEnabled = pushNotificationsEnabled;
       if (twoFactorEnabled !== undefined) updateData.twoFactorEnabled = twoFactorEnabled;
@@ -3723,6 +3732,29 @@ p{color:#6b7280;font-size:14px;}</style>
       if (darkMode !== undefined) updateData.darkMode = darkMode;
       
       const user = await storage.updateUser(userId, updateData);
+
+      // Sync default wallet to match new defaultCurrency
+      if (defaultCurrency && user) {
+        try {
+          const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+          const matchingWallet = userWallets.find(w => w.currency === defaultCurrency);
+          if (matchingWallet) {
+            // Set this wallet as default, unset others
+            await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
+            await db.update(wallets).set({ isDefault: true, updatedAt: new Date() }).where(eq(wallets.id, matchingWallet.id));
+          } else {
+            // Create wallet for the selected currency if it doesn't exist
+            const enabledSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+            const enabled = (enabledSetting.rows[0]?.value?.replace(/['"]/g, '') || "USD,KES").split(",");
+            if (enabled.includes(defaultCurrency)) {
+              await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
+              await db.insert(wallets).values({ userId, currency: defaultCurrency, isDefault: true, isActive: true });
+            }
+          }
+        } catch (walletSyncErr) {
+          console.error('Wallet sync error:', walletSyncErr);
+        }
+      }
       
       if (user) {
         const { password, ...userResponse } = user;
@@ -11407,7 +11439,21 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     try {
       const userId = (req as any).user.id;
       const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map(c => [c.code, c]));
-      const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      let userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+
+      // Auto-create a default wallet if user has none
+      if (userWallets.length === 0) {
+        try {
+          const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+          const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+          const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, '') || userRecord[0]?.defaultCurrency || "USD";
+          const [newWallet] = await db.insert(wallets).values({ userId, currency: defCurrency, isDefault: true, isActive: true }).returning();
+          userWallets = [newWallet];
+        } catch (autoCreateErr) {
+          console.error('Wallet auto-create error:', autoCreateErr);
+        }
+      }
+
       const enriched = userWallets.map(w => ({
         ...w,
         availableBalance: parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0"),

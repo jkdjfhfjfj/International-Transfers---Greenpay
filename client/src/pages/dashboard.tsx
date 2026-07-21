@@ -356,7 +356,12 @@ export default function DashboardPage() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.08 }}
         >
-          {userWallets.length > 0 ? (
+          {walletsLoading ? (
+            <div className="bg-white/10 rounded-2xl p-4 text-center">
+              <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin mx-auto mb-2" />
+              <p className="text-white/60 text-sm">Loading wallets...</p>
+            </div>
+          ) : userWallets.length > 0 ? (
             <WalletCards
               wallets={userWallets}
               showBalance={showBalance}
@@ -367,8 +372,13 @@ export default function DashboardPage() {
               showAdd={true}
             />
           ) : (
-            <div className="bg-white/10 rounded-2xl p-4 text-center">
-              <p className="text-white/60 text-sm">Loading wallets...</p>
+            <div
+              onClick={() => setAddWalletOpen(true)}
+              className="bg-white/10 rounded-2xl p-5 text-center cursor-pointer hover:bg-white/15 transition-colors border-2 border-dashed border-white/30"
+            >
+              <Wallet className="w-8 h-8 text-white/60 mx-auto mb-2" />
+              <p className="text-white/80 text-sm font-medium">No wallets yet</p>
+              <p className="text-white/50 text-xs mt-0.5">Tap to add your first wallet</p>
             </div>
           )}
 

@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { WavyHeader } from "@/components/wavy-header";
+import BottomNavigation from "@/components/bottom-navigation";
 import { useState, useEffect } from "react";
 import { Copy, Eye, EyeOff, Plus, Trash2, CheckCircle, Code } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -473,6 +474,7 @@ export default function APIServicePage() {
           </p>
         </motion.div>
       </div>
+      <BottomNavigation />
     </div>
   );
 }

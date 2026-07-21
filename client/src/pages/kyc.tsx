@@ -168,6 +168,7 @@ export default function KYCPage() {
 
   return (
     <div className="min-h-screen bg-background pb-28">
+      <WavyHeader size="sm" />
       <div className="max-w-md mx-auto px-4 pt-6 space-y-6">
         {/* Admin-requested Advanced KYC banner */}
         {advancedKycRequested && advancedStatus === "not_submitted" && basicStatus === "verified" && (

@@ -12,9 +12,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { mockCurrencies } from "@/lib/mock-data";
+import { useWallets } from "@/hooks/use-wallets";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
+import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight } from "lucide-react";
 
 const withdrawSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) >= 100, "Minimum withdrawal is KSh 100"),
@@ -37,8 +38,12 @@ export default function WithdrawPage() {
   const { toast } = useToast();
   const { user } = useAuth();
 
-  // Use KES balance for withdrawals - users must convert USD to KES first
-  const realTimeBalance = parseFloat(user?.kesBalance || '0');
+  const { wallets: userWallets } = useWallets();
+  const defaultWallet = userWallets.find(w => w.isDefault) || userWallets[0] || null;
+  const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
+  const activeWallet = userWallets.find(w => w.id === selectedWalletId) || defaultWallet;
+  const realTimeBalance = parseFloat(activeWallet?.balance || user?.kesBalance || '0');
+  const activeSymbol = activeWallet?.currency === 'KES' ? 'KSh' : activeWallet?.currency || 'KSh';
   const usdBalance = parseFloat(user?.balance || '0');
 
   const form = useForm<WithdrawForm>({
@@ -96,7 +101,7 @@ export default function WithdrawPage() {
     {
       id: "bank-transfer",
       name: "Bank Transfer",
-      icon: "account_balance",
+      Icon: Building2,
       description: "Direct transfer to your bank account",
       fee: "KSh 300",
       processingTime: "1-3 business days",
@@ -105,7 +110,7 @@ export default function WithdrawPage() {
     {
       id: "mobile-money",
       name: "Mobile Money",
-      icon: "phone_android",
+      Icon: Smartphone,
       description: "M-Pesa, Airtel Money, MTN Mobile Money",
       fee: "KSh 200",
       processingTime: "Within 30 minutes",
@@ -114,7 +119,7 @@ export default function WithdrawPage() {
     {
       id: "local-bank",
       name: "Local Bank Account",
-      icon: "account_balance_wallet",
+      Icon: Wallet,
       description: "Direct deposit to local African banks",
       fee: "KSh 400",
       processingTime: "2-4 hours",
@@ -158,14 +163,27 @@ export default function WithdrawPage() {
           className="bg-gradient-to-r from-primary/10 to-secondary/10 p-4 rounded-xl border border-primary/20"
         >
           <div className="text-center">
-            <p className="text-sm text-muted-foreground">Available for Withdrawal (KES)</p>
-            <p className="text-2xl font-bold text-primary" data-testid="text-available-balance">KSh {formatNumber(realTimeBalance)}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {realTimeBalance < 100 && usdBalance > 0 && (
-                <span className="text-amber-600">Convert USD to KES to withdraw • </span>
-              )}
-              Real-time Balance
-            </p>
+            {userWallets.length > 1 && (
+              <div className="flex gap-2 justify-center flex-wrap mb-3">
+                {userWallets.filter(w => w.isActive && !w.isSuspended).map(w => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    onClick={() => setSelectedWalletId(w.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
+                      (selectedWalletId === w.id || (!selectedWalletId && w.id === defaultWallet?.id))
+                        ? 'bg-primary text-white border-primary'
+                        : 'bg-muted text-muted-foreground border-border'
+                    }`}
+                  >
+                    {w.currency}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="text-sm text-muted-foreground">Available for Withdrawal ({activeWallet?.currency || 'KES'})</p>
+            <p className="text-2xl font-bold text-primary" data-testid="text-available-balance">{activeSymbol} {formatNumber(realTimeBalance)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Real-time Balance</p>
           </div>
         </motion.div>
 
@@ -178,7 +196,7 @@ export default function WithdrawPage() {
             className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-4 rounded-xl"
           >
             <div className="flex items-start">
-              <span className="material-icons text-blue-600 mr-3 mt-0.5">info</span>
+              <Info className="w-5 h-5 text-blue-600 mr-3 mt-0.5 shrink-0" />
               <div>
                 <p className="font-medium text-blue-900 dark:text-blue-200 text-sm mb-1">Convert USD to KES First</p>
                 <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
@@ -221,9 +239,9 @@ export default function WithdrawPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {mockCurrencies.slice(0, 3).map((currency) => (
-                            <SelectItem key={currency.code} value={currency.code}>
-                              {currency.symbol} {currency.code}
+                          {userWallets.filter(w => w.isActive && !w.isSuspended).map((w) => (
+                            <SelectItem key={w.currency} value={w.currency}>
+                              {w.currency}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -304,7 +322,7 @@ export default function WithdrawPage() {
                           data-testid={`withdraw-method-${method.id}`}
                         >
                           <div className="w-12 h-12 bg-muted rounded-xl flex items-center justify-center mr-4">
-                            <span className="material-icons text-muted-foreground">{method.icon}</span>
+                            <method.Icon className="w-5 h-5 text-muted-foreground" />
                           </div>
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-1">
@@ -317,7 +335,7 @@ export default function WithdrawPage() {
                             <p className="text-xs text-accent font-medium mt-1">{method.processingTime}</p>
                           </div>
                           {field.value === method.id && (
-                            <span className="material-icons text-primary ml-2">check_circle</span>
+                            <CheckCircle className="w-5 h-5 text-primary ml-2 shrink-0" />
                           )}
                         </motion.button>
                       ))}
@@ -342,7 +360,7 @@ export default function WithdrawPage() {
                 data-testid="button-crypto-withdraw"
               >
                 <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl flex items-center justify-center mr-4 shadow-md group-hover:scale-105 transition-transform">
-                  <span className="material-icons text-white">currency_bitcoin</span>
+                  <Bitcoin className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
@@ -352,7 +370,7 @@ export default function WithdrawPage() {
                   <p className="text-sm text-muted-foreground">Withdraw to any wallet address worldwide</p>
                   <p className="text-xs text-accent font-medium mt-1">30–60 minutes</p>
                 </div>
-                <span className="material-icons text-muted-foreground ml-2">chevron_right</span>
+                <ChevronRight className="w-5 h-5 text-muted-foreground ml-2 shrink-0" />
               </button>
             </motion.div>
 
@@ -511,7 +529,7 @@ export default function WithdrawPage() {
               className="bg-accent/10 p-4 rounded-xl border border-accent/20"
             >
               <div className="flex items-start">
-                <span className="material-icons text-accent mr-3 mt-0.5">info</span>
+                <Info className="w-5 h-5 text-accent mr-3 mt-0.5 shrink-0" />
                 <div>
                   <h4 className="font-medium text-accent mb-1">Important Information</h4>
                   <ul className="text-sm text-muted-foreground space-y-1">
