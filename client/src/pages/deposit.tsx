@@ -281,7 +281,7 @@ export default function DepositPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {(["mpesa", "crypto", "bank_transfer", "card"] as const).map(method => {
+                {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
                   const meta = METHOD_META[method];
                   const enabled = isEnabled(method);
                   const Icon = meta.icon;
@@ -453,70 +453,74 @@ export default function DepositPage() {
                 <ArrowLeft className="w-4 h-4" /> Back to methods
               </button>
 
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 flex gap-2">
-                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">Send crypto to the address below. Your USD balance will be credited after blockchain confirmations. Only send the exact coin to its matching address.</p>
+              <div className="bg-primary/8 dark:bg-primary/10 border border-primary/20 rounded-xl p-3 flex gap-2">
+                <Info className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-primary/90">Send crypto to the address below. Your balance will be credited after blockchain confirmations. Only send the exact coin to its matching address.</p>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
-                <div className="space-y-2">
-                  <p className="text-xs font-medium text-muted-foreground">Select Coin</p>
+              <div className="bg-card border border-border rounded-2xl overflow-hidden">
+                {/* Coin selector header */}
+                <div className="bg-gradient-to-r from-primary/10 to-primary/5 border-b border-border p-4">
+                  <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Select Coin</p>
                   <div className="grid grid-cols-4 gap-2">
                     {["BTC", "ETH", "USDT", "USDC"].map(coin => (
                       <button
                         key={coin}
                         onClick={() => setSelectedCoin(coin)}
                         data-testid={`coin-btn-${coin}`}
-                        className={`py-2.5 rounded-xl text-sm font-bold transition-all ${selectedCoin === coin ? `bg-gradient-to-r ${COIN_COLORS[coin] || "from-gray-500 to-gray-600"} text-white shadow-md` : "bg-muted text-muted-foreground"}`}
+                        className={`py-3 rounded-xl transition-all flex flex-col items-center gap-1 ${
+                          selectedCoin === coin
+                            ? `bg-gradient-to-br ${COIN_COLORS[coin] || "from-primary to-primary/80"} text-white shadow-lg scale-105`
+                            : "bg-background border border-border text-muted-foreground hover:border-primary/30"
+                        }`}
                       >
-                        {COIN_ICONS[coin] || coin}
+                        <span className="text-base font-bold">{COIN_ICONS[coin] || coin}</span>
+                        <span className="text-[9px] font-semibold opacity-80">{coin}</span>
                       </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {["BTC", "ETH", "USDT", "USDC"].map(coin => (
-                      <p key={coin} className="text-center text-[10px] text-muted-foreground">{coin}</p>
                     ))}
                   </div>
                 </div>
 
-                {selectedAddresses.length === 0 ? (
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-center">
-                    <p className="text-sm text-yellow-700 dark:text-yellow-300 font-medium">No {selectedCoin} addresses configured</p>
-                    <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">Contact support or try another coin.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedAddresses.map(addr => (
-                      <div key={addr.id} className="bg-muted rounded-xl p-3 space-y-2" data-testid={`crypto-addr-${addr.id}`}>
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded">{addr.networkLabel || addr.network}</span>
+                <div className="p-4 space-y-3">
+                  {selectedAddresses.length === 0 ? (
+                    <div className="border border-dashed border-border rounded-xl p-6 text-center">
+                      <Bitcoin className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
+                      <p className="text-sm font-medium text-muted-foreground">No {selectedCoin} addresses configured</p>
+                      <p className="text-xs text-muted-foreground/70 mt-1">Contact support or try another coin.</p>
+                    </div>
+                  ) : (
+                    selectedAddresses.map(addr => (
+                      <div key={addr.id} className="border border-border rounded-xl overflow-hidden" data-testid={`crypto-addr-${addr.id}`}>
+                        <div className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border">
+                          <span className="px-2 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full">{addr.networkLabel || addr.network}</span>
                           {addr.minDeposit && parseFloat(addr.minDeposit) > 0 && (
                             <span className="text-[10px] text-muted-foreground">Min: {addr.minDeposit} {selectedCoin}</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-mono text-xs bg-background rounded p-2 flex-1 break-all">{addr.address}</p>
-                          <CopyButton text={addr.address} />
-                        </div>
-                        {addr.memo && (
-                          <div className="flex items-center gap-2 text-xs">
-                            <span className="font-semibold text-orange-600">Memo/Tag required:</span>
-                            <span className="font-mono bg-background rounded px-2 py-1 flex-1">{addr.memo}</span>
-                            <CopyButton text={addr.memo} />
+                        <div className="p-3 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <p className="font-mono text-xs bg-muted rounded-lg p-2.5 flex-1 break-all text-foreground">{addr.address}</p>
+                            <CopyButton text={addr.address} label="Copy" />
                           </div>
-                        )}
-                        {addr.notes && <p className="text-[11px] text-muted-foreground italic">{addr.notes}</p>}
+                          {addr.memo && (
+                            <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg p-2">
+                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 shrink-0">MEMO REQUIRED</span>
+                              <span className="font-mono text-xs flex-1 text-amber-800 dark:text-amber-300">{addr.memo}</span>
+                              <CopyButton text={addr.memo} />
+                            </div>
+                          )}
+                          {addr.notes && <p className="text-[11px] text-muted-foreground italic">{addr.notes}</p>}
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
               </div>
 
-              <div className="bg-card border border-border rounded-2xl p-4">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Need to notify support of your deposit?</p>
-                <Button variant="outline" size="sm" className="w-full" onClick={() => setLocation("/live-chat")}>
-                  <ExternalLink className="w-3.5 h-3.5 mr-2" /> Contact Support
+              <div className="bg-card border border-border rounded-2xl p-4 flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">Need to notify support of your deposit?</p>
+                <Button variant="outline" size="sm" onClick={() => setLocation("/live-chat")}>
+                  <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Contact Support
                 </Button>
               </div>
             </motion.div>

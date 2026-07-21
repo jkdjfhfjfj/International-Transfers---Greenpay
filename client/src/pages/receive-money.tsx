@@ -18,6 +18,7 @@ import QRCode from "@/components/qr-code";
 import { mockCurrencies } from "@/lib/mock-data";
 import { WavyHeader } from "@/components/wavy-header";
 import { Badge } from "@/components/ui/badge";
+import { Copy, Share2, QrCode, Inbox } from "lucide-react";
 
 const paymentRequestSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than 0"),
@@ -112,11 +113,31 @@ export default function ReceiveMoneyPage() {
   };
 
   const handleCopyAccountDetail = (text: string, label: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: "Copied!",
-      description: `${label} copied to clipboard.`,
-    });
+    const doToast = () => toast({ title: "Copied!", description: `${label} copied to clipboard.` });
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(doToast).catch(() => {
+        // fallback for browsers that block clipboard API
+        const el = document.createElement("textarea");
+        el.value = text;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+        doToast();
+      });
+    } else {
+      const el = document.createElement("textarea");
+      el.value = text;
+      el.style.position = "fixed";
+      el.style.opacity = "0";
+      document.body.appendChild(el);
+      el.select();
+      document.execCommand("copy");
+      document.body.removeChild(el);
+      doToast();
+    }
   };
 
   const handleShare = () => {
@@ -180,7 +201,7 @@ export default function ReceiveMoneyPage() {
               className="bg-gradient-to-br from-card to-muted p-8 rounded-xl border border-border text-center elevation-2 shadow-lg"
             >
               <div className="flex items-center justify-center mb-4">
-                <span className="material-icons text-4xl text-primary">qr_code</span>
+                <QrCode className="w-10 h-10 text-primary" />
               </div>
               <h3 className="font-semibold text-lg mb-2">Your Unique Payment Link</h3>
               <p className="text-sm text-muted-foreground mb-6">Share this QR code or link for instant payments</p>
@@ -208,7 +229,7 @@ export default function ReceiveMoneyPage() {
                   className="w-full"
                   data-testid="button-copy-link"
                 >
-                  <span className="material-icons text-sm mr-1">content_copy</span>
+                  <Copy className="w-4 h-4 mr-1.5" />
                   Copy Link
                 </Button>
                 <Button
@@ -217,7 +238,7 @@ export default function ReceiveMoneyPage() {
                   className="w-full"
                   data-testid="button-share-qr"
                 >
-                  <span className="material-icons text-sm mr-1">share</span>
+                  <Share2 className="w-4 h-4 mr-1.5" />
                   Share Link & QR
                 </Button>
               </div>
@@ -248,15 +269,16 @@ export default function ReceiveMoneyPage() {
                 <div className="flex justify-between items-center p-3 bg-muted rounded-xl">
                   <div>
                     <p className="text-sm text-muted-foreground">Account Number</p>
-                    <p className="font-medium">GP-{user?.id?.slice(-9) || "123456789"}</p>
+                    <p className="font-medium font-mono">GP-{user?.id?.slice(-9) || "123456789"}</p>
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleCopyAccountDetail(`GP-${user?.id?.slice(-9) || "123456789"}`, "Account number")}
-                    className="material-icons text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                     data-testid="button-copy-account"
                   >
-                    content_copy
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Copy</span>
                   </motion.button>
                 </div>
 
@@ -268,10 +290,11 @@ export default function ReceiveMoneyPage() {
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleCopyAccountDetail("GreenPay Digital Bank", "Bank name")}
-                    className="material-icons text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                     data-testid="button-copy-bank"
                   >
-                    content_copy
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Copy</span>
                   </motion.button>
                 </div>
 
@@ -283,10 +306,11 @@ export default function ReceiveMoneyPage() {
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     onClick={() => handleCopyAccountDetail(user?.fullName || "", "Account name")}
-                    className="material-icons text-muted-foreground hover:text-foreground transition-colors"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                     data-testid="button-copy-name"
                   >
-                    content_copy
+                    <Copy className="w-3.5 h-3.5" />
+                    <span className="text-xs font-medium">Copy</span>
                   </motion.button>
                 </div>
               </div>
@@ -472,7 +496,7 @@ export default function ReceiveMoneyPage() {
             </div>
           ) : (
             <div className="p-8 text-center">
-              <span className="material-icons text-muted-foreground mb-3 block text-4xl">inbox</span>
+              <Inbox className="w-10 h-10 text-muted-foreground mb-3 mx-auto" />
               <p className="text-muted-foreground">No incoming payment requests</p>
               <p className="text-sm text-muted-foreground mt-1">Payment requests from others will appear here</p>
             </div>

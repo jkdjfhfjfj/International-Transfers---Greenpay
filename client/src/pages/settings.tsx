@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useCurrencies } from "@/hooks/use-wallets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
@@ -18,6 +19,7 @@ import { WavyHeader } from "@/components/wavy-header";
 export default function SettingsPage() {
   const [, setLocation] = useLocation();
   const { user, logout, login } = useAuth();
+  const { currencies: availableCurrencies } = useCurrencies();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -870,8 +872,19 @@ export default function SettingsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="USD">$ USD</SelectItem>
-                <SelectItem value="KES">KSh KES</SelectItem>
+                {availableCurrencies.length > 0
+                  ? availableCurrencies.map(c => (
+                      <SelectItem key={c.code} value={c.code}>
+                        {c.flag} {c.code}
+                      </SelectItem>
+                    ))
+                  : (
+                    <>
+                      <SelectItem value="USD">🇺🇸 USD</SelectItem>
+                      <SelectItem value="KES">🇰🇪 KES</SelectItem>
+                    </>
+                  )
+                }
               </SelectContent>
             </Select>
           </motion.div>
