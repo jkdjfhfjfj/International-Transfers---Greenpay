@@ -1548,6 +1548,42 @@ p{color:#6b7280;font-size:14px;}</style>
 
   // Note: Chat files are now served via /objects/ endpoint (using object storage)
 
+  // User endpoint: get extracted Didit identity data for profile display
+  app.get("/api/kyc/extracted-data", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+      const kyc = await storage.getKycByUserId(userId);
+      if (!kyc) return res.json({ extractedData: null });
+
+      const decision = (kyc as any).diditDecision as any;
+      if (!decision) return res.json({ extractedData: null });
+
+      const docFeatures = decision?.features?.document || {};
+      const extractedData = {
+        firstName: docFeatures.first_name || null,
+        lastName: docFeatures.last_name || null,
+        fullName: [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
+        dateOfBirth: docFeatures.date_of_birth || null,
+        idNumber: docFeatures.document_number || null,
+        documentType: docFeatures.document_type || (kyc as any).documentType || null,
+        nationality: docFeatures.nationality || null,
+        gender: docFeatures.gender || null,
+        expiryDate: docFeatures.expiry_date || null,
+        address: docFeatures.address || (kyc as any).address || null,
+        issuingCountry: docFeatures.issuing_country || null,
+        diditStatus: (kyc as any).diditStatus || null,
+        kycStatus: kyc.status,
+      };
+
+      res.json({ extractedData });
+    } catch (error) {
+      console.error('[KYC] Extracted data error:', error);
+      res.status(500).json({ message: "Failed to fetch KYC data" });
+    }
+  });
+
   // ── Didit.me KYC Integration ─────────────────────────────────────────────
 
   // Start a didit verification session — returns the didit URL to show the user
@@ -1623,7 +1659,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       const kyc = await storage.getKycByUserId(userId);
       if (!kyc || !(kyc as any).diditSessionId) {
-        return res.json({ status: null, kycStatus: 'not_submitted' });
+        // Return doc status so frontend can show re-verification notice
+        return res.json({ status: null, kycStatus: 'not_submitted', docStatus: kyc?.status || null });
       }
 
       const { getSessionDecision, mapDiditStatusToKyc, isTerminalStatus } = await import('./services/didit');
@@ -4618,33 +4655,56 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const { id } = req.params;
       const { status, verificationNotes } = req.body;
-      
+
+      // 're_verification_requested' resets the user so they can redo Didit flow
+      const isReVerify = status === 're_verification_requested';
+      const docStatus = isReVerify ? 're_verification_requested' : status;
+      const userKycStatus = isReVerify ? 'not_submitted' : status;
+
       const updatedKyc = await storage.updateKycDocument(id, {
-        status,
+        status: docStatus,
         verificationNotes,
-        verifiedAt: status === 'verified' ? new Date() : null
+        verifiedAt: status === 'verified' ? new Date() : null,
+        // Clear didit session so a fresh one is created on retry
+        ...(isReVerify ? { diditSessionId: null, diditStatus: null } as any : {}),
       });
 
       if (updatedKyc) {
         // Update user KYC status
-        await storage.updateUser(updatedKyc.userId, { kycStatus: status });
-        
-        // Send KYC verified notification via SMS, WhatsApp, and Email
-        if (status === 'verified') {
-          const user = await storage.getUser(updatedKyc.userId);
-          if (user) {
+        await storage.updateUser(updatedKyc.userId, { kycStatus: userKycStatus });
+
+        // Notify user
+        const user = await storage.getUser(updatedKyc.userId);
+        if (user) {
+          if (status === 'verified') {
             const { messagingService } = await import('./services/messaging');
             const { mailtrapService } = await import('./services/mailtrap');
-            
             Promise.all([
               messagingService.sendKYCVerified(user.phone),
               user.email ? mailtrapService.sendKYCVerified(
                 user.email,
-                user.firstName || 'User',
-                user.lastName || ''
+                user.fullName?.split(' ')[0] || 'User',
+                user.fullName?.split(' ').slice(1).join(' ') || ''
               ) : Promise.resolve(false)
             ]).catch(err => console.error('KYC notification error:', err));
           }
+
+          // In-app notification
+          const notifMsg = isReVerify
+            ? 'Admin has requested you to re-verify your identity. Please complete a new verification.'
+            : status === 'verified'
+            ? 'Your identity has been verified. You now have full access to all features.'
+            : status === 'rejected'
+            ? `Your KYC verification was rejected. ${verificationNotes ? 'Reason: ' + verificationNotes : 'Please try again.'}`
+            : 'Your KYC status has been updated.';
+
+          await storage.createNotification({
+            userId: updatedKyc.userId,
+            title: isReVerify ? 'Re-verification Required' : status === 'verified' ? 'KYC Verified ✅' : status === 'rejected' ? 'KYC Rejected ❌' : 'KYC Update',
+            message: notifMsg,
+            type: isReVerify ? 'warning' : status === 'verified' ? 'success' : status === 'rejected' ? 'error' : 'info',
+            isGlobal: false,
+          } as any);
         }
       }
 
@@ -4652,6 +4712,96 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('KYC update error:', error);
       res.status(500).json({ message: "Failed to update KYC" });
+    }
+  });
+
+  // Admin: manually poll Didit for the latest decision on a KYC document
+  app.post("/api/admin/kyc/:id/poll-didit", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Fetch the KYC document
+      const [kyc] = await db.select().from(kycDocuments).where(eq(kycDocuments.id, id));
+      if (!kyc) return res.status(404).json({ message: "KYC document not found" });
+
+      const sessionId = (kyc as any).diditSessionId;
+      if (!sessionId) {
+        return res.status(400).json({ message: "No Didit session attached to this document" });
+      }
+
+      const { getSessionDecision, mapDiditStatusToKyc, isTerminalStatus } = await import('./services/didit');
+      const decision = await getSessionDecision(sessionId);
+
+      if (!decision) {
+        return res.status(502).json({ message: "Failed to fetch decision from Didit" });
+      }
+
+      const diditStatus = decision.status;
+      const kycStatus = mapDiditStatusToKyc(diditStatus);
+
+      // Extract structured data from Didit decision features
+      const docFeatures = (decision as any).features?.document || {};
+      const extractedData = {
+        firstName: docFeatures.first_name || null,
+        lastName: docFeatures.last_name || null,
+        fullName: [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
+        dateOfBirth: docFeatures.date_of_birth || null,
+        idNumber: docFeatures.document_number || null,
+        documentType: docFeatures.document_type || null,
+        nationality: docFeatures.nationality || null,
+        gender: docFeatures.gender || null,
+        expiryDate: docFeatures.expiry_date || null,
+        address: docFeatures.address || null,
+        issuingCountry: docFeatures.issuing_country || null,
+      };
+
+      // Update the kyc_documents record
+      await storage.updateKycDocument(id, {
+        diditStatus,
+        status: kycStatus,
+        diditDecision: decision as any,
+        verifiedAt: kycStatus === 'verified' ? new Date() : undefined,
+      } as any);
+
+      // Update user status
+      await storage.updateUser(kyc.userId, { kycStatus });
+
+      // Send notifications on terminal statuses
+      if (isTerminalStatus(diditStatus)) {
+        const user = await storage.getUser(kyc.userId);
+        if (user) {
+          const { messagingService } = await import('./services/messaging');
+          const { mailtrapService } = await import('./services/mailtrap');
+          if (kycStatus === 'verified') {
+            Promise.all([
+              messagingService.sendKYCVerified(user.phone),
+              user.email ? mailtrapService.sendKYCVerified(user.email, user.fullName?.split(' ')[0] || 'User', '') : Promise.resolve(),
+            ]).catch(err => console.error('[Didit] Notification error:', err));
+          }
+          await storage.createNotification({
+            userId: kyc.userId,
+            title: kycStatus === 'verified' ? 'KYC Verified ✅' : 'KYC Update',
+            message: kycStatus === 'verified'
+              ? 'Your identity has been verified. You now have full access to all features.'
+              : kycStatus === 'rejected'
+              ? 'Your KYC verification was not successful. Please try again.'
+              : 'Your KYC is under review.',
+            type: kycStatus === 'verified' ? 'success' : kycStatus === 'rejected' ? 'error' : 'info',
+            isGlobal: false,
+          } as any);
+        }
+      }
+
+      res.json({
+        diditStatus,
+        kycStatus,
+        decision,
+        extractedData,
+        sessionId,
+      });
+    } catch (error) {
+      console.error('[Admin] Poll Didit error:', error);
+      res.status(500).json({ message: "Failed to poll Didit" });
     }
   });
 

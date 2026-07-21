@@ -13,7 +13,7 @@ import { useCurrencies } from "@/hooks/use-wallets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock } from "lucide-react";
+import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock, ShieldCheck, User, Calendar, Hash, MapPin, CreditCard, AlertCircle } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function SettingsPage() {
@@ -590,9 +590,13 @@ export default function SettingsPage() {
               <p className={`text-xs px-2 py-1 rounded-full inline-block mt-1 ${
                 user?.kycStatus === 'verified' 
                   ? 'text-green-600 bg-green-100 dark:text-green-400 dark:bg-green-950' 
+                  : user?.kycStatus === 'not_submitted' || !user?.kycStatus
+                  ? 'text-gray-500 bg-gray-100 dark:text-gray-400 dark:bg-gray-800'
+                  : user?.kycStatus === 'rejected'
+                  ? 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-950'
                   : 'text-yellow-600 bg-yellow-100 dark:text-yellow-400 dark:bg-yellow-950'
               }`}>
-                {user?.kycStatus === 'verified' ? 'KYC Verified' : 'KYC Pending'}
+                {user?.kycStatus === 'verified' ? 'KYC Verified ✓' : user?.kycStatus === 'rejected' ? 'KYC Rejected' : user?.kycStatus === 'not_submitted' || !user?.kycStatus ? 'KYC Not Started' : 'KYC Pending'}
               </p>
             </div>
           </div>
@@ -842,6 +846,9 @@ export default function SettingsPage() {
               </DialogContent>
             </Dialog>
         </motion.div>
+
+        {/* Verified Identity Card — shows extracted Didit data */}
+        <KycIdentityCard kycStatus={user?.kycStatus} />
 
         {/* Account Settings */}
         <motion.div
@@ -1691,5 +1698,93 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// ── Verified Identity Card (read-only Didit extracted data) ──────────────────
+function KycIdentityCard({ kycStatus }: { kycStatus?: string }) {
+  const { data, isLoading } = useQuery<{
+    extractedData: {
+      firstName: string | null;
+      lastName: string | null;
+      fullName: string | null;
+      dateOfBirth: string | null;
+      idNumber: string | null;
+      documentType: string | null;
+      nationality: string | null;
+      gender: string | null;
+      expiryDate: string | null;
+      address: string | null;
+      issuingCountry: string | null;
+      diditStatus: string | null;
+      kycStatus: string;
+    } | null;
+  }>({
+    queryKey: ["/api/kyc/extracted-data"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", "/api/kyc/extracted-data");
+      return res.json();
+    },
+    enabled: kycStatus === "verified",
+  });
+
+  // Only show when verified and there's data to show
+  if (kycStatus !== "verified") return null;
+  if (isLoading) return null;
+
+  const d = data?.extractedData;
+  if (!d || (!d.fullName && !d.idNumber && !d.nationality && !d.dateOfBirth)) return null;
+
+  const fields = [
+    { icon: <User className="w-4 h-4" />, label: "Full Name (Verified)", value: d.fullName },
+    { icon: <Calendar className="w-4 h-4" />, label: "Date of Birth", value: d.dateOfBirth },
+    { icon: <Hash className="w-4 h-4" />, label: "ID / Document Number", value: d.idNumber },
+    { icon: <Globe className="w-4 h-4" />, label: "Nationality", value: d.nationality },
+    { icon: <Globe className="w-4 h-4" />, label: "Gender", value: d.gender },
+    { icon: <CreditCard className="w-4 h-4" />, label: "Document Type", value: d.documentType },
+    { icon: <CreditCard className="w-4 h-4" />, label: "Document Expiry", value: d.expiryDate },
+    { icon: <Globe className="w-4 h-4" />, label: "Issuing Country", value: d.issuingCountry },
+    { icon: <MapPin className="w-4 h-4" />, label: "Address (from ID)", value: d.address },
+  ].filter(f => f.value);
+
+  if (fields.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="bg-card border border-border rounded-xl overflow-hidden elevation-1"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 p-4 bg-green-50 dark:bg-green-900/20 border-b border-border">
+        <div className="w-9 h-9 bg-green-100 dark:bg-green-800/30 rounded-full flex items-center justify-center shrink-0">
+          <ShieldCheck className="w-5 h-5 text-green-600" />
+        </div>
+        <div>
+          <p className="font-semibold text-sm">Verified Identity</p>
+          <p className="text-xs text-muted-foreground">Data from Didit eKYC — read only</p>
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div className="divide-y divide-border">
+        {fields.map((f, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <div className="text-muted-foreground shrink-0">{f.icon}</div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground">{f.label}</p>
+              <p className="text-sm font-medium truncate">{f.value}</p>
+            </div>
+            <AlertCircle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" title="Read only — from identity verification" />
+          </div>
+        ))}
+      </div>
+
+      <div className="px-4 py-3 bg-muted/30 text-xs text-muted-foreground flex items-center gap-1.5">
+        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+        These details were extracted from your verified ID and cannot be edited.
+      </div>
+    </motion.div>
   );
 }

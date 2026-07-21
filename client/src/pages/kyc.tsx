@@ -86,17 +86,21 @@ export default function KYCPage() {
   const isVerified = kycStatus === "verified";
   const isPending = kycStatus === "pending";
   const isRejected = kycStatus === "rejected";
+  const isNotStarted = kycStatus === "not_submitted";
 
   // Query current didit session status
   const { data: diditStatusData, refetch: refetchStatus } = useQuery<{
     status: string | null;
     kycStatus: KycStatus;
     sessionId: string | null;
+    docStatus: string | null;
   }>({
     queryKey: ["/api/kyc/didit/status"],
-    enabled: !!user?.id && (isPending || !!sessionId),
+    enabled: !!user?.id && (isPending || isNotStarted || !!sessionId),
     refetchInterval: isPolling ? 5000 : false,
   });
+
+  const isReVerificationRequested = isNotStarted && diditStatusData?.docStatus === "re_verification_requested";
 
   // Stop polling when we reach a terminal status
   useEffect(() => {
@@ -181,6 +185,23 @@ export default function KYCPage() {
           </p>
         </div>
 
+        {/* Re-verification notice */}
+        {isReVerificationRequested && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-2xl p-4 border bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800 flex items-start gap-3"
+          >
+            <AlertCircle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-semibold text-sm text-orange-800 dark:text-orange-200">Re-verification Required</p>
+              <p className="text-xs text-orange-700 dark:text-orange-300 mt-0.5">
+                An admin has requested that you complete a new identity verification. Please start the process below.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
         {/* Status Card */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
@@ -192,6 +213,8 @@ export default function KYCPage() {
               ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800"
               : isRejected
               ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+              : isReVerificationRequested
+              ? "bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800"
               : "bg-card border-border"
           }`}
         >
@@ -204,6 +227,8 @@ export default function KYCPage() {
                   ? "bg-amber-100 dark:bg-amber-800/30"
                   : isRejected
                   ? "bg-red-100 dark:bg-red-800/30"
+                  : isReVerificationRequested
+                  ? "bg-orange-100 dark:bg-orange-800/30"
                   : "bg-muted"
               }`}
             >
@@ -213,6 +238,8 @@ export default function KYCPage() {
                 <Clock className="w-7 h-7 text-amber-600 animate-pulse" />
               ) : isRejected ? (
                 <XCircle className="w-7 h-7 text-red-600" />
+              ) : isReVerificationRequested ? (
+                <AlertCircle className="w-7 h-7 text-orange-500" />
               ) : (
                 <Shield className="w-7 h-7 text-muted-foreground" />
               )}
@@ -226,6 +253,8 @@ export default function KYCPage() {
                     ? "Under Review"
                     : isRejected
                     ? "Verification Failed"
+                    : isReVerificationRequested
+                    ? "Re-verification Required"
                     : "Not Verified"}
                 </p>
                 <StatusBadge status={kycStatus} />
@@ -237,9 +266,11 @@ export default function KYCPage() {
                   ? "Your documents are being reviewed. Usually completes within minutes."
                   : isRejected
                   ? "Verification was not successful. You can try again."
+                  : isReVerificationRequested
+                  ? "Please complete a fresh verification as requested by our team."
                   : "Complete verification to send money and access all features."}
               </p>
-              {diditStatusData?.status && !isVerified && (
+              {diditStatusData?.status && !isVerified && !isReVerificationRequested && (
                 <div className="mt-1">
                   <DiditStatusLabel diditStatus={diditStatusData.status} />
                 </div>

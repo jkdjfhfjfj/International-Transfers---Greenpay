@@ -47,15 +47,19 @@ export const users = pgTable("users", {
 export const kycDocuments = pgTable("kyc_documents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
-  documentType: text("document_type").notNull(), // national_id, passport, drivers_license
+  documentType: text("document_type").notNull(), // national_id, passport, drivers_license, didit_verification
   frontImageUrl: text("front_image_url"),
   backImageUrl: text("back_image_url"),
   selfieUrl: text("selfie_url"),
   dateOfBirth: text("date_of_birth"),
   address: text("address"),
-  status: text("status").default("pending"),
+  status: text("status").default("pending"), // pending, verified, rejected, re_verification_requested
   verificationNotes: text("verification_notes"),
   verifiedAt: timestamp("verified_at"),
+  // Didit automated verification fields
+  diditSessionId: text("didit_session_id"),
+  diditStatus: text("didit_status"), // raw Didit status string
+  diditDecision: jsonb("didit_decision"), // full Didit decision payload with features/extracted data
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

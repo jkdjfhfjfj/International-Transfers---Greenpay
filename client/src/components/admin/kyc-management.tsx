@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Shield } from "lucide-react";
+import { ExternalLink, Shield, RefreshCw, RotateCcw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -28,16 +28,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { 
-  FileCheck, 
-  CheckCircle, 
-  XCircle, 
-  Eye, 
-  Image,
+import {
+  FileCheck,
+  CheckCircle,
+  XCircle,
+  Eye,
   User,
   Calendar,
   MapPin,
-  AlertTriangle
+  AlertTriangle,
+  Fingerprint,
+  CreditCard,
+  Globe,
+  Hash,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -59,10 +62,74 @@ interface KycDocument {
   updatedAt: string | null;
   diditSessionId: string | null;
   diditStatus: string | null;
+  diditDecision: any | null;
 }
 
 interface KycResponse {
   kycDocuments: KycDocument[];
+}
+
+// Map Didit status to color/label
+function getDiditStatusBadge(diditStatus: string | null | undefined) {
+  if (!diditStatus) return <Badge variant="outline" className="text-xs">Not Started</Badge>;
+  const map: Record<string, { cls: string; label: string }> = {
+    "Approved":       { cls: "bg-green-500 text-white", label: "Approved" },
+    "Declined":       { cls: "bg-red-500 text-white", label: "Declined" },
+    "In Review":      { cls: "bg-amber-500 text-white", label: "In Review" },
+    "In Progress":    { cls: "bg-blue-500 text-white", label: "In Progress" },
+    "Awaiting User":  { cls: "bg-purple-500 text-white", label: "Awaiting User" },
+    "Resubmitted":    { cls: "bg-sky-500 text-white", label: "Resubmitted" },
+    "Expired":        { cls: "bg-gray-400 text-white", label: "Expired" },
+    "Abandoned":      { cls: "bg-gray-400 text-white", label: "Abandoned" },
+    "Kyc Expired":    { cls: "bg-gray-400 text-white", label: "KYC Expired" },
+    "Not Started":    { cls: "bg-gray-200 text-gray-700", label: "Not Started" },
+  };
+  const s = map[diditStatus] || { cls: "bg-gray-200 text-gray-700", label: diditStatus };
+  return <Badge className={`text-xs ${s.cls}`}>{s.label}</Badge>;
+}
+
+function getKycStatusBadge(status: string) {
+  switch (status) {
+    case "verified":
+      return <Badge className="bg-green-500 text-white">Verified</Badge>;
+    case "rejected":
+      return <Badge variant="destructive">Rejected</Badge>;
+    case "pending":
+      return <Badge variant="secondary">Pending Review</Badge>;
+    case "re_verification_requested":
+      return <Badge className="bg-orange-500 text-white">Re-verify Requested</Badge>;
+    default:
+      return <Badge variant="outline">{status}</Badge>;
+  }
+}
+
+function getDocumentTypeName(type: string) {
+  const map: Record<string, string> = {
+    national_id: "National ID",
+    passport: "Passport",
+    drivers_license: "Driver's License",
+    didit_verification: "Didit eKYC",
+  };
+  return map[type] || type;
+}
+
+// Extract structured data from a Didit decision payload
+function extractDiditData(diditDecision: any) {
+  if (!diditDecision) return null;
+  const doc = diditDecision?.features?.document || {};
+  return {
+    firstName: doc.first_name || null,
+    lastName: doc.last_name || null,
+    fullName: [doc.first_name, doc.last_name].filter(Boolean).join(" ") || null,
+    dateOfBirth: doc.date_of_birth || null,
+    idNumber: doc.document_number || null,
+    documentType: doc.document_type || null,
+    nationality: doc.nationality || null,
+    gender: doc.gender || null,
+    expiryDate: doc.expiry_date || null,
+    address: doc.address || null,
+    issuingCountry: doc.issuing_country || null,
+  };
 }
 
 export default function KycManagement() {
@@ -70,6 +137,7 @@ export default function KycManagement() {
   const [reviewStatus, setReviewStatus] = useState("");
   const [reviewNotes, setReviewNotes] = useState("");
   const [viewKyc, setViewKyc] = useState<KycDocument | null>(null);
+  const [pollingId, setPollingId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -89,80 +157,64 @@ export default function KycManagement() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/kyc"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dashboard"] });
-      toast({
-        title: "KYC Updated",
-        description: "KYC document status has been updated successfully",
-      });
+      const label = vars.status === "re_verification_requested" ? "Re-verification requested" : "KYC status updated";
+      toast({ title: label, description: "User has been notified." });
       setSelectedKyc(null);
       setReviewStatus("");
       setReviewNotes("");
     },
     onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to update KYC document",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update KYC document", variant: "destructive" });
     },
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "verified":
-        return <Badge variant="default" className="bg-green-500">Verified</Badge>;
-      case "rejected":
-        return <Badge variant="destructive">Rejected</Badge>;
-      case "pending":
-        return <Badge variant="secondary">Pending Review</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const getDocumentTypeName = (type: string) => {
-    switch (type) {
-      case "national_id":
-        return "National ID";
-      case "passport":
-        return "Passport";
-      case "drivers_license":
-        return "Driver's License";
-      default:
-        return type;
-    }
-  };
+  const pollDiditMutation = useMutation({
+    mutationFn: async (id: string) => {
+      setPollingId(id);
+      const response = await apiRequest("POST", `/api/admin/kyc/${id}/poll-didit`);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/kyc"] });
+      toast({
+        title: "Didit polled",
+        description: `Status: ${data.diditStatus} → KYC: ${data.kycStatus}`,
+      });
+      setPollingId(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Poll failed", description: err?.message || "Could not reach Didit", variant: "destructive" });
+      setPollingId(null);
+    },
+  });
 
   const handleSubmitReview = () => {
     if (!selectedKyc || !reviewStatus) return;
-    
-    updateKycMutation.mutate({
-      id: selectedKyc.id,
-      status: reviewStatus,
-      notes: reviewNotes,
-    });
+    updateKycMutation.mutate({ id: selectedKyc.id, status: reviewStatus, notes: reviewNotes });
   };
 
   if (error) {
     return (
       <Card>
         <CardContent className="p-6">
-          <div className="text-center text-red-600">
-            Failed to load KYC documents
-          </div>
+          <div className="text-center text-red-600">Failed to load KYC documents</div>
         </CardContent>
       </Card>
     );
   }
 
-  const pendingKyc = kycData?.kycDocuments.filter(doc => doc.status === "pending") || [];
-  const reviewedKyc = kycData?.kycDocuments.filter(doc => doc.status !== "pending") || [];
+  const allDocs = kycData?.kycDocuments || [];
+  const pendingKyc = allDocs.filter(doc => doc.status === "pending");
+  const verifiedKyc = allDocs.filter(doc => doc.status === "verified");
+  const rejectedKyc = allDocs.filter(doc => doc.status === "rejected");
+  const reVerifyKyc = allDocs.filter(doc => doc.status === "re_verification_requested");
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+      {/* Header stats */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -170,26 +222,26 @@ export default function KycManagement() {
             KYC Document Review
           </CardTitle>
           <CardDescription>
-            Review and approve user identity verification documents
+            Review, update, and sync user identity verification with Didit
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-4 gap-4">
             <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
               <p className="text-2xl font-bold text-yellow-600">{pendingKyc.length}</p>
-              <p className="text-sm text-yellow-600">Pending Review</p>
+              <p className="text-sm text-yellow-600">Pending</p>
             </div>
             <div className="text-center p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-              <p className="text-2xl font-bold text-green-600">
-                {reviewedKyc.filter(doc => doc.status === "verified").length}
-              </p>
+              <p className="text-2xl font-bold text-green-600">{verifiedKyc.length}</p>
               <p className="text-sm text-green-600">Verified</p>
             </div>
             <div className="text-center p-4 bg-red-50 dark:bg-red-900/20 rounded-lg">
-              <p className="text-2xl font-bold text-red-600">
-                {reviewedKyc.filter(doc => doc.status === "rejected").length}
-              </p>
+              <p className="text-2xl font-bold text-red-600">{rejectedKyc.length}</p>
               <p className="text-sm text-red-600">Rejected</p>
+            </div>
+            <div className="text-center p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg">
+              <p className="text-2xl font-bold text-orange-600">{reVerifyKyc.length}</p>
+              <p className="text-sm text-orange-600">Re-verify</p>
             </div>
           </div>
         </CardContent>
@@ -203,103 +255,16 @@ export default function KycManagement() {
               <AlertTriangle className="w-5 h-5" />
               Pending Reviews ({pendingKyc.length})
             </CardTitle>
-            <CardDescription>
-              Documents awaiting verification
-            </CardDescription>
           </CardHeader>
           <CardContent>
-            {isLoading ? (
-              <div className="flex items-center justify-center py-8">
-                <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>User ID</TableHead>
-                    <TableHead>Document Type</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Didit Status</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingKyc.map((kyc) => (
-                    <TableRow key={kyc.id}>
-                      <TableCell>
-                        <span className="font-mono text-sm">{kyc.userId.slice(0, 8)}...</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="font-medium">{getDocumentTypeName(kyc.documentType)}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">
-                          {format(new Date(kyc.createdAt), "MMM dd, yyyy")}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        {kyc.diditSessionId ? (
-                          <div className="space-y-1">
-                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                              {kyc.diditStatus || "Not Started"}
-                            </Badge>
-                            <a
-                              href={`https://business.didit.me`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              {kyc.diditSessionId.slice(0, 8)}...
-                            </a>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Manual</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {getStatusBadge(kyc.status)}
-                      </TableCell>
-                      <TableCell>
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setSelectedKyc(kyc)}
-                              data-testid={`button-review-kyc-${kyc.id}`}
-                            >
-                              <Eye className="w-4 h-4" />
-                              Review
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader>
-                              <DialogTitle>KYC Document Review</DialogTitle>
-                              <DialogDescription>
-                                Review identity verification documents for user {kyc.userId.slice(0, 8)}...
-                              </DialogDescription>
-                            </DialogHeader>
-                            {selectedKyc && (
-                              <KycReviewDialog 
-                                kyc={selectedKyc} 
-                                onSubmit={handleSubmitReview}
-                                reviewStatus={reviewStatus}
-                                setReviewStatus={setReviewStatus}
-                                reviewNotes={reviewNotes}
-                                setReviewNotes={setReviewNotes}
-                                isLoading={updateKycMutation.isPending}
-                              />
-                            )}
-                          </DialogContent>
-                        </Dialog>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+            <KycTable
+              docs={pendingKyc}
+              isLoading={isLoading}
+              pollingId={pollingId}
+              onReview={(kyc) => setSelectedKyc(kyc)}
+              onView={(kyc) => setViewKyc(kyc)}
+              onPollDidit={(id) => pollDiditMutation.mutate(id)}
+            />
           </CardContent>
         </Card>
       )}
@@ -308,181 +273,486 @@ export default function KycManagement() {
       <Card>
         <CardHeader>
           <CardTitle>All KYC Documents</CardTitle>
-          <CardDescription>
-            Complete history of KYC document submissions
-          </CardDescription>
+          <CardDescription>Complete history of KYC submissions</CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>User ID</TableHead>
-                  <TableHead>Document Type</TableHead>
-                  <TableHead>Didit Status</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Submitted</TableHead>
-                  <TableHead>Verified</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {kycData?.kycDocuments.map((kyc) => (
-                  <TableRow key={kyc.id}>
-                    <TableCell>
-                      <span className="font-mono text-sm">{kyc.userId.slice(0, 8)}...</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="font-medium">{getDocumentTypeName(kyc.documentType)}</span>
-                    </TableCell>
-                    <TableCell>
-                      {kyc.diditSessionId ? (
-                        <div className="space-y-1">
-                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                            {kyc.diditStatus || "Initiated"}
-                          </Badge>
-                          <p className="font-mono text-xs text-muted-foreground">{kyc.diditSessionId.slice(0, 8)}...</p>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Manual</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {getStatusBadge(kyc.status)}
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {format(new Date(kyc.createdAt), "MMM dd, yyyy")}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-sm">
-                        {kyc.verifiedAt ? format(new Date(kyc.verifiedAt), "MMM dd, yyyy") : "-"}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setViewKyc(kyc)}
-                        data-testid={`button-view-kyc-${kyc.id}`}
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          <KycTable
+            docs={allDocs}
+            isLoading={isLoading}
+            pollingId={pollingId}
+            onReview={(kyc) => setSelectedKyc(kyc)}
+            onView={(kyc) => setViewKyc(kyc)}
+            onPollDidit={(id) => pollDiditMutation.mutate(id)}
+          />
         </CardContent>
       </Card>
 
-      {/* View-only KYC details dialog (for reviewed/verified docs) */}
+      {/* Review Dialog (edit status) */}
+      <Dialog open={!!selectedKyc} onOpenChange={(open) => { if (!open) { setSelectedKyc(null); setReviewStatus(""); setReviewNotes(""); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>KYC Review</DialogTitle>
+            <DialogDescription>
+              {selectedKyc && `User ${selectedKyc.userId.slice(0, 8)}… — Current: ${selectedKyc.status}`}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedKyc && (
+            <KycReviewContent
+              kyc={selectedKyc}
+              reviewStatus={reviewStatus}
+              setReviewStatus={setReviewStatus}
+              reviewNotes={reviewNotes}
+              setReviewNotes={setReviewNotes}
+              onSubmit={handleSubmitReview}
+              isLoading={updateKycMutation.isPending}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View-only Dialog */}
       <Dialog open={!!viewKyc} onOpenChange={(open) => { if (!open) setViewKyc(null); }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>KYC Document Details</DialogTitle>
             <DialogDescription>
-              {viewKyc && `Submitted by user ${viewKyc.userId.slice(0, 8)}... — Status: ${viewKyc.status}`}
+              {viewKyc && `User ${viewKyc.userId.slice(0, 8)}… — Status: ${viewKyc.status}`}
             </DialogDescription>
           </DialogHeader>
-          {viewKyc && (
-            <div className="space-y-6">
-              {/* Info grid */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="font-medium mb-2">Document Information</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2"><FileCheck className="w-4 h-4" /><span>Type: {getDocumentTypeName(viewKyc.documentType)}</span></div>
-                    <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>DOB: {viewKyc.dateOfBirth || "Not provided"}</span></div>
-                    <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /><span>Address: {viewKyc.address || "Not provided"}</span></div>
-                  </div>
-                </div>
-                <div>
-                  <h4 className="font-medium mb-2">Review Details</h4>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center gap-2"><User className="w-4 h-4" /><span>User: {viewKyc.userId.slice(0, 8)}...</span></div>
-                    <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Submitted: {format(new Date(viewKyc.createdAt), "MMM dd, yyyy HH:mm")}</span></div>
-                    {viewKyc.diditSessionId && (
-                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
-                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-1 flex items-center gap-1">
-                          <Shield className="w-3 h-3" /> Didit Automated Verification
-                        </p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400">Session: <span className="font-mono">{viewKyc.diditSessionId}</span></p>
-                        {viewKyc.diditStatus && <p className="text-xs text-blue-600 dark:text-blue-400">Status: <strong>{viewKyc.diditStatus}</strong></p>}
-                        <a href="https://business.didit.me" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-500 hover:underline mt-1">
-                          <ExternalLink className="w-3 h-3" /> View in Didit Dashboard
-                        </a>
-                      </div>
-                    )}
-                    {viewKyc.verifiedAt && (
-                      <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /><span>Reviewed: {format(new Date(viewKyc.verifiedAt), "MMM dd, yyyy HH:mm")}</span></div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <span className="text-muted-foreground">Status:</span>
-                      {getStatusBadge(viewKyc.status)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Document images */}
-              <div>
-                <h4 className="font-medium mb-4">Document Images</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {viewKyc.frontImageUrl && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Front Image</p>
-                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                        <img src={viewKyc.frontImageUrl} alt="Front" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.frontImageUrl!, '_blank')} />
-                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-                      </div>
-                    </div>
-                  )}
-                  {viewKyc.backImageUrl && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Back Image</p>
-                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                        <img src={viewKyc.backImageUrl} alt="Back" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.backImageUrl!, '_blank')} />
-                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-                      </div>
-                    </div>
-                  )}
-                  {viewKyc.selfieUrl && (
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Selfie</p>
-                      <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                        <img src={viewKyc.selfieUrl} alt="Selfie" className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(viewKyc.selfieUrl!, '_blank')} />
-                        <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-                      </div>
-                    </div>
-                  )}
-                  {!viewKyc.frontImageUrl && !viewKyc.backImageUrl && !viewKyc.selfieUrl && (
-                    <p className="text-sm text-muted-foreground col-span-3">No document images available.</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Review notes */}
-              {viewKyc.verificationNotes && (
-                <div className="p-4 bg-muted rounded-lg">
-                  <h5 className="font-medium mb-2">Review Notes</h5>
-                  <p className="text-sm text-muted-foreground">{viewKyc.verificationNotes}</p>
-                </div>
-              )}
-            </div>
-          )}
+          {viewKyc && <KycDetailsView kyc={viewKyc} />}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
+// ── Shared table component ────────────────────────────────────────────────────
+function KycTable({
+  docs, isLoading, pollingId, onReview, onView, onPollDidit,
+}: {
+  docs: KycDocument[];
+  isLoading: boolean;
+  pollingId: string | null;
+  onReview: (k: KycDocument) => void;
+  onView: (k: KycDocument) => void;
+  onPollDidit: (id: string) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (docs.length === 0) {
+    return <p className="text-center text-sm text-muted-foreground py-6">No documents found.</p>;
+  }
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>User ID</TableHead>
+          <TableHead>Document</TableHead>
+          <TableHead>Didit Status</TableHead>
+          <TableHead>KYC Status</TableHead>
+          <TableHead>Submitted</TableHead>
+          <TableHead>Actions</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {docs.map((kyc) => (
+          <TableRow key={kyc.id}>
+            <TableCell>
+              <span className="font-mono text-sm">{kyc.userId.slice(0, 8)}…</span>
+            </TableCell>
+            <TableCell>
+              <span className="font-medium text-sm">{getDocumentTypeName(kyc.documentType)}</span>
+            </TableCell>
+            <TableCell>
+              {kyc.diditSessionId ? (
+                <div className="space-y-1">
+                  {getDiditStatusBadge(kyc.diditStatus)}
+                  <p className="font-mono text-xs text-muted-foreground">{kyc.diditSessionId.slice(0, 8)}…</p>
+                </div>
+              ) : (
+                <span className="text-xs text-muted-foreground">Manual</span>
+              )}
+            </TableCell>
+            <TableCell>{getKycStatusBadge(kyc.status)}</TableCell>
+            <TableCell>
+              <span className="text-sm">{format(new Date(kyc.createdAt), "MMM dd, yyyy")}</span>
+            </TableCell>
+            <TableCell>
+              <div className="flex items-center gap-1 flex-wrap">
+                {/* Poll Didit button */}
+                {kyc.diditSessionId && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
+                    disabled={pollingId === kyc.id}
+                    onClick={() => onPollDidit(kyc.id)}
+                    title="Poll Didit for latest status"
+                  >
+                    {pollingId === kyc.id ? (
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                    <span className="ml-1">Sync</span>
+                  </Button>
+                )}
+                {/* Review button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onReview(kyc)}
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  Review
+                </Button>
+                {/* View button */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => onView(kyc)}
+                >
+                  <Eye className="w-3 h-3 mr-1" />
+                  View
+                </Button>
+              </div>
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
+
+// ── Review content (edit status) ─────────────────────────────────────────────
+function KycReviewContent({
+  kyc, reviewStatus, setReviewStatus, reviewNotes, setReviewNotes, onSubmit, isLoading,
+}: {
+  kyc: KycDocument;
+  reviewStatus: string;
+  setReviewStatus: (s: string) => void;
+  reviewNotes: string;
+  setReviewNotes: (s: string) => void;
+  onSubmit: () => void;
+  isLoading: boolean;
+}) {
+  const extracted = extractDiditData(kyc.diditDecision);
+
+  return (
+    <div className="space-y-6">
+      {/* Didit extracted data */}
+      {extracted && (extracted.fullName || extracted.idNumber) && (
+        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 space-y-3">
+          <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-2">
+            <Shield className="w-4 h-4" /> Didit Extracted Identity Data
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {extracted.fullName && (
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Full Name</p>
+                  <p className="font-medium">{extracted.fullName}</p>
+                </div>
+              </div>
+            )}
+            {extracted.dateOfBirth && (
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Date of Birth</p>
+                  <p className="font-medium">{extracted.dateOfBirth}</p>
+                </div>
+              </div>
+            )}
+            {extracted.idNumber && (
+              <div className="flex items-center gap-2">
+                <Hash className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">ID / Document Number</p>
+                  <p className="font-medium font-mono">{extracted.idNumber}</p>
+                </div>
+              </div>
+            )}
+            {extracted.nationality && (
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Nationality</p>
+                  <p className="font-medium">{extracted.nationality}</p>
+                </div>
+              </div>
+            )}
+            {extracted.gender && (
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Gender</p>
+                  <p className="font-medium">{extracted.gender}</p>
+                </div>
+              </div>
+            )}
+            {extracted.expiryDate && (
+              <div className="flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Document Expiry</p>
+                  <p className="font-medium">{extracted.expiryDate}</p>
+                </div>
+              </div>
+            )}
+            {extracted.address && (
+              <div className="flex items-center gap-2 col-span-2">
+                <MapPin className="w-4 h-4 text-blue-500 shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Address</p>
+                  <p className="font-medium">{extracted.address}</p>
+                </div>
+              </div>
+            )}
+            {extracted.issuingCountry && (
+              <div className="flex items-center gap-2">
+                <Globe className="w-4 h-4 text-blue-500" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Issuing Country</p>
+                  <p className="font-medium">{extracted.issuingCountry}</p>
+                </div>
+              </div>
+            )}
+          </div>
+          {kyc.diditSessionId && (
+            <a
+              href="https://business.didit.me"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-xs text-blue-500 hover:underline"
+            >
+              <ExternalLink className="w-3 h-3" /> View in Didit Dashboard
+            </a>
+          )}
+        </div>
+      )}
+
+      {/* Document info */}
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="space-y-2">
+          <h4 className="font-medium">Document Info</h4>
+          <div className="flex items-center gap-2"><FileCheck className="w-4 h-4" /> Type: {getDocumentTypeName(kyc.documentType)}</div>
+          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> DOB: {kyc.dateOfBirth || extracted?.dateOfBirth || "Not provided"}</div>
+          <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Address: {kyc.address || extracted?.address || "Not provided"}</div>
+        </div>
+        <div className="space-y-2">
+          <h4 className="font-medium">Status</h4>
+          <div className="flex items-center gap-2">Current: {getKycStatusBadge(kyc.status)}</div>
+          {kyc.diditStatus && <div className="flex items-center gap-2">Didit: {getDiditStatusBadge(kyc.diditStatus)}</div>}
+          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Submitted: {format(new Date(kyc.createdAt), "MMM dd, yyyy HH:mm")}</div>
+        </div>
+      </div>
+
+      {/* Document images */}
+      <div>
+        <h4 className="font-medium mb-4">Document Images</h4>
+        <div className="grid grid-cols-3 gap-4">
+          {kyc.frontImageUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Front</p>
+              <img src={kyc.frontImageUrl} alt="Front" className="w-full h-40 object-cover rounded-lg border cursor-pointer" onClick={() => window.open(kyc.frontImageUrl!, '_blank')} />
+            </div>
+          )}
+          {kyc.backImageUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Back</p>
+              <img src={kyc.backImageUrl} alt="Back" className="w-full h-40 object-cover rounded-lg border cursor-pointer" onClick={() => window.open(kyc.backImageUrl!, '_blank')} />
+            </div>
+          )}
+          {kyc.selfieUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Selfie</p>
+              <img src={kyc.selfieUrl} alt="Selfie" className="w-full h-40 object-cover rounded-lg border cursor-pointer" onClick={() => window.open(kyc.selfieUrl!, '_blank')} />
+            </div>
+          )}
+          {!kyc.frontImageUrl && !kyc.backImageUrl && !kyc.selfieUrl && (
+            <p className="text-sm text-muted-foreground col-span-3">No document images — Didit eKYC flow (documents processed externally).</p>
+          )}
+        </div>
+      </div>
+
+      {/* Review form */}
+      <div className="space-y-3 pt-4 border-t">
+        <h4 className="font-medium">Admin Decision</h4>
+        <Select value={reviewStatus} onValueChange={setReviewStatus}>
+          <SelectTrigger>
+            <SelectValue placeholder="Select action..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="verified">
+              <div className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-600" /> Approve &amp; Verify</div>
+            </SelectItem>
+            <SelectItem value="pending">
+              <div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-600" /> Mark as Pending</div>
+            </SelectItem>
+            <SelectItem value="rejected">
+              <div className="flex items-center gap-2"><XCircle className="w-4 h-4 text-red-600" /> Reject</div>
+            </SelectItem>
+            <SelectItem value="re_verification_requested">
+              <div className="flex items-center gap-2"><RotateCcw className="w-4 h-4 text-orange-600" /> Request Re-verification</div>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        <Textarea
+          value={reviewNotes}
+          onChange={(e) => setReviewNotes(e.target.value)}
+          placeholder="Notes to user (shown in notification & rejection reason)..."
+          rows={3}
+        />
+        <Button
+          className="w-full"
+          disabled={!reviewStatus || isLoading}
+          onClick={onSubmit}
+        >
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Updating...
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <CheckCircle className="w-4 h-4" /> Submit Decision
+            </span>
+          )}
+        </Button>
+        {reviewStatus === "re_verification_requested" && (
+          <p className="text-xs text-orange-600 text-center">
+            This will reset the user's KYC to "not submitted" so they can start a fresh Didit verification.
+          </p>
+        )}
+      </div>
+
+      {kyc.verificationNotes && (
+        <div className="p-3 bg-muted rounded-lg text-sm">
+          <p className="font-medium mb-1">Previous Notes</p>
+          <p className="text-muted-foreground">{kyc.verificationNotes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── View-only details dialog ──────────────────────────────────────────────────
+function KycDetailsView({ kyc }: { kyc: KycDocument }) {
+  const extracted = extractDiditData(kyc.diditDecision);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2 text-sm">
+          <h4 className="font-medium">Document Information</h4>
+          <div className="flex items-center gap-2"><FileCheck className="w-4 h-4" /> Type: {getDocumentTypeName(kyc.documentType)}</div>
+          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> DOB: {kyc.dateOfBirth || extracted?.dateOfBirth || "Not provided"}</div>
+          <div className="flex items-center gap-2"><MapPin className="w-4 h-4" /> Address: {kyc.address || extracted?.address || "Not provided"}</div>
+        </div>
+        <div className="space-y-2 text-sm">
+          <h4 className="font-medium">Review Details</h4>
+          <div className="flex items-center gap-2"><User className="w-4 h-4" /> User: {kyc.userId.slice(0, 8)}…</div>
+          <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Submitted: {format(new Date(kyc.createdAt), "MMM dd, yyyy HH:mm")}</div>
+          <div className="flex items-center gap-2">Status: {getKycStatusBadge(kyc.status)}</div>
+          {kyc.diditStatus && <div className="flex items-center gap-2">Didit: {getDiditStatusBadge(kyc.diditStatus)}</div>}
+          {kyc.verifiedAt && <div className="flex items-center gap-2"><Calendar className="w-4 h-4" /> Reviewed: {format(new Date(kyc.verifiedAt), "MMM dd, yyyy HH:mm")}</div>}
+          {kyc.diditSessionId && (
+            <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
+              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1 mb-1">
+                <Shield className="w-3 h-3" /> Didit Session
+              </p>
+              <p className="text-xs text-blue-600 font-mono">{kyc.diditSessionId}</p>
+              <a href="https://business.didit.me" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-500 hover:underline mt-1">
+                <ExternalLink className="w-3 h-3" /> View in Didit Dashboard
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Extracted data */}
+      {extracted && (extracted.fullName || extracted.idNumber || extracted.nationality) && (
+        <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+          <p className="text-sm font-semibold text-blue-700 dark:text-blue-300 mb-3 flex items-center gap-2">
+            <Fingerprint className="w-4 h-4" /> Extracted Identity Data
+          </p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {extracted.fullName && (
+              <div><p className="text-xs text-muted-foreground">Full Name</p><p className="font-medium">{extracted.fullName}</p></div>
+            )}
+            {extracted.dateOfBirth && (
+              <div><p className="text-xs text-muted-foreground">Date of Birth</p><p className="font-medium">{extracted.dateOfBirth}</p></div>
+            )}
+            {extracted.idNumber && (
+              <div><p className="text-xs text-muted-foreground">ID / Document #</p><p className="font-medium font-mono">{extracted.idNumber}</p></div>
+            )}
+            {extracted.nationality && (
+              <div><p className="text-xs text-muted-foreground">Nationality</p><p className="font-medium">{extracted.nationality}</p></div>
+            )}
+            {extracted.gender && (
+              <div><p className="text-xs text-muted-foreground">Gender</p><p className="font-medium">{extracted.gender}</p></div>
+            )}
+            {extracted.expiryDate && (
+              <div><p className="text-xs text-muted-foreground">Doc Expiry</p><p className="font-medium">{extracted.expiryDate}</p></div>
+            )}
+            {extracted.issuingCountry && (
+              <div><p className="text-xs text-muted-foreground">Issuing Country</p><p className="font-medium">{extracted.issuingCountry}</p></div>
+            )}
+            {extracted.address && (
+              <div className="col-span-2"><p className="text-xs text-muted-foreground">Address</p><p className="font-medium">{extracted.address}</p></div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Document images */}
+      <div>
+        <h4 className="font-medium mb-4">Document Images</h4>
+        <div className="grid grid-cols-3 gap-4">
+          {kyc.frontImageUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Front</p>
+              <img src={kyc.frontImageUrl} alt="Front" className="w-full h-40 object-cover rounded-lg border cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(kyc.frontImageUrl!, '_blank')} />
+            </div>
+          )}
+          {kyc.backImageUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Back</p>
+              <img src={kyc.backImageUrl} alt="Back" className="w-full h-40 object-cover rounded-lg border cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(kyc.backImageUrl!, '_blank')} />
+            </div>
+          )}
+          {kyc.selfieUrl && (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Selfie</p>
+              <img src={kyc.selfieUrl} alt="Selfie" className="w-full h-40 object-cover rounded-lg border cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(kyc.selfieUrl!, '_blank')} />
+            </div>
+          )}
+          {!kyc.frontImageUrl && !kyc.backImageUrl && !kyc.selfieUrl && (
+            <p className="text-sm text-muted-foreground col-span-3">No document images available.</p>
+          )}
+        </div>
+      </div>
+
+      {kyc.verificationNotes && (
+        <div className="p-4 bg-muted rounded-lg">
+          <h5 className="font-medium mb-2">Review Notes</h5>
+          <p className="text-sm text-muted-foreground">{kyc.verificationNotes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Advanced KYC Section ──────────────────────────────────────────────────────
 
 interface AdvancedKycDoc {
   id: string;
@@ -551,7 +821,6 @@ export function AdvancedKycSection() {
 
   return (
     <div className="space-y-6">
-      {/* Stats */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -579,7 +848,6 @@ export function AdvancedKycSection() {
         </CardContent>
       </Card>
 
-      {/* Submissions table */}
       <Card>
         <CardHeader>
           <CardTitle>All Submissions</CardTitle>
@@ -607,7 +875,7 @@ export function AdvancedKycSection() {
               <TableBody>
                 {submissions.map((sub) => (
                   <TableRow key={sub.id}>
-                    <TableCell><span className="font-mono text-sm">{sub.userId.slice(0, 8)}...</span></TableCell>
+                    <TableCell><span className="font-mono text-sm">{sub.userId.slice(0, 8)}…</span></TableCell>
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
                         {sub.facialPhotoUrl && <Badge variant="outline" className="text-xs">Facial Photo</Badge>}
@@ -625,40 +893,30 @@ export function AdvancedKycSection() {
                       <Dialog>
                         <DialogTrigger asChild>
                           <Button variant="ghost" size="sm" onClick={() => { setSelected(sub); setReviewStatus(""); setReviewNotes(sub.verificationNotes || ""); }}>
-                            <Eye className="w-4 h-4 mr-1" />
-                            Review
+                            <Eye className="w-4 h-4 mr-1" /> Review
                           </Button>
                         </DialogTrigger>
                         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle>Advanced KYC Review</DialogTitle>
-                            <DialogDescription>User {sub.userId.slice(0, 8)}... — {statusBadge(sub.status)}</DialogDescription>
+                            <DialogDescription>User {sub.userId.slice(0, 8)}… — {statusBadge(sub.status)}</DialogDescription>
                           </DialogHeader>
                           {selected && selected.id === sub.id && (
                             <div className="space-y-5">
-                              {/* Document images */}
                               <div className="grid grid-cols-2 gap-4">
                                 {selected.facialPhotoUrl && (
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium">Facial Photo</p>
-                                    <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                                      <img src={selected.facialPhotoUrl} alt="Facial photo" className="w-full h-52 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.facialPhotoUrl!, "_blank")} />
-                                      <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
-                                    </div>
+                                    <img src={selected.facialPhotoUrl} alt="Facial" className="w-full h-52 object-cover rounded-lg border cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.facialPhotoUrl!, "_blank")} />
                                   </div>
                                 )}
                                 {selected.addressProofUrl && (
                                   <div className="space-y-2">
                                     <p className="text-sm font-medium">{addressProofLabel(selected.addressProofType)}</p>
-                                    <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                                      <img src={selected.addressProofUrl} alt="Address proof" className="w-full h-52 object-cover cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.addressProofUrl!, "_blank")} />
-                                      <p className="text-xs text-center p-1 text-gray-400">Click to view full size</p>
-                                    </div>
+                                    <img src={selected.addressProofUrl} alt="Address" className="w-full h-52 object-cover rounded-lg border cursor-pointer hover:scale-105 transition-transform" onClick={() => window.open(selected.addressProofUrl!, "_blank")} />
                                   </div>
                                 )}
                               </div>
-
-                              {/* Address details */}
                               {(selected.fullAddress || selected.city || selected.country) && (
                                 <div className="p-3 rounded-lg bg-muted text-sm space-y-1">
                                   <p className="font-medium flex items-center gap-2"><MapPin className="w-4 h-4" /> Declared Address</p>
@@ -668,18 +926,19 @@ export function AdvancedKycSection() {
                                   </p>
                                 </div>
                               )}
-
-                              {/* Review form */}
                               <div className="space-y-3 pt-2 border-t">
-                                <h4 className="font-medium">Review Decision</h4>
+                                <h4 className="font-medium">Admin Decision</h4>
                                 <Select value={reviewStatus} onValueChange={setReviewStatus}>
                                   <SelectTrigger><SelectValue placeholder="Select decision..." /></SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="verified">
-                                      <div className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-600" /> Approve & Verify</div>
+                                      <div className="flex items-center gap-2"><CheckCircle className="w-4 h-4 text-green-600" /> Approve &amp; Verify</div>
                                     </SelectItem>
                                     <SelectItem value="rejected">
                                       <div className="flex items-center gap-2"><XCircle className="w-4 h-4 text-red-600" /> Reject</div>
+                                    </SelectItem>
+                                    <SelectItem value="pending">
+                                      <div className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-yellow-600" /> Keep Pending</div>
                                     </SelectItem>
                                   </SelectContent>
                                 </Select>
@@ -692,11 +951,9 @@ export function AdvancedKycSection() {
                                   {reviewMutation.isPending ? "Submitting..." : "Submit Review"}
                                 </Button>
                               </div>
-
-                              {/* Existing notes */}
                               {selected.verificationNotes && (
                                 <div className="p-3 bg-muted rounded-lg text-sm">
-                                  <p className="font-medium mb-1">Previous Review Notes</p>
+                                  <p className="font-medium mb-1">Previous Notes</p>
                                   <p className="text-muted-foreground">{selected.verificationNotes}</p>
                                 </div>
                               )}
@@ -712,177 +969,6 @@ export function AdvancedKycSection() {
           )}
         </CardContent>
       </Card>
-    </div>
-  );
-}
-
-function KycReviewDialog({ 
-  kyc, 
-  onSubmit, 
-  reviewStatus, 
-  setReviewStatus, 
-  reviewNotes, 
-  setReviewNotes, 
-  isLoading 
-}: {
-  kyc: KycDocument;
-  onSubmit: () => void;
-  reviewStatus: string;
-  setReviewStatus: (status: string) => void;
-  reviewNotes: string;
-  setReviewNotes: (notes: string) => void;
-  isLoading: boolean;
-}) {
-  return (
-    <div className="space-y-6">
-      {/* Document Information */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h4 className="font-medium text-gray-900 dark:text-white mb-2">Document Information</h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <FileCheck className="w-4 h-4" />
-              <span className="text-sm">Type: {kyc.documentType}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span className="text-sm">DOB: {kyc.dateOfBirth || "Not provided"}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              <span className="text-sm">Address: {kyc.address || "Not provided"}</span>
-            </div>
-          </div>
-        </div>
-        <div>
-          <h4 className="font-medium text-gray-900 dark:text-white mb-2">Submission Details</h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <User className="w-4 h-4" />
-              <span className="text-sm">User: {kyc.userId ? kyc.userId.slice(0, 8) + '...' : 'N/A'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span className="text-sm">Submitted: {format(new Date(kyc.createdAt), "MMM dd, yyyy HH:mm")}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Document Images */}
-      <div>
-        <h4 className="font-medium text-gray-900 dark:text-white mb-4">Document Images</h4>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {kyc.frontImageUrl && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Front Image</p>
-              <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                <img 
-                  src={kyc.frontImageUrl} 
-                  alt="Front of document" 
-                  className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => window.open(kyc.frontImageUrl, '_blank')}
-                  data-testid="img-kyc-front"
-                />
-                <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-              </div>
-            </div>
-          )}
-          {kyc.backImageUrl && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Back Image</p>
-              <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                <img 
-                  src={kyc.backImageUrl} 
-                  alt="Back of document" 
-                  className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => window.open(kyc.backImageUrl, '_blank')}
-                  data-testid="img-kyc-back"
-                />
-                <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-              </div>
-            </div>
-          )}
-          {kyc.selfieUrl && (
-            <div className="space-y-2">
-              <p className="text-sm font-medium">Selfie</p>
-              <div className="border rounded-lg overflow-hidden bg-gray-50 dark:bg-gray-800">
-                <img 
-                  src={kyc.selfieUrl} 
-                  alt="Verification selfie" 
-                  className="w-full h-48 object-cover cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => window.open(kyc.selfieUrl, '_blank')}
-                  data-testid="img-kyc-selfie"
-                />
-                <p className="text-xs text-center p-2 text-gray-500">Click to view full size</p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Review Form */}
-      <div className="space-y-4">
-        <h4 className="font-medium text-gray-900 dark:text-white">Review Decision</h4>
-        
-        <div>
-          <label className="text-sm font-medium">Status</label>
-          <Select value={reviewStatus} onValueChange={setReviewStatus}>
-            <SelectTrigger data-testid="select-kyc-status">
-              <SelectValue placeholder="Select review decision" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="verified">
-                <div className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-600" />
-                  Approve & Verify
-                </div>
-              </SelectItem>
-              <SelectItem value="rejected">
-                <div className="flex items-center gap-2">
-                  <XCircle className="w-4 h-4 text-red-600" />
-                  Reject
-                </div>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div>
-          <label className="text-sm font-medium">Review Notes</label>
-          <Textarea
-            placeholder="Add notes about your review decision..."
-            value={reviewNotes}
-            onChange={(e) => setReviewNotes(e.target.value)}
-            className="mt-1"
-            data-testid="textarea-kyc-notes"
-          />
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            onClick={onSubmit}
-            disabled={!reviewStatus || isLoading}
-            className="flex items-center gap-2"
-            data-testid="button-submit-kyc-review"
-          >
-            {isLoading ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <CheckCircle className="w-4 h-4" />
-            )}
-            Submit Review
-          </Button>
-        </div>
-      </div>
-
-      {/* Existing Notes */}
-      {kyc.verificationNotes && (
-        <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <h5 className="font-medium mb-2">Previous Review Notes</h5>
-          <p className="text-sm text-gray-600 dark:text-gray-400">{kyc.verificationNotes}</p>
-        </div>
-      )}
     </div>
   );
 }
