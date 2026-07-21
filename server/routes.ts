@@ -12,16 +12,7 @@ import bcrypt from "bcrypt";
 import multer from "multer";
 import * as speakeasy from 'speakeasy';
 import * as QRCode from 'qrcode';
-// Inline MIME detection (replaces file-type package)
-async function fileTypeFromBuffer(buf: Buffer): Promise<{ mime: string; ext: string } | undefined> {
-  if (!buf || buf.length < 4) return undefined;
-  if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) return { mime: 'image/jpeg', ext: 'jpg' };
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return { mime: 'image/png', ext: 'png' };
-  if (buf[0] === 0x47 && buf[1] === 0x49 && buf[2] === 0x46) return { mime: 'image/gif', ext: 'gif' };
-  if (buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) return { mime: 'image/webp', ext: 'webp' };
-  if (buf[4] === 0x66 && buf[5] === 0x74 && buf[6] === 0x79 && buf[7] === 0x70) return { mime: 'video/mp4', ext: 'mp4' };
-  return undefined;
-}
+import { fileTypeFromBuffer } from 'file-type';
 import { whatsappService } from "./services/whatsapp";
 import { createExchangeRateService } from "./services/exchange-rate";
 import { payHeroService } from "./services/payhero";
