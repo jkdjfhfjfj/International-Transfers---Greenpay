@@ -83,7 +83,7 @@ export default function TransactionsPage() {
 
     // Advanced filters
     if (advancedFilters.status && transaction.status !== advancedFilters.status) return false;
-    if (advancedFilters.currency && transaction.currency !== advancedFilters.currency) return false;
+    if (advancedFilters.currency && (transaction.currency?.toUpperCase() || 'USD') !== advancedFilters.currency.toUpperCase()) return false;
     if (advancedFilters.type && transaction.type !== advancedFilters.type) return false;
     if (advancedFilters.minAmount && parseFloat(transaction.amount) < advancedFilters.minAmount) return false;
     if (advancedFilters.maxAmount && parseFloat(transaction.amount) > advancedFilters.maxAmount) return false;

@@ -110,7 +110,8 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
     yPos += 6;
   }
   
-  // Transaction Table
+  // Transaction Table — start below summary box
+  const tableStartY = 85 + summaryBoxH + 10;
   const tableData = transactions.map(transaction => {
     const date = new Date(transaction.createdAt).toLocaleDateString('en-US', {
       month: 'short',
@@ -139,7 +140,7 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
   });
   
   autoTable(doc, {
-    startY: 130,
+    startY: tableStartY,
     head: [['Date', 'Description', 'Amount', 'Currency', 'Status']],
     body: tableData,
     theme: 'grid',
