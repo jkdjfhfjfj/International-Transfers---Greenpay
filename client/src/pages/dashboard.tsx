@@ -19,6 +19,16 @@ import { useWallets } from "@/hooks/use-wallets";
 import type { Wallet as WalletType } from "@/hooks/use-wallets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+function getCurrencySymbol(currency?: string): string {
+  const map: Record<string, string> = {
+    USD: '$', EUR: '€', GBP: '£', KES: 'KSh ', NGN: '₦',
+    GHS: 'GH₵', UGX: 'USh ', TZS: 'TSh ', RWF: 'FRw ',
+    ZAR: 'R', XOF: 'CFA ', MAD: 'MAD ', EGP: 'E£', ZMW: 'ZK',
+    AED: 'AED ', CAD: 'CA$', AUD: 'A$', INR: '₹', CNY: '¥', JPY: '¥',
+  };
+  return map[(currency || '').toUpperCase()] ?? ((currency?.toUpperCase() || 'USD') + ' ');
+}
+
 export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const [showBalance, setShowBalance] = useState(true);
@@ -756,8 +766,8 @@ export default function DashboardPage() {
                         ? 'text-green-600'
                         : 'text-red-600'
                     }`}>
-                      {transaction.type === 'receive' || transaction.type === 'deposit' ? '+' : '-'}
-                      {transaction.currency?.toUpperCase() === 'KES' ? 'KSh ' : '$'}{transaction.amount}
+                      {transaction.type === 'receive' || transaction.type === 'deposit' ? '+' : '−'}
+                      {getCurrencySymbol(transaction.currency)}{formatNumber(transaction.amount)}
                     </p>
                     <p className={`text-xs ${
                       transaction.status === 'completed'

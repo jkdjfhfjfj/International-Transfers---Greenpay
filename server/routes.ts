@@ -5099,8 +5099,6 @@ p{color:#6b7280;font-size:14px;}</style>
   app.put("/api/admin/users/:id/profile", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { fullName, email, phone, country } = req.body;
-
       const user = await storage.getUser(id);
       if (!user) return res.status(404).json({ message: "User not found" });
 
