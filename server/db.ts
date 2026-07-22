@@ -103,6 +103,16 @@ async function alterMissingColumns() {
     `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_session_id TEXT`,
     `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_status TEXT`,
     `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_decision JSONB`,
+    // KYC-extracted identity fields on users (auto-populated on verification)
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_full_name TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_date_of_birth TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_number TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_nationality TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_gender TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_address TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_document_type TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_expiry_date TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_issuing_country TEXT`,
   ];
 
   for (const sql of migrations) {

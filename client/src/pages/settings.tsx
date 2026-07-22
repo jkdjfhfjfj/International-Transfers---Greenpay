@@ -848,7 +848,7 @@ export default function SettingsPage() {
         </motion.div>
 
         {/* Verified Identity Card — shows extracted Didit data */}
-        <KycIdentityCard kycStatus={user?.kycStatus} />
+        <KycIdentityCard user={user} />
 
         {/* Account Settings */}
         <motion.div
@@ -1702,49 +1702,20 @@ export default function SettingsPage() {
 }
 
 // ── Verified Identity Card (read-only Didit extracted data) ──────────────────
-function KycIdentityCard({ kycStatus }: { kycStatus?: string }) {
-  const { data, isLoading } = useQuery<{
-    extractedData: {
-      firstName: string | null;
-      lastName: string | null;
-      fullName: string | null;
-      dateOfBirth: string | null;
-      idNumber: string | null;
-      documentType: string | null;
-      nationality: string | null;
-      gender: string | null;
-      expiryDate: string | null;
-      address: string | null;
-      issuingCountry: string | null;
-      diditStatus: string | null;
-      kycStatus: string;
-    } | null;
-  }>({
-    queryKey: ["/api/kyc/extracted-data"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/kyc/extracted-data");
-      return res.json();
-    },
-    enabled: kycStatus === "verified",
-  });
+function KycIdentityCard({ user }: { user?: any }) {
+  if (user?.kycStatus !== "verified") return null;
 
-  // Only show when verified and there's data to show
-  if (kycStatus !== "verified") return null;
-  if (isLoading) return null;
-
-  const d = data?.extractedData;
-  if (!d || (!d.fullName && !d.idNumber && !d.nationality && !d.dateOfBirth)) return null;
-
+  const u = user as any;
   const fields = [
-    { icon: <User className="w-4 h-4" />, label: "Full Name (Verified)", value: d.fullName },
-    { icon: <Calendar className="w-4 h-4" />, label: "Date of Birth", value: d.dateOfBirth },
-    { icon: <Hash className="w-4 h-4" />, label: "ID / Document Number", value: d.idNumber },
-    { icon: <Globe className="w-4 h-4" />, label: "Nationality", value: d.nationality },
-    { icon: <Globe className="w-4 h-4" />, label: "Gender", value: d.gender },
-    { icon: <CreditCard className="w-4 h-4" />, label: "Document Type", value: d.documentType },
-    { icon: <CreditCard className="w-4 h-4" />, label: "Document Expiry", value: d.expiryDate },
-    { icon: <Globe className="w-4 h-4" />, label: "Issuing Country", value: d.issuingCountry },
-    { icon: <MapPin className="w-4 h-4" />, label: "Address (from ID)", value: d.address },
+    { icon: <User className="w-4 h-4" />,     label: "Full Name (Verified)",  value: u.kycFullName },
+    { icon: <Calendar className="w-4 h-4" />, label: "Date of Birth",          value: u.kycDateOfBirth },
+    { icon: <Hash className="w-4 h-4" />,      label: "ID / Document Number",  value: u.kycIdNumber },
+    { icon: <Globe className="w-4 h-4" />,     label: "Nationality",           value: u.kycNationality },
+    { icon: <Globe className="w-4 h-4" />,     label: "Gender",                value: u.kycGender },
+    { icon: <CreditCard className="w-4 h-4" />,label: "Document Type",         value: u.kycDocumentType },
+    { icon: <CreditCard className="w-4 h-4" />,label: "Document Expiry",       value: u.kycIdExpiryDate },
+    { icon: <Globe className="w-4 h-4" />,     label: "Issuing Country",       value: u.kycIssuingCountry },
+    { icon: <MapPin className="w-4 h-4" />,    label: "Address (from ID)",     value: u.kycAddress },
   ].filter(f => f.value);
 
   if (fields.length === 0) return null;

@@ -1554,28 +1554,35 @@ p{color:#6b7280;font-size:14px;}</style>
       const userId = (req as any).session?.userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
+      // Primary: read from the denormalised columns written at verification time
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
       const kyc = await storage.getKycByUserId(userId);
-      if (!kyc) return res.json({ extractedData: null });
+      const u = user as any;
 
-      const decision = (kyc as any).diditDecision as any;
-      if (!decision) return res.json({ extractedData: null });
-
+      // Fallback: parse raw diditDecision if denormalised columns are empty
+      const decision = (kyc as any)?.diditDecision as any;
       const docFeatures = decision?.features?.document || {};
+
       const extractedData = {
-        firstName: docFeatures.first_name || null,
-        lastName: docFeatures.last_name || null,
-        fullName: [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
-        dateOfBirth: docFeatures.date_of_birth || null,
-        idNumber: docFeatures.document_number || null,
-        documentType: docFeatures.document_type || (kyc as any).documentType || null,
-        nationality: docFeatures.nationality || null,
-        gender: docFeatures.gender || null,
-        expiryDate: docFeatures.expiry_date || null,
-        address: docFeatures.address || (kyc as any).address || null,
-        issuingCountry: docFeatures.issuing_country || null,
-        diditStatus: (kyc as any).diditStatus || null,
-        kycStatus: kyc.status,
+        fullName:        u.kycFullName        || [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
+        firstName:       docFeatures.first_name || null,
+        lastName:        docFeatures.last_name  || null,
+        dateOfBirth:     u.kycDateOfBirth     || docFeatures.date_of_birth   || null,
+        idNumber:        u.kycIdNumber        || docFeatures.document_number  || null,
+        documentType:    u.kycDocumentType    || docFeatures.document_type    || kyc?.documentType || null,
+        nationality:     u.kycNationality     || docFeatures.nationality      || null,
+        gender:          u.kycGender          || docFeatures.gender           || null,
+        expiryDate:      u.kycIdExpiryDate    || docFeatures.expiry_date      || null,
+        address:         u.kycAddress         || docFeatures.address          || kyc?.address      || null,
+        issuingCountry:  u.kycIssuingCountry  || docFeatures.issuing_country  || null,
+        diditStatus:     (kyc as any)?.diditStatus || null,
+        kycStatus:       kyc?.status || user.kycStatus,
       };
+
+      const hasData = Object.values(extractedData).some(v => v && typeof v === 'string' && v.trim());
+      if (!hasData) return res.json({ extractedData: null });
 
       res.json({ extractedData });
     } catch (error) {
@@ -1758,6 +1765,35 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Update user status
       await storage.updateUser(userId, { kycStatus });
+
+      // Auto-populate KYC identity fields when verified via webhook
+      if (kycStatus === 'verified') {
+        // Duplicate ID check
+        const doc = payload?.features?.document || {};
+        const idNumber = doc.document_number || null;
+        if (idNumber) {
+          const existing = await db.select({ id: users.id }).from(users).where(eq(users.kycIdNumber, idNumber));
+          if (existing.some(u => u.id !== userId)) {
+            console.warn(`[Didit] Webhook: duplicate ID ${idNumber} — user ${userId} blocked`);
+            await storage.updateUser(userId, { kycStatus: 'rejected' });
+            await storage.updateKycDocument(kyc!.id, { status: 'rejected', verificationNotes: 'Duplicate ID — this document is already linked to another account.' } as any);
+            return res.json({ received: true });
+          }
+        }
+        const kycFields = {
+          kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(' ') || null,
+          kycDateOfBirth: doc.date_of_birth || null,
+          kycIdNumber: idNumber,
+          kycNationality: doc.nationality || null,
+          kycGender: doc.gender || null,
+          kycAddress: doc.address || null,
+          kycDocumentType: doc.document_type || null,
+          kycIdExpiryDate: doc.expiry_date || null,
+          kycIssuingCountry: doc.issuing_country || null,
+        };
+        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        if (Object.keys(filtered).length > 0) await storage.updateUser(userId, filtered as any);
+      }
 
       // Send notifications on terminal statuses
       if (isTerminalStatus(diditStatus)) {
@@ -4661,6 +4697,23 @@ p{color:#6b7280;font-size:14px;}</style>
       const docStatus = isReVerify ? 're_verification_requested' : status;
       const userKycStatus = isReVerify ? 'not_submitted' : status;
 
+      // ── Duplicate ID check when manually approving ──────────────────────────
+      if (status === 'verified') {
+        const kycDoc = await storage.getKycByUserId(
+          (await db.select({ userId: kycDocuments.userId }).from(kycDocuments).where(eq(kycDocuments.id, id)))[0]?.userId
+        );
+        const decision = (kycDoc as any)?.diditDecision;
+        const idNumber = decision?.features?.document?.document_number || null;
+        if (idNumber) {
+          const existing = await db.select({ id: users.id }).from(users)
+            .where(eq(users.kycIdNumber, idNumber));
+          const conflict = existing.find(u => u.id !== kycDoc?.userId);
+          if (conflict) {
+            return res.status(409).json({ message: `This ID document (${idNumber}) is already linked to another account. Verification blocked to prevent duplicate accounts.` });
+          }
+        }
+      }
+
       const updatedKyc = await storage.updateKycDocument(id, {
         status: docStatus,
         verificationNotes,
@@ -4670,6 +4723,28 @@ p{color:#6b7280;font-size:14px;}</style>
       });
 
       if (updatedKyc) {
+        // Auto-populate KYC identity fields on user when verified
+        if (status === 'verified') {
+          const decision = (updatedKyc as any).diditDecision;
+          const doc = decision?.features?.document || {};
+          const kycFields = {
+            kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(' ') || null,
+            kycDateOfBirth: doc.date_of_birth || null,
+            kycIdNumber: doc.document_number || null,
+            kycNationality: doc.nationality || null,
+            kycGender: doc.gender || null,
+            kycAddress: doc.address || null,
+            kycDocumentType: doc.document_type || null,
+            kycIdExpiryDate: doc.expiry_date || null,
+            kycIssuingCountry: doc.issuing_country || null,
+          };
+          // Only write fields that have actual values
+          const filteredKycFields = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+          if (Object.keys(filteredKycFields).length > 0) {
+            await storage.updateUser(updatedKyc.userId, filteredKycFields as any);
+          }
+        }
+
         // Update user KYC status
         await storage.updateUser(updatedKyc.userId, { kycStatus: userKycStatus });
 
@@ -4755,6 +4830,14 @@ p{color:#6b7280;font-size:14px;}</style>
         issuingCountry: docFeatures.issuing_country || null,
       };
 
+      // Duplicate ID check before approving via poll
+      if (kycStatus === 'verified' && extractedData.idNumber) {
+        const existing = await db.select({ id: users.id }).from(users).where(eq(users.kycIdNumber, extractedData.idNumber));
+        if (existing.some(u => u.id !== kyc.userId)) {
+          return res.status(409).json({ message: `This ID document (${extractedData.idNumber}) is already linked to another account. Verification blocked.` });
+        }
+      }
+
       // Update the kyc_documents record
       await storage.updateKycDocument(id, {
         diditStatus,
@@ -4765,6 +4848,23 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Update user status
       await storage.updateUser(kyc.userId, { kycStatus });
+
+      // Auto-populate KYC identity fields when verified via poll
+      if (kycStatus === 'verified') {
+        const kycFields = {
+          kycFullName: extractedData.fullName || null,
+          kycDateOfBirth: extractedData.dateOfBirth || null,
+          kycIdNumber: extractedData.idNumber || null,
+          kycNationality: extractedData.nationality || null,
+          kycGender: extractedData.gender || null,
+          kycAddress: extractedData.address || null,
+          kycDocumentType: extractedData.documentType || null,
+          kycIdExpiryDate: extractedData.expiryDate || null,
+          kycIssuingCountry: extractedData.issuingCountry || null,
+        };
+        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        if (Object.keys(filtered).length > 0) await storage.updateUser(kyc.userId, filtered as any);
+      }
 
       // Send notifications on terminal statuses
       if (isTerminalStatus(diditStatus)) {
@@ -5004,11 +5104,25 @@ p{color:#6b7280;font-size:14px;}</style>
       const user = await storage.getUser(id);
       if (!user) return res.status(404).json({ message: "User not found" });
 
+      const { fullName, email, phone, country,
+              kycFullName, kycDateOfBirth, kycIdNumber, kycNationality,
+              kycGender, kycAddress, kycDocumentType, kycIdExpiryDate, kycIssuingCountry } = req.body;
+
       const updates: Record<string, any> = {};
       if (fullName !== undefined) updates.fullName = fullName.trim();
       if (email !== undefined) updates.email = email.trim().toLowerCase();
       if (phone !== undefined) updates.phone = phone.trim();
       if (country !== undefined) updates.country = country.trim();
+      // Admin-editable KYC identity fields
+      if (kycFullName       !== undefined) updates.kycFullName       = kycFullName?.trim()       || null;
+      if (kycDateOfBirth    !== undefined) updates.kycDateOfBirth    = kycDateOfBirth?.trim()    || null;
+      if (kycIdNumber       !== undefined) updates.kycIdNumber       = kycIdNumber?.trim()       || null;
+      if (kycNationality    !== undefined) updates.kycNationality    = kycNationality?.trim()    || null;
+      if (kycGender         !== undefined) updates.kycGender         = kycGender?.trim()         || null;
+      if (kycAddress        !== undefined) updates.kycAddress        = kycAddress?.trim()        || null;
+      if (kycDocumentType   !== undefined) updates.kycDocumentType   = kycDocumentType?.trim()   || null;
+      if (kycIdExpiryDate   !== undefined) updates.kycIdExpiryDate   = kycIdExpiryDate?.trim()   || null;
+      if (kycIssuingCountry !== undefined) updates.kycIssuingCountry = kycIssuingCountry?.trim() || null;
 
       if (Object.keys(updates).length === 0) {
         return res.status(400).json({ message: "No fields to update" });

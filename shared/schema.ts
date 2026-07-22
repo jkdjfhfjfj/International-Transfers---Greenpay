@@ -40,6 +40,16 @@ export const users = pgTable("users", {
   fcmToken: text("fcm_token"), // Firebase Cloud Messaging token for push notifications
   lastLoginAt: timestamp("last_login_at"),
   googleId: text("google_id"),
+  // KYC-extracted identity fields (auto-populated on verification, editable by admin only)
+  kycFullName: text("kyc_full_name"),
+  kycDateOfBirth: text("kyc_date_of_birth"),
+  kycIdNumber: text("kyc_id_number"),     // unique per verified identity
+  kycNationality: text("kyc_nationality"),
+  kycGender: text("kyc_gender"),
+  kycAddress: text("kyc_address"),
+  kycDocumentType: text("kyc_document_type"),
+  kycIdExpiryDate: text("kyc_id_expiry_date"),
+  kycIssuingCountry: text("kyc_issuing_country"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

@@ -631,6 +631,17 @@ function UserDetailsDialog({ user }: { user: User }) {
   const [editEmail, setEditEmail] = useState(user.email);
   const [editPhone, setEditPhone] = useState(user.phone);
   const [editCountry, setEditCountry] = useState(user.country);
+  // Edit KYC identity state (admin-only)
+  const [editingKyc, setEditingKyc] = useState(false);
+  const [editKycFullName, setEditKycFullName] = useState((user as any).kycFullName || '');
+  const [editKycDob, setEditKycDob] = useState((user as any).kycDateOfBirth || '');
+  const [editKycIdNumber, setEditKycIdNumber] = useState((user as any).kycIdNumber || '');
+  const [editKycNationality, setEditKycNationality] = useState((user as any).kycNationality || '');
+  const [editKycGender, setEditKycGender] = useState((user as any).kycGender || '');
+  const [editKycAddress, setEditKycAddress] = useState((user as any).kycAddress || '');
+  const [editKycDocType, setEditKycDocType] = useState((user as any).kycDocumentType || '');
+  const [editKycExpiry, setEditKycExpiry] = useState((user as any).kycIdExpiryDate || '');
+  const [editKycCountry, setEditKycCountry] = useState((user as any).kycIssuingCountry || '');
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -647,6 +658,22 @@ function UserDetailsDialog({ user }: { user: User }) {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to update user profile", variant: "destructive" });
+    },
+  });
+
+  const updateKycIdentityMutation = useMutation({
+    mutationFn: async (data: Record<string, string | null>) => {
+      const res = await apiRequest("PUT", `/api/admin/users/${user.id}/profile`, data);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.message); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setEditingKyc(false);
+      toast({ title: "KYC Identity Updated", description: "Verified identity fields saved" });
+    },
+    onError: (e: any) => {
+      toast({ title: "Error", description: e.message || "Failed to update KYC identity", variant: "destructive" });
     },
   });
 
@@ -1203,6 +1230,85 @@ function UserDetailsDialog({ user }: { user: User }) {
                 </>
               )}
             </div>
+            {/* KYC Verified Identity — admin editable */}
+            {user.kycStatus === 'verified' && (
+              <div className="space-y-2 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 p-3 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-green-700 dark:text-green-400 uppercase tracking-wide flex items-center gap-1">
+                    <span>🛡</span> Verified Identity
+                  </p>
+                  {!editingKyc ? (
+                    <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingKyc(true)}>
+                      <Pencil className="w-3 h-3 mr-1" /> Edit
+                    </Button>
+                  ) : (
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2 text-green-600"
+                        disabled={updateKycIdentityMutation.isPending}
+                        onClick={() => updateKycIdentityMutation.mutate({
+                          kycFullName: editKycFullName || null,
+                          kycDateOfBirth: editKycDob || null,
+                          kycIdNumber: editKycIdNumber || null,
+                          kycNationality: editKycNationality || null,
+                          kycGender: editKycGender || null,
+                          kycAddress: editKycAddress || null,
+                          kycDocumentType: editKycDocType || null,
+                          kycIdExpiryDate: editKycExpiry || null,
+                          kycIssuingCountry: editKycCountry || null,
+                        })}>
+                        <Save className="w-3 h-3 mr-1" /> Save
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => setEditingKyc(false)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                {editingKyc ? (
+                  <div className="space-y-2">
+                    {[
+                      { label: "Full Name (KYC)", value: editKycFullName, onChange: setEditKycFullName },
+                      { label: "Date of Birth", value: editKycDob, onChange: setEditKycDob },
+                      { label: "ID / Doc Number", value: editKycIdNumber, onChange: setEditKycIdNumber },
+                      { label: "Nationality", value: editKycNationality, onChange: setEditKycNationality },
+                      { label: "Gender", value: editKycGender, onChange: setEditKycGender },
+                      { label: "Document Type", value: editKycDocType, onChange: setEditKycDocType },
+                      { label: "Doc Expiry", value: editKycExpiry, onChange: setEditKycExpiry },
+                      { label: "Issuing Country", value: editKycCountry, onChange: setEditKycCountry },
+                      { label: "Address (from ID)", value: editKycAddress, onChange: setEditKycAddress },
+                    ].map(({ label, value, onChange }) => (
+                      <div key={label}>
+                        <p className="text-[10px] text-muted-foreground">{label}</p>
+                        <Input className="h-7 text-xs" value={value} onChange={(e) => onChange(e.target.value)} />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {[
+                      { label: "Full Name", value: (user as any).kycFullName },
+                      { label: "Date of Birth", value: (user as any).kycDateOfBirth },
+                      { label: "ID / Doc Number", value: (user as any).kycIdNumber },
+                      { label: "Nationality", value: (user as any).kycNationality },
+                      { label: "Gender", value: (user as any).kycGender },
+                      { label: "Document Type", value: (user as any).kycDocumentType },
+                      { label: "Doc Expiry", value: (user as any).kycIdExpiryDate },
+                      { label: "Issuing Country", value: (user as any).kycIssuingCountry },
+                      { label: "Address (from ID)", value: (user as any).kycAddress },
+                    ].filter(f => f.value).map(({ label, value }) => (
+                      <div key={label} className="flex justify-between items-start gap-2">
+                        <p className="text-[10px] text-muted-foreground shrink-0">{label}</p>
+                        <p className="text-[10px] font-medium text-right break-all">{value}</p>
+                      </div>
+                    ))}
+                    {![(user as any).kycFullName, (user as any).kycIdNumber, (user as any).kycDateOfBirth].some(Boolean) && (
+                      <p className="text-[10px] text-muted-foreground italic">No identity data extracted yet — use Poll Didit to sync.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="space-y-2 bg-muted/40 p-3 rounded-xl">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
               {[

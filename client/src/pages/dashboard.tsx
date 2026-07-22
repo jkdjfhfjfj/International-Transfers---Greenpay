@@ -156,8 +156,8 @@ export default function DashboardPage() {
       icon: Smartphone, 
       label: "Buy Airtime", 
       path: "/airtime", 
-      accent: '#0ea5e9',
-      tint: 'rgba(14,165,233,0.08)',
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -166,8 +166,8 @@ export default function DashboardPage() {
       icon: Receipt, 
       label: "Pay Bills", 
       path: "/bills", 
-      accent: '#8b5cf6',
-      tint: 'rgba(139,92,246,0.08)',
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -176,8 +176,8 @@ export default function DashboardPage() {
       icon: TrendingUp, 
       label: "Add Money", 
       path: "/deposit", 
-      accent: '#f59e0b',
-      tint: 'rgba(245,158,11,0.08)',
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -186,8 +186,8 @@ export default function DashboardPage() {
       icon: Bitcoin,
       label: "Crypto",
       path: "/crypto",
-      accent: '#f97316',
-      tint: 'rgba(249,115,22,0.08)',
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -196,8 +196,8 @@ export default function DashboardPage() {
       icon: BarChart3,
       label: "Analytics",
       path: "/analytics",
-      accent: '#06b6d4',
-      tint: 'rgba(6,182,212,0.08)',
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -617,43 +617,43 @@ export default function DashboardPage() {
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
-                accent: '#7c3aed', tint: 'rgba(124,58,237,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'credit_card',
                 badge: cardStatus === 'active',
               },
               {
                 id: 'history', label: 'History', path: '/transactions', testId: 'button-transactions',
-                accent: '#2563eb', tint: 'rgba(37,99,235,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'receipt_long',
               },
               {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
-                accent: '#d97706', tint: 'rgba(217,119,6,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'currency_exchange',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
-                accent: '#059669', tint: 'rgba(5,150,105,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'support_agent',
               },
               {
                 id: 'status', label: 'Status', path: '/status', testId: '',
-                accent: '#0891b2', tint: 'rgba(8,145,178,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'health_and_safety',
               },
               {
                 id: 'settings', label: 'Settings', path: '/settings', testId: 'button-settings',
-                accent: '#475569', tint: 'rgba(71,85,105,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'settings',
               },
               {
                 id: 'loans', label: 'Loans', path: '/loans', testId: '',
-                accent: '#db2777', tint: 'rgba(219,39,119,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'payments',
               },
               {
                 id: 'api', label: 'API', path: '/api-service', testId: '',
-                accent: '#9333ea', tint: 'rgba(147,51,234,0.08)',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'bolt',
               },
             ].map((service, index) => (
@@ -695,11 +695,11 @@ export default function DashboardPage() {
             >
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                style={{ background: 'rgba(71,85,105,0.08)' }}
+                style={{ background: 'rgba(22,163,74,0.08)' }}
               >
-                <Grid className="w-6 h-6" style={{ color: '#475569' }} />
+                <Grid className="w-6 h-6" style={{ color: '#16a34a' }} />
               </div>
-              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#475569' }}>
+              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#16a34a' }}>
                 More
               </span>
             </motion.button>
