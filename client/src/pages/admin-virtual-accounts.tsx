@@ -65,7 +65,7 @@ export default function AdminVirtualAccountsPage() {
           <Button onClick={() => save.mutate()} disabled={save.isLoading} className="gap-2"><Save className="w-4 h-4" /> {save.isLoading ? "Saving..." : `Save ${currency} Details`}</Button>
         </div>
 
-        {saveError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{saveError}</span></div>}
+        {saveError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{saveError}</span></div>
 
         <div className="grid md:grid-cols-2 gap-3">
           {fields.map(f => (
