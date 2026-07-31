@@ -25,6 +25,7 @@ import SendConfirmPage from "@/pages/send-confirm";
 import ReceiveMoneyPage from "@/pages/receive-money";
 import TransactionsPage from "@/pages/transactions";
 import VirtualCardPage from "@/pages/virtual-card";
+import VirtualAccountsPage from "@/pages/virtual-accounts";
 import SettingsPage from "@/pages/settings";
 import SupportPage from "@/pages/support";
 import LiveChatPage from "@/pages/live-chat";
@@ -91,6 +92,7 @@ import AdminDisputesPage from "@/pages/admin-disputes";
 import AdminCryptoPage from "@/pages/admin-crypto";
 import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
 import AdminWalletsPage from "@/pages/admin-wallets";
+import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
 import { useFCM } from "@/hooks/use-fcm";
 
 // User Route Guard Component
@@ -136,6 +138,9 @@ function Router() {
       <Route path="/transactions" component={TransactionsPage} />
       <Route path="/virtual-card">
         <ProtectedRoute component={VirtualCardPage} />
+      </Route>
+      <Route path="/virtual-accounts">
+        <ProtectedRoute component={VirtualAccountsPage} />
       </Route>
       <Route path="/settings" component={SettingsPage} />
       <Route path="/support" component={SupportPage} />
@@ -218,6 +223,7 @@ function Router() {
       <Route path="/admin/crypto" component={AdminCryptoPage} />
       <Route path="/admin/deposit-settings" component={AdminDepositSettingsPage} />
       <Route path="/admin/wallets" component={AdminWalletsPage} />
+      <Route path="/admin/virtual-accounts" component={AdminVirtualAccountsPage} />
       <Route component={NotFound} />
     </Switch>
   );

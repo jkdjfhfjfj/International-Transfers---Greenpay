@@ -213,7 +213,7 @@ export default function LiveChatPage() {
       />
 
       {/* Messages Container */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col pb-24 md:pb-0">
         <ScrollArea className="flex-1 px-4 py-6">
           <div className="space-y-4 max-w-3xl mx-auto">
             {messages.length === 0 ? (
@@ -321,7 +321,7 @@ export default function LiveChatPage() {
         </ScrollArea>
 
         {/* Message Input */}
-        <div className="border-t border-border bg-card p-4">
+        <div className="border-t border-border bg-card p-4 sticky bottom-20 md:bottom-0 z-40">
           <div className="max-w-3xl mx-auto">
             <div className="flex gap-3">
               <Input

@@ -44,6 +44,7 @@ const navSections = [
       { href: "/admin/transactions", label: "Transactions", icon: DollarSign },
       { href: "/admin/withdrawals", label: "Withdrawals", icon: Banknote },
       { href: "/admin/wallets", label: "Multi-Wallets", icon: Wallet },
+      { href: "/admin/virtual-accounts", label: "Virtual Accounts", icon: Banknote },
       { href: "/admin/cards", label: "Virtual Cards", icon: CreditCard },
       { href: "/admin/pricing", label: "Card Pricing", icon: CreditCard },
       { href: "/admin/crypto", label: "Crypto", icon: Bitcoin },

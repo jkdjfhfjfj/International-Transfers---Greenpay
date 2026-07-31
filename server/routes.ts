@@ -4,9 +4,9 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -235,6 +235,101 @@ export async function registerRoutes(app: Express): Promise<Server> {
       env: process.env.NODE_ENV,
       uptime: process.uptime()
     });
+  });
+
+  const supportedVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
+
+  app.get("/api/virtual-accounts", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const applications = await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.userId, userId));
+      const settings = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.isActive, true));
+      res.json({
+        supportedCurrencies: supportedVirtualAccountCurrencies,
+        applications: applications.map((app: any) => ({
+          ...app,
+          accountDetails: app.status === "approved" ? settings.find((s: any) => s.currency === app.currency) || null : null,
+        })),
+      });
+    } catch (error) {
+      console.error("Virtual accounts fetch error:", error);
+      res.status(500).json({ message: "Failed to load virtual accounts" });
+    }
+  });
+
+  app.post("/api/virtual-accounts/apply", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const schema = z.object({
+        currency: z.enum(["USD", "GBP", "EUR"]),
+        sourceOfIncome: z.string().min(2),
+        monthlyVolume: z.string().min(1),
+        purpose: z.string().min(5),
+        expectedSenders: z.string().optional(),
+        declarations: z.object({
+          notUsCitizen: z.boolean(),
+          notPoliticallyExposed: z.boolean(),
+          beneficialOwner: z.boolean(),
+          truthfulInformation: z.boolean(),
+          acceptsTerms: z.boolean(),
+        }),
+      });
+      const data = schema.parse(req.body);
+      if (!Object.values(data.declarations).every(Boolean)) {
+        return res.status(400).json({ message: "All compliance declarations must be accepted." });
+      }
+      const existing = await db.select().from(virtualAccountApplications).where(and(eq(virtualAccountApplications.userId, userId), eq(virtualAccountApplications.currency, data.currency)));
+      if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
+      const [application] = await db.insert(virtualAccountApplications).values({ ...data, userId }).returning();
+      await storage.createNotification({ userId, title: `${data.currency} virtual account application received`, message: "Your application is pending admin review.", type: "info", isGlobal: false });
+      res.status(201).json(application);
+    } catch (error: any) {
+      console.error("Virtual account apply error:", error);
+      res.status(400).json({ message: error?.message || "Failed to submit application" });
+    }
+  });
+
+  app.get("/api/admin/virtual-accounts", requireAdminAuth, async (_req, res) => {
+    try {
+      const applications = await db.select({ application: virtualAccountApplications, user: users }).from(virtualAccountApplications).leftJoin(users, eq(virtualAccountApplications.userId, users.id)).orderBy(desc(virtualAccountApplications.createdAt));
+      const settings = await db.select().from(virtualAccountSettings).orderBy(virtualAccountSettings.currency);
+      res.json({ applications, settings, supportedCurrencies: supportedVirtualAccountCurrencies });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to load virtual account admin data" });
+    }
+  });
+
+  app.put("/api/admin/virtual-accounts/settings/:currency", requireAdminAuth, async (req: any, res) => {
+    try {
+      const currency = String(req.params.currency).toUpperCase();
+      if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
+      const values = { ...req.body, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
+      const existing = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, currency));
+      const [setting] = existing[0]
+        ? await db.update(virtualAccountSettings).set(values).where(eq(virtualAccountSettings.currency, currency)).returning()
+        : await db.insert(virtualAccountSettings).values(values).returning();
+      res.json(setting);
+    } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to save account details" }); }
+  });
+
+  app.patch("/api/admin/virtual-accounts/applications/:id", requireAdminAuth, async (req: any, res) => {
+    try {
+      const status = req.body.status;
+      if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(virtualAccountApplications.id, req.params.id)).returning();
+      if (!application) return res.status(404).json({ message: "Application not found" });
+      const [user] = await db.select().from(users).where(eq(users.id, application.userId));
+      const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
+      if (user && status === "approved") {
+        await storage.createNotification({ userId: user.id, title: `${application.currency} virtual account approved`, message: "Your virtual account details are now available in your wallet.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
+        const { mailtrapService } = await import('./services/mailtrap');
+        const [firstName, ...rest] = (user.fullName || "User").split(" ");
+        mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+          currency: application.currency, account_name: account?.accountName || "GreenPay", bank_name: account?.bankName || "", account_number: account?.accountNumber || "", routing_number: account?.routingNumber || "", sort_code: account?.sortCode || "", iban: account?.iban || "", swift_code: account?.swiftCode || "", bank_address: account?.bankAddress || "", beneficiary_address: account?.beneficiaryAddress || "", payment_instructions: account?.paymentInstructions || "",
+        }).catch(console.error);
+      }
+      res.json(application);
+    } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to review application" }); }
   });
 
   // Demo API Keys endpoint - shows available demo keys for testing

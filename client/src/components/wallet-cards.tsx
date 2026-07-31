@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Eye, EyeOff, Plus, Star, AlertTriangle, Lock } from "lucide-react";
+import { Eye, EyeOff, Plus, Star, AlertTriangle, Lock, Building2 } from "lucide-react";
 import type { Wallet } from "@/hooks/use-wallets";
 import { formatNumber } from "@/lib/formatters";
 import { useLocation } from "wouter";
@@ -34,6 +34,8 @@ const CURRENCY_FLAGS: Record<string, string> = {
   ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
   RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
 };
+
+const VIRTUAL_ACCOUNT_LIVE = new Set(["USD", "GBP", "EUR"]);
 
 const CURRENCY_NAMES: Record<string, string> = {
   USD: 'US Dollar', KES: 'Kenyan Shilling', UGX: 'Ugandan Shilling',
@@ -181,6 +183,12 @@ export default function WalletCards({
                   )}
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-white/50 text-[10px]">Available balance</p>
+                    <button
+                      onClick={e => { e.stopPropagation(); setLocation(`/virtual-accounts?currency=${wallet.currency}`); }}
+                      className="text-white/85 hover:text-white text-[10px] font-semibold bg-white/15 rounded-full px-2 py-1 flex items-center gap-1"
+                    >
+                      <Building2 className="w-3 h-3" /> {VIRTUAL_ACCOUNT_LIVE.has(wallet.currency) ? "Account" : "Soon"}
+                    </button>
                     {onToggleBalance && (
                       <button
                         onClick={e => { e.stopPropagation(); onToggleBalance?.(); }}

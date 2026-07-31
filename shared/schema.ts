@@ -884,3 +884,49 @@ export const wallets = pgTable("wallets", {
 export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
 export type Wallet = typeof wallets.$inferSelect;
 export type InsertWallet = z.infer<typeof insertWalletSchema>;
+
+// Admin-configured virtual bank account details shared by approved users per currency
+export const virtualAccountSettings = pgTable("virtual_account_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  currency: text("currency").notNull().unique(),
+  accountName: text("account_name").notNull(),
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  routingNumber: text("routing_number"),
+  sortCode: text("sort_code"),
+  iban: text("iban"),
+  swiftCode: text("swift_code"),
+  bankAddress: text("bank_address"),
+  beneficiaryAddress: text("beneficiary_address"),
+  paymentInstructions: text("payment_instructions"),
+  isActive: boolean("is_active").default(true),
+  updatedBy: varchar("updated_by").references(() => admins.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User applications for receiving access to virtual account details
+export const virtualAccountApplications = pgTable("virtual_account_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),
+  status: text("status").default("pending"), // pending, approved, rejected
+  sourceOfIncome: text("source_of_income").notNull(),
+  monthlyVolume: text("monthly_volume").notNull(),
+  purpose: text("purpose").notNull(),
+  expectedSenders: text("expected_senders"),
+  declarations: jsonb("declarations").notNull(),
+  adminNotes: text("admin_notes"),
+  reviewedBy: varchar("reviewed_by").references(() => admins.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertVirtualAccountSettingSchema = createInsertSchema(virtualAccountSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVirtualAccountApplicationSchema = createInsertSchema(virtualAccountApplications).omit({ id: true, status: true, adminNotes: true, reviewedBy: true, reviewedAt: true, createdAt: true, updatedAt: true });
+export type VirtualAccountSetting = typeof virtualAccountSettings.$inferSelect;
+export type InsertVirtualAccountSetting = z.infer<typeof insertVirtualAccountSettingSchema>;
+export type VirtualAccountApplication = typeof virtualAccountApplications.$inferSelect;
+export type InsertVirtualAccountApplication = z.infer<typeof insertVirtualAccountApplicationSchema>;
+

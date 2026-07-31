@@ -21,6 +21,7 @@ export default function BottomNavigation() {
     location.startsWith('/dashboard') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||
+    location.startsWith('/virtual-accounts') ||
     location.startsWith('/support') ||
     location.startsWith('/settings') ||
     location.startsWith('/send-money') ||

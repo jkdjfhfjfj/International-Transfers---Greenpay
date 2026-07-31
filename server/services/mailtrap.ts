@@ -18,6 +18,7 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
   transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
   transaction_completed: '',
+  virtual_account_approved: '',
 };
 
 export class MailtrapService {
@@ -221,6 +222,15 @@ export class MailtrapService {
       status: 'Completed',
       date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
     });
+  }
+
+  async sendVirtualAccountApproved(toEmail: string, firstName: string, lastName: string, variables: Record<string, string>): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('virtual_account_approved');
+    if (!uuid) {
+      console.warn('[Mailtrap] virtual_account_approved template UUID not configured — skipping email');
+      return false;
+    }
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
   }
 
   async sendTransactionExport(
