@@ -274,11 +274,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           acceptsTerms: z.boolean(),
         }),
       });
-<<<<<<< ours
-      const data = schema.parse(req.body);
-      if (!Object.values(data.declarations).every(Boolean)) {
-        return res.status(400).json({ message: "All compliance declarations must be accepted." });
-=======
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
         const firstIssue = parsed.error.issues[0];
@@ -291,7 +286,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const data = parsed.data;
       if (!Object.values(data.declarations).every(Boolean)) {
         return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
->>>>>>> theirs
       }
       const existing = await db.select().from(virtualAccountApplications).where(and(eq(virtualAccountApplications.userId, userId), eq(virtualAccountApplications.currency, data.currency)));
       if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
@@ -318,9 +312,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currency = String(req.params.currency).toUpperCase();
       if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
-<<<<<<< ours
-      const values = { ...req.body, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
-=======
       const bodySchema = z.object({
         accountName: z.string().min(2, "Account name must be at least 2 characters."),
         bankName: z.string().min(2, "Bank name must be at least 2 characters."),
@@ -340,7 +331,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: firstIssue?.message || "Please complete the required account details.", errors: parsed.error.issues });
       }
       const values = { ...parsed.data, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
->>>>>>> theirs
       const existing = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, currency));
       const [setting] = existing[0]
         ? await db.update(virtualAccountSettings).set(values).where(eq(virtualAccountSettings.currency, currency)).returning()
