@@ -241,8 +241,10 @@ function AppContent() {
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
   const isAdminPage = location.startsWith('/admin');
 
-  // Only show user widgets on authenticated non-admin pages
-  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage;
+  const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
+
+  // Only show user widgets on authenticated non-admin pages where they won't cover message composers
+  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage && !isSupportComposerPage;
 
   const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage;
 

@@ -99,7 +99,7 @@ export function TalkToUs() {
             initial={{ opacity: 0, y: 20, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.9 }}
-            className="fixed bottom-36 right-4 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
+            className="fixed bottom-44 right-4 w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
             style={{ height: '380px' }}
           >
             <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white p-4 rounded-t-2xl flex items-center justify-between flex-shrink-0">
@@ -189,7 +189,7 @@ export function TalkToUs() {
             initial={{ opacity: 0, y: 10, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-            className="fixed bottom-36 right-4 z-50 flex flex-col gap-3 items-end"
+            className="fixed bottom-44 right-4 z-50 flex flex-col gap-3 items-end"
           >
             {/* AI option */}
             <motion.button
@@ -266,7 +266,7 @@ export function TalkToUs() {
             setMenuOpen(prev => !prev);
           }
         }}
-        className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
+        className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 md:bottom-6"
       >
         <motion.div
           animate={{ rotate: menuOpen ? 180 : 0 }}

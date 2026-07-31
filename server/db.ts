@@ -62,8 +62,62 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
+    // Virtual cards table - auto-created on existing databases that predate card support
+    `CREATE TABLE IF NOT EXISTS virtual_cards (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_number TEXT NOT NULL,
+      expiry_date TEXT NOT NULL,
+      cvv TEXT NOT NULL,
+      balance DECIMAL(10,2) DEFAULT 0.00,
+      status TEXT DEFAULT 'active',
+      freeze_reason TEXT,
+      block_reason TEXT,
+      purchase_amount DECIMAL(10,2) DEFAULT 60.00,
+      paystack_reference TEXT,
+      purchase_date TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
+
+    // Admin-configured virtual account details shared by approved users
+    `CREATE TABLE IF NOT EXISTS virtual_account_settings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      currency TEXT NOT NULL UNIQUE,
+      account_name TEXT NOT NULL,
+      bank_name TEXT NOT NULL,
+      account_number TEXT NOT NULL,
+      routing_number TEXT,
+      sort_code TEXT,
+      iban TEXT,
+      swift_code TEXT,
+      bank_address TEXT,
+      beneficiary_address TEXT,
+      payment_instructions TEXT,
+      is_active BOOLEAN DEFAULT true,
+      updated_by VARCHAR REFERENCES admins(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // User applications for approved access to virtual account details
+    `CREATE TABLE IF NOT EXISTS virtual_account_applications (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      source_of_income TEXT NOT NULL,
+      monthly_volume TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      expected_senders TEXT,
+      declarations JSONB NOT NULL,
+      admin_notes TEXT,
+      reviewed_by VARCHAR REFERENCES admins(id),
+      reviewed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS virtual_account_applications_user_currency_idx ON virtual_account_applications(user_id, currency)`,
     // Deposit bonuses table (admin-configured bonus offers per deposit method)
     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),

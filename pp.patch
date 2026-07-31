@@ -1,0 +1,1576 @@
+diff --git a/client/src/App.tsx b/client/src/App.tsx
+index 7d3c743117ba4e6ae215a7fa99fc26b5c308ff31..af6dda078b629f74bfad4f95edbab1229eb361f2 100644
+--- a/client/src/App.tsx
++++ b/client/src/App.tsx
+@@ -3,50 +3,51 @@ import { useEffect } from "react";
+ import { queryClient } from "./lib/queryClient";
+ import { QueryClientProvider } from "@tanstack/react-query";
+ import { Toaster } from "@/components/ui/toaster";
+ import { TooltipProvider } from "@/components/ui/tooltip";
+ import { AuthProvider, useAuth } from "@/hooks/use-auth";
+ import { TalkToUs } from "@/components/talk-to-us";
+ import { MoreMenu } from "@/components/more-menu";
+ import NotFound from "@/pages/not-found";
+ import DesktopSidebar from "@/components/desktop-sidebar";
+ import SplashPage from "@/pages/splash";
+ import LoginPage from "@/pages/auth/login";
+ import SignupPage from "@/pages/auth/signup";
+ import OtpVerificationPage from "@/pages/auth/otp-verification";
+ import GoogleCompletePage from "@/pages/auth/google-complete";
+ import KycVerificationPage from "@/pages/auth/kyc-verification";
+ import VirtualCardPurchasePage from "@/pages/auth/virtual-card-purchase";
+ import ForgotPasswordPage from "@/pages/auth/forgot-password";
+ import ResetPasswordPage from "@/pages/auth/reset-password";
+ import DashboardPage from "@/pages/dashboard";
+ import SendMoneyPage from "@/pages/send-money";
+ import SendAmountPage from "@/pages/send-amount";
+ import SendConfirmPage from "@/pages/send-confirm";
+ import ReceiveMoneyPage from "@/pages/receive-money";
+ import TransactionsPage from "@/pages/transactions";
+ import VirtualCardPage from "@/pages/virtual-card";
++import VirtualAccountsPage from "@/pages/virtual-accounts";
+ import SettingsPage from "@/pages/settings";
+ import SupportPage from "@/pages/support";
+ import LiveChatPage from "@/pages/live-chat";
+ import DepositPage from "@/pages/deposit";
+ import WithdrawPage from "@/pages/withdraw";
+ import ExchangePage from "@/pages/exchange";
+ import KycPage from "@/pages/kyc";
+ import AirtimePage from "@/pages/airtime";
+ import BillsPage from "@/pages/bills";
+ import StatusPage from "@/pages/status";
+ import LoadingScreen from "@/components/loading-screen";
+ import BottomNavigation from "@/components/bottom-navigation";
+ import { PWAInstallPrompt } from "@/components/pwa-install";
+ import { OfflineIndicator } from "@/components/offline-indicator";
+ import PaymentCallbackPage from "@/pages/payment-callback";
+ import PaymentSuccessPage from "@/pages/payment-success";
+ import PaymentFailedPage from "@/pages/payment-failed";
+ import PaymentProcessingPage from "@/pages/payment-processing";
+ import AdminLogin from "@/pages/admin-login";
+ import AdminDashboard from "@/pages/admin-dashboard-new";
+ import AdminDashboardPage from "@/pages/admin-dashboard";
+ import AdminUsersPage from "@/pages/admin-users";
+ import AdminKycPage from "@/pages/admin-kyc";
+ import AdminAdvancedKycPage from "@/pages/admin-advanced-kyc";
+ import AdminTransactionsPage from "@/pages/admin-transactions";
+@@ -69,96 +70,100 @@ import AdminPayHeroSettingsPage from "@/pages/admin-payhero-fresh";
+ import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
+ import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
+ import AdminProfilePage from "@/pages/admin-profile";
+ import LandingPage from "@/pages/landing/index";
+ import SendMoneyLanding from "@/pages/landing/send-money";
+ import VirtualCardsLanding from "@/pages/landing/virtual-cards";
+ import ExchangeLanding from "@/pages/landing/exchange";
+ import HelpLanding from "@/pages/landing/help";
+ import AirtimeLanding from "@/pages/landing/airtime";
+ import AboutLanding from "@/pages/landing/about";
+ import PricingLanding from "@/pages/landing/pricing";
+ import SecurityLanding from "@/pages/landing/security";
+ import ContactLanding from "@/pages/landing/contact";
+ import TermsAndConditionsPage from "@/pages/terms-and-conditions";
+ import PrivacyPolicyPage from "@/pages/privacy-policy";
+ import LoansPage from "@/pages/loans";
+ import APIServicePage from "@/pages/api-service";
+ import ApiDocumentationPage from "@/pages/api-documentation";
+ import UserSupportTickets from "@/pages/user-support-tickets";
+ import CryptoPage from "@/pages/crypto";
+ import AnalyticsPage from "@/pages/analytics";
+ import AdminDisputesPage from "@/pages/admin-disputes";
+ import AdminCryptoPage from "@/pages/admin-crypto";
+ import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
+ import AdminWalletsPage from "@/pages/admin-wallets";
++import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
+ import { useFCM } from "@/hooks/use-fcm";
+ 
+ // User Route Guard Component
+ function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+   const [, setLocation] = useLocation();
+   const { isAuthenticated, isLoading } = useAuth();
+   
+   // Show loading screen while checking authentication
+   if (isLoading) {
+     return <LoadingScreen />;
+   }
+   
+   if (!isAuthenticated) {
+     // Redirect to login if not authenticated
+     setLocation("/login");
+     return null;
+   }
+   
+   return <Component />;
+ }
+ 
+ 
+ function Router() {
+   return (
+     <Switch>
+       <Route path="/" component={SplashPage} />
+       <Route path="/login" component={LoginPage} />
+       <Route path="/signup" component={SignupPage} />
+       <Route path="/auth/otp-verification" component={OtpVerificationPage} />
+       <Route path="/auth/google/complete" component={GoogleCompletePage} />
+       <Route path="/auth/kyc-verification" component={KycVerificationPage} />
+       <Route path="/auth/virtual-card-purchase" component={VirtualCardPurchasePage} />
+       <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
+       <Route path="/auth/reset-password" component={ResetPasswordPage} />
+       <Route path="/dashboard">
+         <ProtectedRoute component={DashboardPage} />
+       </Route>
+       <Route path="/send-money" component={SendMoneyPage} />
+       <Route path="/send-amount" component={SendAmountPage} />
+       <Route path="/send-confirm" component={SendConfirmPage} />
+       <Route path="/receive-money" component={ReceiveMoneyPage} />
+       <Route path="/pay-to/:userId" component={ReceiveMoneyPage} />
+       <Route path="/transactions" component={TransactionsPage} />
+       <Route path="/virtual-card">
+         <ProtectedRoute component={VirtualCardPage} />
+       </Route>
++      <Route path="/virtual-accounts">
++        <ProtectedRoute component={VirtualAccountsPage} />
++      </Route>
+       <Route path="/settings" component={SettingsPage} />
+       <Route path="/support" component={SupportPage} />
+       <Route path="/support/tickets">
+         <ProtectedRoute component={UserSupportTickets} />
+       </Route>
+       <Route path="/live-chat" component={LiveChatPage} />
+       <Route path="/deposit" component={DepositPage} />
+       <Route path="/withdraw" component={WithdrawPage} />
+       <Route path="/exchange" component={ExchangePage} />
+       <Route path="/kyc" component={KycPage} />
+       <Route path="/kyc-callback" component={() => {
+         const [, setLocation] = useLocation();
+         useEffect(() => {
+           const params = new URLSearchParams(window.location.search);
+           const status = params.get("status");
+           setLocation("/kyc");
+         }, []);
+         return null;
+       }} />
+       <Route path="/airtime" component={AirtimePage} />
+       <Route path="/bills" component={BillsPage} />
+       <Route path="/status" component={StatusPage} />
+       <Route path="/payment-callback" component={PaymentCallbackPage} />
+       <Route path="/payment-success" component={PaymentSuccessPage} />
+       <Route path="/payment-failed" component={PaymentFailedPage} />
+@@ -196,69 +201,72 @@ function Router() {
+       <Route path="/admin/advanced-kyc" component={AdminAdvancedKycPage} />
+       <Route path="/admin/transactions" component={AdminTransactionsPage} />
+       <Route path="/admin/withdrawals" component={AdminWithdrawalsPage} />
+       <Route path="/admin/cards" component={AdminCardsPage} />
+       <Route path="/admin/pricing" component={AdminPricingPage} />
+       <Route path="/admin/notifications" component={AdminNotificationsPage} />
+       <Route path="/admin/mail" component={AdminMailPage} />
+       <Route path="/admin/whatsapp" component={AdminWhatsAppPage} />
+       <Route path="/admin/support" component={AdminSupportPage} />
+       <Route path="/admin/tickets" component={AdminTicketsPage} />
+       <Route path="/admin/logs" component={AdminLogsPage} />
+       <Route path="/admin/templates" component={AdminTemplatesPage} />
+       <Route path="/admin/activity" component={AdminActivityPage} />
+       <Route path="/admin/database" component={AdminDatabasePage} />
+       <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+       <Route path="/admin/settings" component={AdminSystemSettingsPage} />
+       <Route path="/admin/manual-payment" component={AdminManualPaymentSettingsPage} />
+       <Route path="/admin/payhero-settings" component={AdminPayHeroSettingsPage} />
+       <Route path="/admin/messaging" component={AdminMessagingSMSPage} />
+       <Route path="/admin/announcements" component={AdminAnnouncementsDBPage} />
+       <Route path="/admin/profile" component={AdminProfilePage} />
+       <Route path="/admin/disputes" component={AdminDisputesPage} />
+       <Route path="/admin/crypto" component={AdminCryptoPage} />
+       <Route path="/admin/deposit-settings" component={AdminDepositSettingsPage} />
+       <Route path="/admin/wallets" component={AdminWalletsPage} />
++      <Route path="/admin/virtual-accounts" component={AdminVirtualAccountsPage} />
+       <Route component={NotFound} />
+     </Switch>
+   );
+ }
+ 
+ function AppContent() {
+   const [location] = useLocation();
+   const { isAuthenticated } = useAuth();
+   
+   // Initialize FCM push notifications
+   useFCM();
+   
+   // Landing/public pages and admin pages that should not show user widgets
+   const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
+   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
+   const isAdminPage = location.startsWith('/admin');
+ 
+-  // Only show user widgets on authenticated non-admin pages
+-  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage;
++  const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
++
++  // Only show user widgets on authenticated non-admin pages where they won't cover message composers
++  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage && !isSupportComposerPage;
+ 
+   const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage;
+ 
+   return (
+     <TooltipProvider>
+       <Toaster />
+       <OfflineIndicator />
+       {showAppShell && <DesktopSidebar />}
+       <div className={showAppShell ? "md:pl-64" : ""}>
+         <Router />
+       </div>
+       {!isAdminPage && <BottomNavigation />}
+       {!isAdminPage && <PWAInstallPrompt />}
+       {shouldShowWidgets && <TalkToUs />}
+       {shouldShowWidgets && <MoreMenu />}
+     </TooltipProvider>
+   );
+ }
+ 
+ function App() {
+   return (
+     <QueryClientProvider client={queryClient}>
+       <AuthProvider>
+         <AppContent />
+       </AuthProvider>
+diff --git a/client/src/components/admin/admin-shell.tsx b/client/src/components/admin/admin-shell.tsx
+index c1c7a8c1b0a1b65ccb1a3698d0f5ac605e1cf283..90d6ade823cd9120a22e04c045fe45cadcb86673 100644
+--- a/client/src/components/admin/admin-shell.tsx
++++ b/client/src/components/admin/admin-shell.tsx
+@@ -22,50 +22,51 @@ interface AdminContextValue {
+ 
+ const AdminContext = createContext<AdminContextValue>({ admin: null });
+ export const useAdmin = () => useContext(AdminContext);
+ 
+ const navSections = [
+   {
+     title: "Overview",
+     items: [
+       { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+     ],
+   },
+   {
+     title: "Users & KYC",
+     items: [
+       { href: "/admin/users", label: "User Management", icon: Users },
+       { href: "/admin/kyc", label: "KYC Review", icon: FileCheck },
+       { href: "/admin/advanced-kyc", label: "Advanced KYC", icon: Shield },
+     ],
+   },
+   {
+     title: "Finance",
+     items: [
+       { href: "/admin/transactions", label: "Transactions", icon: DollarSign },
+       { href: "/admin/withdrawals", label: "Withdrawals", icon: Banknote },
+       { href: "/admin/wallets", label: "Multi-Wallets", icon: Wallet },
++      { href: "/admin/virtual-accounts", label: "Virtual Accounts", icon: Banknote },
+       { href: "/admin/cards", label: "Virtual Cards", icon: CreditCard },
+       { href: "/admin/pricing", label: "Card Pricing", icon: CreditCard },
+       { href: "/admin/crypto", label: "Crypto", icon: Bitcoin },
+       { href: "/admin/disputes", label: "Disputes", icon: AlertTriangle },
+     ],
+   },
+   {
+     title: "Messaging",
+     items: [
+       { href: "/admin/notifications", label: "Notifications", icon: Bell },
+       { href: "/admin/mail", label: "Mail Management", icon: Mail },
+       { href: "/admin/whatsapp", label: "WhatsApp", icon: MessageCircle },
+       { href: "/admin/support", label: "Live Support", icon: Headphones },
+       { href: "/admin/tickets", label: "Support Tickets", icon: FileText },
+       { href: "/admin/templates", label: "WA Templates", icon: MessageSquare },
+     ],
+   },
+   {
+     title: "System",
+     items: [
+       { href: "/admin/logs", label: "System Logs", icon: Activity },
+       { href: "/admin/activity", label: "Activity Logs", icon: History },
+       { href: "/admin/database", label: "Database", icon: Database },
+       { href: "/admin/analytics", label: "Analytics", icon: BarChart3 },
+     ],
+diff --git a/client/src/components/bottom-navigation.tsx b/client/src/components/bottom-navigation.tsx
+index 0daa9365a2531b0489220c95ce52de1edcfaed1b..3c3d968495b5501bdeb68bba4e1aa900ebb5349c 100644
+--- a/client/src/components/bottom-navigation.tsx
++++ b/client/src/components/bottom-navigation.tsx
+@@ -1,48 +1,49 @@
+ import { useLocation } from "wouter";
+ import { motion } from "framer-motion";
+ import { useAuth } from "@/hooks/use-auth";
+ import { Home, CreditCard, ArrowLeftRight, ClipboardList, LayoutGrid } from "lucide-react";
+ 
+ const navItems = [
+   { id: "dashboard",    Icon: Home,            label: "Home",     path: "/dashboard" },
+   { id: "virtual-card", Icon: CreditCard,       label: "Card",     path: "/virtual-card" },
+   { id: "send",         Icon: ArrowLeftRight,   label: "Transfer", path: "/send-money",  isCenter: true },
+   { id: "transactions", Icon: ClipboardList,    label: "History",  path: "/transactions" },
+   { id: "settings",     Icon: LayoutGrid,       label: "More",     path: "/settings" },
+ ];
+ 
+ export default function BottomNavigation() {
+   const [location, setLocation] = useLocation();
+   const { isAuthenticated } = useAuth();
+ 
+   const isExternal = window.opener !== null || window.parent !== window;
+ 
+   const showBottomNav = !isExternal && isAuthenticated && (
+     location.startsWith('/dashboard') ||
+     location.startsWith('/transactions') ||
+     location.startsWith('/virtual-card') ||
++    location.startsWith('/virtual-accounts') ||
+     location.startsWith('/support') ||
+     location.startsWith('/settings') ||
+     location.startsWith('/send-money') ||
+     location.startsWith('/send-amount') ||
+     location.startsWith('/send-confirm') ||
+     location.startsWith('/receive-money') ||
+     location.startsWith('/deposit') ||
+     location.startsWith('/withdraw') ||
+     location.startsWith('/exchange') ||
+     location.startsWith('/airtime') ||
+     location.startsWith('/bills') ||
+     location.startsWith('/status') ||
+     location.startsWith('/loans') ||
+     location.startsWith('/api-documentation') ||
+     location.startsWith('/admin-notifications') ||
+     location.startsWith('/crypto') ||
+     location.startsWith('/analytics') ||
+     location.startsWith('/payment-processing') ||
+     location.startsWith('/payment-success') ||
+     location.startsWith('/payment-failed') ||
+     location.startsWith('/kyc') ||
+     location.startsWith('/payment-requests') ||
+     location.startsWith('/live-chat') ||
+     location.startsWith('/user-support') ||
+     location.startsWith('/receive-money')
+diff --git a/client/src/components/talk-to-us.tsx b/client/src/components/talk-to-us.tsx
+index 711059ed8eddfabd2da558909fad1dc0531e519b..0b5f8b8778eb5912e8884d0b17128972a2c359ea 100644
+--- a/client/src/components/talk-to-us.tsx
++++ b/client/src/components/talk-to-us.tsx
+@@ -77,51 +77,51 @@ export function TalkToUs() {
+       setMessages(prev => [...prev, {
+         id: (Date.now() + 1).toString(),
+         role: 'assistant',
+         content: 'Connection error. Please check your internet and try again.',
+         timestamp: new Date(),
+       }]);
+     } finally {
+       setIsLoading(false);
+     }
+   };
+ 
+   const openAI = () => {
+     setMenuOpen(false);
+     setAiOpen(true);
+   };
+ 
+   return (
+     <>
+       {/* AI Chat Window */}
+       <AnimatePresence>
+         {aiOpen && (
+           <motion.div
+             initial={{ opacity: 0, y: 20, scale: 0.9 }}
+             animate={{ opacity: 1, y: 0, scale: 1 }}
+             exit={{ opacity: 0, y: 20, scale: 0.9 }}
+-            className="fixed bottom-36 right-4 w-80 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
++            className="fixed bottom-44 right-4 w-[calc(100vw-2rem)] max-w-96 sm:w-96 bg-white dark:bg-gray-900 rounded-2xl shadow-2xl flex flex-col z-50 border border-gray-200 dark:border-gray-700"
+             style={{ height: '380px' }}
+           >
+             <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white p-4 rounded-t-2xl flex items-center justify-between flex-shrink-0">
+               <div>
+                 <h3 className="font-semibold text-base">Ask AI</h3>
+                 <p className="text-xs text-emerald-100">Get help with GreenPay</p>
+                 <p className="text-xs text-emerald-50 mt-0.5">
+                   {remainingRequests} request{remainingRequests !== 1 ? 's' : ''} remaining today
+                 </p>
+               </div>
+               <button
+                 onClick={() => setAiOpen(false)}
+                 className="p-1 hover:bg-green-500 rounded-full transition-colors"
+               >
+                 <X className="w-5 h-5" />
+               </button>
+             </div>
+ 
+             <div className="flex-1 overflow-y-auto p-3 space-y-3">
+               {messages.length === 0 && (
+                 <div className="text-center text-gray-500 mt-8">
+                   <p className="text-sm">👋 Hello! How can I help you today?</p>
+                   <p className="text-xs mt-2 text-gray-400">Ask about payments, transfers, cards, or any feature</p>
+                 </div>
+               )}
+@@ -167,51 +167,51 @@ export function TalkToUs() {
+                   className="text-sm"
+                   disabled={isLoading}
+                 />
+                 <Button
+                   onClick={handleSendMessage}
+                   disabled={isLoading || !input.trim()}
+                   size="sm"
+                   className="bg-green-500 hover:bg-green-600 flex-shrink-0"
+                 >
+                   Send
+                 </Button>
+               </div>
+               <p className="text-xs text-gray-400 text-center">Powered by Gemini</p>
+             </div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+ 
+       {/* Pop-up menu options */}
+       <AnimatePresence>
+         {menuOpen && (
+           <motion.div
+             initial={{ opacity: 0, y: 10, scale: 0.95 }}
+             animate={{ opacity: 1, y: 0, scale: 1 }}
+             exit={{ opacity: 0, y: 10, scale: 0.95 }}
+-            className="fixed bottom-36 right-4 z-50 flex flex-col gap-3 items-end"
++            className="fixed bottom-44 right-4 z-50 flex flex-col gap-3 items-end"
+           >
+             {/* AI option */}
+             <motion.button
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               transition={{ delay: 0.05 }}
+               onClick={openAI}
+               className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
+             >
+               <span className="text-sm font-medium">Ask AI</span>
+               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 to-green-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                 <Bot className="w-5 h-5 text-white" />
+               </div>
+             </motion.button>
+ 
+             {/* WhatsApp option */}
+             <motion.a
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               transition={{ delay: 0.0 }}
+               href={whatsappLink}
+               target="_blank"
+               rel="noopener noreferrer"
+               onClick={() => setMenuOpen(false)}
+               className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
+@@ -244,39 +244,39 @@ export function TalkToUs() {
+               transition={{ delay: 0.15 }}
+               onClick={() => { setMenuOpen(false); setLocation('/live-chat'); }}
+               className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
+             >
+               <span className="text-sm font-medium">Live Support</span>
+               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-rose-600 flex items-center justify-center shadow-md group-hover:scale-105 transition-transform">
+                 <Headphones className="w-5 h-5 text-white" />
+               </div>
+             </motion.button>
+           </motion.div>
+         )}
+       </AnimatePresence>
+ 
+       {/* Main "Talk to Us" button */}
+       <motion.button
+         initial={{ scale: 0 }}
+         animate={{ scale: 1 }}
+         onClick={() => {
+           if (aiOpen) {
+             setAiOpen(false);
+             setMenuOpen(false);
+           } else {
+             setMenuOpen(prev => !prev);
+           }
+         }}
+-        className="fixed bottom-24 right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
++        className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 md:bottom-6"
+       >
+         <motion.div
+           animate={{ rotate: menuOpen ? 180 : 0 }}
+           transition={{ duration: 0.2 }}
+         >
+           <ChevronUp className="w-4 h-4" />
+         </motion.div>
+         <span className="text-sm font-semibold">Talk to us</span>
+         <MessageCircle className="w-4 h-4" />
+       </motion.button>
+     </>
+   );
+ }
+diff --git a/client/src/components/wallet-cards.tsx b/client/src/components/wallet-cards.tsx
+index 5e0091a456d4abdcca1ff10c4f7a85bb5812afd2..7c188a167ba05812afb1cee158df59f89c42ec69 100644
+--- a/client/src/components/wallet-cards.tsx
++++ b/client/src/components/wallet-cards.tsx
+@@ -1,62 +1,64 @@
+ import { useRef, useState, useEffect } from "react";
+ import { motion, AnimatePresence } from "framer-motion";
+-import { Eye, EyeOff, Plus, Star, AlertTriangle, Lock } from "lucide-react";
++import { Eye, EyeOff, Plus, Star, AlertTriangle, Lock, Building2 } from "lucide-react";
+ import type { Wallet } from "@/hooks/use-wallets";
+ import { formatNumber } from "@/lib/formatters";
+ import { useLocation } from "wouter";
+ 
+ const CURRENCY_SYMBOLS: Record<string, string> = {
+   USD: '$', KES: 'KSh', UGX: 'UGX', GHS: '₵', NGN: '₦',
+   ZAR: 'R', TZS: 'TSh', XOF: 'CFA', CDF: 'FC', XAF: 'FCFA',
+   RWF: 'RF', SLE: 'Le', ZMW: 'ZK', EUR: '€', GBP: '£',
+ };
+ 
+ const CURRENCY_COLORS: Record<string, string> = {
+   USD: 'from-emerald-500 via-green-500 to-teal-600',
+   KES: 'from-red-500 via-red-400 to-orange-500',
+   UGX: 'from-yellow-500 via-yellow-400 to-orange-500',
+   GHS: 'from-red-600 via-orange-500 to-green-600',
+   NGN: 'from-green-700 via-green-600 to-green-500',
+   ZAR: 'from-blue-600 via-blue-500 to-yellow-500',
+   TZS: 'from-cyan-600 via-cyan-500 to-blue-500',
+   XOF: 'from-purple-600 via-purple-500 to-violet-500',
+   CDF: 'from-sky-600 via-sky-500 to-blue-500',
+   XAF: 'from-teal-600 via-teal-500 to-green-500',
+   RWF: 'from-blue-700 via-blue-500 to-cyan-400',
+   SLE: 'from-green-600 via-teal-500 to-green-400',
+   ZMW: 'from-orange-500 via-orange-400 to-red-400',
+   EUR: 'from-blue-700 via-indigo-600 to-blue-500',
+   GBP: 'from-indigo-700 via-purple-600 to-indigo-500',
+ };
+ 
+ const CURRENCY_FLAGS: Record<string, string> = {
+   USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
+   ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
+   RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
+ };
+ 
++const VIRTUAL_ACCOUNT_LIVE = new Set(["USD", "GBP", "EUR"]);
++
+ const CURRENCY_NAMES: Record<string, string> = {
+   USD: 'US Dollar', KES: 'Kenyan Shilling', UGX: 'Ugandan Shilling',
+   GHS: 'Ghanaian Cedi', NGN: 'Nigerian Naira', ZAR: 'South African Rand',
+   TZS: 'Tanzanian Shilling', XOF: 'West African CFA', CDF: 'Congolese Franc',
+   XAF: 'Central African CFA', RWF: 'Rwandan Franc', SLE: 'Sierra Leonean Leone',
+   ZMW: 'Zambian Kwacha', EUR: 'Euro', GBP: 'British Pound',
+ };
+ 
+ interface WalletCardsProps {
+   wallets: Wallet[];
+   onWalletSelect?: (wallet: Wallet) => void;
+   selectedWalletId?: string;
+   showBalance?: boolean;
+   onToggleBalance?: () => void;
+   onAddWallet?: () => void;
+   showAdd?: boolean;
+ }
+ 
+ export default function WalletCards({
+   wallets,
+   onWalletSelect,
+   selectedWalletId,
+   showBalance = true,
+   onToggleBalance,
+   onAddWallet,
+@@ -159,50 +161,56 @@ export default function WalletCards({
+                       </span>
+                     )}
+                   </div>
+                 </div>
+ 
+                 <div>
+                   {showBalance ? (
+                     <div>
+                       <div className="flex items-baseline gap-1">
+                         <span className="text-white/70 text-xs">{symbol}</span>
+                         <span className="text-white font-bold text-2xl tracking-tight">
+                           {formatNumber(available, 2)}
+                         </span>
+                       </div>
+                       {hold > 0 && (
+                         <p className="text-white/50 text-[10px] mt-0.5">
+                           {symbol}{formatNumber(hold, 2)} on hold
+                         </p>
+                       )}
+                     </div>
+                   ) : (
+                     <span className="text-white font-bold text-2xl tracking-widest">••••••</span>
+                   )}
+                   <div className="flex items-center justify-between mt-1">
+                     <p className="text-white/50 text-[10px]">Available balance</p>
++                    <button
++                      onClick={e => { e.stopPropagation(); setLocation(`/virtual-accounts?currency=${wallet.currency}`); }}
++                      className="text-white/85 hover:text-white text-[10px] font-semibold bg-white/15 rounded-full px-2 py-1 flex items-center gap-1"
++                    >
++                      <Building2 className="w-3 h-3" /> {VIRTUAL_ACCOUNT_LIVE.has(wallet.currency) ? "Account" : "Soon"}
++                    </button>
+                     {onToggleBalance && (
+                       <button
+                         onClick={e => { e.stopPropagation(); onToggleBalance?.(); }}
+                         className="text-white/60 hover:text-white transition-colors"
+                       >
+                         {showBalance ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                       </button>
+                     )}
+                   </div>
+                 </div>
+               </div>
+             </motion.div>
+           );
+         })}
+ 
+         {showAdd && (
+           <motion.div
+             initial={{ opacity: 0, scale: 0.95 }}
+             animate={{ opacity: 1, scale: 1 }}
+             onClick={onAddWallet || (() => setLocation("/settings"))}
+             className="snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+           >
+             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+               <Plus className="w-5 h-5 text-primary" />
+             </div>
+diff --git a/client/src/pages/admin-virtual-accounts.tsx b/client/src/pages/admin-virtual-accounts.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..25b3dd3b8d90722966a88cdbffd68e836d04029c
+--- /dev/null
++++ b/client/src/pages/admin-virtual-accounts.tsx
+@@ -0,0 +1,50 @@
++import AdminShell from "@/components/admin/admin-shell";
++import { useState } from "react";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { apiRequest } from "@/lib/queryClient";
++import { Button } from "@/components/ui/button";
++import { Input } from "@/components/ui/input";
++import { Textarea } from "@/components/ui/textarea";
++import { Label } from "@/components/ui/label";
++import { Badge } from "@/components/ui/badge";
++import { useToast } from "@/hooks/use-toast";
++import { AlertCircle, Building2, Check, Save, X } from "lucide-react";
++
++const fields = ["accountName","bankName","accountNumber","routingNumber","sortCode","iban","swiftCode","bankAddress","beneficiaryAddress","paymentInstructions"];
++
++export default function AdminVirtualAccountsPage() {
++  const { toast } = useToast(); const qc = useQueryClient(); const [currency, setCurrency] = useState("USD"); const [draft, setDraft] = useState<any>({}); const [saveError, setSaveError] = useState("");
++  const { data } = useQuery({ queryKey: ["/api/admin/virtual-accounts"], queryFn: async () => (await apiRequest("GET", "/api/admin/virtual-accounts")).json() });
++  const setting = (data?.settings || []).find((s: any) => s.currency === currency) || {};
++  const applications = data?.applications || [];
++  const save = useMutation({
++    mutationFn: async () => {
++      const payload = Object.fromEntries(fields.map(field => [field, get(field)]));
++      return (await apiRequest("PUT", `/api/admin/virtual-accounts/settings/${currency}`, { ...payload, isActive: true })).json();
++    },
++    onSuccess: () => { setSaveError(""); toast({ title: "Account details saved" }); setDraft({}); qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] }); },
++    onError: (e: any) => {
++      const raw = e?.message || "Failed to save account details";
++      let friendly = raw;
++      try { friendly = JSON.parse(raw.replace(/^\d+:\s*/, "")).message || friendly; } catch {}
++      setSaveError(friendly);
++      toast({ title: "Save failed", description: friendly, variant: "destructive" });
++    },
++  });
++  const review = useMutation({ mutationFn: async ({ id, status }: any) => (await apiRequest("PATCH", `/api/admin/virtual-accounts/applications/${id}`, { status })).json(), onSuccess: () => { toast({ title: "Application updated" }); qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] }); }, onError: (e: any) => toast({ title: "Review failed", description: e?.message || "Could not update application", variant: "destructive" }) });
++  const get = (k: string) => draft[k] ?? setting[k] ?? "";
++  return <AdminShell title="Virtual Accounts">
++    <div className="max-w-6xl space-y-6">
++      <div><h2 className="text-xl font-bold flex items-center gap-2"><Building2 className="text-green-600" /> Virtual USD, GBP & EUR Accounts</h2><p className="text-sm text-gray-500">Configure the shared beneficiary account details shown to approved users. Mailtrap template key: <code>virtual_account_approved</code>. Variables: first_name, last_name, currency, account_name, bank_name, account_number, routing_number, sort_code, iban, swift_code, bank_address, beneficiary_address, payment_instructions.</p></div>
++      <div className="bg-white border rounded-xl p-4 space-y-4 shadow-sm">
++        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
++          <div className="flex gap-2">{["USD","GBP","EUR"].map(c => <Button key={c} variant={currency===c?"default":"outline"} onClick={() => { setCurrency(c); setDraft({}); setSaveError(""); }}>{c}</Button>)}</div>
++          <Button onClick={() => save.mutate()} disabled={save.isPending} className="gap-2"><Save className="w-4 h-4" /> {save.isPending ? "Saving..." : `Save ${currency} Details`}</Button>
++        </div>
++        {saveError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{saveError}</span></div>}
++        <div className="grid md:grid-cols-2 gap-3">{fields.map(f => <div key={f} className={f.includes("Address") || f.includes("Instructions") ? "md:col-span-2" : ""}><Label className="capitalize">{f.replace(/([A-Z])/g, " $1")}{["accountName","bankName","accountNumber"].includes(f) && <span className="text-red-500"> *</span>}</Label>{f.includes("Address") || f.includes("Instructions") ? <Textarea value={get(f)} onChange={e => { setSaveError(""); setDraft({ ...draft, [f]: e.target.value }); }} /> : <Input value={get(f)} onChange={e => { setSaveError(""); setDraft({ ...draft, [f]: e.target.value }); }} />}</div>)}</div>
++      </div>
++      <div className="bg-white border rounded-xl overflow-hidden"><div className="p-4 border-b"><h3 className="font-semibold">Applications</h3></div><div className="divide-y">{applications.map((row: any) => { const a=row.application, u=row.user; return <div key={a.id} className="p-4 grid md:grid-cols-[1fr_auto] gap-3"><div><div className="flex gap-2 items-center"><p className="font-semibold">{u?.fullName} — {a.currency}</p><Badge className="capitalize">{a.status}</Badge></div><p className="text-sm text-gray-500">{u?.email}</p><p className="text-sm mt-2">Income: {a.sourceOfIncome} · Volume: {a.monthlyVolume}</p><p className="text-sm text-gray-600">Purpose: {a.purpose}</p><pre className="text-xs bg-gray-50 rounded p-2 mt-2 overflow-auto">{JSON.stringify(a.declarations, null, 2)}</pre></div><div className="flex gap-2 items-start">{a.status === "pending" && <><Button size="sm" onClick={() => review.mutate({ id:a.id, status:"approved" })}><Check className="w-4 h-4 mr-1" /> Approve</Button><Button size="sm" variant="destructive" onClick={() => review.mutate({ id:a.id, status:"rejected" })}><X className="w-4 h-4 mr-1" /> Reject</Button></>}</div></div>})}{applications.length===0 && <p className="p-6 text-sm text-gray-500">No applications yet.</p>}</div></div>
++    </div>
++  </AdminShell>;
++}
+diff --git a/client/src/pages/live-chat.tsx b/client/src/pages/live-chat.tsx
+index 6ebff5bd818ed4c266a78e5bfe73901407b6b92b..dc3b42c297de5a7007bb5adc1164070ce7d65501 100644
+--- a/client/src/pages/live-chat.tsx
++++ b/client/src/pages/live-chat.tsx
+@@ -191,51 +191,51 @@ export default function LiveChatPage() {
+       handleSendMessage();
+     }
+   };
+ 
+   if (messagesLoading) {
+     return (
+       <div className="min-h-screen bg-background flex items-center justify-center">
+         <div className="text-center space-y-4">
+           <div className="animate-spin w-8 h-8 border-4 border-primary/20 border-t-primary rounded-full mx-auto"></div>
+           <p className="text-muted-foreground">Loading chat...</p>
+         </div>
+       </div>
+     );
+   }
+ 
+   return (
+     <div className="min-h-screen bg-background flex flex-col">
+       {/* Header */}
+       <WavyHeader
+         
+         
+         size="sm"
+       />
+ 
+       {/* Messages Container */}
+-      <div className="flex-1 flex flex-col">
++      <div className="flex-1 flex flex-col pb-24 md:pb-0">
+         <ScrollArea className="flex-1 px-4 py-6">
+           <div className="space-y-4 max-w-3xl mx-auto">
+             {messages.length === 0 ? (
+               <motion.div
+                 initial={{ opacity: 0, y: 20 }}
+                 animate={{ opacity: 1, y: 0 }}
+                 className="text-center py-12 space-y-4"
+               >
+                 <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto">
+                   <MessageSquare className="w-8 h-8 text-primary" />
+                 </div>
+                 <div>
+                   <h3 className="font-semibold text-lg mb-2">Start a conversation</h3>
+                   <p className="text-muted-foreground">
+                     Send us a message and we'll get back to you as soon as possible.
+                   </p>
+                 </div>
+               </motion.div>
+             ) : (
+               messages.map((message, index) => (
+                 <motion.div
+                   key={message.id}
+                   initial={{ opacity: 0, y: 20 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   transition={{ delay: index * 0.05 }}
+@@ -299,51 +299,51 @@ export default function LiveChatPage() {
+                             : message.fileUrl.startsWith('/')
+                               ? message.fileUrl
+                               : `/${message.fileUrl}`
+                           }
+                           target="_blank" 
+                           rel="noopener noreferrer"
+                           className="text-sm underline hover:no-underline"
+                         >
+                           {message.fileName || 'Download file'}
+                         </a>
+                       </div>
+                     )}
+                     <p>{message.content}</p>
+                     <p className="text-xs opacity-70 mt-1">
+                       {format(new Date(message.createdAt), 'HH:mm')}
+                     </p>
+                   </div>
+                 </motion.div>
+               ))
+             )}
+             <div ref={messagesEndRef} />
+           </div>
+         </ScrollArea>
+ 
+         {/* Message Input */}
+-        <div className="border-t border-border bg-card p-4">
++        <div className="border-t border-border bg-card p-4 sticky bottom-20 md:bottom-0 z-40">
+           <div className="max-w-3xl mx-auto">
+             <div className="flex gap-3">
+               <Input
+                 value={messageText}
+                 onChange={(e) => setMessageText(e.target.value)}
+                 onKeyDown={handleKeyPress}
+                 placeholder="Type your message..."
+                 disabled={!conversation?.id || sendMessageMutation.isPending || uploadFileMutation.isPending}
+                 className="flex-1"
+                 data-testid="input-message"
+               />
+               
+               {/* File Upload */}
+               <input
+                 type="file"
+                 ref={fileInputRef}
+                 onChange={handleFileSelect}
+                 className="hidden"
+                 accept="image/*,application/pdf,.doc,.docx,.txt"
+               />
+               
+               <Button
+                 variant="outline"
+                 size="sm"
+                 onClick={() => fileInputRef.current?.click()}
+diff --git a/client/src/pages/virtual-accounts.tsx b/client/src/pages/virtual-accounts.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..795805824a2ad8644c2947c2337aa66323d94a66
+--- /dev/null
++++ b/client/src/pages/virtual-accounts.tsx
+@@ -0,0 +1,113 @@
++import { useMemo, useState } from "react";
++import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
++import { useLocation } from "wouter";
++import { apiRequest } from "@/lib/queryClient";
++import { Button } from "@/components/ui/button";
++import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
++import { Input } from "@/components/ui/input";
++import { Label } from "@/components/ui/label";
++import { Textarea } from "@/components/ui/textarea";
++import { Checkbox } from "@/components/ui/checkbox";
++import { Badge } from "@/components/ui/badge";
++import { AlertCircle, Building2, CheckCircle2, Clock, Copy, ShieldCheck } from "lucide-react";
++import { WavyHeader } from "@/components/wavy-header";
++import { useToast } from "@/hooks/use-toast";
++
++const currencyMeta: Record<string, { flag: string; name: string; enabled: boolean }> = {
++  USD: { flag: "🇺🇸", name: "US Dollar", enabled: true },
++  GBP: { flag: "🇬🇧", name: "British Pound", enabled: true },
++  EUR: { flag: "🇪🇺", name: "Euro", enabled: true },
++  KES: { flag: "🇰🇪", name: "Kenyan Shilling", enabled: false },
++  NGN: { flag: "🇳🇬", name: "Nigerian Naira", enabled: false },
++  GHS: { flag: "🇬🇭", name: "Ghanaian Cedi", enabled: false },
++};
++
++type Application = { id: string; currency: string; status: string; adminNotes?: string; accountDetails?: any };
++
++export default function VirtualAccountsPage() {
++  const [, setLocation] = useLocation();
++  const { toast } = useToast();
++  const queryClient = useQueryClient();
++  const [currency, setCurrency] = useState(() => {
++    const requested = new URLSearchParams(window.location.search).get("currency")?.toUpperCase();
++    return requested && ["USD", "GBP", "EUR"].includes(requested) ? requested : "USD";
++  });
++  const [step, setStep] = useState(1);
++  const [form, setForm] = useState({ sourceOfIncome: "", monthlyVolume: "", purpose: "", expectedSenders: "" });
++  const [formError, setFormError] = useState("");
++  const [declarations, setDeclarations] = useState({ notUsCitizen: false, notPoliticallyExposed: false, beneficialOwner: false, truthfulInformation: false, acceptsTerms: false });
++
++  const { data } = useQuery<{ applications: Application[]; supportedCurrencies: string[] }>({
++    queryKey: ["/api/virtual-accounts"],
++    queryFn: async () => (await apiRequest("GET", "/api/virtual-accounts")).json(),
++  });
++  const applications = data?.applications || [];
++  const selectedApplication = useMemo(() => applications.find(a => a.currency === currency), [applications, currency]);
++
++  const applyMutation = useMutation({
++    mutationFn: async () => (await apiRequest("POST", "/api/virtual-accounts/apply", { currency, ...form, declarations })).json(),
++    onSuccess: () => { setFormError(""); toast({ title: "Application submitted", description: "Your request is now pending admin review." }); queryClient.invalidateQueries({ queryKey: ["/api/virtual-accounts"] }); setStep(1); },
++    onError: (e: any) => {
++      const raw = e?.message || "Failed to submit application";
++      let friendly = raw;
++      try {
++        const jsonText = raw.replace(/^\d+:\s*/, "");
++        const parsed = JSON.parse(jsonText);
++        friendly = parsed.message || parsed.errors?.[0]?.message || friendly;
++      } catch {}
++      setFormError(friendly);
++      toast({ title: "Could not submit", description: friendly, variant: "destructive" });
++    },
++  });
++
++  const copy = (text?: string) => { if (text) navigator.clipboard.writeText(text); toast({ title: "Copied" }); };
++  const fieldErrors = {
++    sourceOfIncome: form.sourceOfIncome.trim().length > 0 && form.sourceOfIncome.trim().length < 2 ? "Enter at least 2 characters." : "",
++    monthlyVolume: form.monthlyVolume.trim().length === 0 ? "Expected monthly volume is required." : "",
++    purpose: form.purpose.trim().length > 0 && form.purpose.trim().length < 5 ? "Purpose must be at least 5 characters." : "",
++  };
++  const canContinue = step === 1
++    ? form.sourceOfIncome.trim().length >= 2 && form.monthlyVolume.trim().length > 0 && form.purpose.trim().length >= 5
++    : Object.values(declarations).every(Boolean);
++
++  return <div className="min-h-screen bg-slate-50 pb-28 md:pb-8">
++    <WavyHeader title="Virtual Currency Accounts" subtitle="Apply for USD, GBP or EUR account details after review" onBack={() => setLocation("/dashboard")} size="lg" icon={<Building2 className="w-5 h-5 text-white" />} />
++
++    <main className="max-w-3xl mx-auto px-4 -mt-6 space-y-4">
++      <div className="grid grid-cols-3 gap-2">
++        {Object.entries(currencyMeta).map(([code, meta]) => <button key={code} onClick={() => meta.enabled && setCurrency(code)} disabled={!meta.enabled} className={`rounded-2xl border p-3 text-left bg-white ${currency === code ? "border-emerald-500 ring-2 ring-emerald-100" : "border-slate-200"} ${!meta.enabled ? "opacity-60" : ""}`}>
++          <div className="text-xl">{meta.flag}</div><div className="font-bold text-sm">{code}</div><div className="text-[10px] text-slate-500">{meta.enabled ? meta.name : "Coming soon"}</div>
++        </button>)}
++      </div>
++
++      {selectedApplication?.status === "approved" && selectedApplication.accountDetails ? <Card className="border-emerald-200">
++        <CardHeader><CardTitle className="flex items-center gap-2"><CheckCircle2 className="text-emerald-600" /> {currency} account approved</CardTitle></CardHeader>
++        <CardContent className="space-y-3">
++          {["accountName","bankName","accountNumber","routingNumber","sortCode","iban","swiftCode","bankAddress","beneficiaryAddress"].map(k => selectedApplication.accountDetails?.[k] && <div key={k} className="bg-slate-50 rounded-xl p-3 flex items-center justify-between gap-3"><div><p className="text-xs uppercase text-slate-500">{k.replace(/([A-Z])/g, " $1")}</p><p className="font-semibold break-all">{selectedApplication.accountDetails[k]}</p></div><Button size="sm" variant="ghost" onClick={() => copy(selectedApplication.accountDetails[k])}><Copy className="w-4 h-4" /></Button></div>)}
++          {selectedApplication.accountDetails.paymentInstructions && <p className="text-sm text-slate-600 bg-amber-50 border border-amber-100 rounded-xl p-3">{selectedApplication.accountDetails.paymentInstructions}</p>}
++        </CardContent>
++      </Card> : selectedApplication ? <Card><CardContent className="py-8 text-center"><Clock className="w-10 h-10 text-amber-500 mx-auto mb-3" /><h2 className="font-bold capitalize">{selectedApplication.status}</h2><p className="text-sm text-slate-500 mt-1">{selectedApplication.status === "pending" ? "Admin is reviewing your declarations and source of income." : selectedApplication.adminNotes || "You may apply again after updating your information."}</p></CardContent></Card> : <Card>
++        <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" /> Apply for {currency} account</CardTitle></CardHeader>
++        <CardContent className="space-y-4">
++          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
++            <div className="flex items-center gap-2"><Badge>{step} of 2</Badge><span className="text-sm text-slate-500">{step === 1 ? "Funding profile" : "Compliance declarations"}</span></div>
++            <div className="flex h-2 flex-1 overflow-hidden rounded-full bg-slate-100 sm:max-w-56"><div className="bg-emerald-500 transition-all" style={{ width: step === 1 ? "50%" : "100%" }} /></div>
++          </div>
++          {formError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{formError}</span></div>}
++          {step === 1 ? <div className="space-y-3">
++            <div><Label>Source of income</Label><Input value={form.sourceOfIncome} onChange={e => { setFormError(""); setForm({ ...form, sourceOfIncome: e.target.value }); }} placeholder="Employment, business, investments..." />{fieldErrors.sourceOfIncome && <p className="mt-1 text-xs text-red-600">{fieldErrors.sourceOfIncome}</p>}</div>
++            <div><Label>Expected monthly volume</Label><Input value={form.monthlyVolume} onChange={e => { setFormError(""); setForm({ ...form, monthlyVolume: e.target.value }); }} placeholder="e.g. 1,000 - 5,000" />{fieldErrors.monthlyVolume && <p className="mt-1 text-xs text-red-600">{fieldErrors.monthlyVolume}</p>}</div>
++            <div><Label>Purpose of account</Label><Textarea value={form.purpose} onChange={e => { setFormError(""); setForm({ ...form, purpose: e.target.value }); }} placeholder="Receiving salary, client payments, remittances..." />{fieldErrors.purpose && <p className="mt-1 text-xs text-red-600">{fieldErrors.purpose}</p>}</div>
++            <div><Label>Expected senders</Label><Input value={form.expectedSenders} onChange={e => setForm({ ...form, expectedSenders: e.target.value })} placeholder="Employer, platforms, family, clients" /></div>
++          </div> : <div className="space-y-3">
++            {[
++              ["notUsCitizen", "I confirm I am not a US citizen, resident, or tax person."], ["notPoliticallyExposed", "I am not politically exposed and am not related to a politically exposed person."], ["beneficialOwner", "I am the beneficial owner of funds received into this account."], ["truthfulInformation", "All information supplied is truthful and current."], ["acceptsTerms", "I accept GreenPay virtual account terms and monitoring requirements."],
++            ].map(([key, label]) => <label key={key} className="flex gap-3 rounded-xl border p-3 text-sm"><Checkbox checked={(declarations as any)[key]} onCheckedChange={v => setDeclarations({ ...declarations, [key]: Boolean(v) })} /><span>{label}</span></label>)}
++            <div className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800 flex gap-2"><ShieldCheck className="w-4 h-4 mt-0.5" /> Approved users see one admin-configured account per currency. Incoming credits remain subject to compliance checks.</div>
++          </div>}
++          <div className="sticky bottom-24 z-10 -mx-2 flex gap-2 rounded-2xl border bg-white/95 p-2 shadow-lg backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none">{step > 1 && <Button className="flex-1" variant="outline" onClick={() => setStep(1)}>Back</Button>}<Button className="flex-1" disabled={!canContinue || applyMutation.isPending} onClick={() => step === 1 ? setStep(2) : applyMutation.mutate()}>{step === 1 ? "Continue" : "Submit for review"}</Button></div>
++        </CardContent>
++      </Card>}
++    </main>
++  </div>;
++}
+diff --git a/server/db.ts b/server/db.ts
+index e5e600fddea2ff2d32b65b7005059d904227065f..fe0c2f6559b73d41d81d11b09d5a66dee70a1166 100644
+--- a/server/db.ts
++++ b/server/db.ts
+@@ -40,52 +40,106 @@ async function alterMissingColumns() {
+       is_active BOOLEAN DEFAULT true,
+       is_suspended BOOLEAN DEFAULT false,
+       suspend_reason TEXT,
+       created_at TIMESTAMP DEFAULT NOW(),
+       updated_at TIMESTAMP DEFAULT NOW()
+     )`,
+     `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+     // Migrate existing USD balances to wallets
+     `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+      SELECT id, 'USD', COALESCE(balance, 0), true, true FROM users
+      WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'USD')
+      ON CONFLICT DO NOTHING`,
+     // Migrate existing KES balances to wallets
+     `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+      SELECT id, 'KES', COALESCE(kes_balance, 0), false, true FROM users
+      WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'KES')
+      ON CONFLICT DO NOTHING`,
+     // NexusPay API key in api_configurations table (safe fallback)
+     `INSERT INTO api_configurations (service_name, config_key, config_value, is_active) VALUES ('nexuspay', 'api_key', '""', true) ON CONFLICT (service_name, config_key) DO NOTHING`,
+     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
+     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
+     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
+     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,
+     `ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT`,
+     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
++    // Virtual cards table - auto-created on existing databases that predate card support
++    `CREATE TABLE IF NOT EXISTS virtual_cards (
++      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
++      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++      card_number TEXT NOT NULL,
++      expiry_date TEXT NOT NULL,
++      cvv TEXT NOT NULL,
++      balance DECIMAL(10,2) DEFAULT 0.00,
++      status TEXT DEFAULT 'active',
++      freeze_reason TEXT,
++      block_reason TEXT,
++      purchase_amount DECIMAL(10,2) DEFAULT 60.00,
++      paystack_reference TEXT,
++      purchase_date TIMESTAMP DEFAULT NOW(),
++      updated_at TIMESTAMP DEFAULT NOW()
++    )`,
+     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
+     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
++
++    // Admin-configured virtual account details shared by approved users
++    `CREATE TABLE IF NOT EXISTS virtual_account_settings (
++      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
++      currency TEXT NOT NULL UNIQUE,
++      account_name TEXT NOT NULL,
++      bank_name TEXT NOT NULL,
++      account_number TEXT NOT NULL,
++      routing_number TEXT,
++      sort_code TEXT,
++      iban TEXT,
++      swift_code TEXT,
++      bank_address TEXT,
++      beneficiary_address TEXT,
++      payment_instructions TEXT,
++      is_active BOOLEAN DEFAULT true,
++      updated_by VARCHAR REFERENCES admins(id),
++      created_at TIMESTAMP DEFAULT NOW(),
++      updated_at TIMESTAMP DEFAULT NOW()
++    )`,
++    // User applications for approved access to virtual account details
++    `CREATE TABLE IF NOT EXISTS virtual_account_applications (
++      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
++      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
++      currency TEXT NOT NULL,
++      status TEXT DEFAULT 'pending',
++      source_of_income TEXT NOT NULL,
++      monthly_volume TEXT NOT NULL,
++      purpose TEXT NOT NULL,
++      expected_senders TEXT,
++      declarations JSONB NOT NULL,
++      admin_notes TEXT,
++      reviewed_by VARCHAR REFERENCES admins(id),
++      reviewed_at TIMESTAMP,
++      created_at TIMESTAMP DEFAULT NOW(),
++      updated_at TIMESTAMP DEFAULT NOW()
++    )`,
++    `CREATE UNIQUE INDEX IF NOT EXISTS virtual_account_applications_user_currency_idx ON virtual_account_applications(user_id, currency)`,
+     // Deposit bonuses table (admin-configured bonus offers per deposit method)
+     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
+       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+       method TEXT NOT NULL,
+       min_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+       bonus_amount DECIMAL(18,2) NOT NULL,
+       bonus_type TEXT NOT NULL DEFAULT 'fixed',
+       description TEXT,
+       is_active BOOLEAN DEFAULT true,
+       created_at TIMESTAMP DEFAULT NOW(),
+       updated_at TIMESTAMP DEFAULT NOW()
+     )`,
+     // Advanced KYC documents table
+     `CREATE TABLE IF NOT EXISTS advanced_kyc_documents (
+       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+       user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       facial_photo_url TEXT,
+       address_proof_url TEXT,
+       address_proof_type TEXT,
+       full_address TEXT,
+       city TEXT,
+       postal_code TEXT,
+       country TEXT,
+       status TEXT NOT NULL DEFAULT 'pending',
+       verification_notes TEXT,
+diff --git a/server/routes.ts b/server/routes.ts
+index 6b029d8911a9cf6f97c8d9d5f2b4d5400feadee3..0e477e6dcb4d11f05ca80620a97a04b179cfa951 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -1,34 +1,34 @@
+ import type { Express } from "express";
+ import { createServer, type Server } from "http";
+ import { WebSocketServer, WebSocket } from "ws";
+ import path from "path";
+ import { storage } from "./storage";
+ import { db, pool } from "./db";
+-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory } from "@shared/schema";
++import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications } from "@shared/schema";
+ import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
+-import { desc, eq, sql } from "drizzle-orm";
++import { and, desc, eq, sql } from "drizzle-orm";
+ import { z } from "zod";
+ import bcrypt from "bcrypt";
+ import multer from "multer";
+ import * as speakeasy from 'speakeasy';
+ import * as QRCode from 'qrcode';
+ import { fileTypeFromBuffer } from 'file-type';
+ import { whatsappService } from "./services/whatsapp";
+ import { createExchangeRateService } from "./services/exchange-rate";
+ import { payHeroService } from "./services/payhero";
+ import { paystackService } from "./services/paystack";
+ import { twoFactorService } from "./services/2fa";
+ import { biometricService } from "./services/biometric";
+ import { notificationService } from "./services/notifications";
+ import { CloudinaryStorageService, ObjectNotFoundError } from "./cloudinaryStorage";
+ import { statumService } from "./statumService";
+ import { ActivityLogger } from "./services/activity-logger";
+ import { validateApiKey, optionalApiKey } from "./middleware/api-key";
+ import { openaiService } from "./services/ai";
+ import { aiRateLimiter } from "./services/ai-rate-limiter";
+ 
+ const cloudinaryStorage = new CloudinaryStorageService();
+ 
+ // Configure multer for file uploads with memory storage (for cloud upload)
+ const upload = multer({
+   storage: multer.memoryStorage(), // Store files in memory buffer for cloud upload
+@@ -215,50 +215,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
+       console.error('Manual proof upload error:', error);
+       res.status(500).json({ message: "Failed to upload proof. Please try again." });
+     }
+   });
+ 
+   const requireAdminAuth = (req: any, res: any, next: any) => {
+     if (!req.session?.admin?.id) {
+       return res.status(401).json({ message: "Admin authentication required" });
+     }
+     next();
+   };
+ 
+   // Apply maintenance mode middleware globally
+   app.use(checkMaintenanceMode);
+ 
+   // Health check endpoint - must be defined early to avoid catch-all routes
+   app.get("/health", (_req, res) => {
+     res.status(200).json({ 
+       status: "healthy", 
+       timestamp: new Date().toISOString(),
+       env: process.env.NODE_ENV,
+       uptime: process.uptime()
+     });
+   });
+ 
++  const supportedVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
++
++  app.get("/api/virtual-accounts", requireAuth, async (req: any, res) => {
++    try {
++      const userId = req.session.userId;
++      const applications = await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.userId, userId));
++      const settings = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.isActive, true));
++      res.json({
++        supportedCurrencies: supportedVirtualAccountCurrencies,
++        applications: applications.map((app: any) => ({
++          ...app,
++          accountDetails: app.status === "approved" ? settings.find((s: any) => s.currency === app.currency) || null : null,
++        })),
++      });
++    } catch (error) {
++      console.error("Virtual accounts fetch error:", error);
++      res.status(500).json({ message: "Failed to load virtual accounts" });
++    }
++  });
++
++  app.post("/api/virtual-accounts/apply", requireAuth, async (req: any, res) => {
++    try {
++      const userId = req.session.userId;
++      const schema = z.object({
++        currency: z.enum(["USD", "GBP", "EUR"]),
++        sourceOfIncome: z.string().min(2),
++        monthlyVolume: z.string().min(1),
++        purpose: z.string().min(5),
++        expectedSenders: z.string().optional(),
++        declarations: z.object({
++          notUsCitizen: z.boolean(),
++          notPoliticallyExposed: z.boolean(),
++          beneficialOwner: z.boolean(),
++          truthfulInformation: z.boolean(),
++          acceptsTerms: z.boolean(),
++        }),
++      });
++      const parsed = schema.safeParse(req.body);
++      if (!parsed.success) {
++        const firstIssue = parsed.error.issues[0];
++        return res.status(400).json({
++          message: firstIssue?.message || "Please complete all required application fields.",
++          field: firstIssue?.path?.join("."),
++          errors: parsed.error.issues.map(issue => ({ field: issue.path.join("."), message: issue.message })),
++        });
++      }
++      const data = parsed.data;
++      if (!Object.values(data.declarations).every(Boolean)) {
++        return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
++      }
++      const existing = await db.select().from(virtualAccountApplications).where(and(eq(virtualAccountApplications.userId, userId), eq(virtualAccountApplications.currency, data.currency)));
++      if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
++      const [application] = await db.insert(virtualAccountApplications).values({ ...data, userId }).returning();
++      await storage.createNotification({ userId, title: `${data.currency} virtual account application received`, message: "Your application is pending admin review.", type: "info", isGlobal: false });
++      res.status(201).json(application);
++    } catch (error: any) {
++      console.error("Virtual account apply error:", error);
++      res.status(400).json({ message: error?.message || "Failed to submit application" });
++    }
++  });
++
++  app.get("/api/admin/virtual-accounts", requireAdminAuth, async (_req, res) => {
++    try {
++      const applications = await db.select({ application: virtualAccountApplications, user: users }).from(virtualAccountApplications).leftJoin(users, eq(virtualAccountApplications.userId, users.id)).orderBy(desc(virtualAccountApplications.createdAt));
++      const settings = await db.select().from(virtualAccountSettings).orderBy(virtualAccountSettings.currency);
++      res.json({ applications, settings, supportedCurrencies: supportedVirtualAccountCurrencies });
++    } catch (error) {
++      res.status(500).json({ message: "Failed to load virtual account admin data" });
++    }
++  });
++
++  app.put("/api/admin/virtual-accounts/settings/:currency", requireAdminAuth, async (req: any, res) => {
++    try {
++      const currency = String(req.params.currency).toUpperCase();
++      if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
++      const bodySchema = z.object({
++        accountName: z.string().min(2, "Account name must be at least 2 characters."),
++        bankName: z.string().min(2, "Bank name must be at least 2 characters."),
++        accountNumber: z.string().min(3, "Account number must be at least 3 characters."),
++        routingNumber: z.string().optional().nullable(),
++        sortCode: z.string().optional().nullable(),
++        iban: z.string().optional().nullable(),
++        swiftCode: z.string().optional().nullable(),
++        bankAddress: z.string().optional().nullable(),
++        beneficiaryAddress: z.string().optional().nullable(),
++        paymentInstructions: z.string().optional().nullable(),
++        isActive: z.boolean().optional(),
++      });
++      const parsed = bodySchema.safeParse(req.body);
++      if (!parsed.success) {
++        const firstIssue = parsed.error.issues[0];
++        return res.status(400).json({ message: firstIssue?.message || "Please complete the required account details.", errors: parsed.error.issues });
++      }
++      const values = { ...parsed.data, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
++      const existing = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, currency));
++      const [setting] = existing[0]
++        ? await db.update(virtualAccountSettings).set(values).where(eq(virtualAccountSettings.currency, currency)).returning()
++        : await db.insert(virtualAccountSettings).values(values).returning();
++      res.json(setting);
++    } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to save account details" }); }
++  });
++
++  app.patch("/api/admin/virtual-accounts/applications/:id", requireAdminAuth, async (req: any, res) => {
++    try {
++      const status = req.body.status;
++      if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
++      const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(virtualAccountApplications.id, req.params.id)).returning();
++      if (!application) return res.status(404).json({ message: "Application not found" });
++      const [user] = await db.select().from(users).where(eq(users.id, application.userId));
++      const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
++      if (user && status === "approved") {
++        await storage.createNotification({ userId: user.id, title: `${application.currency} virtual account approved`, message: "Your virtual account details are now available in your wallet.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
++        const { mailtrapService } = await import('./services/mailtrap');
++        const [firstName, ...rest] = (user.fullName || "User").split(" ");
++        mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
++          currency: application.currency, account_name: account?.accountName || "GreenPay", bank_name: account?.bankName || "", account_number: account?.accountNumber || "", routing_number: account?.routingNumber || "", sort_code: account?.sortCode || "", iban: account?.iban || "", swift_code: account?.swiftCode || "", bank_address: account?.bankAddress || "", beneficiary_address: account?.beneficiaryAddress || "", payment_instructions: account?.paymentInstructions || "",
++        }).catch(console.error);
++      }
++      res.json(application);
++    } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to review application" }); }
++  });
++
+   // Demo API Keys endpoint - shows available demo keys for testing
+   app.get("/api/demo-keys", (_req, res) => {
+     res.status(200).json({ 
+       message: "Available demo API keys for testing (development only)",
+       keys: [
+         {
+           key: "gpay_demo_test",
+           name: "Full Test Key",
+           scope: ["read", "write", "*"],
+           description: "Full access for testing all API operations"
+         },
+         {
+           key: "gpay_demo_read",
+           name: "Read-Only Key",
+           scope: ["read"],
+           description: "Read-only access for testing GET endpoints"
+         },
+         {
+           key: "gpay_demo_write",
+           name: "Write-Only Key", 
+           scope: ["write"],
+           description: "Write-only access for testing POST/PUT endpoints"
+         },
+         {
+           key: "gpay_demo_all",
+@@ -9155,81 +9277,92 @@ p{color:#6b7280;font-size:14px;}</style>
+       const { type, amount, currency, description, fee, recipientDetails } = req.body;
+       
+       if (!sessionUserId) {
+         return res.status(401).json({ message: "Authentication required" });
+       }
+       
+       if (type !== 'withdraw') {
+         return res.status(400).json({ message: "This endpoint only handles withdrawal requests" });
+       }
+       
+       const withdrawAmount = parseFloat(amount);
+       const withdrawFee = parseFloat(fee || '0');
+       
+       if (withdrawAmount <= 0) {
+         return res.status(400).json({ message: "Invalid withdrawal amount" });
+       }
+       
+       // Security: users can only create transactions for themselves
+       const userId = sessionUserId;
+       
+       // Get user
+       const user = await storage.getUser(userId);
+       if (!user) {
+         return res.status(404).json({ message: "User not found" });
+       }
++      if ((user as any).isSuspended) {
++        return res.status(403).json({ message: (user as any).suspensionReason || "Your account is suspended. Withdrawals are disabled. Please contact support." });
++      }
+       
+       // Calculate real-time balance based on withdrawal currency
+       const userTransactions = await storage.getTransactionsByUserId(userId);
+       const isKesWithdrawal = currency?.toUpperCase() === 'KES';
+       
+       // For KES withdrawals, check KES balance; for USD withdrawals, check USD balance
+       const realTimeBalance = userTransactions.reduce((balance: number, txn: any) => {
+         // Count both COMPLETED and PENDING transactions to prevent multiple withdrawals
+         if (txn.status === 'completed' || (txn.status === 'pending' && txn.type === 'withdraw')) {
+           // Only count transactions matching the withdrawal currency
+           const txnCurrency = txn.currency?.toUpperCase();
+           const matchesCurrency = isKesWithdrawal ? txnCurrency === 'KES' : txnCurrency !== 'KES';
+           
+           if (matchesCurrency) {
+             if (txn.type === 'receive' || txn.type === 'deposit') {
+               return balance + parseFloat(txn.amount);
+             } else if (txn.type === 'send' || txn.type === 'withdraw') {
+               return balance - parseFloat(txn.amount) - parseFloat(txn.fee || '0');
+             }
+           }
+           // card_purchase not deducted from balance (paid via M-Pesa)
+         }
+         return balance;
+       }, parseFloat(isKesWithdrawal ? (user.kesBalance || '0') : (user.balance || '0')));
+       
+-      // Check sufficient balance
+-      if (realTimeBalance < withdrawAmount + withdrawFee) {
++      const [matchingWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, currency?.toUpperCase() || "USD"))).limit(1);
++      if (matchingWallet?.isSuspended) {
++        return res.status(403).json({ message: matchingWallet.suspendReason || `${currency} wallet is suspended. Withdrawals are disabled.` });
++      }
++      const walletHoldAmount = parseFloat(matchingWallet?.holdAmount || "0");
++      const withdrawableBalance = Math.max(0, realTimeBalance - walletHoldAmount);
++
++      // Check sufficient balance after admin holds
++      if (withdrawableBalance < withdrawAmount + withdrawFee) {
+         return res.status(400).json({ 
+           message: "Insufficient balance",
+           currency: currency,
+-          available: realTimeBalance.toFixed(2),
++          available: withdrawableBalance.toFixed(2),
++          held: walletHoldAmount.toFixed(2),
+           required: (withdrawAmount + withdrawFee).toFixed(2)
+         });
+       }
+       
+       // Create withdrawal transaction with pending status
+       const transaction = await storage.createTransaction({
+         userId,
+         type: 'withdraw' as const,
+         amount: amount,
+         currency,
+         status: 'pending' as const, // Withdrawals start as pending for admin approval
+         description,
+         fee: fee || '0.00',
+         recipientDetails,
+         reference: storage.generateTransactionReference()
+       });
+       
+       // Send notification to admins about new withdrawal request
+       await notificationService.sendNotification({
+         title: "Withdrawal Request",
+         body: `New withdrawal request: ${currency} ${amount} from ${user.fullName}`,
+         userId: userId, // This will be extended to notify admins too
+         type: "transaction"
+       });
+       
+@@ -11545,52 +11678,60 @@ Sitemap: https://greenpay.world/sitemap.xml`;
+         networkLabel: chosen.networkLabel,
+         message: `Send exactly ${cryptoAmount} ${coin} on ${chosen.networkLabel} to the address below. Your wallet will be credited after ${cryptoTx.requiredConfirmations} confirmations.`
+       });
+     } catch (error) {
+       console.error("Crypto deposit error:", error);
+       res.status(500).json({ message: "Failed to initiate deposit" });
+     }
+   });
+ 
+   // POST crypto withdrawal
+   app.post("/api/crypto/withdraw", requireAuth, async (req, res) => {
+     try {
+       const userId = (req.session as any).userId;
+       const { coin, amount, toAddress } = req.body;
+       if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
+ 
+       const rate = CRYPTO_RATES[coin];
+       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+ 
+       const cryptoAmount = parseFloat(amount);
+       const usdValue = cryptoAmount * rate;
+ 
+       // Check user USD balance
+       const [userRow] = await db.select().from(users).where(eq(users.id, userId));
+       if (!userRow) return res.status(404).json({ message: "User not found" });
+-      if (parseFloat(userRow.balance || "0") < usdValue) {
+-        return res.status(400).json({ message: "Insufficient wallet balance" });
++      if (userRow.isSuspended) {
++        return res.status(403).json({ message: userRow.suspensionReason || "Your account is suspended. Crypto withdrawals are disabled. Please contact support." });
++      }
++      const [usdWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, "USD"))).limit(1);
++      if (usdWallet?.isSuspended) {
++        return res.status(403).json({ message: usdWallet.suspendReason || "Your USD wallet is suspended. Crypto withdrawals are disabled." });
++      }
++      const availableUsd = parseFloat(userRow.balance || "0") - parseFloat(usdWallet?.holdAmount || "0");
++      if (availableUsd < usdValue) {
++        return res.status(400).json({ message: "Insufficient available wallet balance", available: availableUsd.toFixed(2), held: parseFloat(usdWallet?.holdAmount || "0").toFixed(2) });
+       }
+ 
+       // Deduct from balance
+       await db.update(users).set({
+         balance: (parseFloat(userRow.balance || "0") - usdValue).toFixed(2)
+       }).where(eq(users.id, userId));
+ 
+       const [cryptoTx] = await db.insert(cryptoTransactions).values({
+         userId,
+         type: "withdrawal",
+         coin,
+         network: CRYPTO_NETWORKS[coin] || "unknown",
+         amount: cryptoAmount.toFixed(8),
+         usdValue: usdValue.toFixed(2),
+         toAddress,
+         status: "pending",
+         confirmations: 0,
+         requiredConfirmations: 1,
+       }).returning();
+ 
+       // Record as a transaction
+       await db.insert(transactions).values({
+         userId,
+         type: "withdraw",
+         amount: usdValue.toFixed(2),
+diff --git a/server/services/mailtrap.ts b/server/services/mailtrap.ts
+index f87d2fffe89167a46d3dcdefb45e50482d203774..ecf48b14e1031d9bc5e0574c01e583793d050e37 100644
+--- a/server/services/mailtrap.ts
++++ b/server/services/mailtrap.ts
+@@ -1,45 +1,46 @@
+ import fetch from 'node-fetch';
+ import { storage } from '../storage';
+ 
+ interface MailtrapTemplate {
+   uuid: string;
+   variables: Record<string, string>;
+ }
+ 
+ // Default template UUIDs — overridden by admin settings in DB
+ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
+   otp: '64254a5b-a2ba-4b7d-aa41-5a0907c836db',
+   password_reset: '97fe2c00-4cfd-433b-b262-25632cbdbed7',
+   welcome: '7711c72e-431b-4fb9-bea9-9738d4d8bfe7',
+   kyc_submitted: 'dd087e67-8a7b-4bb8-9645-acbd61666d76',
+   kyc_verified: 'c6353bf3-8e12-4852-8607-82223f49a4aa',
+   login_alert: '42ce5e3b-eed9-41aa-808c-cfecbd906e60',
+   fund_receipt: '5e2a2ec4-37fb-4178-96c4-598977065f9c',
+   card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
+   transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
+   transaction_completed: '',
++  virtual_account_approved: '',
+ };
+ 
+ export class MailtrapService {
+   private apiKey: string | null = null;
+   private apiUrl = 'https://send.api.mailtrap.io/api/send';
+   private fromEmail = 'support@greenpay.world';
+   private fromName = 'GreenPay';
+ 
+   constructor() {
+     // Load API key from environment only; do not fall back to a hard-coded key.
+     this.apiKey = process.env.MAILTRAP_API_KEY || null;
+     this.loadApiKey().catch(err => console.error('[Mailtrap] Background load error:', err));
+   }
+ 
+   private async loadApiKey(): Promise<void> {
+     try {
+       const setting = await storage.getSystemSetting('email', 'mailtrap_api_key');
+       if (setting?.value) {
+         this.apiKey = setting.value;
+         // Keep env in sync for current process/session
+         process.env.MAILTRAP_API_KEY = setting.value;
+       } else {
+         // If DB setting missing, rely on environment only (no hard-coded fallback)
+         this.apiKey = process.env.MAILTRAP_API_KEY || null;
+       }
+@@ -201,50 +202,59 @@ export class MailtrapService {
+     date?: string
+   ): Promise<boolean> {
+     const uuid = await this.getTemplateUuid('transaction_completed');
+     if (!uuid) {
+       console.warn('[Mailtrap] transaction_completed template UUID not configured — skipping email');
+       return false;
+     }
+     const typeLabel =
+       transactionType === 'deposit' ? 'Deposit' :
+       transactionType === 'withdraw' ? 'Withdrawal' :
+       transactionType === 'send' ? 'Transfer Sent' :
+       transactionType === 'receive' ? 'Transfer Received' : 'Transaction';
+ 
+     return this.sendTemplate(toEmail, uuid, {
+       first_name: firstName,
+       last_name: lastName,
+       amount,
+       currency,
+       transaction_type: typeLabel,
+       transaction_id: transactionId,
+       status: 'Completed',
+       date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+     });
+   }
+ 
++  async sendVirtualAccountApproved(toEmail: string, firstName: string, lastName: string, variables: Record<string, string>): Promise<boolean> {
++    const uuid = await this.getTemplateUuid('virtual_account_approved');
++    if (!uuid) {
++      console.warn('[Mailtrap] virtual_account_approved template UUID not configured — skipping email');
++      return false;
++    }
++    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
++  }
++
+   async sendTransactionExport(
+     toEmail: string, firstName: string, lastName: string,
+     attachments: Array<{ filename: string; content: string; disposition: string }>
+   ): Promise<boolean> {
+     const uuid = await this.getTemplateUuid('transaction_export');
+     if (!uuid) return false;
+     return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
+   }
+ 
+   /** Return all template names and their current UUIDs (DB overrides + defaults) */
+   async getAllTemplateUuids(): Promise<Record<string, { uuid: string; isCustom: boolean }>> {
+     const result: Record<string, { uuid: string; isCustom: boolean }> = {};
+     for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
+       try {
+         const setting = await storage.getSystemSetting('email_templates', name);
+         if (setting?.value?.trim()) {
+           result[name] = { uuid: setting.value.trim(), isCustom: true };
+         } else {
+           result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+         }
+       } catch {
+         result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+       }
+     }
+     return result;
+diff --git a/shared/schema.ts b/shared/schema.ts
+index 163902e1c9ad2446916f4049b54dad265807744b..439164af06dcaf1ff732f7834b89dec1477ecb9f 100644
+--- a/shared/schema.ts
++++ b/shared/schema.ts
+@@ -862,25 +862,71 @@ export const advancedKycDocuments = pgTable("advanced_kyc_documents", {
+ });
+ 
+ export const insertAdvancedKycSchema = createInsertSchema(advancedKycDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+ export type AdvancedKycDocument = typeof advancedKycDocuments.$inferSelect;
+ export type InsertAdvancedKyc = z.infer<typeof insertAdvancedKycSchema>;
+ 
+ // Multi-currency wallets — one per currency per user, admin-controlled
+ export const wallets = pgTable("wallets", {
+   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+   currency: text("currency").notNull(),           // 'USD', 'KES', 'UGX', etc.
+   label: text("label"),                           // Optional custom name
+   balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+   holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+   isDefault: boolean("is_default").default(false),
+   isActive: boolean("is_active").default(true),
+   isSuspended: boolean("is_suspended").default(false),
+   suspendReason: text("suspend_reason"),
+   createdAt: timestamp("created_at").defaultNow(),
+   updatedAt: timestamp("updated_at").defaultNow(),
+ });
+ 
+ export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+ export type Wallet = typeof wallets.$inferSelect;
+ export type InsertWallet = z.infer<typeof insertWalletSchema>;
++
++// Admin-configured virtual bank account details shared by approved users per currency
++export const virtualAccountSettings = pgTable("virtual_account_settings", {
++  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
++  currency: text("currency").notNull().unique(),
++  accountName: text("account_name").notNull(),
++  bankName: text("bank_name").notNull(),
++  accountNumber: text("account_number").notNull(),
++  routingNumber: text("routing_number"),
++  sortCode: text("sort_code"),
++  iban: text("iban"),
++  swiftCode: text("swift_code"),
++  bankAddress: text("bank_address"),
++  beneficiaryAddress: text("beneficiary_address"),
++  paymentInstructions: text("payment_instructions"),
++  isActive: boolean("is_active").default(true),
++  updatedBy: varchar("updated_by").references(() => admins.id),
++  createdAt: timestamp("created_at").defaultNow(),
++  updatedAt: timestamp("updated_at").defaultNow(),
++});
++
++// User applications for receiving access to virtual account details
++export const virtualAccountApplications = pgTable("virtual_account_applications", {
++  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
++  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
++  currency: text("currency").notNull(),
++  status: text("status").default("pending"), // pending, approved, rejected
++  sourceOfIncome: text("source_of_income").notNull(),
++  monthlyVolume: text("monthly_volume").notNull(),
++  purpose: text("purpose").notNull(),
++  expectedSenders: text("expected_senders"),
++  declarations: jsonb("declarations").notNull(),
++  adminNotes: text("admin_notes"),
++  reviewedBy: varchar("reviewed_by").references(() => admins.id),
++  reviewedAt: timestamp("reviewed_at"),
++  createdAt: timestamp("created_at").defaultNow(),
++  updatedAt: timestamp("updated_at").defaultNow(),
++});
++
++export const insertVirtualAccountSettingSchema = createInsertSchema(virtualAccountSettings).omit({ id: true, createdAt: true, updatedAt: true });
++export const insertVirtualAccountApplicationSchema = createInsertSchema(virtualAccountApplications).omit({ id: true, status: true, adminNotes: true, reviewedBy: true, reviewedAt: true, createdAt: true, updatedAt: true });
++export type VirtualAccountSetting = typeof virtualAccountSettings.$inferSelect;
++export type InsertVirtualAccountSetting = z.infer<typeof insertVirtualAccountSettingSchema>;
++export type VirtualAccountApplication = typeof virtualAccountApplications.$inferSelect;
++export type InsertVirtualAccountApplication = z.infer<typeof insertVirtualAccountApplicationSchema>;
++

@@ -274,9 +274,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
           acceptsTerms: z.boolean(),
         }),
       });
+<<<<<<< ours
       const data = schema.parse(req.body);
       if (!Object.values(data.declarations).every(Boolean)) {
         return res.status(400).json({ message: "All compliance declarations must be accepted." });
+=======
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0];
+        return res.status(400).json({
+          message: firstIssue?.message || "Please complete all required application fields.",
+          field: firstIssue?.path?.join("."),
+          errors: parsed.error.issues.map(issue => ({ field: issue.path.join("."), message: issue.message })),
+        });
+      }
+      const data = parsed.data;
+      if (!Object.values(data.declarations).every(Boolean)) {
+        return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
+>>>>>>> theirs
       }
       const existing = await db.select().from(virtualAccountApplications).where(and(eq(virtualAccountApplications.userId, userId), eq(virtualAccountApplications.currency, data.currency)));
       if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
@@ -303,7 +318,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const currency = String(req.params.currency).toUpperCase();
       if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
+<<<<<<< ours
       const values = { ...req.body, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
+=======
+      const bodySchema = z.object({
+        accountName: z.string().min(2, "Account name must be at least 2 characters."),
+        bankName: z.string().min(2, "Bank name must be at least 2 characters."),
+        accountNumber: z.string().min(3, "Account number must be at least 3 characters."),
+        routingNumber: z.string().optional().nullable(),
+        sortCode: z.string().optional().nullable(),
+        iban: z.string().optional().nullable(),
+        swiftCode: z.string().optional().nullable(),
+        bankAddress: z.string().optional().nullable(),
+        beneficiaryAddress: z.string().optional().nullable(),
+        paymentInstructions: z.string().optional().nullable(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0];
+        return res.status(400).json({ message: firstIssue?.message || "Please complete the required account details.", errors: parsed.error.issues });
+      }
+      const values = { ...parsed.data, currency, updatedBy: req.session.admin.id, updatedAt: new Date() };
+>>>>>>> theirs
       const existing = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, currency));
       const [setting] = existing[0]
         ? await db.update(virtualAccountSettings).set(values).where(eq(virtualAccountSettings.currency, currency)).returning()
@@ -9272,6 +9309,9 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      if ((user as any).isSuspended) {
+        return res.status(403).json({ message: (user as any).suspensionReason || "Your account is suspended. Withdrawals are disabled. Please contact support." });
+      }
       
       // Calculate real-time balance based on withdrawal currency
       const userTransactions = await storage.getTransactionsByUserId(userId);
@@ -9297,12 +9337,20 @@ p{color:#6b7280;font-size:14px;}</style>
         return balance;
       }, parseFloat(isKesWithdrawal ? (user.kesBalance || '0') : (user.balance || '0')));
       
-      // Check sufficient balance
-      if (realTimeBalance < withdrawAmount + withdrawFee) {
+      const [matchingWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, currency?.toUpperCase() || "USD"))).limit(1);
+      if (matchingWallet?.isSuspended) {
+        return res.status(403).json({ message: matchingWallet.suspendReason || `${currency} wallet is suspended. Withdrawals are disabled.` });
+      }
+      const walletHoldAmount = parseFloat(matchingWallet?.holdAmount || "0");
+      const withdrawableBalance = Math.max(0, realTimeBalance - walletHoldAmount);
+
+      // Check sufficient balance after admin holds
+      if (withdrawableBalance < withdrawAmount + withdrawFee) {
         return res.status(400).json({ 
           message: "Insufficient balance",
           currency: currency,
-          available: realTimeBalance.toFixed(2),
+          available: withdrawableBalance.toFixed(2),
+          held: walletHoldAmount.toFixed(2),
           required: (withdrawAmount + withdrawFee).toFixed(2)
         });
       }
@@ -11662,8 +11710,16 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       // Check user USD balance
       const [userRow] = await db.select().from(users).where(eq(users.id, userId));
       if (!userRow) return res.status(404).json({ message: "User not found" });
-      if (parseFloat(userRow.balance || "0") < usdValue) {
-        return res.status(400).json({ message: "Insufficient wallet balance" });
+      if (userRow.isSuspended) {
+        return res.status(403).json({ message: userRow.suspensionReason || "Your account is suspended. Crypto withdrawals are disabled. Please contact support." });
+      }
+      const [usdWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, "USD"))).limit(1);
+      if (usdWallet?.isSuspended) {
+        return res.status(403).json({ message: usdWallet.suspendReason || "Your USD wallet is suspended. Crypto withdrawals are disabled." });
+      }
+      const availableUsd = parseFloat(userRow.balance || "0") - parseFloat(usdWallet?.holdAmount || "0");
+      if (availableUsd < usdValue) {
+        return res.status(400).json({ message: "Insufficient available wallet balance", available: availableUsd.toFixed(2), held: parseFloat(usdWallet?.holdAmount || "0").toFixed(2) });
       }
 
       // Deduct from balance
