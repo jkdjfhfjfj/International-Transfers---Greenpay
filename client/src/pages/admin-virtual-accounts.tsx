@@ -8,32 +8,73 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { AlertCircle, Building2, Check, Save, X } from "lucide-react";
+import {
+  AlertCircle, Building2, Check, Save, X, ChevronDown, ChevronUp,
+  User, Clock, CheckCircle2, XCircle, FileText,
+} from "lucide-react";
 
-const fields = ["accountName","bankName","accountNumber","routingNumber","sortCode","iban","swiftCode","bankAddress","beneficiaryAddress","paymentInstructions"];
+const CURRENCIES = ["USD", "GBP", "EUR"] as const;
+type Currency = typeof CURRENCIES[number];
+
+const CURRENCY_META: Record<Currency, { flag: string; name: string }> = {
+  USD: { flag: "🇺🇸", name: "US Dollar"     },
+  GBP: { flag: "🇬🇧", name: "British Pound" },
+  EUR: { flag: "🇪🇺", name: "Euro"          },
+};
+
+const SETTINGS_FIELDS: { key: string; label: string; multiline?: boolean; optional?: boolean }[] = [
+  { key: "accountName",        label: "Account name"         },
+  { key: "bankName",           label: "Bank name"            },
+  { key: "accountNumber",      label: "Account number"       },
+  { key: "routingNumber",      label: "Routing number",       optional: true },
+  { key: "sortCode",           label: "Sort code",            optional: true },
+  { key: "iban",               label: "IBAN",                 optional: true },
+  { key: "swiftCode",          label: "SWIFT / BIC",          optional: true },
+  { key: "bankAddress",        label: "Bank address",         optional: true, multiline: true },
+  { key: "beneficiaryAddress", label: "Beneficiary address",  optional: true, multiline: true },
+  { key: "paymentInstructions",label: "Payment instructions", optional: true, multiline: true },
+];
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "approved") return <Badge className="bg-emerald-100 text-emerald-700 border-0 gap-1"><CheckCircle2 className="w-3 h-3" />Approved</Badge>;
+  if (status === "rejected") return <Badge className="bg-red-100 text-red-700 border-0 gap-1"><XCircle className="w-3 h-3" />Rejected</Badge>;
+  return <Badge className="bg-amber-100 text-amber-700 border-0 gap-1"><Clock className="w-3 h-3" />Pending</Badge>;
+}
 
 export default function AdminVirtualAccountsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [currency, setCurrency] = useState("USD");
-  const [draft, setDraft] = useState<any>({});
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [draft, setDraft] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState("");
+  const [expandedApp, setExpandedApp] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
 
-  const { data } = useQuery({ queryKey: ["/api/admin/virtual-accounts"], queryFn: async () => (await apiRequest("GET", "/api/admin/virtual-accounts")).json() });
-  const setting = (data?.settings || []).find((s: any) => s.currency === currency) || {};
-  const applications = data?.applications || [];
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/admin/virtual-accounts"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/virtual-accounts")).json(),
+  });
 
+  const settings     = (data?.settings     || []) as any[];
+  const applications = (data?.applications || []) as any[];
+
+  const setting = settings.find((s: any) => s.currency === currency) || {};
   const get = (k: string) => draft[k] ?? setting[k] ?? "";
 
-  const save = useMutation({
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = Object.fromEntries(fields.map(field => [field, get(field)]));
-      return (await apiRequest("PUT", `/api/admin/virtual-accounts/settings/${currency}`, { ...payload, isActive: true })).json();
+      const payload: Record<string, any> = { isActive: true };
+      SETTINGS_FIELDS.forEach(f => { payload[f.key] = get(f.key) || null; });
+      // required fields
+      payload.accountName  = get("accountName");
+      payload.bankName     = get("bankName");
+      payload.accountNumber = get("accountNumber");
+      return (await apiRequest("PUT", `/api/admin/virtual-accounts/settings/${currency}`, payload)).json();
     },
     onSuccess: () => {
       setSaveError("");
-      toast({ title: "Account details saved" });
       setDraft({});
+      toast({ title: `${currency} account details saved` });
       qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
     },
     onError: (e: any) => {
@@ -42,63 +83,234 @@ export default function AdminVirtualAccountsPage() {
       try { friendly = JSON.parse(raw.replace(/^\d+:\s*/, "")).message || friendly; } catch {}
       setSaveError(friendly);
       toast({ title: "Save failed", description: friendly, variant: "destructive" });
-    }
+    },
   });
 
-  const review = useMutation({
-    mutationFn: async ({ id, status }: any) => (await apiRequest("PATCH", `/api/admin/virtual-accounts/applications/${id}`, { status })).json(),
-    onSuccess: () => { toast({ title: "Application updated" }); qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] }); }
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes?: string }) =>
+      (await apiRequest("PATCH", `/api/admin/virtual-accounts/applications/${id}`, { status, adminNotes })).json(),
+    onSuccess: (_data, vars) => {
+      toast({ title: `Application ${vars.status}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
   });
 
-  return <AdminShell title="Virtual Accounts">
-    <div className="max-w-6xl space-y-6">
-      <div>
-        <h2 className="text-xl font-bold flex items-center gap-2"><Building2 className="text-green-600" /> Virtual USD, GBP & EUR Accounts</h2>
-        <p className="text-sm text-gray-500">Configure the bank details sent to approved users for each supported currency.</p>
-      </div>
+  return (
+    <AdminShell title="Virtual Accounts">
+      <div className="max-w-5xl space-y-6">
 
-      <div className="bg-white border rounded-xl p-4 space-y-4 shadow-sm">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div className="flex gap-2">
-            {["USD","GBP","EUR"].map(c => <Button key={c} variant={currency===c?"default":"outline"} onClick={() => { setCurrency(c); setDraft({}); setSaveError(""); }}>{c}</Button>)}
+        {/* ── Settings panel ─────────────────────────────────────────────── */}
+        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-emerald-600" />
+            <h2 className="font-semibold text-slate-800">Bank account settings</h2>
+            <p className="text-sm text-slate-400 ml-1">— configure details sent to approved users</p>
           </div>
-          <Button onClick={() => save.mutate()} disabled={save.isLoading} className="gap-2"><Save className="w-4 h-4" /> {save.isLoading ? "Saving..." : `Save ${currency} Details`}</Button>
-        </div>
 
-        {saveError && <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" /> <span>{saveError}</span></div>}
+          {/* Currency tabs */}
+          <div className="flex border-b bg-slate-50">
+            {CURRENCIES.map(c => (
+              <button
+                key={c}
+                onClick={() => { setCurrency(c); setDraft({}); setSaveError(""); }}
+                className={[
+                  "flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors",
+                  currency === c
+                    ? "border-emerald-500 text-emerald-700 bg-white"
+                    : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60",
+                ].join(" ")}
+              >
+                <span>{CURRENCY_META[c].flag}</span>
+                <span>{c}</span>
+                {settings.find((s: any) => s.currency === c) && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                )}
+              </button>
+            ))}
+          </div>
 
-        <div className="grid md:grid-cols-2 gap-3">
-          {fields.map(f => (
-            <div key={f} className={f.includes("Address") || f.includes("Instructions") ? "md:col-span-2" : ""}>
-              <Label className="capitalize">{f.replace(/([A-Z])/g, ' $1')}</Label>
-              {f.includes("Address") || f.includes("Instructions") ? (
-                <Textarea value={get(f)} onChange={(e: any) => setDraft({ ...draft, [f]: e.target.value })} />
-              ) : (
-                <Input value={get(f)} onChange={(e: any) => setDraft({ ...draft, [f]: e.target.value })} />
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="bg-white border rounded-xl overflow-hidden">
-        <div className="p-4 border-b"><h3 className="font-semibold">Applications</h3></div>
-        <div className="divide-y">
-          {applications.map((app: any) => (
-            <div key={app.id} className="p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium">{app.walletAddress ?? app.id}</div>
-                <div className="text-sm text-slate-500">{app.currency} — {app.status}</div>
+          <div className="p-5 space-y-4">
+            {saveError && (
+              <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{saveError}</span>
               </div>
-              <div className="flex items-center gap-2">
-                {app.status !== 'approved' && <Button onClick={() => review.mutate({ id: app.id, status: 'approved' })} className="gap-2"><Check /> Approve</Button>}
-                {app.status !== 'rejected' && <Button variant="outline" onClick={() => review.mutate({ id: app.id, status: 'rejected' })} className="gap-2"><X /> Reject</Button>}
-              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {SETTINGS_FIELDS.map(f => (
+                <div key={f.key} className={f.multiline ? "md:col-span-2" : ""}>
+                  <Label className="text-sm font-medium text-slate-700 mb-1 block">
+                    {f.label}
+                    {!f.optional && <span className="text-red-500 ml-0.5">*</span>}
+                    {f.optional && <span className="text-slate-400 font-normal ml-1">(optional)</span>}
+                  </Label>
+                  {f.multiline ? (
+                    <Textarea
+                      value={get(f.key)}
+                      onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
+                      rows={2}
+                      placeholder={`Enter ${f.label.toLowerCase()}`}
+                    />
+                  ) : (
+                    <Input
+                      value={get(f.key)}
+                      onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
+                      placeholder={`Enter ${f.label.toLowerCase()}`}
+                    />
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
-          {applications.length === 0 && <div className="p-4 text-sm text-slate-500">No applications found.</div>}
+
+            <div className="flex justify-end pt-1">
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {saveMutation.isPending ? "Saving…" : `Save ${currency} details`}
+              </Button>
+            </div>
+          </div>
         </div>
+
+        {/* ── Applications ───────────────────────────────────────────────── */}
+        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-slate-500" />
+              <h2 className="font-semibold text-slate-800">Applications</h2>
+            </div>
+            <Badge variant="secondary">{applications.length}</Badge>
+          </div>
+
+          {isLoading ? (
+            <div className="p-10 flex justify-center">
+              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 text-sm">No applications yet.</div>
+          ) : (
+            <div className="divide-y">
+              {applications.map((item: any) => {
+                const app  = item.application ?? item;
+                const user = item.user;
+                const isOpen = expandedApp === app.id;
+
+                return (
+                  <div key={app.id}>
+                    <div
+                      className="flex items-center gap-3 px-5 py-4 hover:bg-slate-50 cursor-pointer"
+                      onClick={() => setExpandedApp(isOpen ? null : app.id)}
+                    >
+                      {/* avatar */}
+                      <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4 text-emerald-600" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-slate-800 text-sm truncate">
+                          {user?.fullName || user?.email || app.userId}
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          {user?.email} &nbsp;·&nbsp; {app.currency} account
+                        </p>
+                      </div>
+
+                      <StatusBadge status={app.status} />
+
+                      <button className="text-slate-400 ml-2">
+                        {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {isOpen && (
+                      <div className="px-5 pb-5 space-y-4 bg-slate-50 border-t">
+                        {/* Application details */}
+                        <div className="grid sm:grid-cols-2 gap-3 pt-4">
+                          {[
+                            ["Currency",         app.currency],
+                            ["Status",           app.status],
+                            ["Source of income", app.sourceOfIncome],
+                            ["Monthly volume",   app.monthlyVolume],
+                            ["Purpose",          app.purpose],
+                            ["Expected senders", app.expectedSenders || "—"],
+                            ["Applied on",       app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"],
+                          ].map(([label, value]) => (
+                            <div key={label as string} className="bg-white rounded-xl border p-3">
+                              <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">{label}</p>
+                              <p className="text-sm text-slate-700 font-medium">{value}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Declarations */}
+                        {app.declarations && (
+                          <div className="bg-white rounded-xl border p-3">
+                            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-2">Compliance declarations</p>
+                            <div className="grid sm:grid-cols-2 gap-1">
+                              {Object.entries(app.declarations).map(([k, v]) => (
+                                <div key={k} className={`flex items-center gap-1.5 text-xs ${v ? "text-emerald-700" : "text-red-600"}`}>
+                                  {v ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                  {k.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Admin notes (for rejection) */}
+                        {app.status === "pending" && (
+                          <div>
+                            <Label className="text-sm mb-1 block">Admin notes (shown to user on rejection)</Label>
+                            <Textarea
+                              value={rejectNotes[app.id] || ""}
+                              onChange={e => setRejectNotes({ ...rejectNotes, [app.id]: e.target.value })}
+                              placeholder="Optional reason for rejection…"
+                              rows={2}
+                            />
+                          </div>
+                        )}
+
+                        {app.adminNotes && (
+                          <div className="bg-white rounded-xl border p-3">
+                            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-1">Admin notes</p>
+                            <p className="text-sm text-slate-700">{app.adminNotes}</p>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        {app.status === "pending" && (
+                          <div className="flex gap-2 pt-1">
+                            <Button
+                              onClick={() => reviewMutation.mutate({ id: app.id, status: "approved" })}
+                              disabled={reviewMutation.isPending}
+                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                            >
+                              <Check className="w-4 h-4" /> Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => reviewMutation.mutate({ id: app.id, status: "rejected", adminNotes: rejectNotes[app.id] })}
+                              disabled={reviewMutation.isPending}
+                              className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                            >
+                              <X className="w-4 h-4" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
-    </div>
-  </AdminShell>;
+    </AdminShell>
+  );
 }
