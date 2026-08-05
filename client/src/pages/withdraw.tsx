@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useWallets } from "@/hooks/use-wallets";
-import { formatNumber } from "@/lib/formatters";
+import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight } from "lucide-react";
 
@@ -43,7 +43,7 @@ export default function WithdrawPage() {
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const activeWallet = userWallets.find(w => w.id === selectedWalletId) || defaultWallet;
   const realTimeBalance = parseFloat(activeWallet?.balance || user?.kesBalance || '0');
-  const activeSymbol = activeWallet?.currency === 'KES' ? 'KSh' : activeWallet?.currency || 'KSh';
+  const activeSymbol = getCurrencySymbol(activeWallet?.currency || 'KES').trim();
   const usdBalance = parseFloat(user?.balance || '0');
 
   const form = useForm<WithdrawForm>({
@@ -200,7 +200,7 @@ export default function WithdrawPage() {
               <div>
                 <p className="font-medium text-blue-900 dark:text-blue-200 text-sm mb-1">Convert USD to KES First</p>
                 <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
-                  Withdrawals require KES balance. You have $USD {formatNumber(usdBalance)} available to convert.
+                  Your KES balance is low. You have ${formatNumber(usdBalance)} USD available to convert to KES.
                 </p>
                 <Button
                   type="button"
@@ -283,7 +283,7 @@ export default function WithdrawPage() {
                     className="p-3 border border-border rounded-lg hover:bg-muted transition-colors text-sm font-medium"
                     data-testid={`quick-amount-${amount}`}
                   >
-                    KSh {amount}
+                    {activeSymbol} {amount}
                   </motion.button>
                 ))}
               </div>
@@ -553,7 +553,7 @@ export default function WithdrawPage() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Withdrawal Amount</span>
-                  <span className="font-medium">KSh {form.watch("amount") || "0.00"}</span>
+                  <span className="font-medium">{activeSymbol} {form.watch("amount") || "0.00"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Processing Fee</span>
@@ -575,8 +575,8 @@ export default function WithdrawPage() {
                 <div className="flex justify-between font-bold">
                   <span>You Receive</span>
                   <span className="text-primary">
-                    KSh {form.watch("amount") ? 
-                      formatNumber(parseFloat(form.watch("amount")) - parseFloat(getWithdrawFee().replace('KSh ', ''))) : 
+                    {activeSymbol} {form.watch("amount") ? 
+                      formatNumber(parseFloat(form.watch("amount")) - parseFloat(getWithdrawFee().replace(/[^0-9.]/g, ''))) : 
                       "0.00"}
                   </span>
                 </div>
@@ -594,7 +594,7 @@ export default function WithdrawPage() {
                 disabled={withdrawMutation.isPending || !selectedMethod}
                 data-testid="button-confirm-withdrawal"
               >
-                {withdrawMutation.isPending ? "Processing..." : `Withdraw KSh ${form.watch("amount") || "0.00"}`}
+                {withdrawMutation.isPending ? "Processing..." : `Withdraw ${activeSymbol} ${form.watch("amount") || "0.00"}`}
               </Button>
             </motion.div>
           </form>

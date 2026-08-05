@@ -68,13 +68,16 @@ export class MessagingService {
     if (cleaned.startsWith('00')) cleaned = cleaned.substring(2);
     if (cleaned.startsWith('+')) cleaned = cleaned.substring(1);
 
-    if (cleaned.startsWith('254')) return cleaned;
-    if (cleaned.startsWith('0')) return '254' + cleaned.substring(1);
-    if (cleaned.length === 9 && (cleaned.startsWith('7') || cleaned.startsWith('1'))) {
-      return '254' + cleaned;
-    }
+    // Already a full Kenyan number
+    if (cleaned.startsWith('254') && cleaned.length >= 12) return cleaned;
+    // Kenya local: 07XX / 01XX (10 digits)
+    if (cleaned.startsWith('0') && cleaned.length === 10) return '254' + cleaned.substring(1);
+    // Kenya short: 7XX or 1XX (9 digits)
+    if (cleaned.length === 9 && (cleaned.startsWith('7') || cleaned.startsWith('1'))) return '254' + cleaned;
+    // International number with country code — pass through as-is
+    if (cleaned.length >= 10) return cleaned;
 
-    return cleaned.startsWith('254') ? cleaned : '254' + cleaned;
+    return cleaned;
   }
 
   /**

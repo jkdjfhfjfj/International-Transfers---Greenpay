@@ -35,6 +35,80 @@ const SETTINGS_FIELDS: { key: string; label: string; multiline?: boolean; option
   { key: "paymentInstructions",label: "Payment instructions", optional: true, multiline: true },
 ];
 
+// ── Email template UUID config ────────────────────────────────────────────────
+const EMAIL_TEMPLATE_KEYS = [
+  { key: "virtual_account_approved", label: "Virtual Account Approved" },
+  { key: "virtual_account_rejected", label: "Virtual Account Rejected (uses approved template)" },
+  { key: "kyc_verified",             label: "KYC Verified"             },
+  { key: "kyc_submitted",            label: "KYC Submitted"            },
+  { key: "welcome",                  label: "Welcome Email"            },
+  { key: "fund_receipt",             label: "Fund Receipt"             },
+  { key: "transaction_export",       label: "Transaction Export"       },
+];
+
+function EmailTemplateConfig() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const { data: uuids, isLoading } = useQuery({
+    queryKey: ["/api/admin/email-templates"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/email-templates")).json(),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ key, uuid }: { key: string; uuid: string }) =>
+      (await apiRequest("PUT", `/api/admin/email-templates/${key}`, { uuid })).json(),
+    onSuccess: (_d, vars) => {
+      toast({ title: `Template UUID saved`, description: vars.key });
+      qc.invalidateQueries({ queryKey: ["/api/admin/email-templates"] });
+      setDrafts(d => { const n = { ...d }; delete n[vars.key]; return n; });
+    },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="p-5 text-sm text-slate-400">Loading templates…</div>;
+
+  return (
+    <div className="p-5 space-y-3">
+      <p className="text-xs text-slate-500">Configure Mailtrap template UUIDs. Changes take effect immediately — all emails use the updated UUID.</p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {EMAIL_TEMPLATE_KEYS.map(({ key, label }) => {
+          const current = (uuids?.templates?.[key]?.uuid) || "";
+          const isCustom = uuids?.templates?.[key]?.isCustom;
+          const draft = drafts[key];
+          const value = draft !== undefined ? draft : current;
+          return (
+            <div key={key} className="space-y-1">
+              <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+                {label}
+                {isCustom && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Custom</span>}
+              </Label>
+              <div className="flex gap-1.5">
+                <Input
+                  value={value}
+                  onChange={e => setDrafts(d => ({ ...d, [key]: e.target.value }))}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="font-mono text-xs h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5"
+                  disabled={draft === undefined || saveMutation.isPending}
+                  onClick={() => saveMutation.mutate({ key, uuid: draft! })}
+                >
+                  <Save className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function StatusBadge({ status }: { status: string }) {
   if (status === "approved") return <Badge className="bg-emerald-100 text-emerald-700 border-0 gap-1"><CheckCircle2 className="w-3 h-3" />Approved</Badge>;
   if (status === "rejected") return <Badge className="bg-red-100 text-red-700 border-0 gap-1"><XCircle className="w-3 h-3" />Rejected</Badge>;
@@ -174,6 +248,16 @@ export default function AdminVirtualAccountsPage() {
               </Button>
             </div>
           </div>
+        </div>
+
+        {/* ── Email Template Config ──────────────────────────────────────── */}
+        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center gap-2">
+            <FileText className="w-5 h-5 text-violet-500" />
+            <h2 className="font-semibold text-slate-800">Email Template UUIDs</h2>
+            <p className="text-sm text-slate-400 ml-1">— Mailtrap template UUIDs for virtual account emails</p>
+          </div>
+          <EmailTemplateConfig />
         </div>
 
         {/* ── Applications ───────────────────────────────────────────────── */}

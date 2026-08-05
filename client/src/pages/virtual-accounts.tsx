@@ -366,10 +366,7 @@ export default function VirtualAccountsPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-28 md:pb-10">
-      <WavyHeader
-        onBack={() => setLocation("/dashboard")}
-        size="sm"
-      />
+      <WavyHeader size="sm" />
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
         {/* Page heading */}

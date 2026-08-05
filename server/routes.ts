@@ -347,12 +347,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!application) return res.status(404).json({ message: "Application not found" });
       const [user] = await db.select().from(users).where(eq(users.id, application.userId));
       const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
+      const [firstName, ...rest] = (user?.fullName || "User").split(" ");
       if (user && status === "approved") {
-        await storage.createNotification({ userId: user.id, title: `${application.currency} virtual account approved`, message: "Your virtual account details are now available in your wallet.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
+        await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Approved`, message: "Your virtual account details are now available. Check Virtual Accounts to view your bank details.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
         const { mailtrapService } = await import('./services/mailtrap');
-        const [firstName, ...rest] = (user.fullName || "User").split(" ");
         mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
-          currency: application.currency, account_name: account?.accountName || "GreenPay", bank_name: account?.bankName || "", account_number: account?.accountNumber || "", routing_number: account?.routingNumber || "", sort_code: account?.sortCode || "", iban: account?.iban || "", swift_code: account?.swiftCode || "", bank_address: account?.bankAddress || "", beneficiary_address: account?.beneficiaryAddress || "", payment_instructions: account?.paymentInstructions || "",
+          currency: application.currency,
+          application_id: application.id,
+          account_name: account?.accountName || "GreenPay",
+          bank_name: account?.bankName || "",
+          account_number: account?.accountNumber || "",
+          routing_number: account?.routingNumber || "",
+          sort_code: account?.sortCode || "",
+          iban: account?.iban || "",
+          swift_code: account?.swiftCode || "",
+          bank_address: account?.bankAddress || "",
+          beneficiary_address: account?.beneficiaryAddress || "",
+          payment_instructions: account?.paymentInstructions || "",
+        }).catch(console.error);
+      }
+      if (user && status === "rejected") {
+        await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Application`, message: req.body.adminNotes || "Your virtual account application was not approved at this time. You may re-apply.", type: "error", isGlobal: false, actionUrl: "/virtual-accounts" });
+        const { mailtrapService } = await import('./services/mailtrap');
+        // Send generic email notification for rejection
+        mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+          currency: application.currency,
+          application_id: application.id,
+          account_name: "N/A",
+          bank_name: "", account_number: "", routing_number: "", sort_code: "", iban: "", swift_code: "", bank_address: "", beneficiary_address: "",
+          payment_instructions: `Your ${application.currency} virtual account application was not approved. Reason: ${req.body.adminNotes || "Please contact support for details."}`,
         }).catch(console.error);
       }
       res.json(application);
@@ -2199,7 +2222,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!paymentData.success) {
         if (paymentData.status === 'INVALID_PHONE_NUMBER' || paymentData.status === 'INVALID_PHONE_FORMAT') {
           return res.status(400).json({ 
-            message: 'Invalid phone number format. Please update your profile with a valid Kenyan phone number (e.g., +254712345678 or 0712345678)',
+            message: 'Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).',
             status: paymentData.status 
           });
         }
@@ -2500,6 +2523,19 @@ p{color:#6b7280;font-size:14px;}</style>
       }
 
       const { fullName, email, phone, country, profilePhotoUrl } = req.body;
+
+      // KYC-verified users can only update their profile photo
+      const currentUser = await storage.getUser(id);
+      if (currentUser?.kycStatus === 'verified') {
+        if (profilePhotoUrl === undefined) {
+          return res.status(403).json({ message: "Your profile details are locked after KYC verification. Only your profile photo can be updated." });
+        }
+        const updatedUser = await storage.updateUser(id, { profilePhotoUrl });
+        if (!updatedUser) return res.status(404).json({ message: "User not found" });
+        (req.session as any).userId = updatedUser.id;
+        const { password, ...userResponse } = updatedUser;
+        return res.json({ user: userResponse, message: "Profile photo updated successfully" });
+      }
 
       // Check if email is already taken by another user
       if (email) {

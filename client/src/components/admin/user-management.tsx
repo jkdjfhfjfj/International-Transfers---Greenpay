@@ -374,8 +374,8 @@ export default function UserManagement() {
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span className="font-mono">${user.balance || "0.00"}</span>
-                          <span className="text-xs text-gray-500 font-mono">KES {(user as any).kesBalance || "0.00"}</span>
+                          <span className="font-mono text-xs font-semibold">USD ${user.balance || "0.00"}</span>
+                          <span className="text-xs text-gray-500 font-mono">KSh {(user as any).kesBalance || "0.00"}</span>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -1330,8 +1330,8 @@ function UserDetailsDialog({ user }: { user: User }) {
               </div>
               <div className="pt-2 border-t border-border">
                 <p className="text-xs text-muted-foreground mb-1">Balances</p>
-                <p className="text-sm font-bold text-primary">${user.balance || "0.00"} USD</p>
-                <p className="text-xs font-semibold text-muted-foreground">KSh {user.kesBalance || "0.00"} KES</p>
+                <p className="text-sm font-bold text-primary">USD ${user.balance || "0.00"}</p>
+                <p className="text-xs font-semibold text-muted-foreground">KSh {(user as any).kesBalance || "0.00"} KES</p>
               </div>
             </div>
           </div>

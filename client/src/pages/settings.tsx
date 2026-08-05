@@ -673,73 +673,114 @@ export default function SettingsPage() {
                   </div>
 
                   {/* Personal Information */}
-                  <div className="space-y-4 bg-muted/30 p-4 rounded-xl">
-                    <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
-                      <span className="material-icons text-sm text-primary">badge</span>
-                      Personal Information
-                    </h4>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="fullName" className="text-sm font-medium">Full Name *</Label>
-                        <Input
-                          id="fullName"
-                          placeholder="e.g., John Doe"
-                          value={profileData.fullName}
-                          onChange={(e) => setProfileData({ ...profileData, fullName: e.target.value })}
-                          data-testid="input-full-name"
-                          className="mt-1.5"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="email" className="text-sm font-medium">Email Address *</Label>
-                        <Input
-                          id="email"
-                          type="email"
-                          placeholder="your.email@example.com"
-                          value={profileData.email}
-                          onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                          data-testid="input-email"
-                          className="mt-1.5"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1.5">Used for account notifications</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="phone" className="text-sm font-medium">Phone Number *</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
-                          placeholder="07XXXXXXXX"
-                          value={profileData.phone}
-                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                          data-testid="input-phone"
-                          className="mt-1.5"
-                        />
-                        <p className="text-xs text-muted-foreground mt-1.5">Used for M-Pesa payments and 2FA</p>
-                      </div>
-                      <div>
-                        <Label htmlFor="country" className="text-sm font-medium">Country *</Label>
-                        <Select 
-                          value={profileData.country}
-                          onValueChange={(value) => setProfileData({ ...profileData, country: value })}
-                        >
-                          <SelectTrigger data-testid="select-country" className="mt-1.5">
-                            <SelectValue placeholder="Select your country" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Kenya">🇰🇪 Kenya</SelectItem>
-                            <SelectItem value="Nigeria">🇳🇬 Nigeria</SelectItem>
-                            <SelectItem value="Ghana">🇬🇭 Ghana</SelectItem>
-                            <SelectItem value="South Africa">🇿🇦 South Africa</SelectItem>
-                            <SelectItem value="Uganda">🇺🇬 Uganda</SelectItem>
-                            <SelectItem value="Tanzania">🇹🇿 Tanzania</SelectItem>
-                            <SelectItem value="United States">🇺🇸 United States</SelectItem>
-                            <SelectItem value="United Kingdom">🇬🇧 United Kingdom</SelectItem>
-                            <SelectItem value="Canada">🇨🇦 Canada</SelectItem>
-                          </SelectContent>
-                        </Select>
+                  {(() => {
+                    const isKYCVerified = user?.kycStatus === 'verified';
+                    return (
+                    <div className="space-y-4 bg-muted/30 p-4 rounded-xl">
+                      <h4 className="font-semibold text-sm text-foreground flex items-center gap-2">
+                        <span className="material-icons text-sm text-primary">badge</span>
+                        Personal Information
+                        {isKYCVerified && (
+                          <span className="ml-auto flex items-center gap-1 text-xs font-normal text-green-600 dark:text-green-400">
+                            <ShieldCheck className="w-3.5 h-3.5" /> KYC Verified — locked
+                          </span>
+                        )}
+                      </h4>
+                      {isKYCVerified && (
+                        <div className="flex items-start gap-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300">
+                          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                          <span>Your identity has been verified. Name, email, phone and country are locked to your KYC documents. Only your profile photo and password can be changed.</span>
+                        </div>
+                      )}
+                      <div className="space-y-4">
+                        <div>
+                          <Label htmlFor="fullName" className="text-sm font-medium">Full Name *</Label>
+                          <Input
+                            id="fullName"
+                            placeholder="e.g., John Doe"
+                            value={isKYCVerified ? (user?.kycFullName || profileData.fullName) : profileData.fullName}
+                            onChange={(e) => !isKYCVerified && setProfileData({ ...profileData, fullName: e.target.value })}
+                            readOnly={isKYCVerified}
+                            data-testid="input-full-name"
+                            className={`mt-1.5 ${isKYCVerified ? 'opacity-60 cursor-not-allowed bg-muted' : ''}`}
+                          />
+                          {isKYCVerified && <p className="text-xs text-muted-foreground mt-1">Name from your KYC document</p>}
+                        </div>
+                        <div>
+                          <Label htmlFor="email" className="text-sm font-medium">Email Address *</Label>
+                          <Input
+                            id="email"
+                            type="email"
+                            placeholder="your.email@example.com"
+                            value={profileData.email}
+                            onChange={(e) => !isKYCVerified && setProfileData({ ...profileData, email: e.target.value })}
+                            readOnly={isKYCVerified}
+                            data-testid="input-email"
+                            className={`mt-1.5 ${isKYCVerified ? 'opacity-60 cursor-not-allowed bg-muted' : ''}`}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1.5">Used for account notifications</p>
+                        </div>
+                        <div>
+                          <Label htmlFor="phone" className="text-sm font-medium">Phone Number *</Label>
+                          <Input
+                            id="phone"
+                            type="tel"
+                            placeholder="+1234567890"
+                            value={profileData.phone}
+                            onChange={(e) => !isKYCVerified && setProfileData({ ...profileData, phone: e.target.value })}
+                            readOnly={isKYCVerified}
+                            data-testid="input-phone"
+                            className={`mt-1.5 ${isKYCVerified ? 'opacity-60 cursor-not-allowed bg-muted' : ''}`}
+                          />
+                          <p className="text-xs text-muted-foreground mt-1.5">Used for payments and 2FA</p>
+                        </div>
+                        <div>
+                          <Label htmlFor="country" className="text-sm font-medium">Country *</Label>
+                          {isKYCVerified ? (
+                            <Input
+                              id="country"
+                              value={profileData.country}
+                              readOnly
+                              className="mt-1.5 opacity-60 cursor-not-allowed bg-muted"
+                            />
+                          ) : (
+                            <Select
+                              value={profileData.country}
+                              onValueChange={(value) => setProfileData({ ...profileData, country: value })}
+                            >
+                              <SelectTrigger data-testid="select-country" className="mt-1.5">
+                                <SelectValue placeholder="Select your country" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Kenya">🇰🇪 Kenya</SelectItem>
+                                <SelectItem value="Nigeria">🇳🇬 Nigeria</SelectItem>
+                                <SelectItem value="Ghana">🇬🇭 Ghana</SelectItem>
+                                <SelectItem value="South Africa">🇿🇦 South Africa</SelectItem>
+                                <SelectItem value="Uganda">🇺🇬 Uganda</SelectItem>
+                                <SelectItem value="Tanzania">🇹🇿 Tanzania</SelectItem>
+                                <SelectItem value="Rwanda">🇷🇼 Rwanda</SelectItem>
+                                <SelectItem value="Ethiopia">🇪🇹 Ethiopia</SelectItem>
+                                <SelectItem value="Senegal">🇸🇳 Senegal</SelectItem>
+                                <SelectItem value="Cameroon">🇨🇲 Cameroon</SelectItem>
+                                <SelectItem value="Ivory Coast">🇨🇮 Ivory Coast</SelectItem>
+                                <SelectItem value="Congo">🇨🇩 Congo (DRC)</SelectItem>
+                                <SelectItem value="Zambia">🇿🇲 Zambia</SelectItem>
+                                <SelectItem value="Sierra Leone">🇸🇱 Sierra Leone</SelectItem>
+                                <SelectItem value="United States">🇺🇸 United States</SelectItem>
+                                <SelectItem value="United Kingdom">🇬🇧 United Kingdom</SelectItem>
+                                <SelectItem value="Canada">🇨🇦 Canada</SelectItem>
+                                <SelectItem value="Germany">🇩🇪 Germany</SelectItem>
+                                <SelectItem value="France">🇫🇷 France</SelectItem>
+                                <SelectItem value="Netherlands">🇳🇱 Netherlands</SelectItem>
+                                <SelectItem value="Other">🌍 Other</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Password Change Section */}
                   <div className="border-t border-border pt-4">
