@@ -42,9 +42,11 @@ export default function WithdrawPage() {
   const defaultWallet = userWallets.find(w => w.isDefault) || userWallets[0] || null;
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const activeWallet = userWallets.find(w => w.id === selectedWalletId) || defaultWallet;
-  const realTimeBalance = parseFloat(activeWallet?.balance || user?.kesBalance || '0');
+  const realTimeBalance = activeWallet
+    ? Math.max(0, parseFloat(activeWallet.balance || '0') - parseFloat(activeWallet.holdAmount || '0') - parseFloat(activeWallet.withdrawalHoldAmount || '0'))
+    : 0;
   const activeSymbol = getCurrencySymbol(activeWallet?.currency || 'KES').trim();
-  const usdBalance = parseFloat(user?.balance || '0');
+  const usdBalance = parseFloat(userWallets.find(w => w.currency === "USD")?.balance || '0');
 
   const form = useForm<WithdrawForm>({
     resolver: zodResolver(withdrawSchema),

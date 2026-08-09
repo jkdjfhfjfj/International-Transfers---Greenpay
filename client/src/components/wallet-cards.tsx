@@ -112,7 +112,8 @@ export default function WalletCards({
           const name = wallet.label || CURRENCY_NAMES[wallet.currency] || wallet.currency;
           const balance = parseFloat(wallet.balance || "0");
           const hold = parseFloat(wallet.holdAmount || "0");
-          const available = balance - hold;
+          const withdrawalHold = parseFloat(wallet.withdrawalHoldAmount || "0");
+          const available = balance - hold - withdrawalHold;
           const isSelected = wallet.id === selectedWalletId || (!selectedWalletId && i === activeIndex);
 
           return (

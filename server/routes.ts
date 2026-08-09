@@ -29,6 +29,64 @@ import { aiRateLimiter } from "./services/ai-rate-limiter";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
+const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
+
+function getSupportedCurrencyCodes() {
+  return NEXUSPAY_CURRENCIES.map((currency) => currency.code);
+}
+
+async function getEnabledCurrencyCodes(): Promise<string[]> {
+  const fallback = getSupportedCurrencyCodes();
+  try {
+    const result = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+    const configured = String(result.rows[0]?.value || "").replace(/['"]/g, "");
+    const enabled = configured
+      .split(",")
+      .map(normalizeCurrency)
+      .filter((currency) => fallback.includes(currency));
+    return enabled.length ? enabled : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+async function getUserWallet(userId: string, currency: unknown) {
+  const code = normalizeCurrency(currency);
+  const [wallet] = await db
+    .select()
+    .from(wallets)
+    .where(and(eq(wallets.userId, userId), eq(wallets.currency, code)))
+    .limit(1);
+  return wallet;
+}
+
+async function ensureUserWallet(userId: string, currency: unknown) {
+  const code = normalizeCurrency(currency);
+  let wallet = await getUserWallet(userId, code);
+  if (!wallet) {
+    const enabled = await getEnabledCurrencyCodes();
+    if (!enabled.includes(code)) return undefined;
+    const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
+    const [created] = await db.insert(wallets).values({
+      userId,
+      currency: code,
+      isDefault: existing.length === 0,
+      isActive: true,
+    }).returning();
+    wallet = created;
+  }
+  return wallet;
+}
+
+function walletAvailableBalance(wallet: { balance?: string | null; holdAmount?: string | null; withdrawalHoldAmount?: string | null }) {
+  return Math.max(
+    0,
+    parseFloat(wallet.balance || "0") -
+      parseFloat(wallet.holdAmount || "0") -
+      parseFloat(wallet.withdrawalHoldAmount || "0"),
+  );
+}
+
 // Configure multer for file uploads with memory storage (for cloud upload)
 const upload = multer({
   storage: multer.memoryStorage(), // Store files in memory buffer for cloud upload
@@ -99,15 +157,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Maintenance mode middleware - APPLIED AT END
   const checkMaintenanceMode = async (req: any, res: any, next: any) => {
     try {
-      const maintenanceSetting = await storage.getSystemSetting("general", "maintenance_mode");
+      const maintenanceSetting =
+        await storage.getSystemSetting("general", "maintenance_mode") ||
+        await storage.getSystemSetting("platform", "maintenance_mode");
       const maintenanceEnabled = String(maintenanceSetting?.value) === 'true';
       
-      // Allow only login/logout/static during maintenance
-      const allowedPaths = ['/api/auth/login', '/api/auth/logout', '/api/auth/verify-otp', '/api/admin/auth/login', '/api/admin/settings'];
+      // Admin sessions always bypass maintenance. Users may still reach auth and
+      // the maintenance-status endpoint so the client can render a useful page.
+      const allowedPaths = [
+        '/api/auth/me',
+        '/api/auth/login',
+        '/api/auth/logout',
+        '/api/auth/verify-otp',
+        '/api/admin/login',
+        '/api/admin/auth/login',
+        '/api/system-settings',
+        '/health',
+      ];
       const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path));
       
       if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
-        const messageSetting = await storage.getSystemSetting("general", "maintenance_message");
+        const messageSetting =
+          await storage.getSystemSetting("general", "maintenance_message") ||
+          await storage.getSystemSetting("platform", "maintenance_message");
         return res.status(503).json({ 
           message: messageSetting?.value || "System is under maintenance. Please try again later.",
           maintenanceMode: true
@@ -777,16 +849,6 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.post("/api/auth/login", optionalApiKey, async (req, res) => {
     try {
-      // Check maintenance mode FIRST - block all login attempts
-      const maintenanceSetting = await storage.getSystemSetting('platform', 'maintenance_mode');
-      if (maintenanceSetting?.value === 'true') {
-        return res.status(503).json({ 
-          message: "System is under maintenance",
-          maintenanceMode: true,
-          maintenanceMessage: (await storage.getSystemSetting('platform', 'maintenance_message'))?.value || "System maintenance in progress"
-        });
-      }
-
       const { email, password } = loginSchema.parse(req.body);
       
       const user = await storage.getUserByEmail(email);
@@ -3100,7 +3162,15 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      console.log(`👤 User ${user.fullName} (${user.email}) - KES Balance: ${user.kesBalance}`);
+      const airtimeCurrency = normalizeCurrency(currency);
+      if (airtimeCurrency !== "KES") {
+        return res.status(400).json({ message: "Airtime is currently payable from the KES wallet only." });
+      }
+      const wallet = await getUserWallet(userId, airtimeCurrency);
+      if (!wallet || !wallet.isActive || wallet.isSuspended) {
+        return res.status(400).json({ message: "Your KES wallet is not available for airtime purchases." });
+      }
+      console.log(`👤 User ${user.fullName} (${user.email}) - KES wallet balance: ${wallet.balance}`);
 
       // Check PIN if required by admin settings
       const settings = await storage.getSystemSettings();
@@ -3118,9 +3188,11 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
 
-      // Airtime purchases require KES balance
-      const kesBalance = parseFloat(user.kesBalance || "0");
+      // Reserve the amount from the canonical KES wallet before calling the
+      // provider. This prevents two concurrent purchases from spending the
+      // same balance.
       const purchaseAmount = parseFloat(amount);
+      const kesBalance = walletAvailableBalance(wallet);
       
       if (kesBalance < purchaseAmount) {
         console.warn(`⚠️ Insufficient balance - Required: ${purchaseAmount}, Available: ${kesBalance}`);
@@ -3129,9 +3201,27 @@ p{color:#6b7280;font-size:14px;}</style>
         });
       }
 
+      const debitResult = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND user_id = $3
+           AND is_active = true AND is_suspended = false
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [purchaseAmount, wallet.id, userId],
+      );
+      if (debitResult.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient KES balance" });
+      }
+
       // Call Statum API to purchase airtime
       console.log(`📞 Calling Statum API for airtime purchase...`);
-      const statumResponse = await statumService.purchaseAirtime(phoneNumber, purchaseAmount);
+      let statumResponse;
+      try {
+        statumResponse = await statumService.purchaseAirtime(phoneNumber, purchaseAmount);
+      } catch (providerError) {
+        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [purchaseAmount, wallet.id]);
+        throw providerError;
+      }
       
       console.log(`✅ Statum API response:`, statumResponse);
 
@@ -3156,10 +3246,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
       console.log(`💾 Transaction created: ${transaction.id}`);
 
-      // Update user KES balance
       const newKesBalance = kesBalance - purchaseAmount;
-      await storage.updateUser(userId, { kesBalance: newKesBalance.toFixed(2) });
-      
       console.log(`✅ Updated user balance: ${kesBalance} -> ${newKesBalance}`);
       console.log(`🎉 Airtime purchase completed successfully`);
 
@@ -3232,14 +3319,27 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Email verification is required to claim this bonus" });
       }
 
-      // Add bonus to user's KES balance
-      const currentKesBalance = parseFloat(user.kesBalance || "0");
+      // Credit the canonical KES wallet, not the legacy user-level balance.
+      const wallet = await ensureUserWallet(userId, "KES");
+      if (!wallet) {
+        return res.status(400).json({ message: "KES wallet is not enabled. Please contact support." });
+      }
+      const claimResult = await pool.query(
+        `UPDATE users
+         SET has_claimed_airtime_bonus = true, updated_at = NOW()
+         WHERE id = $1 AND has_claimed_airtime_bonus IS NOT TRUE
+         RETURNING id`,
+        [userId],
+      );
+      if (claimResult.rowCount !== 1) {
+        return res.status(400).json({ message: "You have already claimed your airtime bonus" });
+      }
+      const currentKesBalance = walletAvailableBalance(wallet);
       const newKesBalance = currentKesBalance + bonusAmount;
-
-      await storage.updateUser(userId, { 
-        kesBalance: newKesBalance.toFixed(2),
-        hasClaimedAirtimeBonus: true
-      });
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [bonusAmount, wallet.id],
+      );
 
       console.log(`💰 Bonus credited: ${currentKesBalance} -> ${newKesBalance} KES`);
 
@@ -4265,54 +4365,52 @@ p{color:#6b7280;font-size:14px;}</style>
       const exchangeRate = await exchangeRateService.getExchangeRate(fromCurrency, toCurrency);
       const convertedAmount = (exchangeAmount * exchangeRate).toFixed(2);
 
-      // Handle dual wallet balance updates (USD <-> KES)
-      const currentUsdBalance = parseFloat(user.balance || "0");
-      const currentKesBalance = parseFloat(user.kesBalance || "0");
-      
-      let newUsdBalance = currentUsdBalance;
-      let newKesBalance = currentKesBalance;
-
-      // Check balance and update appropriate wallet
-      if (fromCurrency === 'USD' && toCurrency === 'KES') {
-        // Converting USD to KES
-        if (currentUsdBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient USD balance" });
-        }
-        newUsdBalance = currentUsdBalance - totalDeducted;
-        newKesBalance = currentKesBalance + parseFloat(convertedAmount);
-      } else if (fromCurrency === 'KES' && toCurrency === 'USD') {
-        // Converting KES to USD
-        if (currentKesBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient KES balance" });
-        }
-        newKesBalance = currentKesBalance - totalDeducted;
-        newUsdBalance = currentUsdBalance + parseFloat(convertedAmount);
-      } else {
-        // For other currency pairs, use USD balance
-        if (currentUsdBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient USD balance" });
-        }
-        newUsdBalance = currentUsdBalance - totalDeducted;
+      const sourceCurrency = normalizeCurrency(fromCurrency);
+      const targetCurrency = normalizeCurrency(toCurrency);
+      const enabledCurrencies = await getEnabledCurrencyCodes();
+      if (!enabledCurrencies.includes(sourceCurrency) || !enabledCurrencies.includes(targetCurrency)) {
+        return res.status(400).json({ message: "Both currencies must be enabled" });
+      }
+      if (sourceCurrency === targetCurrency) {
+        return res.status(400).json({ message: "Choose two different currencies" });
       }
 
-      // Update user balances
-      await storage.updateUser(userId, {
-        balance: newUsdBalance.toFixed(2),
-        kesBalance: newKesBalance.toFixed(2)
-      });
+      const sourceWallet = await getUserWallet(userId, sourceCurrency);
+      const targetWallet = await ensureUserWallet(userId, targetCurrency);
+      if (!sourceWallet || !targetWallet) {
+        return res.status(400).json({ message: "Create wallets for both currencies before exchanging" });
+      }
+      const available = walletAvailableBalance(sourceWallet);
+      if (available < totalDeducted) {
+        return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
+      }
+
+      const debit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [totalDeducted, sourceWallet.id],
+      );
+      if (debit.rowCount !== 1) {
+        return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
+      }
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [parseFloat(convertedAmount), targetWallet.id],
+      );
       
       // Create exchange transaction
       const transaction = await storage.createTransaction({
         userId,
         type: "exchange",
         amount: amount.toString(),
-        currency: fromCurrency,
+        currency: sourceCurrency,
         status: "completed",
         fee,
         exchangeRate: exchangeRate.toString(),
-        description: `Exchanged ${amount} ${fromCurrency} to ${convertedAmount} ${toCurrency}`,
+        description: `Exchanged ${amount} ${sourceCurrency} to ${convertedAmount} ${targetCurrency}`,
         metadata: {
-          targetCurrency: toCurrency,
+          targetCurrency,
           convertedAmount,
           exchangeType: "instant"
         }
@@ -8790,17 +8888,20 @@ p{color:#6b7280;font-size:14px;}</style>
           const withdrawalFee = parseFloat(transaction.fee || '0');
           const totalDeduction = withdrawalAmount + withdrawalFee;
           
-          // Check currency and deduct from correct wallet
-          const isKesWithdrawal = transaction.currency?.toUpperCase() === 'KES';
-          const currentBalance = parseFloat(isKesWithdrawal ? (user.kesBalance || '0') : (user.balance || '0'));
-          const newBalance = (currentBalance - totalDeduction).toFixed(2);
-          
-          // Update the correct wallet balance
-          const balanceUpdate = isKesWithdrawal 
-            ? { kesBalance: newBalance } 
-            : { balance: newBalance };
-          
-          await storage.updateUser(user.id, balanceUpdate);
+          const wallet = await getUserWallet(user.id, transaction.currency);
+          if (!wallet) {
+            return res.status(400).json({ message: `${transaction.currency} wallet not found` });
+          }
+          // The amount was reserved when the withdrawal was submitted. Approval
+          // consumes that reservation without subtracting the balance twice.
+          await pool.query(
+            `UPDATE wallets
+             SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
+                 balance = GREATEST(0, balance - $1),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [totalDeduction, wallet.id],
+          );
           
           await notificationService.sendNotification({
             title: "Withdrawal Approved",
@@ -8833,17 +8934,18 @@ p{color:#6b7280;font-size:14px;}</style>
         // REFUND the balance to user since withdrawal was rejected
         const user = await storage.getUser(transaction.userId);
         if (user) {
-          const isKes = transaction.currency?.toUpperCase() === 'KES';
-          const currentBalance = isKes ? parseFloat(user.kesBalance || '0') : parseFloat(user.balance || '0');
           const refundAmount = parseFloat(transaction.amount) + parseFloat(transaction.fee || '0');
-          const newBalance = currentBalance + refundAmount;
-          
-          const balanceUpdate = isKes 
-            ? { kesBalance: newBalance.toFixed(2) }
-            : { balance: newBalance.toFixed(2) };
-          
-          await storage.updateUser(transaction.userId, balanceUpdate);
-          console.log(`✅ Refunded ${transaction.currency} ${refundAmount} to user ${user.email}`);
+          const wallet = await getUserWallet(transaction.userId, transaction.currency);
+          if (wallet) {
+            await pool.query(
+              `UPDATE wallets
+               SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [refundAmount, wallet.id],
+            );
+          }
+          console.log(`✅ Released ${transaction.currency} ${refundAmount} withdrawal hold for ${user.email}`);
           
           // Notify user
           await notificationService.sendNotification({
@@ -9339,36 +9441,19 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(403).json({ message: (user as any).suspensionReason || "Your account is suspended. Withdrawals are disabled. Please contact support." });
       }
       
-      // Calculate real-time balance based on withdrawal currency
-      const userTransactions = await storage.getTransactionsByUserId(userId);
-      const isKesWithdrawal = currency?.toUpperCase() === 'KES';
-      
-      // For KES withdrawals, check KES balance; for USD withdrawals, check USD balance
-      const realTimeBalance = userTransactions.reduce((balance: number, txn: any) => {
-        // Count both COMPLETED and PENDING transactions to prevent multiple withdrawals
-        if (txn.status === 'completed' || (txn.status === 'pending' && txn.type === 'withdraw')) {
-          // Only count transactions matching the withdrawal currency
-          const txnCurrency = txn.currency?.toUpperCase();
-          const matchesCurrency = isKesWithdrawal ? txnCurrency === 'KES' : txnCurrency !== 'KES';
-          
-          if (matchesCurrency) {
-            if (txn.type === 'receive' || txn.type === 'deposit') {
-              return balance + parseFloat(txn.amount);
-            } else if (txn.type === 'send' || txn.type === 'withdraw') {
-              return balance - parseFloat(txn.amount) - parseFloat(txn.fee || '0');
-            }
-          }
-          // card_purchase not deducted from balance (paid via M-Pesa)
-        }
-        return balance;
-      }, parseFloat(isKesWithdrawal ? (user.kesBalance || '0') : (user.balance || '0')));
-      
-      const [matchingWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, currency?.toUpperCase() || "USD"))).limit(1);
+      const normalizedWithdrawalCurrency = normalizeCurrency(currency);
+      if (!(await getEnabledCurrencyCodes()).includes(normalizedWithdrawalCurrency)) {
+        return res.status(400).json({ message: `${normalizedWithdrawalCurrency} is not an enabled currency` });
+      }
+      const matchingWallet = await getUserWallet(userId, normalizedWithdrawalCurrency);
+      if (!matchingWallet) {
+        return res.status(400).json({ message: `Create a ${normalizedWithdrawalCurrency} wallet before withdrawing` });
+      }
       if (matchingWallet?.isSuspended) {
         return res.status(403).json({ message: matchingWallet.suspendReason || `${currency} wallet is suspended. Withdrawals are disabled.` });
       }
-      const walletHoldAmount = parseFloat(matchingWallet?.holdAmount || "0");
-      const withdrawableBalance = Math.max(0, realTimeBalance - walletHoldAmount);
+      const walletHoldAmount = parseFloat(matchingWallet.holdAmount || "0");
+      const withdrawableBalance = walletAvailableBalance(matchingWallet);
 
       // Check sufficient balance after admin holds
       if (withdrawableBalance < withdrawAmount + withdrawFee) {
@@ -9382,11 +9467,23 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       // Create withdrawal transaction with pending status
+      const totalHold = withdrawAmount + withdrawFee;
+      const holdResult = await pool.query(
+        `UPDATE wallets
+         SET withdrawal_hold_amount = withdrawal_hold_amount + $1, updated_at = NOW()
+         WHERE id = $2 AND is_active = true AND is_suspended = false
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [totalHold, matchingWallet.id],
+      );
+      if (holdResult.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+
       const transaction = await storage.createTransaction({
         userId,
         type: 'withdraw' as const,
         amount: amount,
-        currency,
+        currency: normalizedWithdrawalCurrency,
         status: 'pending' as const, // Withdrawals start as pending for admin approval
         description,
         fee: fee || '0.00',
@@ -9402,9 +9499,9 @@ p{color:#6b7280;font-size:14px;}</style>
         type: "transaction"
       });
       
-      res.json({ 
+      res.json({
         transaction,
-        message: "Withdrawal request submitted successfully. It will be processed within 1-3 business days."
+        message: "Withdrawal request submitted successfully. It will be processed within 1-3 business days.",
       });
     } catch (error) {
       console.error('Withdrawal error:', error);
@@ -12182,8 +12279,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
   app.get("/api/currencies", async (req, res) => {
     try {
-      const setting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
-      const enabled = (setting.rows[0]?.value || "USD,KES,UGX,GHS,NGN,ZAR,TZS,XOF,CDF,XAF,RWF,SLE,ZMW,EUR,GBP").replace(/['"]/g, '').split(",").map((s: string) => s.trim()).filter(Boolean);
+      const enabled = await getEnabledCurrencyCodes();
       const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
       const defaultCurrency = (defSetting.rows[0]?.value || "USD").replace(/['"]/g, '').trim();
       const currencies = NEXUSPAY_CURRENCIES.filter(c => enabled.includes(c.code));
@@ -12198,15 +12294,22 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const userId = (req.session as any).userId;
       const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
+      const normalizedCurrency = normalizeCurrency(currency);
+      if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
+        return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
+      }
       if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
       const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
-      const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === currency);
+      if (wallet_.currency !== normalizedCurrency) {
+        return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
+      }
+      const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
-      const result = await nexusPayService.checkout({ amount: parseFloat(amount), currency, channel, phone, email, correspondent, description: description || `Deposit to ${currency} wallet` });
+      const result = await nexusPayService.checkout({ amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent, description: description || `Deposit to ${normalizedCurrency} wallet` });
       await db.insert(transactions).values({
-        userId, type: "deposit", amount: String(amount), currency, status: "pending",
+        userId, type: "deposit", amount: String(amount), currency: normalizedCurrency, status: "pending",
         reference: result.reference, description: `NexusPay ${currency} deposit`,
         metadata: { walletId, channel, gateway: currencyMeta?.gateway, redirectUrl: result.redirectUrl } as any,
       });

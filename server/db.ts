@@ -44,6 +44,8 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `UPDATE wallets SET withdrawal_hold_amount = 0.0000 WHERE withdrawal_hold_amount IS NULL`,
     // Migrate existing USD balances to wallets
     `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
      SELECT id, 'USD', COALESCE(balance, 0), true, true FROM users

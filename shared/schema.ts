@@ -873,6 +873,7 @@ export const wallets = pgTable("wallets", {
   label: text("label"),                           // Optional custom name
   balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
   holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  withdrawalHoldAmount: decimal("withdrawal_hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
   isDefault: boolean("is_default").default(false),
   isActive: boolean("is_active").default(true),
   isSuspended: boolean("is_suspended").default(false),

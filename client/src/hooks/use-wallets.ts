@@ -9,6 +9,7 @@ export interface Wallet {
   label: string | null;
   balance: string;
   holdAmount: string;
+  withdrawalHoldAmount?: string;
   isDefault: boolean;
   isActive: boolean;
   isSuspended: boolean;
@@ -64,7 +65,7 @@ export function useWallets() {
   });
 
   const totalUSDValue = wallets.reduce((sum, w) => {
-    return sum + parseFloat(w.balance || "0");
+    return sum + Math.max(0, parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0") - parseFloat(w.withdrawalHoldAmount || "0"));
   }, 0);
 
   return {
