@@ -2367,9 +2367,15 @@ p{color:#6b7280;font-size:14px;}</style>
           const user = await storage.getUser(transaction.userId);
           if (user) {
             const depositAmount = parseFloat(transaction.amount);
-            const currentBalance = parseFloat(user.balance || "0");
-            const newBalance = (currentBalance + depositAmount).toFixed(2);
-            await storage.updateUser(transaction.userId, { balance: newBalance });
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(transaction.userId, depositCurrency);
+            if (!depositWallet) {
+              throw new Error(`${depositCurrency} wallet is not enabled`);
+            }
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id],
+            );
 
             notificationService.sendNotification({
               userId: transaction.userId,
@@ -2413,16 +2419,17 @@ p{color:#6b7280;font-size:14px;}</style>
 
               if (eligible.length > 0) {
                 const { bonus, value: bonusValue } = eligible[0];
-                const balanceAfterDeposit = parseFloat(newBalance);
-                const balanceWithBonus = (balanceAfterDeposit + bonusValue).toFixed(2);
-                await storage.updateUser(transaction.userId, { balance: balanceWithBonus });
+                await pool.query(
+                  `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+                  [bonusValue, depositWallet.id],
+                );
                 await storage.createTransaction({
                   userId: transaction.userId,
                   type: 'deposit',
                   amount: bonusValue.toFixed(2),
-                  currency: 'USD',
+                  currency: depositCurrency,
                   status: 'completed',
-                  description: `Deposit bonus: ${bonus.description || `+$${bonusValue.toFixed(2)} for depositing via M-Pesa`}`,
+                  description: `Deposit bonus: ${bonus.description || `+${depositCurrency} ${bonusValue.toFixed(2)} for depositing via M-Pesa`}`,
                   fee: '0.00',
                   metadata: { bonusId: bonus.id, bonusType: 'deposit_bonus', triggerMethod: 'mpesa' }
                 });
@@ -2935,11 +2942,15 @@ p{color:#6b7280;font-size:14px;}</style>
           // 2. Credit user balance
           const user = await storage.getUser(transaction.userId);
           if (user) {
-            const currentBalance = parseFloat(user.balance || '0');
             const depositAmount = parseFloat(transaction.amount);
-            const newBalance = (currentBalance + depositAmount).toFixed(2);
-            
-            await storage.updateUser(user.id, { balance: newBalance });
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
+            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
+            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id],
+            );
             
             // 3. Send in-app notification
             await notificationService.sendNotification({
@@ -3093,10 +3104,15 @@ p{color:#6b7280;font-size:14px;}</style>
           await storage.updateTransactionStatus(transaction.id, 'completed');
           const user = await storage.getUser(transaction.userId);
           if (user) {
-            const currentBalance = parseFloat(user.balance || '0');
             const depositAmount = parseFloat(transaction.amount);
-            const newBalance = (currentBalance + depositAmount).toFixed(2);
-            await storage.updateUser(user.id, { balance: newBalance });
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
+            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
+            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id],
+            );
             
             await notificationService.sendNotification({
               userId: user.id,
@@ -3396,9 +3412,11 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      console.log(`👤 User ${user.fullName} - KES Balance: ${user.kesBalance}`);
-
-      const kesBalance = parseFloat(user.kesBalance || "0");
+      const kesWallet = await getUserWallet(userId, "KES");
+      if (!kesWallet) {
+        return res.status(400).json({ message: "KES wallet not found" });
+      }
+      const kesBalance = walletAvailableBalance(kesWallet);
       const paymentAmount = parseFloat(amount);
       
       if (kesBalance < paymentAmount) {
@@ -3438,7 +3456,19 @@ p{color:#6b7280;font-size:14px;}</style>
         metadata: { billPaymentId: billPayment.id, provider }
       });
 
-      // DO NOT deduct balance yet - only when verified as completed
+      const billDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND user_id = $3
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [paymentAmount, kesWallet.id, userId],
+      );
+      if (billDebit.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient KES balance" });
+      }
+
+      // The amount is debited once and the bill remains pending until provider
+      // verification completes. A failed verification must refund this debit.
       console.log(`⏳ Bill payment pending verification with provider`);
 
       res.json({ 
@@ -3551,17 +3581,25 @@ p{color:#6b7280;font-size:14px;}</style>
       const user = await storage.getUser(sessionUserId);
       if (!user) return res.status(404).json({ message: "User not found" });
       
-      const walletBalance = parseFloat(user.balance || '0');
+      const wallet = await getUserWallet(sessionUserId, "USD");
+      if (!wallet) return res.status(400).json({ message: "USD wallet not found" });
+      const walletBalance = walletAvailableBalance(wallet);
       const cardBalance = parseFloat(card.balance || '0');
       
       if (direction === 'wallet_to_card') {
-        if (walletBalance < transferAmount) {
+        const debitResult = await pool.query(
+          `UPDATE wallets
+           SET balance = balance - $1, updated_at = NOW()
+           WHERE id = $2 AND user_id = $3
+             AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+          [transferAmount, wallet.id, sessionUserId],
+        );
+        if (debitResult.rowCount !== 1) {
           return res.status(400).json({ message: "Insufficient wallet balance" });
         }
         const newWalletBalance = (walletBalance - transferAmount).toFixed(2);
         const newCardBalance = (cardBalance + transferAmount).toFixed(2);
         
-        await storage.updateUser(sessionUserId, { balance: newWalletBalance });
         await storage.updateVirtualCard(cardId, { balance: newCardBalance });
         
         await storage.createTransaction({
@@ -3583,7 +3621,10 @@ p{color:#6b7280;font-size:14px;}</style>
         const newCardBalance = (cardBalance - transferAmount).toFixed(2);
         const newWalletBalance = (walletBalance + transferAmount).toFixed(2);
         
-        await storage.updateUser(sessionUserId, { balance: newWalletBalance });
+        await pool.query(
+          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+          [transferAmount, wallet.id],
+        );
         await storage.updateVirtualCard(cardId, { balance: newCardBalance });
         
         await storage.createTransaction({
@@ -3763,8 +3804,14 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Update user balance
       const user = await storage.getUser(userId);
-      const newBalance = (parseFloat(user?.balance || "0") + parseFloat(amount)).toFixed(2);
-      await storage.updateUser(userId, { balance: newBalance });
+      const receiveCurrency = normalizeCurrency(currency);
+      const receiveWallet = await ensureUserWallet(userId, receiveCurrency);
+      if (!receiveWallet) return res.status(400).json({ message: `${receiveCurrency} wallet is not enabled` });
+      const newBalance = (walletAvailableBalance(receiveWallet) + parseFloat(amount)).toFixed(2);
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [parseFloat(amount), receiveWallet.id],
+      );
       
       // Send notification
       await notificationService.sendTransactionNotification(userId, transaction);
@@ -5769,12 +5816,15 @@ p{color:#6b7280;font-size:14px;}</style>
       if (deductionTypes.includes(before.type) && wasDeducted && nowFailed && !wasFailed) {
         const user = await storage.getUser(before.userId);
         if (user) {
-          const isKes = (before.currency || "").toUpperCase() === "KES";
           const refundAmount = parseFloat(before.amount || "0") + parseFloat(before.fee || "0");
-          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
-          const newBalance = currentBalance + refundAmount;
-          const upd = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
-          await storage.updateUser(before.userId, upd);
+          const refundCurrency = normalizeCurrency(before.currency || "USD");
+          const refundWallet = await ensureUserWallet(before.userId, refundCurrency);
+          if (refundWallet) {
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [refundAmount, refundWallet.id],
+            );
+          }
           console.log(`✅ Refunded ${before.currency} ${refundAmount} to user ${user.email} (admin marked ${status})`);
 
           try {
@@ -6541,8 +6591,11 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Determine which wallet to update based on currency (default to USD for backward compatibility)
       const targetCurrency = currency?.toUpperCase() || 'USD';
-      const isKes = targetCurrency === 'KES';
-      const currentBalance = parseFloat(isKes ? (user.kesBalance || "0") : (user.balance || "0"));
+      const adjustmentWallet = await ensureUserWallet(req.params.id, targetCurrency);
+      if (!adjustmentWallet) {
+        return res.status(400).json({ error: `${targetCurrency} wallet is not enabled` });
+      }
+      const currentBalance = walletAvailableBalance(adjustmentWallet);
       const updateAmount = parseFloat(amount);
       
       let newBalance: number;
@@ -6565,12 +6618,14 @@ p{color:#6b7280;font-size:14px;}</style>
           return res.status(400).json({ error: "Invalid update type" });
       }
       
-      // Update the appropriate wallet balance
-      const balanceUpdate = isKes 
-        ? { kesBalance: newBalance.toFixed(2) } 
-        : { balance: newBalance.toFixed(2) };
-      
-      const updatedUser = await storage.updateUser(req.params.id, balanceUpdate);
+      const adjustmentResult = await pool.query(
+        `UPDATE wallets SET balance = $1, updated_at = NOW() WHERE id = $2`,
+        [newBalance.toFixed(2), adjustmentWallet.id],
+      );
+      if (adjustmentResult.rowCount !== 1) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      const updatedUser = await storage.getUser(req.params.id);
       
       // Create transaction record for history with correct currency
       const transactionAmount = type === 'set' ? Math.abs(newBalance - currentBalance) : updateAmount;
@@ -7507,17 +7562,22 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
       
-      const userBalance = parseFloat(user.balance || "0");
       const contributionAmount = parseFloat(amount);
+      const savingsWallet = await getUserWallet(userId, "USD");
+      if (!savingsWallet) return res.status(400).json({ message: "USD wallet not found" });
+      const userBalance = walletAvailableBalance(savingsWallet);
       
       if (userBalance < contributionAmount) {
         return res.status(400).json({ message: "Insufficient balance" });
       }
       
-      // Update user balance
-      await storage.updateUser(userId, {
-        balance: (userBalance - contributionAmount).toFixed(2)
-      });
+      const savingsDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [contributionAmount, savingsWallet.id],
+      );
+      if (savingsDebit.rowCount !== 1) return res.status(400).json({ message: "Insufficient balance" });
       
       // Update savings goal
       const newAmount = parseFloat(savingsGoal.currentAmount || "0") + contributionAmount;
@@ -8432,9 +8492,14 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
 
-      // Use balance field directly (it's already the current state!)
-      const senderBalance = parseFloat(fromUser.balance || '0');
-      const recipientBalance = parseFloat(toUser.balance || '0');
+      const transferCurrency = normalizeCurrency(currency);
+      const senderWallet = await getUserWallet(fromUserId, transferCurrency);
+      const recipientWallet = await ensureUserWallet(toUserId, transferCurrency);
+      if (!senderWallet || !recipientWallet) {
+        return res.status(400).json({ message: `${transferCurrency} wallet is not available` });
+      }
+      const senderBalance = walletAvailableBalance(senderWallet);
+      const recipientBalance = walletAvailableBalance(recipientWallet);
 
       if (senderBalance < transferAmount) {
         console.error('[Transfer] Insufficient balance:', { senderBalance, transferAmount });
@@ -8462,7 +8527,7 @@ p{color:#6b7280;font-size:14px;}</style>
         userId: fromUserId,
         type: 'send',
         amount: amount,
-        currency: currency,
+        currency: transferCurrency,
         status: 'completed',
         description: description || `Transfer to ${toUser.fullName}`,
         recipient: toUser.fullName,
@@ -8476,7 +8541,7 @@ p{color:#6b7280;font-size:14px;}</style>
         userId: toUserId,
         type: 'receive',
         amount: amount,
-        currency: currency,
+        currency: transferCurrency,
         status: 'completed',
         description: description || `Transfer from ${fromUser.fullName}`,
         sender: fromUser.fullName,
@@ -8485,10 +8550,21 @@ p{color:#6b7280;font-size:14px;}</style>
         fee: '0'
       });
 
-      // UPDATE BALANCES IN DATABASE
-      console.log('[Transfer] Updating balances - Sender:', senderNewBalance, 'Recipient:', recipientNewBalance);
-      await storage.updateUser(fromUserId, { balance: senderNewBalance.toFixed(2) });
-      await storage.updateUser(toUserId, { balance: recipientNewBalance.toFixed(2) });
+      // Update both wallets atomically enough to prevent spending more than
+      // the sender's available balance during concurrent transfers.
+      const senderDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [transferAmount, senderWallet.id],
+      );
+      if (senderDebit.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [transferAmount, recipientWallet.id],
+      );
 
       // Send email to recipient with fund receipt using Mailtrap
       const { MailtrapService } = await import('./services/mailtrap');
@@ -12120,12 +12196,22 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       if (deductionTypes.includes(tx.type)) {
         const user = await storage.getUser(userId);
         if (user) {
-          const isKes = (tx.currency || "").toUpperCase() === "KES";
           const refundAmount = parseFloat(tx.amount || "0") + parseFloat(tx.fee || "0");
-          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
-          const newBalance = currentBalance + refundAmount;
-          const upd = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
-          await storage.updateUser(userId, upd);
+          const refundCurrency = normalizeCurrency(tx.currency || "USD");
+          const refundWallet = await getUserWallet(userId, refundCurrency);
+          if (refundWallet) {
+            if (tx.type === "withdraw") {
+              await pool.query(
+                `UPDATE wallets SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1), updated_at = NOW() WHERE id = $2`,
+                [refundAmount, refundWallet.id],
+              );
+            } else {
+              await pool.query(
+                `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+                [refundAmount, refundWallet.id],
+              );
+            }
+          }
         }
       }
 
@@ -12245,7 +12331,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
 
       const enriched = userWallets.map(w => ({
         ...w,
-        availableBalance: parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0"),
+        availableBalance: walletAvailableBalance(w),
         currencyMeta: currencyMeta[w.currency] || null,
       }));
       res.json({ wallets: enriched });
@@ -12257,12 +12343,13 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const userId = (req.session as any).userId;
       const { currency } = req.body;
       if (!currency) return res.status(400).json({ message: "currency required" });
-      const knownCodes = NEXUSPAY_CURRENCIES.map(c => c.code);
-      if (!knownCodes.includes(currency)) return res.status(400).json({ message: `${currency} is not a supported currency` });
+      const normalizedCurrency = normalizeCurrency(currency);
+      const knownCodes = await getEnabledCurrencyCodes();
+      if (!knownCodes.includes(normalizedCurrency)) return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
       const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
-      if (existing.some(w => w.currency === currency)) return res.status(400).json({ message: `You already have a ${currency} wallet` });
+      if (existing.some(w => w.currency === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
       const isDefault = existing.length === 0;
-      const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault, isActive: true }).returning();
+      const [newWallet] = await db.insert(wallets).values({ userId, currency: normalizedCurrency, isDefault, isActive: true }).returning();
       res.json({ wallet: newWallet });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });

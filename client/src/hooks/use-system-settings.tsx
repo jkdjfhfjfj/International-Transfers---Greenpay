@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
 interface SystemSettings {
+  general?: {
+    maintenance_mode?: { value: string };
+    maintenance_message?: { value: string };
+  };
   platform?: {
     maintenance_mode?: { value: string };
     maintenance_message?: { value: string };
@@ -47,11 +51,18 @@ export function useSystemSettings() {
   }, []);
 
   const getMaintenanceMode = () => {
-    return settings?.platform?.maintenance_mode?.value === 'true';
+    return (
+      settings?.general?.maintenance_mode?.value === 'true' ||
+      settings?.platform?.maintenance_mode?.value === 'true'
+    );
   };
 
   const getMaintenanceMessage = () => {
-    return settings?.platform?.maintenance_message?.value || "System maintenance in progress";
+    return (
+      settings?.general?.maintenance_message?.value ||
+      settings?.platform?.maintenance_message?.value ||
+      "System maintenance in progress"
+    );
   };
 
   const getPinRequired = () => {

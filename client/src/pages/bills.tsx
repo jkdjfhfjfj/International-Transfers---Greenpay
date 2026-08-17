@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useWallets } from "@/hooks/use-wallets";
 import { apiRequest } from "@/lib/queryClient";
 import { Receipt, CheckCircle, Clock, Zap } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
@@ -34,6 +35,7 @@ export default function BillsPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
+  const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const [billHistory, setBillHistory] = useState<BillPaymentRecord[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
@@ -150,7 +152,7 @@ export default function BillsPage() {
     billPaymentMutation.mutate();
   };
 
-  const kesBalance = parseFloat(user?.kesBalance || "0");
+  const kesBalance = wallets.find((wallet) => wallet.currency === "KES")?.availableBalance || 0;
   const paymentAmount = parseFloat(amount) || 0;
   const selectedProviderObj = BILL_PROVIDERS.find(p => p.id === selectedProvider?.id);
   const idLabel = selectedProvider?.needsId === "meterNumber" ? "Meter Number" : "Account Number";

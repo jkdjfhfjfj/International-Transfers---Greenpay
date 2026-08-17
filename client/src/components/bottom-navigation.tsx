@@ -64,8 +64,8 @@ export default function BottomNavigation() {
       data-testid="bottom-navigation"
     >
       <div
-        className="bg-background border-t border-border"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+        className="bg-background/95 border-t border-border shadow-[0_-4px_18px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:shadow-[0_-4px_18px_rgba(0,0,0,0.28)]"
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
       >
         <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 64 }}>
           {navItems.map((item) => {
@@ -91,7 +91,7 @@ export default function BottomNavigation() {
                       height: 52,
                       borderRadius: '50%',
                       background: 'linear-gradient(135deg, #0f766e 0%, #16a34a 100%)',
-                      border: '3px solid white',
+                      border: '3px solid var(--background)',
                       boxShadow: '0 6px 20px rgba(5, 150, 105, 0.40)',
                       display: 'flex',
                       alignItems: 'center',

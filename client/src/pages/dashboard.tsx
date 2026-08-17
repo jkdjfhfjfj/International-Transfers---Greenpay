@@ -113,8 +113,8 @@ export default function DashboardPage() {
   const loginHistory = (loginHistoryData as any)?.loginHistory || [];
   
   // Dual wallet balances
-  const usdBalance = parseFloat(user?.balance || '0');
-  const kesBalance = parseFloat(user?.kesBalance || '0');
+  const usdBalance = userWallets.find((wallet) => wallet.currency === "USD")?.availableBalance || 0;
+  const kesBalance = userWallets.find((wallet) => wallet.currency === "KES")?.availableBalance || 0;
   
   // Get the active wallet balance based on selection
   const activeBalance = activeWallet === 'USD' ? usdBalance : kesBalance;

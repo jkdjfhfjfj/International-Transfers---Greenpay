@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useWallets } from "@/hooks/use-wallets";
 import { apiRequest } from "@/lib/queryClient";
 import { Smartphone, Zap, Wifi, TrendingUp, Clock } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
@@ -32,6 +33,7 @@ export default function AirtimePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
+  const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const [selectedProvider, setSelectedProvider] = useState("");
   const [showPINModal, setShowPINModal] = useState(false);
@@ -106,7 +108,7 @@ export default function AirtimePage() {
   });
 
   const onSubmit = (data: AirtimeForm) => {
-    const kesBalance = parseFloat(user?.kesBalance || '0');
+    const kesBalance = wallets.find((wallet) => wallet.currency === "KES")?.availableBalance || 0;
     const amount = parseFloat(data.amount);
     
     if (kesBalance < amount) {

@@ -13,6 +13,7 @@ var schema_exports = {};
 __export(schema_exports, {
   adminLogs: () => adminLogs,
   admins: () => admins,
+  advancedKycDocuments: () => advancedKycDocuments,
   aiUsage: () => aiUsage,
   announcements: () => announcements,
   apiConfigurations: () => apiConfigurations,
@@ -20,8 +21,13 @@ __export(schema_exports, {
   budgets: () => budgets,
   chatMessages: () => chatMessages,
   conversations: () => conversations,
+  cryptoDepositAddresses: () => cryptoDepositAddresses,
+  cryptoTransactions: () => cryptoTransactions,
+  cryptoWallets: () => cryptoWallets,
+  depositBonuses: () => depositBonuses,
   insertAdminLogSchema: () => insertAdminLogSchema,
   insertAdminSchema: () => insertAdminSchema,
+  insertAdvancedKycSchema: () => insertAdvancedKycSchema,
   insertAiUsageSchema: () => insertAiUsageSchema,
   insertAnnouncementSchema: () => insertAnnouncementSchema,
   insertApiConfigurationSchema: () => insertApiConfigurationSchema,
@@ -29,6 +35,10 @@ __export(schema_exports, {
   insertBudgetSchema: () => insertBudgetSchema,
   insertChatMessageSchema: () => insertChatMessageSchema,
   insertConversationSchema: () => insertConversationSchema,
+  insertCryptoDepositAddressSchema: () => insertCryptoDepositAddressSchema,
+  insertCryptoTransactionSchema: () => insertCryptoTransactionSchema,
+  insertCryptoWalletSchema: () => insertCryptoWalletSchema,
+  insertDepositBonusSchema: () => insertDepositBonusSchema,
   insertKycDocumentSchema: () => insertKycDocumentSchema,
   insertLoginHistorySchema: () => insertLoginHistorySchema,
   insertMessageSchema: () => insertMessageSchema,
@@ -42,11 +52,15 @@ __export(schema_exports, {
   insertSystemLogSchema: () => insertSystemLogSchema,
   insertSystemSettingSchema: () => insertSystemSettingSchema,
   insertTicketReplySchema: () => insertTicketReplySchema,
+  insertTransactionDisputeSchema: () => insertTransactionDisputeSchema,
   insertTransactionSchema: () => insertTransactionSchema,
   insertUserActivityLogSchema: () => insertUserActivityLogSchema,
   insertUserPreferencesSchema: () => insertUserPreferencesSchema,
   insertUserSchema: () => insertUserSchema,
+  insertVirtualAccountApplicationSchema: () => insertVirtualAccountApplicationSchema,
+  insertVirtualAccountSettingSchema: () => insertVirtualAccountSettingSchema,
   insertVirtualCardSchema: () => insertVirtualCardSchema,
+  insertWalletSchema: () => insertWalletSchema,
   insertWhatsappConfigSchema: () => insertWhatsappConfigSchema,
   insertWhatsappConversationSchema: () => insertWhatsappConversationSchema,
   insertWhatsappMessageSchema: () => insertWhatsappMessageSchema,
@@ -64,12 +78,16 @@ __export(schema_exports, {
   systemLogs: () => systemLogs,
   systemSettings: () => systemSettings,
   ticketReplies: () => ticketReplies,
+  transactionDisputes: () => transactionDisputes,
   transactions: () => transactions,
   userActivityLog: () => userActivityLog,
   userPreferences: () => userPreferences,
   userSessions: () => userSessions,
   users: () => users,
+  virtualAccountApplications: () => virtualAccountApplications,
+  virtualAccountSettings: () => virtualAccountSettings,
   virtualCards: () => virtualCards,
+  wallets: () => wallets,
   whatsappConfig: () => whatsappConfig,
   whatsappConversations: () => whatsappConversations,
   whatsappMessages: () => whatsappMessages
@@ -77,7 +95,7 @@ __export(schema_exports, {
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, kycDocuments, virtualCards, transactions, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, announcements, insertAnnouncementSchema, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, aiUsage, insertAiUsageSchema;
+var users, kycDocuments, virtualCards, transactions, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, announcements, insertAnnouncementSchema, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, transactionDisputes, cryptoWallets, cryptoTransactions, aiUsage, insertAiUsageSchema, insertTransactionDisputeSchema, insertCryptoWalletSchema, insertCryptoTransactionSchema, cryptoDepositAddresses, insertCryptoDepositAddressSchema, depositBonuses, insertDepositBonusSchema, advancedKycDocuments, insertAdvancedKycSchema, wallets, insertWalletSchema, virtualAccountSettings, virtualAccountApplications, insertVirtualAccountSettingSchema, insertVirtualAccountApplicationSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -93,6 +111,10 @@ var init_schema = __esm({
       isPhoneVerified: boolean("is_phone_verified").default(false),
       kycStatus: text("kyc_status").default("not_submitted"),
       // not_submitted, pending, verified, rejected
+      advancedKycStatus: text("advanced_kyc_status").default("not_submitted"),
+      // not_submitted, pending, verified, rejected
+      advancedKycRequested: boolean("advanced_kyc_requested").default(false),
+      // admin-requested advanced KYC
       hasVirtualCard: boolean("has_virtual_card").default(false),
       twoFactorSecret: text("two_factor_secret"),
       twoFactorEnabled: boolean("two_factor_enabled").default(false),
@@ -121,6 +143,18 @@ var init_schema = __esm({
       fcmToken: text("fcm_token"),
       // Firebase Cloud Messaging token for push notifications
       lastLoginAt: timestamp("last_login_at"),
+      googleId: text("google_id"),
+      // KYC-extracted identity fields (auto-populated on verification, editable by admin only)
+      kycFullName: text("kyc_full_name"),
+      kycDateOfBirth: text("kyc_date_of_birth"),
+      kycIdNumber: text("kyc_id_number"),
+      // unique per verified identity
+      kycNationality: text("kyc_nationality"),
+      kycGender: text("kyc_gender"),
+      kycAddress: text("kyc_address"),
+      kycDocumentType: text("kyc_document_type"),
+      kycIdExpiryDate: text("kyc_id_expiry_date"),
+      kycIssuingCountry: text("kyc_issuing_country"),
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
     });
@@ -128,15 +162,22 @@ var init_schema = __esm({
       id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
       userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
       documentType: text("document_type").notNull(),
-      // national_id, passport, drivers_license
+      // national_id, passport, drivers_license, didit_verification
       frontImageUrl: text("front_image_url"),
       backImageUrl: text("back_image_url"),
       selfieUrl: text("selfie_url"),
       dateOfBirth: text("date_of_birth"),
       address: text("address"),
       status: text("status").default("pending"),
+      // pending, verified, rejected, re_verification_requested
       verificationNotes: text("verification_notes"),
       verifiedAt: timestamp("verified_at"),
+      // Didit automated verification fields
+      diditSessionId: text("didit_session_id"),
+      diditStatus: text("didit_status"),
+      // raw Didit status string
+      diditDecision: jsonb("didit_decision"),
+      // full Didit decision payload with features/extracted data
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
     });
@@ -714,6 +755,59 @@ var init_schema = __esm({
       createdAt: true
     });
     insertTicketReplySchema = createInsertSchema(ticketReplies).omit({ id: true, createdAt: true });
+    transactionDisputes = pgTable("transaction_disputes", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+      reason: text("reason").notNull(),
+      // unauthorized, duplicate, wrong_amount, fraud, other
+      description: text("description"),
+      status: text("status").default("open"),
+      // open, under_review, resolved, rejected
+      adminNotes: text("admin_notes"),
+      resolvedAt: timestamp("resolved_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    cryptoWallets = pgTable("crypto_wallets", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      coin: text("coin").notNull(),
+      // BTC, ETH, USDT, USDC
+      network: text("network").notNull(),
+      // bitcoin, ethereum, tron (for USDT TRC-20)
+      address: text("address").notNull(),
+      balance: decimal("balance", { precision: 18, scale: 8 }).default("0.00000000"),
+      isActive: boolean("is_active").default(true),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    cryptoTransactions = pgTable("crypto_transactions", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      type: text("type").notNull(),
+      // deposit, withdrawal, card_purchase
+      coin: text("coin").notNull(),
+      // BTC, ETH, USDT, USDC
+      network: text("network").notNull(),
+      amount: decimal("amount", { precision: 18, scale: 8 }).notNull(),
+      // crypto amount
+      usdValue: decimal("usd_value", { precision: 10, scale: 2 }).notNull(),
+      // equivalent USD
+      txHash: text("tx_hash"),
+      // blockchain transaction hash
+      fromAddress: text("from_address"),
+      toAddress: text("to_address"),
+      status: text("status").default("pending"),
+      // pending, confirming, completed, failed
+      confirmations: integer("confirmations").default(0),
+      requiredConfirmations: integer("required_confirmations").default(3),
+      fee: decimal("fee", { precision: 18, scale: 8 }).default("0.00000000"),
+      adminNotes: text("admin_notes"),
+      completedAt: timestamp("completed_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
     aiUsage = pgTable("ai_usage", {
       id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
       userId: varchar("user_id"),
@@ -726,6 +820,118 @@ var init_schema = __esm({
       updatedAt: timestamp("updated_at").defaultNow()
     });
     insertAiUsageSchema = createInsertSchema(aiUsage).omit({ id: true, createdAt: true, updatedAt: true });
+    insertTransactionDisputeSchema = createInsertSchema(transactionDisputes).omit({ id: true, createdAt: true, updatedAt: true, resolvedAt: true, status: true, adminNotes: true });
+    insertCryptoWalletSchema = createInsertSchema(cryptoWallets).omit({ id: true, createdAt: true, updatedAt: true, balance: true });
+    insertCryptoTransactionSchema = createInsertSchema(cryptoTransactions).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+    cryptoDepositAddresses = pgTable("crypto_deposit_addresses", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      coin: text("coin").notNull(),
+      // BTC, ETH, USDT, USDC
+      network: text("network").notNull(),
+      // bitcoin, ethereum, tron, bsc, polygon, etc.
+      networkLabel: text("network_label").notNull(),
+      // "Bitcoin Network", "Ethereum (ERC-20)", "TRON (TRC-20)"
+      address: text("address").notNull(),
+      memo: text("memo"),
+      // optional memo/tag for some networks
+      qrCodeUrl: text("qr_code_url"),
+      // optional admin-uploaded QR
+      minDeposit: decimal("min_deposit", { precision: 18, scale: 8 }).default("0.00000000"),
+      isActive: boolean("is_active").default(true),
+      notes: text("notes"),
+      // optional admin notes shown to users
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertCryptoDepositAddressSchema = createInsertSchema(cryptoDepositAddresses).omit({ id: true, createdAt: true, updatedAt: true });
+    depositBonuses = pgTable("deposit_bonuses", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      method: text("method").notNull(),
+      // mpesa | crypto | bank_transfer | card | any
+      minAmount: decimal("min_amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+      bonusAmount: decimal("bonus_amount", { precision: 18, scale: 2 }).notNull(),
+      bonusType: text("bonus_type").notNull().default("fixed"),
+      // fixed | percentage
+      description: text("description"),
+      isActive: boolean("is_active").default(true),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertDepositBonusSchema = createInsertSchema(depositBonuses).omit({ id: true, createdAt: true, updatedAt: true });
+    advancedKycDocuments = pgTable("advanced_kyc_documents", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      facialPhotoUrl: text("facial_photo_url"),
+      addressProofUrl: text("address_proof_url"),
+      addressProofType: text("address_proof_type"),
+      // utility_bill, bank_statement, lease, government_letter, other
+      fullAddress: text("full_address"),
+      city: text("city"),
+      postalCode: text("postal_code"),
+      country: text("country"),
+      status: text("status").default("pending"),
+      // pending, verified, rejected
+      verificationNotes: text("verification_notes"),
+      verifiedAt: timestamp("verified_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertAdvancedKycSchema = createInsertSchema(advancedKycDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+    wallets = pgTable("wallets", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      currency: text("currency").notNull(),
+      // 'USD', 'KES', 'UGX', etc.
+      label: text("label"),
+      // Optional custom name
+      balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+      holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+      withdrawalHoldAmount: decimal("withdrawal_hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+      isDefault: boolean("is_default").default(false),
+      isActive: boolean("is_active").default(true),
+      isSuspended: boolean("is_suspended").default(false),
+      suspendReason: text("suspend_reason"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+    virtualAccountSettings = pgTable("virtual_account_settings", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      currency: text("currency").notNull().unique(),
+      accountName: text("account_name").notNull(),
+      bankName: text("bank_name").notNull(),
+      accountNumber: text("account_number").notNull(),
+      routingNumber: text("routing_number"),
+      sortCode: text("sort_code"),
+      iban: text("iban"),
+      swiftCode: text("swift_code"),
+      bankAddress: text("bank_address"),
+      beneficiaryAddress: text("beneficiary_address"),
+      paymentInstructions: text("payment_instructions"),
+      isActive: boolean("is_active").default(true),
+      updatedBy: varchar("updated_by").references(() => admins.id),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    virtualAccountApplications = pgTable("virtual_account_applications", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      currency: text("currency").notNull(),
+      status: text("status").default("pending"),
+      // pending, approved, rejected
+      sourceOfIncome: text("source_of_income").notNull(),
+      monthlyVolume: text("monthly_volume").notNull(),
+      purpose: text("purpose").notNull(),
+      expectedSenders: text("expected_senders"),
+      declarations: jsonb("declarations").notNull(),
+      adminNotes: text("admin_notes"),
+      reviewedBy: varchar("reviewed_by").references(() => admins.id),
+      reviewedAt: timestamp("reviewed_at"),
+      createdAt: timestamp("created_at").defaultNow(),
+      updatedAt: timestamp("updated_at").defaultNow()
+    });
+    insertVirtualAccountSettingSchema = createInsertSchema(virtualAccountSettings).omit({ id: true, createdAt: true, updatedAt: true });
+    insertVirtualAccountApplicationSchema = createInsertSchema(virtualAccountApplications).omit({ id: true, status: true, adminNotes: true, reviewedBy: true, reviewedAt: true, createdAt: true, updatedAt: true });
   }
 });
 
@@ -748,24 +954,156 @@ function resolveConnectionString() {
     const port = PGPORT || "5432";
     return `postgresql://${PGUSER}:${encodeURIComponent(PGPASSWORD)}@${PGHOST}:${port}/${PGDATABASE}?sslmode=require`;
   }
-  throw new Error(
-    "No database connection configured. Set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE environment variables."
-  );
+  return null;
 }
 async function alterMissingColumns() {
   const migrations = [
+    // Multi-currency wallets table
+    `CREATE TABLE IF NOT EXISTS wallets (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      label TEXT,
+      balance DECIMAL(18,4) DEFAULT 0.0000,
+      hold_amount DECIMAL(18,4) DEFAULT 0.0000,
+      is_default BOOLEAN DEFAULT false,
+      is_active BOOLEAN DEFAULT true,
+      is_suspended BOOLEAN DEFAULT false,
+      suspend_reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `UPDATE wallets SET withdrawal_hold_amount = 0.0000 WHERE withdrawal_hold_amount IS NULL`,
+    // Migrate existing USD balances to wallets
+    `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+     SELECT id, 'USD', COALESCE(balance, 0), true, true FROM users
+     WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'USD')
+     ON CONFLICT DO NOTHING`,
+    // Migrate existing KES balances to wallets
+    `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
+     SELECT id, 'KES', COALESCE(kes_balance, 0), false, true FROM users
+     WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'KES')
+     ON CONFLICT DO NOTHING`,
+    // NexusPay API key in api_configurations table (safe fallback)
+    `INSERT INTO api_configurations (service_name, config_key, config_value, is_active) VALUES ('nexuspay', 'api_key', '""', true) ON CONFLICT (service_name, config_key) DO NOTHING`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS fcm_token TEXT`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS image_url TEXT`,
+    // Virtual cards table - auto-created on existing databases that predate card support
+    `CREATE TABLE IF NOT EXISTS virtual_cards (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      card_number TEXT NOT NULL,
+      expiry_date TEXT NOT NULL,
+      cvv TEXT NOT NULL,
+      balance DECIMAL(10,2) DEFAULT 0.00,
+      status TEXT DEFAULT 'active',
+      freeze_reason TEXT,
+      block_reason TEXT,
+      purchase_amount DECIMAL(10,2) DEFAULT 60.00,
+      paystack_reference TEXT,
+      purchase_date TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
-    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
+    // Admin-configured virtual account details shared by approved users
+    `CREATE TABLE IF NOT EXISTS virtual_account_settings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      currency TEXT NOT NULL UNIQUE,
+      account_name TEXT NOT NULL,
+      bank_name TEXT NOT NULL,
+      account_number TEXT NOT NULL,
+      routing_number TEXT,
+      sort_code TEXT,
+      iban TEXT,
+      swift_code TEXT,
+      bank_address TEXT,
+      beneficiary_address TEXT,
+      payment_instructions TEXT,
+      is_active BOOLEAN DEFAULT true,
+      updated_by VARCHAR REFERENCES admins(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // User applications for approved access to virtual account details
+    `CREATE TABLE IF NOT EXISTS virtual_account_applications (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      status TEXT DEFAULT 'pending',
+      source_of_income TEXT NOT NULL,
+      monthly_volume TEXT NOT NULL,
+      purpose TEXT NOT NULL,
+      expected_senders TEXT,
+      declarations JSONB NOT NULL,
+      admin_notes TEXT,
+      reviewed_by VARCHAR REFERENCES admins(id),
+      reviewed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS virtual_account_applications_user_currency_idx ON virtual_account_applications(user_id, currency)`,
+    // Deposit bonuses table (admin-configured bonus offers per deposit method)
+    `CREATE TABLE IF NOT EXISTS deposit_bonuses (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      method TEXT NOT NULL,
+      min_amount DECIMAL(18,2) NOT NULL DEFAULT 0,
+      bonus_amount DECIMAL(18,2) NOT NULL,
+      bonus_type TEXT NOT NULL DEFAULT 'fixed',
+      description TEXT,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // Advanced KYC documents table
+    `CREATE TABLE IF NOT EXISTS advanced_kyc_documents (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      facial_photo_url TEXT,
+      address_proof_url TEXT,
+      address_proof_type TEXT,
+      full_address TEXT,
+      city TEXT,
+      postal_code TEXT,
+      country TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      verification_notes TEXT,
+      verified_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    // Advanced KYC status column on users
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_status TEXT DEFAULT 'not_submitted'`,
+    // Admin-requested advanced KYC flag
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS advanced_kyc_requested BOOLEAN DEFAULT false`,
+    // Google OAuth
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT`,
+    // Didit.me KYC integration
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_session_id TEXT`,
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_status TEXT`,
+    `ALTER TABLE kyc_documents ADD COLUMN IF NOT EXISTS didit_decision JSONB`,
+    // KYC-extracted identity fields on users (auto-populated on verification)
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_full_name TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_date_of_birth TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_number TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_nationality TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_gender TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_address TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_document_type TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_expiry_date TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_issuing_country TEXT`
   ];
-  for (const sql3 of migrations) {
+  for (const sql4 of migrations) {
     try {
-      await pool.query(sql3);
+      await pool.query(sql4);
     } catch (err) {
-      console.warn(`\u26A0\uFE0F Migration skipped (${sql3.slice(0, 50)}...): ${err.message}`);
+      console.warn(`\u26A0\uFE0F Migration skipped (${sql4.slice(0, 50)}...): ${err.message}`);
     }
   }
 }
@@ -780,6 +1118,7 @@ async function tablesExist() {
   }
 }
 async function ensureSchema() {
+  if (!pool) return;
   const exists = await tablesExist();
   if (!exists) {
     console.warn('\u26A0\uFE0F  Database tables not found. If this is a fresh database, run "npm run db:push" manually to create the schema.');
@@ -795,11 +1134,8 @@ var init_db = __esm({
     init_schema();
     neonConfig.webSocketConstructor = ws;
     connectionString = resolveConnectionString();
-    if (!process.env.DATABASE_URL) {
-      process.env.DATABASE_URL = connectionString;
-    }
-    pool = new Pool({ connectionString });
-    db = drizzle({ client: pool, schema: schema_exports });
+    pool = connectionString ? new Pool({ connectionString }) : null;
+    db = connectionString ? drizzle({ client: pool, schema: schema_exports }) : null;
   }
 });
 
@@ -1116,7 +1452,14 @@ var init_storage = __esm({
         return card;
       }
       async getVirtualCardByUserId(userId) {
-        return Array.from(this.virtualCards.values()).find((card) => card.userId === userId);
+        const allCards = Array.from(this.virtualCards.values()).filter((card) => card.userId === userId).sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+        return allCards.find((c) => c.status === "active") || allCards[0];
+      }
+      async getVirtualCardsByUserId(userId) {
+        return Array.from(this.virtualCards.values()).filter((card) => card.userId === userId).sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+      }
+      async getVirtualCardById(id) {
+        return this.virtualCards.get(id);
       }
       async updateVirtualCard(id, updates) {
         const card = this.virtualCards.get(id);
@@ -1539,14 +1882,29 @@ var init_storage = __esm({
       async assignSupportTicket() {
         return void 0;
       }
-      async getSystemSetting() {
-        return void 0;
+      async getSystemSetting(category, key) {
+        return Array.from(this.systemSettings?.values?.() || []).find(
+          (s) => s.category === category && s.key === key
+        );
       }
-      async getSystemSettingsByCategory() {
-        return [];
+      async getSystemSettingsByCategory(category) {
+        return Array.from(this.systemSettings?.values?.() || []).filter(
+          (s) => s.category === category
+        );
       }
-      async setSystemSetting() {
-        throw new Error("Not implemented");
+      async setSystemSetting(setting) {
+        const id = randomUUID();
+        const existing = Array.from(this.systemSettings.values()).find(
+          (s) => s.category === setting.category && s.key === setting.key
+        );
+        if (existing) {
+          const updated = { ...existing, value: setting.value, updatedAt: /* @__PURE__ */ new Date() };
+          this.systemSettings.set(existing.id, updated);
+          return updated;
+        }
+        const newSetting = { id, ...setting, createdAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() };
+        this.systemSettings.set(id, newSetting);
+        return newSetting;
       }
       async updateUserOtp(id, otpCode, otpExpiry) {
         const user = this.users.get(id);
@@ -1722,7 +2080,14 @@ var init_storage = __esm({
         return card;
       }
       async getVirtualCardByUserId(userId) {
-        const [card] = await db.select().from(virtualCards).where(eq(virtualCards.userId, userId));
+        const allCards = await db.select().from(virtualCards).where(eq(virtualCards.userId, userId)).orderBy(desc(virtualCards.purchaseDate));
+        return allCards.find((c) => c.status === "active") || allCards[0] || void 0;
+      }
+      async getVirtualCardsByUserId(userId) {
+        return await db.select().from(virtualCards).where(eq(virtualCards.userId, userId)).orderBy(desc(virtualCards.purchaseDate));
+      }
+      async getVirtualCardById(id) {
+        const [card] = await db.select().from(virtualCards).where(eq(virtualCards.id, id));
         return card || void 0;
       }
       async updateVirtualCard(id, updates) {
@@ -1865,6 +2230,9 @@ var init_storage = __esm({
       }
       async getAllVirtualCards() {
         return await db.select().from(virtualCards).orderBy(desc(virtualCards.purchaseDate));
+      }
+      async getVirtualCardsByUserId(userId) {
+        return await db.select().from(virtualCards).where(eq(virtualCards.userId, userId)).orderBy(desc(virtualCards.purchaseDate));
       }
       async getUsersCount() {
         const result = await db.select({ count: count() }).from(users);
@@ -2230,7 +2598,7 @@ var init_storage = __esm({
         await db.delete(announcements).where(eq(announcements.id, id));
       }
     };
-    storage = new DatabaseStorage();
+    storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
     memStorage = new MemStorage();
   }
 });
@@ -2242,7 +2610,7 @@ __export(exchange_rate_exports, {
   createExchangeRateService: () => createExchangeRateService,
   exchangeRateService: () => exchangeRateService
 });
-import fetch2 from "node-fetch";
+import fetch3 from "node-fetch";
 var ExchangeRateService, createExchangeRateService, exchangeRateService;
 var init_exchange_rate = __esm({
   "server/services/exchange-rate.ts"() {
@@ -2282,7 +2650,7 @@ var init_exchange_rate = __esm({
         }
         try {
           const url = `${this.baseUrl}/${apiKey}/pair/${from}/${to}`;
-          const response = await fetch2(url);
+          const response = await fetch3(url);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
@@ -2314,7 +2682,7 @@ var init_exchange_rate = __esm({
         }
         try {
           const url = `${this.baseUrl}/${apiKey}/latest/${base}`;
-          const response = await fetch2(url);
+          const response = await fetch3(url);
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
@@ -2333,17 +2701,255 @@ var init_exchange_rate = __esm({
         }
       }
       getMultipleFallbackRates(base, targets) {
-        const fallbackRates = {
-          "KES": 129,
-          "USD": 77e-4
+        const usdRates = {
+          "KES": 129.5,
+          "EUR": 0.9215,
+          "GBP": 0.7891,
+          "NGN": 1601,
+          "GHS": 15.6,
+          "TZS": 2645,
+          "UGX": 3720,
+          "ZAR": 18.63,
+          "CAD": 1.3615,
+          "AUD": 1.543,
+          "JPY": 154.8,
+          "CNY": 7.241,
+          "INR": 83.45,
+          "AED": 3.6725,
+          "SAR": 3.75,
+          "USD": 1
         };
+        if (base === "USD") {
+          return Object.fromEntries(
+            targets.map((target) => [target, usdRates[target] ?? 1])
+          );
+        }
+        const baseToUsd = usdRates[base] ? 1 / usdRates[base] : 1;
         return Object.fromEntries(
-          targets.map((target) => [target, fallbackRates[target] || 1])
+          targets.map((target) => [target, parseFloat(((usdRates[target] ?? 1) * baseToUsd).toFixed(6))])
         );
       }
     };
     createExchangeRateService = (storage2) => new ExchangeRateService(storage2);
     exchangeRateService = new ExchangeRateService();
+  }
+});
+
+// server/services/mailtrap.ts
+var mailtrap_exports = {};
+__export(mailtrap_exports, {
+  MailtrapService: () => MailtrapService,
+  mailtrapService: () => mailtrapService2
+});
+import fetch7 from "node-fetch";
+var DEFAULT_TEMPLATE_UUIDs, MailtrapService, mailtrapService2;
+var init_mailtrap = __esm({
+  "server/services/mailtrap.ts"() {
+    "use strict";
+    init_storage();
+    DEFAULT_TEMPLATE_UUIDs = {
+      otp: "64254a5b-a2ba-4b7d-aa41-5a0907c836db",
+      password_reset: "97fe2c00-4cfd-433b-b262-25632cbdbed7",
+      welcome: "7711c72e-431b-4fb9-bea9-9738d4d8bfe7",
+      kyc_submitted: "dd087e67-8a7b-4bb8-9645-acbd61666d76",
+      kyc_verified: "c6353bf3-8e12-4852-8607-82223f49a4aa",
+      login_alert: "42ce5e3b-eed9-41aa-808c-cfecbd906e60",
+      fund_receipt: "5e2a2ec4-37fb-4178-96c4-598977065f9c",
+      card_activation: "a1b2c3d4-e5f6-4789-0123-456789abcdef",
+      transaction_export: "307e5609-66bb-4235-8653-27f0d5d74a39",
+      transaction_completed: "",
+      virtual_account_approved: ""
+    };
+    MailtrapService = class {
+      apiKey = null;
+      apiUrl = "https://send.api.mailtrap.io/api/send";
+      fromEmail = "support@greenpay.world";
+      fromName = "GreenPay";
+      constructor() {
+        this.apiKey = process.env.MAILTRAP_API_KEY || null;
+        this.loadApiKey().catch((err) => console.error("[Mailtrap] Background load error:", err));
+      }
+      async loadApiKey() {
+        try {
+          const setting = await storage.getSystemSetting("email", "mailtrap_api_key");
+          if (setting?.value) {
+            this.apiKey = setting.value;
+            process.env.MAILTRAP_API_KEY = setting.value;
+          } else {
+            this.apiKey = process.env.MAILTRAP_API_KEY || null;
+          }
+        } catch {
+          this.apiKey = process.env.MAILTRAP_API_KEY || null;
+        }
+      }
+      async refreshApiKey() {
+        await this.loadApiKey();
+      }
+      /**
+       * Get template UUID — checks DB first, falls back to hardcoded defaults
+       */
+      async getTemplateUuid(templateName) {
+        try {
+          const setting = await storage.getSystemSetting("email_templates", templateName);
+          if (setting?.value && setting.value.trim()) return setting.value.trim();
+        } catch {
+        }
+        return DEFAULT_TEMPLATE_UUIDs[templateName] || null;
+      }
+      /**
+       * Send email using Mailtrap template
+       */
+      async sendTemplate(toEmail, templateUuid, variables, attachments) {
+        try {
+          if (!this.apiKey) {
+            console.error("[Mailtrap] API key not configured");
+            return false;
+          }
+          if (!templateUuid) {
+            console.warn("[Mailtrap] Template UUID not configured \u2014 skipping email");
+            return false;
+          }
+          const payload = {
+            template_uuid: templateUuid,
+            template_variables: variables,
+            from: { email: this.fromEmail, name: this.fromName },
+            to: [{ email: toEmail }]
+          };
+          if (attachments?.length) payload.attachments = attachments;
+          const response = await fetch7(this.apiUrl, {
+            method: "POST",
+            headers: {
+              "Api-Token": this.apiKey,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
+          if (!response.ok) {
+            const error = await response.text();
+            console.error(`[Mailtrap] Send failed ${response.status}: ${error}`);
+            return false;
+          }
+          const result = await response.json();
+          if (result.success || result.message_id || result.messages) {
+            console.log(`[Mailtrap] \u2713 Sent template ${templateUuid} to ${toEmail}`);
+            return true;
+          }
+          console.warn("[Mailtrap] Unexpected response:", result);
+          return true;
+        } catch (error) {
+          console.error("[Mailtrap] Error:", error);
+          return false;
+        }
+      }
+      async sendOTP(toEmail, firstName, lastName, otp) {
+        const uuid = await this.getTemplateUuid("otp");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, otp });
+      }
+      async sendPasswordReset(toEmail, firstName, lastName, resetCode) {
+        const uuid = await this.getTemplateUuid("password_reset");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, reset_code: resetCode });
+      }
+      async sendWelcome(toEmail, firstName, lastName) {
+        const uuid = await this.getTemplateUuid("welcome");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+      }
+      async sendKYCSubmitted(toEmail, firstName, lastName) {
+        const uuid = await this.getTemplateUuid("kyc_submitted");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+      }
+      async sendKYCVerified(toEmail, firstName, lastName) {
+        const uuid = await this.getTemplateUuid("kyc_verified");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+      }
+      async sendLoginAlert(toEmail, firstName, lastName, location, ipAddress, device) {
+        const uuid = await this.getTemplateUuid("login_alert");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          location,
+          ip_address: ipAddress,
+          device
+        });
+      }
+      async sendFundReceipt(toEmail, firstName, lastName, amount, currency, sender) {
+        const uuid = await this.getTemplateUuid("fund_receipt");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          amount,
+          currency,
+          sender
+        });
+      }
+      async sendCardActivation(toEmail, firstName, lastName, cardLastFour) {
+        const uuid = await this.getTemplateUuid("card_activation");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          card_last_four: cardLastFour
+        });
+      }
+      async sendCustomTemplate(toEmail, templateUuid, variables) {
+        return this.sendTemplate(toEmail, templateUuid, variables);
+      }
+      async sendTransactionCompleted(toEmail, firstName, lastName, amount, currency, transactionType, transactionId, date) {
+        const uuid = await this.getTemplateUuid("transaction_completed");
+        if (!uuid) {
+          console.warn("[Mailtrap] transaction_completed template UUID not configured \u2014 skipping email");
+          return false;
+        }
+        const typeLabel = transactionType === "deposit" ? "Deposit" : transactionType === "withdraw" ? "Withdrawal" : transactionType === "send" ? "Transfer Sent" : transactionType === "receive" ? "Transfer Received" : "Transaction";
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          amount,
+          currency,
+          transaction_type: typeLabel,
+          transaction_id: transactionId,
+          status: "Completed",
+          date: date || (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+        });
+      }
+      async sendVirtualAccountApproved(toEmail, firstName, lastName, variables) {
+        const uuid = await this.getTemplateUuid("virtual_account_approved");
+        if (!uuid) {
+          console.warn("[Mailtrap] virtual_account_approved template UUID not configured \u2014 skipping email");
+          return false;
+        }
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
+      }
+      async sendTransactionExport(toEmail, firstName, lastName, attachments) {
+        const uuid = await this.getTemplateUuid("transaction_export");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
+      }
+      /** Return all template names and their current UUIDs (DB overrides + defaults) */
+      async getAllTemplateUuids() {
+        const result = {};
+        for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
+          try {
+            const setting = await storage.getSystemSetting("email_templates", name);
+            if (setting?.value?.trim()) {
+              result[name] = { uuid: setting.value.trim(), isCustom: true };
+            } else {
+              result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+            }
+          } catch {
+            result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+          }
+        }
+        return result;
+      }
+    };
+    mailtrapService2 = new MailtrapService();
   }
 });
 
@@ -3196,7 +3802,7 @@ __export(whatsapp_exports, {
   WhatsAppService: () => WhatsAppService,
   whatsappService: () => whatsappService
 });
-import fetch6 from "node-fetch";
+import fetch8 from "node-fetch";
 var WhatsAppService, whatsappService;
 var init_whatsapp = __esm({
   "server/services/whatsapp.ts"() {
@@ -3329,7 +3935,7 @@ Sent on: ${dateStr} at ${timeStr}
             }
           };
           console.log("[WhatsApp] Sending text message to", formattedPhone, ":", message);
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3419,7 +4025,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3491,7 +4097,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3570,7 +4176,7 @@ Sent on: ${dateStr} at ${timeStr}
             location,
             ipAddress
           });
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3659,7 +4265,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3719,7 +4325,7 @@ Sent on: ${dateStr} at ${timeStr}
               language: { code: "en_US" }
             }
           };
-          const response = await fetch6(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 KYC verified sent to ${phoneNumber}`);
@@ -3752,7 +4358,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: cardLastFour }] }]
             }
           };
-          const response = await fetch6(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Card activation sent to ${phoneNumber}`);
@@ -3785,7 +4391,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: currency }, { type: "text", text: amount }, { type: "text", text: sender }] }]
             }
           };
-          const response = await fetch6(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Fund receipt sent to ${phoneNumber}`);
@@ -3818,7 +4424,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: userName }] }]
             }
           };
-          const response = await fetch6(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Account creation notification sent to ${phoneNumber}`);
@@ -3874,7 +4480,7 @@ Sent on: ${dateStr} at ${timeStr}
             components: content
           };
           console.log(`[WhatsApp] Creating template "${templateName}"...`);
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -3968,7 +4574,7 @@ Sent on: ${dateStr} at ${timeStr}
             requiredParams: validation.required,
             parameters: paramArray
           });
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4260,7 +4866,7 @@ Sent on: ${dateStr} at ${timeStr}
           const wabaId = await this.getWabaId();
           if (!wabaId) return null;
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,status,language,category,components`;
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4300,7 +4906,7 @@ Sent on: ${dateStr} at ${timeStr}
           }
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?fields=name,status,language,category,components`;
           console.log(`[WhatsApp] Fetching templates from Meta...`);
-          const response = await fetch6(url, {
+          const response = await fetch8(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4343,221 +4949,13 @@ Sent on: ${dateStr} at ${timeStr}
   }
 });
 
-// server/services/mailtrap.ts
-var mailtrap_exports = {};
-__export(mailtrap_exports, {
-  MailtrapService: () => MailtrapService,
-  mailtrapService: () => mailtrapService2
-});
-import fetch7 from "node-fetch";
-var TEMPLATE_UUIDs, MailtrapService, mailtrapService2;
-var init_mailtrap = __esm({
-  "server/services/mailtrap.ts"() {
-    "use strict";
-    init_storage();
-    TEMPLATE_UUIDs = {
-      otp: "64254a5b-a2ba-4b7d-aa41-5a0907c836db",
-      password_reset: "97fe2c00-4cfd-433b-b262-25632cbdbed7",
-      welcome: "7711c72e-431b-4fb9-bea9-9738d4d8bfe7",
-      kyc_submitted: "dd087e67-8a7b-4bb8-9645-acbd61666d76",
-      kyc_verified: "c6353bf3-8e12-4852-8607-82223f49a4aa",
-      login_alert: "42ce5e3b-eed9-41aa-808c-cfecbd906e60",
-      fund_receipt: "5e2a2ec4-37fb-4178-96c4-598977065f9c",
-      card_activation: "a1b2c3d4-e5f6-4789-0123-456789abcdef",
-      transaction_export: "307e5609-66bb-4235-8653-27f0d5d74a39"
-    };
-    MailtrapService = class {
-      apiKey = null;
-      apiUrl = "https://send.api.mailtrap.io/api/send";
-      fromEmail = "support@greenpay.world";
-      fromName = "GreenPay";
-      initialized = false;
-      constructor() {
-        this.apiKey = process.env.MAILTRAP_API_KEY || "3aac21f265f8750724b1d9bfeff9a712";
-        console.log("[Mailtrap] \u2713 Service initialized with API key");
-        this.loadApiKey().catch((err) => console.error("[Mailtrap] Background load error:", err));
-      }
-      /**
-       * Load Mailtrap API key from database or environment
-       */
-      async loadApiKey() {
-        try {
-          const setting = await storage.getSystemSetting("email", "mailtrap_api_key");
-          if (setting?.value) {
-            this.apiKey = setting.value;
-            process.env.MAILTRAP_API_KEY = setting.value;
-            console.log("[Mailtrap] \u2713 API key loaded from database");
-          } else {
-            this.apiKey = process.env.MAILTRAP_API_KEY || "3aac21f265f8750724b1d9bfeff9a712";
-            if (process.env.MAILTRAP_API_KEY) {
-              console.log("[Mailtrap] \u2713 API key loaded from environment");
-            } else {
-              console.log("[Mailtrap] \u2713 Using default API key");
-            }
-          }
-          this.initialized = true;
-        } catch (error) {
-          console.error("[Mailtrap] Error loading API key:", error);
-          this.apiKey = process.env.MAILTRAP_API_KEY || "3aac21f265f8750724b1d9bfeff9a712";
-        }
-      }
-      /**
-       * Refresh API key when settings are updated
-       */
-      async refreshApiKey() {
-        console.log("[Mailtrap] Refreshing API key...");
-        await this.loadApiKey();
-      }
-      /**
-       * Send email using Mailtrap template with optional attachments
-       */
-      async sendTemplate(toEmail, templateUuid, variables, attachments) {
-        try {
-          if (!this.apiKey) {
-            console.error("[Mailtrap] \u2717 API key not configured");
-            return false;
-          }
-          const payload = {
-            template_uuid: templateUuid,
-            template_variables: variables,
-            from: {
-              email: this.fromEmail,
-              name: this.fromName
-            },
-            to: [
-              { email: toEmail }
-            ]
-          };
-          if (attachments && attachments.length > 0) {
-            payload.attachments = attachments;
-          }
-          console.log(`[Mailtrap] Sending template ${templateUuid} to ${toEmail}${attachments ? " with attachments" : ""}`);
-          const response = await fetch7(this.apiUrl, {
-            method: "POST",
-            headers: {
-              "Api-Token": this.apiKey,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify(payload)
-          });
-          if (!response.ok) {
-            const error = await response.text();
-            console.error(`[Mailtrap] \u2717 Send failed: ${response.status} - ${error}`);
-            return false;
-          }
-          const result = await response.json();
-          console.log(`[Mailtrap] \u2713 Full Response:`, JSON.stringify(result, null, 2));
-          if (result.success || result.message_id || result.messages) {
-            console.log(`[Mailtrap] \u2713 Email sent successfully - Response: ${JSON.stringify(result)}`);
-            return true;
-          } else {
-            console.warn(`[Mailtrap] \u26A0\uFE0F Unexpected response format:`, result);
-            return true;
-          }
-        } catch (error) {
-          console.error("[Mailtrap] Error sending email:", error);
-          return false;
-        }
-      }
-      /**
-       * Send OTP verification email
-       */
-      async sendOTP(toEmail, firstName, lastName, otp) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.otp, {
-          first_name: firstName,
-          last_name: lastName,
-          otp
-        });
-      }
-      /**
-       * Send password reset email
-       */
-      async sendPasswordReset(toEmail, firstName, lastName, resetCode) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.password_reset, {
-          first_name: firstName,
-          last_name: lastName,
-          reset_code: resetCode
-        });
-      }
-      /**
-       * Send welcome email
-       */
-      async sendWelcome(toEmail, firstName, lastName) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.welcome, {
-          first_name: firstName,
-          last_name: lastName
-        });
-      }
-      /**
-       * Send KYC submitted notification
-       */
-      async sendKYCSubmitted(toEmail, firstName, lastName) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.kyc_submitted, {
-          first_name: firstName,
-          last_name: lastName
-        });
-      }
-      /**
-       * Send KYC verified notification
-       */
-      async sendKYCVerified(toEmail, firstName, lastName) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.kyc_verified, {
-          first_name: firstName,
-          last_name: lastName
-        });
-      }
-      /**
-       * Send login alert email
-       */
-      async sendLoginAlert(toEmail, firstName, lastName, location, ipAddress, device) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.login_alert, {
-          first_name: firstName,
-          last_name: lastName,
-          location,
-          ip_address: ipAddress,
-          device
-        });
-      }
-      /**
-       * Send fund receipt notification email
-       */
-      async sendFundReceipt(toEmail, firstName, lastName, amount, currency, sender) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.fund_receipt, {
-          first_name: firstName,
-          last_name: lastName,
-          amount,
-          currency,
-          sender
-        });
-      }
-      /**
-       * Send card activation notification email
-       */
-      async sendCardActivation(toEmail, firstName, lastName, cardLastFour) {
-        return this.sendTemplate(toEmail, TEMPLATE_UUIDs.card_activation, {
-          first_name: firstName,
-          last_name: lastName,
-          card_last_four: cardLastFour
-        });
-      }
-      /**
-       * Admin: Send custom template to user
-       */
-      async sendCustomTemplate(toEmail, templateUuid, variables) {
-        return this.sendTemplate(toEmail, templateUuid, variables);
-      }
-    };
-    mailtrapService2 = new MailtrapService();
-  }
-});
-
 // server/services/messaging.ts
 var messaging_exports = {};
 __export(messaging_exports, {
   MessagingService: () => MessagingService,
   messagingService: () => messagingService2
 });
-import fetch8 from "node-fetch";
+import fetch9 from "node-fetch";
 var MessagingService, messagingService2;
 var init_messaging = __esm({
   "server/services/messaging.ts"() {
@@ -4566,110 +4964,116 @@ var init_messaging = __esm({
     init_email();
     init_whatsapp();
     MessagingService = class {
-      SMS_URL = "https://comms.umeskiasoftwares.com/api/v1/sms/send";
-      MAX_MESSAGE_LENGTH = 160;
-      MESSAGE_PREFIX = "[Greenpay] ";
+      SMS_URL = "https://sms.paygrid.co.ke/api/sms/send";
+      MESSAGE_PREFIX = "[GREENPAY] ";
       /**
-       * Get messaging credentials from system settings
+       * Get messaging credentials from system settings (CommsGrid)
        */
       async getCredentials() {
         try {
           const settings = await storage.getSystemSettingsByCategory("messaging");
-          let apiKey = settings.find((s) => s.key === "sms_api_key")?.value;
-          let appId = settings.find((s) => s.key === "sms_app_id")?.value;
-          let senderId = settings.find((s) => s.key === "sms_sender_id")?.value;
-          apiKey = apiKey || process.env.SMS_API_KEY || "";
-          appId = appId || process.env.SMS_APP_ID || "";
-          senderId = senderId || process.env.SMS_SENDER_ID || "UMS_TX";
-          if (!apiKey || !appId || !senderId) {
-            console.warn("SMS messaging credentials not fully configured (settings or env)");
+          let apiKey = settings.find((s) => s.key === "commsGrid_api_key")?.value;
+          let senderId = settings.find((s) => s.key === "commsGrid_sender_id")?.value;
+          let deviceId = settings.find((s) => s.key === "commsGrid_device_id")?.value;
+          apiKey = apiKey || process.env.COMMSGRID_API_KEY || process.env.SMS_API_KEY || "";
+          senderId = senderId || process.env.COMMSGRID_SENDER_ID || process.env.SMS_SENDER_ID || "GREENPAY";
+          deviceId = deviceId || process.env.COMMSGRID_DEVICE_ID || void 0;
+          if (!apiKey || !senderId) {
+            console.warn("[SMS] CommsGrid credentials not fully configured");
             return null;
           }
-          return { apiKey, appId, senderId };
+          return { apiKey, senderId, deviceId };
         } catch (error) {
-          console.error("Error fetching messaging credentials:", error);
+          console.error("[SMS] Error fetching credentials:", error);
           return null;
         }
       }
       /**
-       * Format phone number to Kenya format without + (254XXXXXXXXX)
-       * Handles: +254xxx, 00254xxx, 0xxx, 254xxx, 7xxx, 1xxx
-       * Returns phone without + prefix for SMS API compatibility
+       * Format phone number to international format (254XXXXXXXXX)
        */
       formatPhoneNumber(phone) {
-        let cleaned = phone.replace(/[\s-()]/g, "");
-        if (cleaned.startsWith("00")) {
-          cleaned = cleaned.substring(2);
-        }
-        if (cleaned.startsWith("+")) {
-          cleaned = cleaned.substring(1);
-        }
-        if (cleaned.startsWith("254")) {
-          return cleaned;
-        } else if (cleaned.startsWith("0")) {
-          return "254" + cleaned.substring(1);
-        } else if (cleaned.length === 9 && (cleaned.startsWith("7") || cleaned.startsWith("1"))) {
-          return "254" + cleaned;
-        }
-        return cleaned.startsWith("254") ? cleaned : "254" + cleaned;
+        let cleaned = phone.replace(/[\s\-()]/g, "");
+        if (cleaned.startsWith("00")) cleaned = cleaned.substring(2);
+        if (cleaned.startsWith("+")) cleaned = cleaned.substring(1);
+        if (cleaned.startsWith("254") && cleaned.length >= 12) return cleaned;
+        if (cleaned.startsWith("0") && cleaned.length === 10) return "254" + cleaned.substring(1);
+        if (cleaned.length === 9 && (cleaned.startsWith("7") || cleaned.startsWith("1"))) return "254" + cleaned;
+        if (cleaned.length >= 10) return cleaned;
+        return cleaned;
       }
       /**
-       * Truncate message to fit within character limit (including prefix)
+       * Prepend [GREENPAY] prefix and trim if needed
        */
       formatMessage(message) {
-        const fullMessage = this.MESSAGE_PREFIX + message;
-        if (fullMessage.length > this.MAX_MESSAGE_LENGTH) {
-          const availableLength = this.MAX_MESSAGE_LENGTH - this.MESSAGE_PREFIX.length - 3;
-          return this.MESSAGE_PREFIX + message.substring(0, availableLength) + "...";
-        }
-        return fullMessage;
+        return this.MESSAGE_PREFIX + message;
       }
       /**
-       * Send SMS message
+       * Core SMS send via CommsGrid API
        */
       async sendSMS(phone, message, credentials) {
         try {
           const formattedPhone = this.formatPhoneNumber(phone);
           const formattedMessage = this.formatMessage(message);
-          const response = await fetch8(this.SMS_URL, {
+          const body = {
+            recipient: [formattedPhone],
+            message: formattedMessage,
+            sender_id: credentials.senderId
+          };
+          if (credentials.deviceId) {
+            body.device_id = credentials.deviceId;
+          }
+          const response = await fetch9(this.SMS_URL, {
             method: "POST",
             headers: {
-              "Content-Type": "application/json"
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${credentials.apiKey}`,
+              "Accept": "application/json"
             },
-            body: JSON.stringify({
-              api_key: credentials.apiKey,
-              app_id: credentials.appId,
-              sender_id: credentials.senderId,
-              phone: formattedPhone,
-              message: formattedMessage
-            })
+            body: JSON.stringify(body)
           });
           const result = await response.json();
-          if (result.status_code === 200 || result.status_code === 0) {
-            console.log(`SMS sent successfully to ${formattedPhone}`);
+          if (result.status === "success") {
+            console.log(`[SMS] Sent to ${formattedPhone} \u2014 cost: ${result.data?.cost ?? "N/A"}`);
             return true;
           } else {
-            console.error(`SMS send failed: ${result.message}`);
+            console.error(`[SMS] Send failed: ${result.message}`);
             return false;
           }
         } catch (error) {
-          console.error("SMS sending error:", error);
+          console.error("[SMS] Sending error:", error);
           return false;
         }
+      }
+      /**
+       * Send SMS to multiple recipients (admin broadcast)
+       */
+      async sendSMSToMultiple(phones, message) {
+        const credentials = await this.getCredentials();
+        if (!credentials) {
+          console.warn("[SMS] No credentials configured for bulk send");
+          return { sent: 0, failed: phones.length };
+        }
+        let sent = 0;
+        let failed = 0;
+        await Promise.all(
+          phones.map(async (phone) => {
+            const ok = await this.sendSMS(phone, message, credentials);
+            if (ok) sent++;
+            else failed++;
+          })
+        );
+        return { sent, failed };
       }
       /**
        * Send WhatsApp message via Meta WhatsApp Business API
        */
       async sendWhatsApp(phone, message) {
         try {
-          if (!whatsappService.isConfigured()) {
-            console.warn("WhatsApp Business API not configured");
-            return false;
-          }
+          if (!whatsappService.isConfigured()) return false;
           const formattedMessage = this.formatMessage(message);
           return await whatsappService.sendTextMessage(phone, formattedMessage);
         } catch (error) {
-          console.error("WhatsApp sending error:", error);
+          console.error("[WhatsApp] Sending error:", error);
           return false;
         }
       }
@@ -4679,254 +5083,297 @@ var init_messaging = __esm({
       async sendAdminChatNotification(userId) {
         try {
           const user = await storage.getUser(userId);
-          const userName = user?.fullName || user?.firstName || "A user";
+          const userName = user?.fullName || "A user";
           const adminPhones = ["+254741855218", "+254794967351"];
-          const credentials = await this["getCredentials"]();
-          if (!credentials) {
-            console.warn("Admin chat notification skipped: credentials missing");
-            return;
-          }
-          const notification = `[Admin] ${userName} has started a new live chat. Please attend to them.`;
+          const credentials = await this.getCredentials();
+          if (!credentials) return;
+          const notification = `${userName} has started a new live chat. Please attend to them.`;
           await Promise.all(adminPhones.map(
-            (phone) => this["sendSMS"](phone, notification, credentials).catch((err) => console.error(`Failed to send admin SMS to ${phone}:`, err))
+            (phone) => this.sendSMS(phone, notification, credentials).catch(
+              (err) => console.error(`[SMS] Failed to send admin SMS to ${phone}:`, err)
+            )
           ));
         } catch (error) {
-          console.error("Error sending admin chat notification:", error);
+          console.error("[SMS] Error sending admin chat notification:", error);
         }
       }
       /**
-       * Send message concurrently via SMS and WhatsApp
+       * Send message via SMS + WhatsApp concurrently
        */
       async sendMessage(phone, message) {
         const credentials = await this.getCredentials();
-        let smsResult = false;
-        let whatsappResult = false;
-        if (credentials) {
-          smsResult = await this.sendSMS(phone, message, credentials);
-        } else {
-          console.warn("SMS credentials not configured, skipping SMS");
-        }
-        whatsappResult = await this.sendWhatsApp(phone, message);
+        const [smsResult, whatsappResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, message, credentials) : Promise.resolve(false),
+          this.sendWhatsApp(phone, message)
+        ]);
+        if (!credentials) console.warn("[SMS] Skipped: credentials not configured");
         return { sms: smsResult, whatsapp: whatsappResult };
       }
       /**
-       * Send message to all channels (SMS, WhatsApp, and Email)
-       */
-      async sendMultiChannelMessage(phone, email, message) {
-        const credentials = await this.getCredentials();
-        const results = {
-          sms: false,
-          whatsapp: false,
-          email: false
-        };
-        if (credentials) {
-          results.sms = await this.sendSMS(phone, message, credentials);
-        } else {
-          console.warn("SMS credentials not configured, skipping SMS");
-        }
-        results.whatsapp = await this.sendWhatsApp(phone, message);
-        if (email) {
-          console.log("Email will be sent via specialized emailService methods");
-          results.email = true;
-        }
-        return results;
-      }
-      /**
-       * Send OTP verification code via SMS, WhatsApp (template), and Email (CONCURRENT)
+       * Send OTP via SMS + WhatsApp + Email (concurrent)
        */
       async sendOTP(phone, otpCode, email, userName) {
-        console.log(`[OTP] Starting OTP send for phone: ${phone}`);
+        console.log(`[OTP] Sending to phone: ${phone}`);
         const enableSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
-        console.log(`[OTP] enable_otp_messages setting:`, enableSetting?.value || "not set (will allow)");
         if (enableSetting?.value === "false") {
-          console.log("[OTP] OTP messages disabled, skipping send");
+          console.log("[OTP] Disabled by setting");
           return { sms: false, whatsapp: false, email: false };
         }
         const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
         const credentials = await this.getCredentials();
-        console.log(`[OTP] SMS credentials available: ${!!credentials}`);
         const firstName = userName?.split(" ")[0] || "User";
         const lastName = userName?.split(" ").slice(1).join(" ") || "";
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your verification code is ${otpCode}. Valid for 10 minutes.`, credentials) : (console.log("[OTP] SMS skipped: credentials missing"), Promise.resolve(false)),
-          whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : (console.log("[OTP] WhatsApp skipped: not configured"), Promise.resolve(false)),
-          email ? mailtrapService3.sendOTP(email, firstName, lastName, otpCode) : (console.log("[OTP] Email skipped: no email or service down"), Promise.resolve(false))
+          credentials ? this.sendSMS(phone, `Your GreenPay verification code is ${otpCode}. Valid for 10 minutes. Do not share with anyone.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : Promise.resolve(false),
+          email ? mailtrapService3.sendOTP(email, firstName, lastName, otpCode) : Promise.resolve(false)
         ]);
-        console.log(`[OTP] Send results - SMS: ${smsResult}, WhatsApp: ${whatsappResult}, Email: ${emailResult}`);
+        console.log(`[OTP] Results \u2014 SMS: ${smsResult}, WA: ${whatsappResult}, Email: ${emailResult}`);
         return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
-       * Send password reset code via SMS, WhatsApp (template), and Email (CONCURRENT)
+       * Send login alert via SMS + WhatsApp + Email
+       */
+      async sendLoginAlert(phone, location, ip, email, userName) {
+        const enableSetting = await storage.getSystemSetting("messaging", "enable_login_alert_messages");
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
+        const timestamp2 = (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });
+        const credentials = await this.getCredentials();
+        const [smsResult, whatsappResult, emailResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `New login to your GreenPay account from ${location} (IP: ${ip}). Not you? Contact support immediately.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendLoginAlert(phone, location, ip) : Promise.resolve(false),
+          email ? emailService.sendLoginAlert(email, location, ip, timestamp2, userName) : Promise.resolve(false)
+        ]);
+        return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
+      }
+      /**
+       * Send password reset via SMS + WhatsApp + Email
        */
       async sendPasswordReset(phone, resetCode, email, userName) {
         const enableSetting = await storage.getSystemSetting("messaging", "enable_password_reset_messages");
-        if (enableSetting?.value === "false") {
-          return { sms: false, whatsapp: false, email: false };
-        }
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
         const credentials = await this.getCredentials();
         const firstName = userName?.split(" ")[0] || "User";
         const lastName = userName?.split(" ").slice(1).join(" ") || "";
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your password reset code is ${resetCode}. Valid for 10 minutes.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Your GreenPay password reset code is ${resetCode}. Valid for 10 minutes.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendPasswordReset(phone, resetCode) : Promise.resolve(false),
           email ? mailtrapService3.sendPasswordReset(email, firstName, lastName, resetCode) : Promise.resolve(false)
         ]);
         return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
-       * Send fund receipt notification via SMS, WhatsApp (template), and Email
+       * Send fund receipt via SMS + WhatsApp + Email
        */
       async sendFundReceipt(phone, amount, currency, sender, email, userName) {
         const enableSetting = await storage.getSystemSetting("messaging", "enable_fund_receipt_messages");
-        if (enableSetting?.value === "false") {
-          return { sms: false, whatsapp: false, email: false };
-        }
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
-        let smsResult = false;
-        let whatsappResult = false;
-        if (credentials) {
-          const message = `You received ${currency} ${amount} from ${sender}. Check your account.`;
-          smsResult = await this.sendSMS(phone, message, credentials);
-        }
-        if (whatsappService.isConfigured()) {
-          whatsappResult = await whatsappService.sendFundReceipt(phone, amount, currency, sender);
-        }
-        let emailResult = false;
-        if (email) {
-          emailResult = await emailService.sendFundReceipt(email, amount, currency, sender, userName);
-        }
+        const [smsResult, whatsappResult, emailResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `You received ${currency} ${amount} from ${sender}. Your GreenPay balance has been updated.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendFundReceipt(phone, amount, currency, sender) : Promise.resolve(false),
+          email ? emailService.sendFundReceipt(email, amount, currency, sender, userName) : Promise.resolve(false)
+        ]);
         return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
-       * Send login alert with location and IP via SMS, WhatsApp (template), and Email
+       * Send deposit confirmation via SMS
        */
-      async sendLoginAlert(phone, location, ip, email, userName) {
-        const enableSetting = await storage.getSystemSetting("messaging", "enable_login_alert_messages");
-        if (enableSetting?.value === "false") {
-          return { sms: false, whatsapp: false, email: false };
-        }
-        const timestamp2 = (/* @__PURE__ */ new Date()).toLocaleString("en-US", {
-          dateStyle: "long",
-          timeStyle: "short"
-        });
+      async sendDepositConfirmation(phone, amount, currency, method, email, userName) {
+        const enableSetting = await storage.getSystemSetting("messaging", "enable_deposit_messages");
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
-        let smsResult = false;
-        let whatsappResult = false;
-        if (credentials) {
-          const message = `New login from ${location} (IP: ${ip}). Not you? Contact support.`;
-          smsResult = await this.sendSMS(phone, message, credentials);
-        }
-        if (whatsappService.isConfigured()) {
-          whatsappResult = await whatsappService.sendLoginAlert(phone, location, ip);
-        }
-        let emailResult = false;
-        if (email) {
-          emailResult = await emailService.sendLoginAlert(email, location, ip, timestamp2, userName);
-        }
-        return {
-          sms: smsResult,
-          whatsapp: whatsappResult,
-          email: emailResult
-        };
+        const [smsResult, whatsappResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `Deposit of ${currency} ${amount} via ${method} was successful. Your GreenPay account has been credited.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendTextMessage(phone, this.formatMessage(`Deposit of ${currency} ${amount} via ${method} successful. Account credited.`)) : Promise.resolve(false)
+        ]);
+        return { sms: smsResult, whatsapp: whatsappResult, email: false };
       }
       /**
-       * Send KYC verified notification via SMS, WhatsApp (template), and Email
+       * Send withdrawal notification via SMS + WhatsApp + Email
        */
-      async sendKYCVerified(phone, email, userName) {
-        const enableSetting = await storage.getSystemSetting("messaging", "enable_kyc_verified_messages");
-        if (enableSetting?.value === "false") {
-          return { sms: false, whatsapp: false, email: false };
-        }
+      async sendWithdrawalNotification(phone, amount, currency, destination, status, email, userName) {
+        const enableSetting = await storage.getSystemSetting("messaging", "enable_withdrawal_messages");
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
-        let smsResult = false;
-        let whatsappResult = false;
-        if (credentials) {
-          const message = `Your account is now verified! You can now access all features.`;
-          smsResult = await this.sendSMS(phone, message, credentials);
-        }
-        if (whatsappService.isConfigured()) {
-          whatsappResult = await whatsappService.sendKYCVerified(phone);
-        }
-        let emailResult = false;
-        if (email && userName) {
-          emailResult = await emailService.sendKYCVerified(email, userName);
-        }
-        return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
+        const [smsResult, whatsappResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `Withdrawal of ${currency} ${amount} to ${destination} is ${status}. Check your GreenPay account for details.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendTextMessage(phone, this.formatMessage(`Withdrawal of ${currency} ${amount} is ${status}.`)) : Promise.resolve(false)
+        ]);
+        return { sms: smsResult, whatsapp: whatsappResult, email: false };
       }
       /**
-       * Old sendKYCVerified method - kept for now, replaced above
-       */
-      async sendKYCVerifiedOld(phone, email, userName) {
-        const message = `Your account is now verified! You can now access all features.`;
-        const mobileResult = await this.sendMessage(phone, message);
-        let emailResult = false;
-        if (email && userName) {
-          emailResult = await emailService.sendKYCVerified(email, userName);
-        }
-        return {
-          sms: mobileResult.sms,
-          whatsapp: mobileResult.whatsapp,
-          email: emailResult
-        };
-      }
-      /**
-       * Send card activation notification via SMS, WhatsApp (template), and Email
+       * Send card issued/activated notification
        */
       async sendCardActivation(phone, cardLastFour, email, userName) {
         const enableSetting = await storage.getSystemSetting("messaging", "enable_card_activation_messages");
-        if (enableSetting?.value === "false") {
-          return { sms: false, whatsapp: false, email: false };
-        }
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
-        let smsResult = false;
-        let whatsappResult = false;
-        if (credentials) {
-          const message = `Your virtual card ending in ${cardLastFour} is now active!`;
-          smsResult = await this.sendSMS(phone, message, credentials);
-        }
-        if (whatsappService.isConfigured()) {
-          whatsappResult = await whatsappService.sendCardActivation(phone, cardLastFour);
-        }
-        let emailResult = false;
-        if (email) {
-          emailResult = await emailService.sendCardActivation(email, cardLastFour, userName);
-        }
+        const [smsResult, whatsappResult, emailResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `Your GreenPay virtual card ending in ${cardLastFour} has been issued and is now active. Use it for online payments worldwide.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendCardActivation(phone, cardLastFour) : Promise.resolve(false),
+          email ? emailService.sendCardActivation(email, cardLastFour, userName) : Promise.resolve(false)
+        ]);
         return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
-       * Send transaction notification via SMS, WhatsApp, and Email
+       * Send KYC verified notification
        */
-      async sendTransactionNotification(phone, type, amount, currency, status, transactionId, email, userName) {
-        const action = type === "withdraw" ? "Withdrawal" : type === "send" ? "Transfer" : "Transaction";
-        const message = `${action} of ${currency} ${amount} ${status}. Check your account for details.`;
-        const mobileResult = await this.sendMessage(phone, message);
-        let emailResult = false;
-        if (email && transactionId) {
-          emailResult = await emailService.sendTransactionNotification(
-            email,
-            type,
-            amount,
-            currency,
-            status,
-            transactionId,
-            userName
-          );
-        }
-        return {
-          sms: mobileResult.sms,
-          whatsapp: mobileResult.whatsapp,
-          email: emailResult
-        };
+      async sendKYCVerified(phone, email, userName) {
+        const enableSetting = await storage.getSystemSetting("messaging", "enable_kyc_verified_messages");
+        if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
+        const credentials = await this.getCredentials();
+        const [smsResult, whatsappResult, emailResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, `Your GreenPay account is now verified! You have full access to all platform features.`, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendKYCVerified(phone) : Promise.resolve(false),
+          email && userName ? emailService.sendKYCVerified(email, userName) : Promise.resolve(false)
+        ]);
+        return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
       }
       /**
-       * Generate 6-digit OTP code
+       * Send transaction notification (send/receive/general)
+       */
+      async sendTransactionNotification(phone, type, amount, currency, status, transactionId, email, userName) {
+        const action = type === "withdraw" ? "Withdrawal" : type === "send" ? "Transfer sent" : type === "receive" ? "Transfer received" : "Transaction";
+        const message = `${action} of ${currency} ${amount} \u2014 Status: ${status}. Ref: ${transactionId || "N/A"}`;
+        const credentials = await this.getCredentials();
+        const [smsResult, whatsappResult, emailResult] = await Promise.all([
+          credentials ? this.sendSMS(phone, message, credentials) : Promise.resolve(false),
+          whatsappService.isConfigured() ? whatsappService.sendTextMessage(phone, this.formatMessage(message)) : Promise.resolve(false),
+          email && transactionId ? emailService.sendTransactionNotification(email, type, amount, currency, status, transactionId, userName) : Promise.resolve(false)
+        ]);
+        return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
+      }
+      /**
+       * Generate 6-digit OTP
        */
       generateOTP() {
         return Math.floor(1e5 + Math.random() * 9e5).toString();
       }
     };
     messagingService2 = new MessagingService();
+  }
+});
+
+// server/services/didit.ts
+var didit_exports = {};
+__export(didit_exports, {
+  createDiditSession: () => createDiditSession,
+  getSessionDecision: () => getSessionDecision,
+  isDiditConfigured: () => isDiditConfigured,
+  isTerminalStatus: () => isTerminalStatus,
+  mapDiditStatusToKyc: () => mapDiditStatusToKyc,
+  verifyWebhookSignature: () => verifyWebhookSignature
+});
+import fetch10 from "node-fetch";
+import crypto from "crypto";
+function getApiKey() {
+  return process.env.DIDIT_API_KEY || null;
+}
+function getWorkflowId() {
+  return process.env.DIDIT_WORKFLOW_ID || null;
+}
+function mapDiditStatusToKyc(diditStatus) {
+  switch (diditStatus) {
+    case "Approved":
+      return "verified";
+    case "Declined":
+      return "rejected";
+    case "Expired":
+    case "Abandoned":
+    case "Kyc Expired":
+      return "rejected";
+    case "In Review":
+    case "Awaiting User":
+    case "Resubmitted":
+    case "In Progress":
+    case "Not Started":
+    default:
+      return "pending";
+  }
+}
+function isTerminalStatus(diditStatus) {
+  return ["Approved", "Declined", "Expired", "Abandoned", "Kyc Expired"].includes(diditStatus);
+}
+async function createDiditSession(userId, callbackUrl) {
+  const apiKey = getApiKey();
+  const workflowId = getWorkflowId();
+  if (!apiKey || !workflowId) {
+    console.error("[Didit] Missing DIDIT_API_KEY or DIDIT_WORKFLOW_ID environment variables");
+    return null;
+  }
+  try {
+    const response = await fetch10(`${DIDIT_BASE_URL}/v3/session/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey
+      },
+      body: JSON.stringify({
+        workflow_id: workflowId,
+        vendor_data: userId,
+        callback: callbackUrl,
+        callback_method: "both"
+      })
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[Didit] Session creation failed (${response.status}):`, error);
+      return null;
+    }
+    const session2 = await response.json();
+    console.log(`[Didit] Session created: ${session2.session_id} for user ${userId}`);
+    return session2;
+  } catch (error) {
+    console.error("[Didit] Session creation error:", error);
+    return null;
+  }
+}
+async function getSessionDecision(sessionId) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.error("[Didit] Missing DIDIT_API_KEY");
+    return null;
+  }
+  try {
+    const response = await fetch10(`${DIDIT_BASE_URL}/v3/session/${sessionId}/decision/`, {
+      method: "GET",
+      headers: {
+        "x-api-key": apiKey
+      }
+    });
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`[Didit] Decision fetch failed (${response.status}):`, error);
+      return null;
+    }
+    const decision = await response.json();
+    return decision;
+  } catch (error) {
+    console.error("[Didit] Decision fetch error:", error);
+    return null;
+  }
+}
+function verifyWebhookSignature(payload, signature, secret) {
+  try {
+    const expectedSig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
+    return crypto.timingSafeEqual(
+      Buffer.from(signature),
+      Buffer.from(expectedSig)
+    );
+  } catch {
+    return false;
+  }
+}
+function isDiditConfigured() {
+  return !!(process.env.DIDIT_API_KEY && process.env.DIDIT_WORKFLOW_ID);
+}
+var DIDIT_BASE_URL;
+var init_didit = __esm({
+  "server/services/didit.ts"() {
+    "use strict";
+    DIDIT_BASE_URL = "https://verification.didit.me";
   }
 });
 
@@ -4952,7 +5399,7 @@ function getCurrencySymbol(currency) {
     case "USD":
       return "$";
     default:
-      return "$";
+      return upper ? upper + " " : "";
   }
 }
 async function generateTransactionPDF(transactions2, userData) {
@@ -4990,15 +5437,17 @@ async function generateTransactionPDF(transactions2, userData) {
   if (userData.email) {
     doc.text(`Email: ${userData.email}`, 14, 77);
   }
-  const usdTransactions = transactions2.filter((t) => t.currency?.toUpperCase() !== "KES");
-  const kesTransactions = transactions2.filter((t) => t.currency?.toUpperCase() === "KES");
-  const totalUsdIn = usdTransactions.filter((t) => (t.type === "receive" || t.type === "deposit") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
-  const totalUsdOut = usdTransactions.filter((t) => (t.type === "send" || t.type === "withdraw" || t.type === "card_purchase") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
-  const totalKesIn = kesTransactions.filter((t) => (t.type === "receive" || t.type === "deposit") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
-  const totalKesOut = kesTransactions.filter((t) => (t.type === "send" || t.type === "withdraw" || t.type === "card_purchase") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
+  const currencies = [...new Set(transactions2.map((t) => t.currency?.toUpperCase() || "USD"))];
+  const currencyStats = currencies.map((cur) => {
+    const curTxns = transactions2.filter((t) => (t.currency?.toUpperCase() || "USD") === cur);
+    const totalIn = curTxns.filter((t) => (t.type === "receive" || t.type === "deposit") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
+    const totalOut = curTxns.filter((t) => (t.type === "send" || t.type === "withdraw" || t.type === "card_purchase") && t.status === "completed").reduce((sum2, t) => sum2 + parseFloat(t.amount), 0);
+    return { cur, sym: getCurrencySymbol(cur), totalIn, totalOut };
+  });
+  const summaryBoxH = Math.max(35, 20 + currencyStats.length * 8);
   doc.setDrawColor(greenColor[0], greenColor[1], greenColor[2]);
   doc.setLineWidth(0.5);
-  doc.rect(14, 85, pageWidth - 28, 35);
+  doc.rect(14, 85, pageWidth - 28, summaryBoxH);
   doc.setFontSize(9);
   doc.setFont("helvetica", "bold");
   doc.setTextColor(darkColor[0], darkColor[1], darkColor[2]);
@@ -5006,23 +5455,16 @@ async function generateTransactionPDF(transactions2, userData) {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   let yPos = 100;
-  if (usdTransactions.length > 0) {
+  for (const { cur, sym, totalIn, totalOut } of currencyStats) {
     doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-    doc.text("USD:", 18, yPos);
+    doc.text(`${cur}:`, 18, yPos);
     doc.setTextColor(34, 197, 94);
-    doc.text(`+$${formatNumber(totalUsdIn)}`, 50, yPos);
+    doc.text(`+${sym}${formatNumber(totalIn)}`, 50, yPos);
     doc.setTextColor(239, 68, 68);
-    doc.text(`-$${formatNumber(totalUsdOut)}`, 90, yPos);
+    doc.text(`-${sym}${formatNumber(totalOut)}`, 90, yPos);
     yPos += 6;
   }
-  if (kesTransactions.length > 0) {
-    doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
-    doc.text("KES:", 18, yPos);
-    doc.setTextColor(34, 197, 94);
-    doc.text(`+KSh ${formatNumber(totalKesIn)}`, 50, yPos);
-    doc.setTextColor(239, 68, 68);
-    doc.text(`-KSh ${formatNumber(totalKesOut)}`, 90, yPos);
-  }
+  const tableStartY = 85 + summaryBoxH + 10;
   const tableData = transactions2.map((transaction) => {
     const date = new Date(transaction.createdAt).toLocaleDateString("en-US", {
       month: "short",
@@ -5041,7 +5483,7 @@ async function generateTransactionPDF(transactions2, userData) {
     ];
   });
   autoTable(doc, {
-    startY: 130,
+    startY: tableStartY,
     head: [["Date", "Description", "Amount", "Currency", "Status"]],
     body: tableData,
     theme: "grid",
@@ -5205,7 +5647,7 @@ var init_api_key = __esm({
 });
 
 // server/services/fcm.ts
-import axios from "axios";
+import fetch11 from "node-fetch";
 var FCM_API_URL, FCMService, fcmService;
 var init_fcm = __esm({
   "server/services/fcm.ts"() {
@@ -5226,17 +5668,19 @@ var init_fcm = __esm({
           const serviceAccount = JSON.parse(
             process.env.FIREBASE_SERVICE_ACCOUNT || "{}"
           );
-          const response = await axios.post(
-            "https://oauth2.googleapis.com/token",
-            {
+          const response = await fetch11("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
               client_id: serviceAccount.client_id,
               client_secret: serviceAccount.client_secret,
               refresh_token: serviceAccount.refresh_token,
               grant_type: "refresh_token"
-            }
-          );
-          this.accessToken = response.data.access_token;
-          this.tokenExpiry = Date.now() + response.data.expires_in * 1e3;
+            })
+          });
+          const data = await response.json();
+          this.accessToken = data.access_token;
+          this.tokenExpiry = Date.now() + data.expires_in * 1e3;
           return this.accessToken;
         } catch (error) {
           console.error("FCM token error:", error);
@@ -5258,17 +5702,19 @@ var init_fcm = __esm({
               }
             }
           };
-          const response = await axios.post(
+          const response = await fetch11(
             `${FCM_API_URL}/${this.projectId}/messages:send`,
-            { message },
             {
+              method: "POST",
               headers: {
                 Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json"
-              }
+              },
+              body: JSON.stringify({ message })
             }
           );
-          console.log("FCM sent successfully:", response.data.name);
+          const result = await response.json();
+          console.log("FCM sent successfully:", result.name);
           return true;
         } catch (error) {
           console.error("FCM send error:", error);
@@ -5290,17 +5736,19 @@ var init_fcm = __esm({
               }
             }
           };
-          const response = await axios.post(
+          const response = await fetch11(
             `${FCM_API_URL}/${this.projectId}/messages:send`,
-            { message },
             {
+              method: "POST",
               headers: {
                 Authorization: `Bearer ${accessToken}`,
                 "Content-Type": "application/json"
-              }
+              },
+              body: JSON.stringify({ message })
             }
           );
-          console.log("FCM topic sent successfully:", response.data.name);
+          const result = await response.json();
+          console.log("FCM topic sent successfully:", result.name);
           return true;
         } catch (error) {
           console.error("FCM topic send error:", error);
@@ -5328,25 +5776,24 @@ var init_fcm = __esm({
                     }
                   }
                 };
-                await axios.post(
+                await fetch11(
                   `${FCM_API_URL}/${this.projectId}/messages:send`,
-                  { message },
                   {
+                    method: "POST",
                     headers: {
                       Authorization: `Bearer ${accessToken}`,
                       "Content-Type": "application/json"
-                    }
+                    },
+                    body: JSON.stringify({ message })
                   }
                 );
                 successCount++;
-              } catch (error) {
+              } catch {
                 failureCount++;
               }
             }
           }
-          console.log(
-            `FCM multicast: ${successCount} success, ${failureCount} failures`
-          );
+          console.log(`FCM multicast: ${successCount} success, ${failureCount} failures`);
           return { success: successCount, failure: failureCount };
         } catch (error) {
           console.error("FCM multicast error:", error);
@@ -5509,7 +5956,6 @@ var init_notification_queue = __esm({
 });
 
 // server/index.ts
-import "dotenv/config";
 import express2 from "express";
 import session from "express-session";
 import ConnectPgSimple from "connect-pg-simple";
@@ -5519,10 +5965,126 @@ import { Pool as Pool2 } from "pg";
 init_storage();
 init_db();
 init_schema();
-init_exchange_rate();
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { desc as desc2, eq as eq3 } from "drizzle-orm";
+
+// server/services/nexuspay.ts
+import fetch2 from "node-fetch";
+var NEXUSPAY_BASE_URL = "https://app.makamescopay.com/api";
+var NEXUSPAY_CURRENCIES = [
+  { code: "USD", name: "US Dollar", flag: "\u{1F1FA}\u{1F1F8}", gateway: "paystack", channel: "card", countryCode: "US", countryName: "United States", color: "from-emerald-500 to-green-600" },
+  { code: "KES", name: "Kenyan Shilling", flag: "\u{1F1F0}\u{1F1EA}", gateway: "mpesa", channel: "mobile_money", correspondents: [{ id: "MPESA_KEN", label: "M-Pesa" }], countryCode: "KE", countryName: "Kenya", color: "from-red-500 to-orange-500" },
+  { code: "UGX", name: "Ugandan Shilling", flag: "\u{1F1FA}\u{1F1EC}", gateway: "pawapay", channel: "mobile_money", correspondents: [{ id: "MTN_MOMO_UGA", label: "MTN Mobile Money" }, { id: "AIRTEL_OAPI_UGA", label: "Airtel Money" }], countryCode: "UG", countryName: "Uganda", color: "from-yellow-500 to-orange-500" },
+  { code: "GHS", name: "Ghanaian Cedi", flag: "\u{1F1EC}\u{1F1ED}", gateway: "paystack", channel: "mobile_money", correspondents: [{ id: "MTN_MOMO_GHA", label: "MTN MoMo" }, { id: "VODAFONE_GHA", label: "Vodafone Cash" }, { id: "AIRTEL_TIGO_GHA", label: "AirtelTigo" }], countryCode: "GH", countryName: "Ghana", color: "from-red-600 to-green-600" },
+  { code: "NGN", name: "Nigerian Naira", flag: "\u{1F1F3}\u{1F1EC}", gateway: "paystack", channel: "card", countryCode: "NG", countryName: "Nigeria", color: "from-green-600 to-green-800" },
+  { code: "ZAR", name: "South African Rand", flag: "\u{1F1FF}\u{1F1E6}", gateway: "paystack", channel: "card", countryCode: "ZA", countryName: "South Africa", color: "from-blue-600 to-yellow-500" },
+  { code: "TZS", name: "Tanzanian Shilling", flag: "\u{1F1F9}\u{1F1FF}", gateway: "optimapay", channel: "other", countryCode: "TZ", countryName: "Tanzania", color: "from-cyan-500 to-blue-600" },
+  { code: "XOF", name: "West African CFA", flag: "\u{1F30D}", gateway: "pawapay", channel: "mobile_money", countryCode: "SN", countryName: "West Africa", color: "from-purple-500 to-violet-600" },
+  { code: "CDF", name: "Congolese Franc", flag: "\u{1F1E8}\u{1F1E9}", gateway: "pawapay", channel: "mobile_money", correspondents: [{ id: "MPESA_COD", label: "M-Pesa Congo" }, { id: "AIRTEL_OAPI_COD", label: "Airtel Money" }], countryCode: "CD", countryName: "DR Congo", color: "from-sky-500 to-blue-600" },
+  { code: "XAF", name: "Central African CFA", flag: "\u{1F30D}", gateway: "pawapay", channel: "mobile_money", countryCode: "CM", countryName: "Central Africa", color: "from-teal-500 to-green-600" },
+  { code: "RWF", name: "Rwandan Franc", flag: "\u{1F1F7}\u{1F1FC}", gateway: "pawapay", channel: "mobile_money", correspondents: [{ id: "MTN_MOMO_RWA", label: "MTN MoMo" }, { id: "AIRTEL_OAPI_RWA", label: "Airtel Money" }], countryCode: "RW", countryName: "Rwanda", color: "from-blue-600 to-cyan-500" },
+  { code: "SLE", name: "Sierra Leonean Leone", flag: "\u{1F1F8}\u{1F1F1}", gateway: "pawapay", channel: "mobile_money", correspondents: [{ id: "ORANGE_SLE", label: "Orange Money" }], countryCode: "SL", countryName: "Sierra Leone", color: "from-green-500 to-teal-600" },
+  { code: "ZMW", name: "Zambian Kwacha", flag: "\u{1F1FF}\u{1F1F2}", gateway: "pawapay", channel: "mobile_money", correspondents: [{ id: "MTN_MOMO_ZMB", label: "MTN MoMo" }, { id: "AIRTEL_OAPI_ZMB", label: "Airtel Money" }], countryCode: "ZM", countryName: "Zambia", color: "from-orange-400 to-red-500" },
+  { code: "EUR", name: "Euro", flag: "\u{1F1EA}\u{1F1FA}", gateway: "paystack", channel: "card", countryCode: "EU", countryName: "Europe", color: "from-blue-700 to-indigo-600" },
+  { code: "GBP", name: "British Pound", flag: "\u{1F1EC}\u{1F1E7}", gateway: "paystack", channel: "card", countryCode: "GB", countryName: "United Kingdom", color: "from-indigo-700 to-purple-700" }
+];
+var CURRENCY_MAP = Object.fromEntries(
+  NEXUSPAY_CURRENCIES.map((c) => [c.code, c])
+);
+var NexusPayService = class {
+  envApiKey;
+  baseUrl;
+  constructor() {
+    this.envApiKey = process.env.NEXUSPAY_API_KEY || null;
+    this.baseUrl = NEXUSPAY_BASE_URL;
+  }
+  async getApiKey() {
+    if (this.envApiKey) return this.envApiKey;
+    try {
+      const { pool: pool2 } = await Promise.resolve().then(() => (init_db(), db_exports));
+      if (pool2) {
+        const result = await pool2.query(
+          `SELECT value FROM system_settings WHERE key = $1 AND category = $2 LIMIT 1`,
+          ["nexuspay_api_key", "payment"]
+        );
+        if (result.rows.length > 0 && result.rows[0].value) return result.rows[0].value;
+      }
+    } catch {
+    }
+    return null;
+  }
+  headers(apiKey) {
+    return {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`
+    };
+  }
+  async checkout(params) {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) throw new Error("NexusPay API key not configured. Set NEXUSPAY_API_KEY or configure it in admin settings.");
+    const body = {
+      amount: params.amount,
+      currency: params.currency,
+      channel: params.channel,
+      description: params.description || "GreenPay wallet deposit"
+    };
+    if (params.phone) body.phone = params.phone;
+    if (params.email) body.email = params.email;
+    if (params.correspondent) body.correspondent = params.correspondent;
+    const response = await fetch2(`${this.baseUrl}/checkout`, {
+      method: "POST",
+      headers: this.headers(apiKey),
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `NexusPay checkout failed: ${response.status}`);
+    return data;
+  }
+  async getStatus(reference) {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) throw new Error("NexusPay API key not configured");
+    const response = await fetch2(`${this.baseUrl}/status/${reference}`, {
+      headers: this.headers(apiKey)
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || `Status check failed: ${response.status}`);
+    return data;
+  }
+  async getCountries() {
+    const apiKey = await this.getApiKey();
+    if (apiKey) {
+      try {
+        const response = await fetch2(`${this.baseUrl}/countries`, {
+          headers: this.headers(apiKey)
+        });
+        if (response.ok) {
+          const data = await response.json();
+          return data.countries || [];
+        }
+      } catch {
+      }
+    }
+    return NEXUSPAY_CURRENCIES.map((c) => ({
+      code: c.countryCode,
+      name: c.countryName,
+      flag: c.flag,
+      currency: c.code,
+      gateway: c.gateway,
+      correspondents: c.correspondents || []
+    }));
+  }
+  isConfigured() {
+    return !!this.envApiKey;
+  }
+  getSupportedCurrencies() {
+    return NEXUSPAY_CURRENCIES;
+  }
+};
+var nexusPayService = new NexusPayService();
+
+// server/routes.ts
+init_exchange_rate();
+import { and as and2, desc as desc2, eq as eq3, sql as sql3 } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt2 from "bcrypt";
 import multer from "multer";
@@ -5532,7 +6094,7 @@ import { fileTypeFromBuffer } from "file-type";
 
 // server/services/payhero.ts
 init_storage();
-import fetch3 from "node-fetch";
+import fetch4 from "node-fetch";
 var PayHeroService = class {
   username;
   password;
@@ -5683,15 +6245,33 @@ var PayHeroService = class {
         channel_id: payload.channel_id,
         url
       });
-      const response = await fetch3(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader
-        },
-        body: JSON.stringify(payload)
-      });
-      const data = await response.json();
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3e4);
+      let response;
+      try {
+        response = await fetch4(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": authHeader
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal
+        });
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      const rawText = await response.text();
+      let data = {};
+      if (rawText.trim()) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.error("PayHero response is not valid JSON:", rawText.slice(0, 200));
+        }
+      } else {
+        console.warn("PayHero returned an empty response body (HTTP", response.status, ")");
+      }
       console.log("PayHero HTTP response:", {
         httpStatus: response.status,
         success: data.success,
@@ -5715,10 +6295,11 @@ var PayHeroService = class {
         CheckoutRequestID: data.CheckoutRequestID || ""
       };
     } catch (error) {
-      console.error("PayHero payment initiation error:", error);
+      const isTimeout = error?.name === "AbortError" || error?.code === "ECONNRESET" || error?.code === "ETIMEDOUT";
+      console.error("PayHero payment initiation error:", isTimeout ? "Request timed out (504)" : error);
       return {
         success: false,
-        status: "ERROR",
+        status: isTimeout ? "TIMEOUT" : "ERROR",
         reference: "",
         CheckoutRequestID: ""
       };
@@ -5733,13 +6314,29 @@ var PayHeroService = class {
       const credentials = Buffer.from(`${this.username}:${this.password}`).toString("base64");
       const authHeader = `Basic ${credentials}`;
       console.log("Checking PayHero transaction status:", { reference, url });
-      const response = await fetch3(url, {
-        method: "GET",
-        headers: {
-          "Authorization": authHeader
+      const statusController = new AbortController();
+      const statusTimeoutId = setTimeout(() => statusController.abort(), 15e3);
+      let response;
+      try {
+        response = await fetch4(url, {
+          method: "GET",
+          headers: { "Authorization": authHeader },
+          signal: statusController.signal
+        });
+      } finally {
+        clearTimeout(statusTimeoutId);
+      }
+      const rawText = await response.text();
+      let data = {};
+      if (rawText.trim()) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (parseErr) {
+          console.error("PayHero status response is not valid JSON:", rawText.slice(0, 200));
         }
-      });
-      const data = await response.json();
+      } else {
+        console.warn("PayHero status check returned empty body (HTTP", response.status, ")");
+      }
       console.log("PayHero transaction status response:", {
         httpStatus: response.status,
         reference,
@@ -5761,11 +6358,12 @@ var PayHeroService = class {
         message: data.message
       };
     } catch (error) {
-      console.error("PayHero transaction status check error:", error);
+      const isTimeout = error?.name === "AbortError" || error?.code === "ECONNRESET" || error?.code === "ETIMEDOUT";
+      console.error("PayHero status check error:", isTimeout ? "Request timed out" : error);
       return {
         success: false,
-        status: "ERROR",
-        message: "Failed to check transaction status"
+        status: isTimeout ? "TIMEOUT" : "ERROR",
+        message: isTimeout ? "PayHero request timed out \u2014 please try again" : "Failed to check transaction status"
       };
     }
   }
@@ -5793,7 +6391,7 @@ var PayHeroService = class {
 var payHeroService = new PayHeroService();
 
 // server/services/paystack.ts
-import fetch4 from "node-fetch";
+import fetch5 from "node-fetch";
 var PaystackService = class {
   secretKey;
   baseUrl = "https://api.paystack.co";
@@ -5809,7 +6407,7 @@ var PaystackService = class {
       this.secretKey = secretKey;
     }
   }
-  async initializePayment(email, amount, reference, currency = "KES", phoneNumber, callbackUrl) {
+  async initializePayment(email, amount, reference, currency = "KES", phoneNumber, callbackUrl, metadata) {
     if (!this.isConfigured) {
       return {
         status: false,
@@ -5835,7 +6433,10 @@ var PaystackService = class {
           provider: "mpesa"
         };
       }
-      const response = await fetch4(url, {
+      if (metadata && Object.keys(metadata).length > 0) {
+        payload.metadata = { custom_fields: Object.entries(metadata).map(([key, value]) => ({ display_name: key, variable_name: key, value })) };
+      }
+      const response = await fetch5(url, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.secretKey}`,
@@ -5856,7 +6457,7 @@ var PaystackService = class {
   async verifyPayment(reference) {
     try {
       const url = `${this.baseUrl}/transaction/verify/${reference}`;
-      const response = await fetch4(url, {
+      const response = await fetch5(url, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${this.secretKey}`
@@ -5881,7 +6482,7 @@ var PaystackService = class {
         last_name: lastName,
         phone
       };
-      const response = await fetch4(url, {
+      const response = await fetch5(url, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.secretKey}`,
@@ -6310,7 +6911,7 @@ var CloudinaryStorageService = class {
 var cloudinaryStorage = new CloudinaryStorageService();
 
 // server/statumService.ts
-import fetch5 from "node-fetch";
+import fetch6 from "node-fetch";
 var StatumService = class {
   consumerKey;
   consumerSecret;
@@ -6360,7 +6961,7 @@ var StatumService = class {
         amount
       };
       console.log(`\u{1F4E4} Request body:`, JSON.stringify(requestBody, null, 2));
-      const response = await fetch5(this.apiUrl, {
+      const response = await fetch6(this.apiUrl, {
         method: "POST",
         headers: {
           "Authorization": this.getAuthHeader(),
@@ -6574,6 +7175,49 @@ var aiRateLimiter = new AIRateLimiter();
 
 // server/routes.ts
 var cloudinaryStorage2 = new CloudinaryStorageService();
+var normalizeCurrency = (currency) => String(currency || "").trim().toUpperCase();
+function getSupportedCurrencyCodes() {
+  return NEXUSPAY_CURRENCIES.map((currency) => currency.code);
+}
+async function getEnabledCurrencyCodes() {
+  const fallback = getSupportedCurrencyCodes();
+  try {
+    const result = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+    const configured = String(result.rows[0]?.value || "").replace(/['"]/g, "");
+    const enabled = configured.split(",").map(normalizeCurrency).filter((currency) => fallback.includes(currency));
+    return enabled.length ? enabled : fallback;
+  } catch {
+    return fallback;
+  }
+}
+async function getUserWallet(userId, currency) {
+  const code = normalizeCurrency(currency);
+  const [wallet] = await db.select().from(wallets).where(and2(eq3(wallets.userId, userId), eq3(wallets.currency, code))).limit(1);
+  return wallet;
+}
+async function ensureUserWallet(userId, currency) {
+  const code = normalizeCurrency(currency);
+  let wallet = await getUserWallet(userId, code);
+  if (!wallet) {
+    const enabled = await getEnabledCurrencyCodes();
+    if (!enabled.includes(code)) return void 0;
+    const existing = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+    const [created] = await db.insert(wallets).values({
+      userId,
+      currency: code,
+      isDefault: existing.length === 0,
+      isActive: true
+    }).returning();
+    wallet = created;
+  }
+  return wallet;
+}
+function walletAvailableBalance(wallet) {
+  return Math.max(
+    0,
+    parseFloat(wallet.balance || "0") - parseFloat(wallet.holdAmount || "0") - parseFloat(wallet.withdrawalHoldAmount || "0")
+  );
+}
 var upload = multer({
   storage: multer.memoryStorage(),
   // Store files in memory buffer for cloud upload
@@ -6644,12 +7288,21 @@ var transferSchema = z.object({
 async function registerRoutes(app2) {
   const checkMaintenanceMode = async (req, res, next) => {
     try {
-      const maintenanceSetting = await storage.getSystemSetting("general", "maintenance_mode");
+      const maintenanceSetting = await storage.getSystemSetting("general", "maintenance_mode") || await storage.getSystemSetting("platform", "maintenance_mode");
       const maintenanceEnabled = String(maintenanceSetting?.value) === "true";
-      const allowedPaths = ["/api/auth/login", "/api/auth/logout", "/api/auth/verify-otp", "/api/admin/auth/login", "/api/admin/settings"];
+      const allowedPaths = [
+        "/api/auth/me",
+        "/api/auth/login",
+        "/api/auth/logout",
+        "/api/auth/verify-otp",
+        "/api/admin/login",
+        "/api/admin/auth/login",
+        "/api/system-settings",
+        "/health"
+      ];
       const isAllowedPath = allowedPaths.some((path3) => req.path.startsWith(path3));
       if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
-        const messageSetting = await storage.getSystemSetting("general", "maintenance_message");
+        const messageSetting = await storage.getSystemSetting("general", "maintenance_message") || await storage.getSystemSetting("platform", "maintenance_message");
         return res.status(503).json({
           message: messageSetting?.value || "System is under maintenance. Please try again later.",
           maintenanceMode: true
@@ -6753,6 +7406,153 @@ async function registerRoutes(app2) {
       env: process.env.NODE_ENV,
       uptime: process.uptime()
     });
+  });
+  const supportedVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
+  app2.get("/api/virtual-accounts", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const applications = await db.select().from(virtualAccountApplications).where(eq3(virtualAccountApplications.userId, userId));
+      const settings = await db.select().from(virtualAccountSettings).where(eq3(virtualAccountSettings.isActive, true));
+      res.json({
+        supportedCurrencies: supportedVirtualAccountCurrencies,
+        applications: applications.map((app3) => ({
+          ...app3,
+          accountDetails: app3.status === "approved" ? settings.find((s) => s.currency === app3.currency) || null : null
+        }))
+      });
+    } catch (error) {
+      console.error("Virtual accounts fetch error:", error);
+      res.status(500).json({ message: "Failed to load virtual accounts" });
+    }
+  });
+  app2.post("/api/virtual-accounts/apply", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const schema = z.object({
+        currency: z.enum(["USD", "GBP", "EUR"]),
+        sourceOfIncome: z.string().min(2),
+        monthlyVolume: z.string().min(1),
+        purpose: z.string().min(5),
+        expectedSenders: z.string().optional(),
+        declarations: z.object({
+          notUsCitizen: z.boolean(),
+          notPoliticallyExposed: z.boolean(),
+          beneficialOwner: z.boolean(),
+          truthfulInformation: z.boolean(),
+          acceptsTerms: z.boolean()
+        })
+      });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0];
+        return res.status(400).json({
+          message: firstIssue?.message || "Please complete all required application fields.",
+          field: firstIssue?.path?.join("."),
+          errors: parsed.error.issues.map((issue) => ({ field: issue.path.join("."), message: issue.message }))
+        });
+      }
+      const data = parsed.data;
+      if (!Object.values(data.declarations).every(Boolean)) {
+        return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
+      }
+      const existing = await db.select().from(virtualAccountApplications).where(and2(eq3(virtualAccountApplications.userId, userId), eq3(virtualAccountApplications.currency, data.currency)));
+      if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
+      const [application] = await db.insert(virtualAccountApplications).values({ ...data, userId }).returning();
+      await storage.createNotification({ userId, title: `${data.currency} virtual account application received`, message: "Your application is pending admin review.", type: "info", isGlobal: false });
+      res.status(201).json(application);
+    } catch (error) {
+      console.error("Virtual account apply error:", error);
+      res.status(400).json({ message: error?.message || "Failed to submit application" });
+    }
+  });
+  app2.get("/api/admin/virtual-accounts", requireAdminAuth, async (_req, res) => {
+    try {
+      const applications = await db.select({ application: virtualAccountApplications, user: users }).from(virtualAccountApplications).leftJoin(users, eq3(virtualAccountApplications.userId, users.id)).orderBy(desc2(virtualAccountApplications.createdAt));
+      const settings = await db.select().from(virtualAccountSettings).orderBy(virtualAccountSettings.currency);
+      res.json({ applications, settings, supportedCurrencies: supportedVirtualAccountCurrencies });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to load virtual account admin data" });
+    }
+  });
+  app2.put("/api/admin/virtual-accounts/settings/:currency", requireAdminAuth, async (req, res) => {
+    try {
+      const currency = String(req.params.currency).toUpperCase();
+      if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
+      const bodySchema = z.object({
+        accountName: z.string().min(2, "Account name must be at least 2 characters."),
+        bankName: z.string().min(2, "Bank name must be at least 2 characters."),
+        accountNumber: z.string().min(3, "Account number must be at least 3 characters."),
+        routingNumber: z.string().optional().nullable(),
+        sortCode: z.string().optional().nullable(),
+        iban: z.string().optional().nullable(),
+        swiftCode: z.string().optional().nullable(),
+        bankAddress: z.string().optional().nullable(),
+        beneficiaryAddress: z.string().optional().nullable(),
+        paymentInstructions: z.string().optional().nullable(),
+        isActive: z.boolean().optional()
+      });
+      const parsed = bodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        const firstIssue = parsed.error.issues[0];
+        return res.status(400).json({ message: firstIssue?.message || "Please complete the required account details.", errors: parsed.error.issues });
+      }
+      const values = { ...parsed.data, currency, updatedBy: req.session.admin.id, updatedAt: /* @__PURE__ */ new Date() };
+      const existing = await db.select().from(virtualAccountSettings).where(eq3(virtualAccountSettings.currency, currency));
+      const [setting] = existing[0] ? await db.update(virtualAccountSettings).set(values).where(eq3(virtualAccountSettings.currency, currency)).returning() : await db.insert(virtualAccountSettings).values(values).returning();
+      res.json(setting);
+    } catch (error) {
+      res.status(400).json({ message: error?.message || "Failed to save account details" });
+    }
+  });
+  app2.patch("/api/admin/virtual-accounts/applications/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const status = req.body.status;
+      if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(virtualAccountApplications.id, req.params.id)).returning();
+      if (!application) return res.status(404).json({ message: "Application not found" });
+      const [user] = await db.select().from(users).where(eq3(users.id, application.userId));
+      const [account] = await db.select().from(virtualAccountSettings).where(eq3(virtualAccountSettings.currency, application.currency));
+      const [firstName, ...rest] = (user?.fullName || "User").split(" ");
+      if (user && status === "approved") {
+        await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Approved`, message: "Your virtual account details are now available. Check Virtual Accounts to view your bank details.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
+        const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+        mailtrapService3.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+          currency: application.currency,
+          application_id: application.id,
+          account_name: account?.accountName || "GreenPay",
+          bank_name: account?.bankName || "",
+          account_number: account?.accountNumber || "",
+          routing_number: account?.routingNumber || "",
+          sort_code: account?.sortCode || "",
+          iban: account?.iban || "",
+          swift_code: account?.swiftCode || "",
+          bank_address: account?.bankAddress || "",
+          beneficiary_address: account?.beneficiaryAddress || "",
+          payment_instructions: account?.paymentInstructions || ""
+        }).catch(console.error);
+      }
+      if (user && status === "rejected") {
+        await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Application`, message: req.body.adminNotes || "Your virtual account application was not approved at this time. You may re-apply.", type: "error", isGlobal: false, actionUrl: "/virtual-accounts" });
+        const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+        mailtrapService3.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+          currency: application.currency,
+          application_id: application.id,
+          account_name: "N/A",
+          bank_name: "",
+          account_number: "",
+          routing_number: "",
+          sort_code: "",
+          iban: "",
+          swift_code: "",
+          bank_address: "",
+          beneficiary_address: "",
+          payment_instructions: `Your ${application.currency} virtual account application was not approved. Reason: ${req.body.adminNotes || "Please contact support for details."}`
+        }).catch(console.error);
+      }
+      res.json(application);
+    } catch (error) {
+      res.status(400).json({ message: error?.message || "Failed to review application" });
+    }
   });
   app2.get("/api/demo-keys", (_req, res) => {
     res.status(200).json({
@@ -6862,6 +7662,13 @@ async function registerRoutes(app2) {
           mailtrapService3.sendWelcome(user.email, user.fullName?.split(" ")[0] || "User", user.fullName?.split(" ")[1] || "").catch((err) => console.error("[Signup] Email welcome error:", err));
         }
       }
+      try {
+        const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, "") || "USD";
+        await db.insert(wallets).values({ userId: user.id, currency: defCurrency, isDefault: true, isActive: true });
+      } catch (walletErr) {
+        console.error("[Signup] Wallet auto-create error:", walletErr);
+      }
       const { password, ...userResponse } = user;
       req.session.save((saveErr) => {
         if (saveErr) {
@@ -6880,16 +7687,205 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: "Invalid user data" });
     }
   });
+  const googleOAuthStates = /* @__PURE__ */ new Map();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of googleOAuthStates) {
+      if (now > v) googleOAuthStates.delete(k);
+    }
+  }, 6e4);
+  function getGoogleRedirectUri(req) {
+    if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+    const domains = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN;
+    if (domains) return `https://${domains.split(",")[0]}/auth/google/callback`;
+    return `${req.protocol}://${req.get("host")}/auth/google/callback`;
+  }
+  function googlePopupHtml(result, message) {
+    const redirectMap = {
+      login: "/dashboard",
+      new_user: "/auth/google/complete",
+      cancelled: "/login",
+      suspended: "/login",
+      error: "/login"
+    };
+    const fallback = redirectMap[result] || "/login";
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GreenPay</title>
+<style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0fdf4;}
+.card{background:#fff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+.dot{width:40px;height:40px;border-radius:50%;background:#22c55e;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;}
+p{color:#6b7280;font-size:14px;}</style>
+</head><body>
+<div class="card">
+  <div class="dot"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <p>${message}</p>
+</div>
+<script>
+(function(){
+  var result='${result}';
+  function done(){
+    if(window.opener&&!window.opener.closed){
+      try{window.opener.postMessage({googleAuth:result},'*');}catch(e){}
+      setTimeout(function(){window.close();},300);
+    } else {
+      window.location.href='${fallback}';
+    }
+  }
+  done();
+})();
+</script></body></html>`;
+  }
+  app2.get("/auth/google", (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) return res.send(googlePopupHtml("error", "Google sign-in is not configured."));
+    const state = Math.random().toString(36).substring(2, 18);
+    googleOAuthStates.set(state, Date.now() + 10 * 60 * 1e3);
+    const redirectUri = getGoogleRedirectUri(req);
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: "code",
+      scope: "openid email profile",
+      access_type: "offline",
+      prompt: "select_account",
+      state
+    });
+    res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+  });
+  app2.get("/auth/google/callback", async (req, res) => {
+    const { code, state, error } = req.query;
+    if (error || !code) return res.send(googlePopupHtml("cancelled", "Sign-in was cancelled."));
+    const expiry = googleOAuthStates.get(state);
+    if (!expiry || Date.now() > expiry) return res.send(googlePopupHtml("error", "Session expired, please try again."));
+    googleOAuthStates.delete(state);
+    try {
+      const clientId = process.env.GOOGLE_CLIENT_ID;
+      const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+      const redirectUri = getGoogleRedirectUri(req);
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" })
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenData.access_token) {
+        console.error("[Google OAuth] Token exchange failed:", tokenData);
+        return res.send(googlePopupHtml("error", "Could not authenticate with Google."));
+      }
+      const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      });
+      const profile = await userInfoRes.json();
+      const existingUser = await storage.getUserByEmail(profile.email);
+      if (existingUser) {
+        if (existingUser.isSuspended) return res.send(googlePopupHtml("suspended", "This account has been suspended."));
+        if (!existingUser.googleId) {
+          await storage.updateUser(existingUser.id, { googleId: profile.id });
+        }
+        await storage.updateUser(existingUser.id, { lastLoginAt: /* @__PURE__ */ new Date() });
+        req.session.userId = existingUser.id;
+        req.session.user = { id: existingUser.id, email: existingUser.email };
+        try {
+          const ua = req.headers["user-agent"] || "Unknown";
+          await db.insert(loginHistory).values({
+            userId: existingUser.id,
+            ipAddress: req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.ip || "Unknown",
+            userAgent: ua,
+            deviceType: ua.toLowerCase().includes("mobile") ? "mobile" : "desktop",
+            browser: "Google OAuth",
+            status: "success"
+          });
+        } catch (_) {
+        }
+        await new Promise((r) => req.session.save(() => r()));
+        return res.send(googlePopupHtml("login", "Signed in! Redirecting..."));
+      } else {
+        req.session.googlePending = {
+          googleId: profile.id,
+          email: profile.email,
+          fullName: profile.name,
+          profilePhotoUrl: profile.picture
+        };
+        await new Promise((r) => req.session.save(() => r()));
+        return res.send(googlePopupHtml("new_user", "Almost there! Setting up your account..."));
+      }
+    } catch (err) {
+      console.error("[Google OAuth] Callback error:", err);
+      return res.send(googlePopupHtml("error", "Something went wrong. Please try again."));
+    }
+  });
+  app2.get("/api/auth/google/pending", (req, res) => {
+    const pending = req.session.googlePending;
+    if (!pending) return res.json({ pending: false });
+    res.json({ pending: true, fullName: pending.fullName, email: pending.email, profilePhotoUrl: pending.profilePhotoUrl });
+  });
+  app2.post("/api/auth/google/complete", async (req, res) => {
+    const pending = req.session.googlePending;
+    if (!pending) return res.status(400).json({ message: "Session expired. Please sign in with Google again." });
+    const { fullName, phone, country } = req.body;
+    if (!fullName || !phone || !country) return res.status(400).json({ message: "Full name, phone and country are required" });
+    try {
+      const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+      const formattedPhone = messagingService3.formatPhoneNumber(phone);
+      const existing = await storage.getUserByEmail(pending.email);
+      if (existing) return res.status(400).json({ message: "An account with this email already exists. Please log in." });
+      const { db: database } = await Promise.resolve().then(() => (init_db(), db_exports));
+      const { eq: eq4 } = await import("drizzle-orm");
+      const phoneCheck = await database.select().from(users).where(eq4(users.phone, formattedPhone));
+      if (phoneCheck.length > 0) return res.status(400).json({ message: "This phone number is already registered." });
+      const bcrypt3 = await import("bcrypt");
+      const randomPassword = await bcrypt3.hash(Math.random().toString(36) + Date.now().toString(), 10);
+      const user = await storage.createUser({
+        fullName: fullName.trim(),
+        email: pending.email,
+        phone: formattedPhone,
+        country,
+        password: randomPassword
+      });
+      await storage.updateUser(user.id, {
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        googleId: pending.googleId,
+        profilePhotoUrl: pending.profilePhotoUrl
+      });
+      delete req.session.googlePending;
+      req.session.userId = user.id;
+      req.session.user = { id: user.id, email: user.email };
+      try {
+        const ua = req.headers["user-agent"] || "Unknown";
+        await db.insert(loginHistory).values({
+          userId: user.id,
+          ipAddress: req.headers["x-forwarded-for"]?.split(",")[0].trim() || req.ip || "Unknown",
+          userAgent: ua,
+          deviceType: ua.toLowerCase().includes("mobile") ? "mobile" : "desktop",
+          browser: "Google OAuth",
+          status: "success"
+        });
+      } catch (_2) {
+      }
+      try {
+        const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const defCurrency = (defCurrencySetting.rows[0]?.value || "USD").replace(/['"]/g, "").trim();
+        await db.insert(wallets).values({ userId: user.id, currency: defCurrency, isDefault: true, isActive: true });
+      } catch (_2) {
+      }
+      const { whatsappService: whatsappService2 } = await Promise.resolve().then(() => (init_whatsapp(), whatsapp_exports));
+      const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+      whatsappService2.sendAccountCreation(formattedPhone, fullName).catch(() => {
+      });
+      mailtrapService3.sendWelcome(pending.email, fullName.split(" ")[0] || "User", fullName.split(" ")[1] || "").catch(() => {
+      });
+      const { password: _, ...userResponse } = user;
+      await new Promise((r) => req.session.save(() => r()));
+      res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true } });
+    } catch (err) {
+      console.error("[Google OAuth] Complete error:", err);
+      res.status(500).json({ message: "Failed to create account. Please try again." });
+    }
+  });
   app2.post("/api/auth/login", optionalApiKey, async (req, res) => {
     try {
-      const maintenanceSetting = await storage.getSystemSetting("platform", "maintenance_mode");
-      if (maintenanceSetting?.value === "true") {
-        return res.status(503).json({
-          message: "System is under maintenance",
-          maintenanceMode: true,
-          maintenanceMessage: (await storage.getSystemSetting("platform", "maintenance_message"))?.value || "System maintenance in progress"
-        });
-      }
       const { email, password } = loginSchema.parse(req.body);
       const user = await storage.getUserByEmail(email);
       if (!user) {
@@ -6899,7 +7895,7 @@ async function registerRoutes(app2) {
       if (!isValidPassword) {
         return res.status(401).json({ message: "Invalid credentials" });
       }
-      if (user.isSuspended) {
+      if (user.isSuspended === true) {
         return res.status(403).json({
           message: "Your account has been suspended. Please contact support for assistance.",
           accountSuspended: true,
@@ -7551,6 +8547,224 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to upload file", error: String(error) });
     }
   });
+  app2.get("/api/kyc/extracted-data", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const kyc = await storage.getKycByUserId(userId);
+      const u = user;
+      const decision = kyc?.diditDecision;
+      const docFeatures = decision?.features?.document || {};
+      const extractedData = {
+        fullName: u.kycFullName || [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(" ") || null,
+        firstName: docFeatures.first_name || null,
+        lastName: docFeatures.last_name || null,
+        dateOfBirth: u.kycDateOfBirth || docFeatures.date_of_birth || null,
+        idNumber: u.kycIdNumber || docFeatures.document_number || null,
+        documentType: u.kycDocumentType || docFeatures.document_type || kyc?.documentType || null,
+        nationality: u.kycNationality || docFeatures.nationality || null,
+        gender: u.kycGender || docFeatures.gender || null,
+        expiryDate: u.kycIdExpiryDate || docFeatures.expiry_date || null,
+        address: u.kycAddress || docFeatures.address || kyc?.address || null,
+        issuingCountry: u.kycIssuingCountry || docFeatures.issuing_country || null,
+        diditStatus: kyc?.diditStatus || null,
+        kycStatus: kyc?.status || user.kycStatus
+      };
+      const hasData = Object.values(extractedData).some((v) => v && typeof v === "string" && v.trim());
+      if (!hasData) return res.json({ extractedData: null });
+      res.json({ extractedData });
+    } catch (error) {
+      console.error("[KYC] Extracted data error:", error);
+      res.status(500).json({ message: "Failed to fetch KYC data" });
+    }
+  });
+  app2.post("/api/kyc/didit/start", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const { createDiditSession: createDiditSession2, isDiditConfigured: isDiditConfigured2 } = await Promise.resolve().then(() => (init_didit(), didit_exports));
+      if (!isDiditConfigured2()) {
+        return res.status(503).json({
+          message: "KYC verification service is not configured. Please contact support.",
+          configured: false
+        });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (user.kycStatus === "verified") {
+        return res.status(409).json({ message: "Your KYC is already verified." });
+      }
+      const appUrl = process.env.APP_URL || `https://${req.get("host")}`;
+      const callbackUrl = `${appUrl}/kyc-callback`;
+      const session2 = await createDiditSession2(userId, callbackUrl);
+      if (!session2) {
+        return res.status(502).json({ message: "Failed to create verification session. Please try again." });
+      }
+      let existingKyc = await storage.getKycByUserId(userId);
+      if (existingKyc && existingKyc.status !== "rejected") {
+        await storage.updateKycDocument(existingKyc.id, {
+          diditSessionId: session2.session_id,
+          diditStatus: session2.status,
+          status: "pending"
+        });
+      } else {
+        await storage.createKycDocument({
+          userId,
+          documentType: "didit_verification",
+          status: "pending",
+          diditSessionId: session2.session_id,
+          diditStatus: session2.status
+        });
+      }
+      await storage.updateUser(userId, { kycStatus: "pending" });
+      res.json({
+        sessionId: session2.session_id,
+        url: session2.url,
+        status: session2.status
+      });
+    } catch (error) {
+      console.error("[Didit] Start session error:", error);
+      res.status(500).json({ message: "Failed to start verification" });
+    }
+  });
+  app2.get("/api/kyc/didit/status", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const kyc = await storage.getKycByUserId(userId);
+      if (!kyc || !kyc.diditSessionId) {
+        return res.json({ status: null, kycStatus: "not_submitted", docStatus: kyc?.status || null });
+      }
+      const { getSessionDecision: getSessionDecision2, mapDiditStatusToKyc: mapDiditStatusToKyc2, isTerminalStatus: isTerminalStatus2 } = await Promise.resolve().then(() => (init_didit(), didit_exports));
+      const decision = await getSessionDecision2(kyc.diditSessionId);
+      if (!decision) {
+        return res.json({
+          status: kyc.diditStatus,
+          kycStatus: kyc.status,
+          sessionId: kyc.diditSessionId
+        });
+      }
+      const diditStatus = decision.status;
+      const kycStatus = mapDiditStatusToKyc2(diditStatus);
+      if (diditStatus !== kyc.diditStatus || kycStatus !== kyc.status) {
+        await storage.updateKycDocument(kyc.id, {
+          diditStatus,
+          status: kycStatus,
+          diditDecision: decision,
+          verifiedAt: kycStatus === "verified" ? /* @__PURE__ */ new Date() : void 0
+        });
+        await storage.updateUser(userId, { kycStatus });
+        if (isTerminalStatus2(diditStatus)) {
+          const user = await storage.getUser(userId);
+          if (user) {
+            const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+            const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+            if (kycStatus === "verified") {
+              Promise.all([
+                messagingService3.sendKYCVerified(user.phone),
+                user.email ? mailtrapService3.sendKYCVerified(user.email, user.fullName?.split(" ")[0] || "User", "") : Promise.resolve()
+              ]).catch((err) => console.error("[Didit] Notification error:", err));
+            }
+          }
+        }
+      }
+      res.json({
+        status: diditStatus,
+        kycStatus,
+        sessionId: kyc.diditSessionId,
+        decision: isTerminalStatus2(diditStatus) ? decision : void 0
+      });
+    } catch (error) {
+      console.error("[Didit] Status poll error:", error);
+      res.status(500).json({ message: "Failed to check verification status" });
+    }
+  });
+  app2.post("/api/kyc/didit/webhook", async (req, res) => {
+    try {
+      const { verifyWebhookSignature: verifyWebhookSignature2, mapDiditStatusToKyc: mapDiditStatusToKyc2, isTerminalStatus: isTerminalStatus2 } = await Promise.resolve().then(() => (init_didit(), didit_exports));
+      const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
+      if (webhookSecret) {
+        const signature = req.headers["x-didit-signature"];
+        if (!signature) {
+          return res.status(401).json({ message: "Missing webhook signature" });
+        }
+        const rawBody = JSON.stringify(req.body);
+        const valid = verifyWebhookSignature2(rawBody, signature, webhookSecret);
+        if (!valid) {
+          return res.status(401).json({ message: "Invalid webhook signature" });
+        }
+      }
+      const payload = req.body;
+      const { session_id: sessionId, vendor_data: userId, status: diditStatus } = payload;
+      if (!sessionId || !userId || !diditStatus) {
+        return res.status(400).json({ message: "Invalid webhook payload" });
+      }
+      console.log(`[Didit] Webhook: session ${sessionId} \u2192 ${diditStatus} (user: ${userId})`);
+      const kycStatus = mapDiditStatusToKyc2(diditStatus);
+      const kyc = await storage.getKycByUserId(userId);
+      if (kyc) {
+        await storage.updateKycDocument(kyc.id, {
+          diditStatus,
+          status: kycStatus,
+          diditDecision: payload,
+          verifiedAt: kycStatus === "verified" ? /* @__PURE__ */ new Date() : void 0
+        });
+      }
+      await storage.updateUser(userId, { kycStatus });
+      if (kycStatus === "verified") {
+        const doc = payload?.features?.document || {};
+        const idNumber = doc.document_number || null;
+        if (idNumber) {
+          const existing = await db.select({ id: users.id }).from(users).where(eq3(users.kycIdNumber, idNumber));
+          if (existing.some((u) => u.id !== userId)) {
+            console.warn(`[Didit] Webhook: duplicate ID ${idNumber} \u2014 user ${userId} blocked`);
+            await storage.updateUser(userId, { kycStatus: "rejected" });
+            await storage.updateKycDocument(kyc.id, { status: "rejected", verificationNotes: "Duplicate ID \u2014 this document is already linked to another account." });
+            return res.json({ received: true });
+          }
+        }
+        const kycFields = {
+          kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(" ") || null,
+          kycDateOfBirth: doc.date_of_birth || null,
+          kycIdNumber: idNumber,
+          kycNationality: doc.nationality || null,
+          kycGender: doc.gender || null,
+          kycAddress: doc.address || null,
+          kycDocumentType: doc.document_type || null,
+          kycIdExpiryDate: doc.expiry_date || null,
+          kycIssuingCountry: doc.issuing_country || null
+        };
+        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        if (Object.keys(filtered).length > 0) await storage.updateUser(userId, filtered);
+      }
+      if (isTerminalStatus2(diditStatus)) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+          const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+          if (kycStatus === "verified") {
+            Promise.all([
+              messagingService3.sendKYCVerified(user.phone),
+              user.email ? mailtrapService3.sendKYCVerified(user.email, user.fullName?.split(" ")[0] || "User", "") : Promise.resolve()
+            ]).catch((err) => console.error("[Didit] Notification error:", err));
+          }
+          await storage.createNotification({
+            userId,
+            title: kycStatus === "verified" ? "KYC Verified \u2705" : "KYC Update",
+            message: kycStatus === "verified" ? "Your identity has been verified. You now have full access to all features." : kycStatus === "rejected" ? "Your KYC verification was not successful. Please try again." : "Your KYC is under review. We'll notify you once complete.",
+            type: kycStatus === "verified" ? "success" : kycStatus === "rejected" ? "error" : "info",
+            isGlobal: false
+          });
+        }
+      }
+      res.json({ received: true });
+    } catch (error) {
+      console.error("[Didit] Webhook error:", error);
+      res.status(500).json({ message: "Webhook processing failed" });
+    }
+  });
   app2.post("/api/kyc/submit", upload.fields([
     { name: "frontImage", maxCount: 1 },
     { name: "backImage", maxCount: 1 },
@@ -7744,8 +8958,14 @@ async function registerRoutes(app2) {
       if (!paymentData.success) {
         if (paymentData.status === "INVALID_PHONE_NUMBER" || paymentData.status === "INVALID_PHONE_FORMAT") {
           return res.status(400).json({
-            message: "Invalid phone number format. Please update your profile with a valid Kenyan phone number (e.g., +254712345678 or 0712345678)",
+            message: "Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).",
             status: paymentData.status
+          });
+        }
+        if (paymentData.status === "TIMEOUT") {
+          return res.status(504).json({
+            message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.",
+            status: "TIMEOUT"
           });
         }
         return res.status(400).json({
@@ -7806,6 +9026,80 @@ async function registerRoutes(app2) {
             type: "success"
           }).catch((err) => console.error("Notification error:", err));
         }
+        if (transaction.type === "deposit") {
+          const user = await storage.getUser(transaction.userId);
+          if (user) {
+            const depositAmount = parseFloat(transaction.amount);
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(transaction.userId, depositCurrency);
+            if (!depositWallet) {
+              throw new Error(`${depositCurrency} wallet is not enabled`);
+            }
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id]
+            );
+            notificationService.sendNotification({
+              userId: transaction.userId,
+              title: "Deposit Successful",
+              message: `Your M-Pesa deposit of $${depositAmount.toFixed(2)} has been credited to your wallet.`,
+              type: "success"
+            }).catch((err) => console.error("Notification error:", err));
+            try {
+              const { messagingService: depositSms } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+              const { mailtrapService: depositMailtrap } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+              if (user.phone) {
+                depositSms.sendDepositConfirmation(user.phone, depositAmount.toFixed(2), "USD", "M-Pesa", user.email, user.fullName).catch(() => {
+                });
+              }
+              if (user.email) {
+                depositMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(" ")[0] || "User",
+                  user.lastName || user.fullName?.split(" ")[1] || "",
+                  depositAmount.toFixed(2),
+                  "USD",
+                  "deposit",
+                  transaction.id
+                ).catch(() => {
+                });
+              }
+            } catch (_) {
+            }
+            try {
+              const activeBonuses = await db.select().from(depositBonuses).where(eq3(depositBonuses.isActive, true));
+              const eligible = activeBonuses.filter((b) => (b.method === "mpesa" || b.method === "any") && depositAmount >= parseFloat(b.minAmount)).map((b) => ({
+                bonus: b,
+                value: b.bonusType === "percentage" ? depositAmount * parseFloat(b.bonusAmount) / 100 : parseFloat(b.bonusAmount)
+              })).filter((e) => e.value > 0).sort((a, b) => b.value - a.value);
+              if (eligible.length > 0) {
+                const { bonus, value: bonusValue } = eligible[0];
+                await pool.query(
+                  `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+                  [bonusValue, depositWallet.id]
+                );
+                await storage.createTransaction({
+                  userId: transaction.userId,
+                  type: "deposit",
+                  amount: bonusValue.toFixed(2),
+                  currency: depositCurrency,
+                  status: "completed",
+                  description: `Deposit bonus: ${bonus.description || `+${depositCurrency} ${bonusValue.toFixed(2)} for depositing via M-Pesa`}`,
+                  fee: "0.00",
+                  metadata: { bonusId: bonus.id, bonusType: "deposit_bonus", triggerMethod: "mpesa" }
+                });
+                notificationService.sendNotification({
+                  userId: transaction.userId,
+                  title: "Deposit Bonus Credited!",
+                  message: `You received a $${bonusValue.toFixed(2)} bonus for your M-Pesa deposit!`,
+                  type: "success"
+                }).catch((err) => console.error("Bonus notification error:", err));
+              }
+            } catch (bonusErr) {
+              console.error("[PayHero Bonus Error]:", bonusErr);
+            }
+          }
+        }
       } else {
         await storage.updateTransactionStatus(transaction.id, "failed");
         await storage.updateTransactionMetadata(transaction.id, {
@@ -7816,7 +9110,7 @@ async function registerRoutes(app2) {
         notificationService.sendNotification({
           userId: transaction.userId,
           title: "Payment Failed",
-          message: `Your card purchase payment failed: ${ResultDesc}`,
+          message: `Your ${transaction.type === "deposit" ? "deposit" : "card purchase"} payment failed: ${ResultDesc}`,
           type: "error"
         }).catch((err) => console.error("Notification error:", err));
       }
@@ -7824,6 +9118,104 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("[PayHero Callback Error]:", error);
       res.sendStatus(500);
+    }
+  });
+  app2.post("/api/deposit/mpesa", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { amount, phone } = req.body;
+      if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "Valid amount required" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const phoneToUse = phone || user.phone;
+      if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
+      let exchangeRate = 129;
+      try {
+        const rateService = await createExchangeRateService();
+        exchangeRate = await rateService.getRate("USD", "KES");
+      } catch (e) {
+        console.warn("[Deposit/Mpesa] Using fallback rate");
+      }
+      const kesAmount = parseFloat(amount) * exchangeRate;
+      const reference = `DEP-${Date.now()}-${userId.slice(-6)}`;
+      const callbackUrl = `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`;
+      const paymentData = await payHeroService.initiateMpesaPayment(
+        Math.round(kesAmount),
+        phoneToUse,
+        reference,
+        user.fullName,
+        callbackUrl
+      );
+      if (!paymentData.success) {
+        if (paymentData.status === "INVALID_PHONE_NUMBER" || paymentData.status === "INVALID_PHONE_FORMAT") {
+          return res.status(400).json({ message: "Invalid phone number. Use format: 07XXXXXXXX or +2547XXXXXXXX", status: paymentData.status });
+        }
+        if (paymentData.status === "TIMEOUT") {
+          return res.status(504).json({ message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.", status: "TIMEOUT" });
+        }
+        return res.status(400).json({ message: "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
+      }
+      await storage.createTransaction({
+        userId,
+        type: "deposit",
+        amount: parseFloat(amount).toFixed(2),
+        currency: "USD",
+        status: "pending",
+        description: `M-Pesa deposit via PayHero`,
+        fee: "0.00",
+        exchangeRate: exchangeRate.toString(),
+        paystackReference: paymentData.reference || reference,
+        metadata: { paymentMethod: "mpesa", phoneNumber: phoneToUse, kesAmount: kesAmount.toFixed(2), exchangeRate }
+      });
+      res.json({
+        success: true,
+        reference: paymentData.reference || reference,
+        checkoutRequestId: paymentData.CheckoutRequestID,
+        message: "STK Push sent to your phone. Enter your M-Pesa PIN to complete payment."
+      });
+    } catch (error) {
+      console.error("[Deposit/Mpesa Error]:", error);
+      res.status(500).json({ message: "Error initiating M-Pesa deposit" });
+    }
+  });
+  app2.get("/api/deposit/mpesa/status/:reference", requireAuth, async (req, res) => {
+    try {
+      const { reference } = req.params;
+      const transaction = await db.query.transactions.findFirst({
+        where: eq3(transactions.paystackReference, reference)
+      });
+      if (!transaction) return res.status(404).json({ message: "Transaction not found" });
+      res.json({ status: transaction.status, amount: transaction.amount, description: transaction.description });
+    } catch (error) {
+      res.status(500).json({ message: "Error checking status" });
+    }
+  });
+  app2.get("/api/deposit/config", requireAuth, async (req, res) => {
+    try {
+      const keys = [
+        "mpesa_enabled",
+        "crypto_enabled",
+        "bank_transfer_enabled",
+        "card_enabled",
+        "bank_name",
+        "bank_account_name",
+        "bank_account_number",
+        "bank_swift_code",
+        "bank_branch",
+        "bank_currency",
+        "bank_routing_number",
+        "bank_additional_info"
+      ];
+      const settingsMap = {};
+      for (const key of keys) {
+        const s = await storage.getSystemSetting("deposit_methods", key);
+        if (s) settingsMap[key] = String(s.value);
+      }
+      const activeBonuses = await db.select().from(depositBonuses).where(eq3(depositBonuses.isActive, true));
+      res.json({ methods: settingsMap, bonuses: activeBonuses });
+    } catch (error) {
+      console.error("[Deposit Config Error]:", error);
+      res.status(500).json({ message: "Error loading deposit config" });
     }
   });
   app2.put("/api/users/:id/profile", async (req, res) => {
@@ -7843,6 +9235,17 @@ async function registerRoutes(app2) {
         return res.status(403).json({ message: "You can only update your own profile" });
       }
       const { fullName, email, phone, country, profilePhotoUrl } = req.body;
+      const currentUser = await storage.getUser(id);
+      if (currentUser?.kycStatus === "verified") {
+        if (profilePhotoUrl === void 0) {
+          return res.status(403).json({ message: "Your profile details are locked after KYC verification. Only your profile photo can be updated." });
+        }
+        const updatedUser2 = await storage.updateUser(id, { profilePhotoUrl });
+        if (!updatedUser2) return res.status(404).json({ message: "User not found" });
+        req.session.userId = updatedUser2.id;
+        const { password: password2, ...userResponse2 } = updatedUser2;
+        return res.json({ user: userResponse2, message: "Profile photo updated successfully" });
+      }
       if (email) {
         const existingUser = await storage.getUserByEmail(email);
         if (existingUser && existingUser.id !== id) {
@@ -8082,16 +9485,42 @@ async function registerRoutes(app2) {
           await storage.updateTransactionStatus(transaction.id, "completed");
           const user = await storage.getUser(transaction.userId);
           if (user) {
-            const currentBalance = parseFloat(user.balance || "0");
             const depositAmount = parseFloat(transaction.amount);
-            const newBalance = (currentBalance + depositAmount).toFixed(2);
-            await storage.updateUser(user.id, { balance: newBalance });
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
+            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
+            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id]
+            );
             await notificationService.sendNotification({
               userId: user.id,
               title: "Deposit Successful",
               message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
               type: "transaction"
             });
+            try {
+              const { messagingService: psTxSms } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+              const { mailtrapService: psTxMailtrap } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+              if (user.phone) {
+                psTxSms.sendTransactionNotification(user.phone, "deposit", depositAmount.toFixed(2), "USD", "completed", transaction.id).catch(() => {
+                });
+              }
+              if (user.email) {
+                psTxMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(" ")[0] || "User",
+                  user.lastName || user.fullName?.split(" ")[1] || "",
+                  depositAmount.toFixed(2),
+                  "USD",
+                  "deposit",
+                  transaction.id
+                ).catch(() => {
+                });
+              }
+            } catch (_) {
+            }
             console.log(`User ${user.id} credited with $${depositAmount}. New balance: ${newBalance}`);
           }
         }
@@ -8107,7 +9536,7 @@ async function registerRoutes(app2) {
   });
   app2.post("/api/deposit/initialize-payment", requireAuth, async (req, res) => {
     try {
-      const { amount, currency, paymentMethod } = req.body;
+      const { amount, currency, paymentMethod, billingAddress, billingCity, billingCountry } = req.body;
       const userId = req.session.userId;
       console.log("Deposit payment request - userId:", userId, "amount:", amount, "currency:", currency, "method:", paymentMethod);
       if (!userId) {
@@ -8135,13 +9564,18 @@ async function registerRoutes(app2) {
       let channels = ["card", "mobile_money"];
       if (paymentMethod === "card") channels = ["card"];
       if (paymentMethod === "mpesa" || paymentMethod === "airtel") channels = ["mobile_money"];
+      const paymentMetadata = { paymentMethod };
+      if (billingAddress) paymentMetadata.billing_address = billingAddress;
+      if (billingCity) paymentMetadata.billing_city = billingCity;
+      if (billingCountry) paymentMetadata.billing_country = billingCountry;
       const paymentData = await paystackService.initializePayment(
         user.email,
         parseFloat(finalAmountKes.toFixed(2)),
         reference,
         "KES",
         user.phone || void 0,
-        callbackUrl
+        callbackUrl,
+        paymentMetadata
       );
       if (!paymentData.status) {
         return res.status(400).json({ message: paymentData.message });
@@ -8184,16 +9618,42 @@ async function registerRoutes(app2) {
           await storage.updateTransactionStatus(transaction.id, "completed");
           const user = await storage.getUser(transaction.userId);
           if (user) {
-            const currentBalance = parseFloat(user.balance || "0");
             const depositAmount = parseFloat(transaction.amount);
-            const newBalance = (currentBalance + depositAmount).toFixed(2);
-            await storage.updateUser(user.id, { balance: newBalance });
+            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
+            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
+            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
+            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [depositAmount, depositWallet.id]
+            );
             await notificationService.sendNotification({
               userId: user.id,
               title: "Deposit Successful",
               message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
               type: "transaction"
             });
+            try {
+              const { messagingService: ps2TxSms } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+              const { mailtrapService: ps2TxMailtrap } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+              if (user.phone) {
+                ps2TxSms.sendTransactionNotification(user.phone, "deposit", depositAmount.toFixed(2), "USD", "completed", transaction.id).catch(() => {
+                });
+              }
+              if (user.email) {
+                ps2TxMailtrap.sendTransactionCompleted(
+                  user.email,
+                  user.firstName || user.fullName?.split(" ")[0] || "User",
+                  user.lastName || user.fullName?.split(" ")[1] || "",
+                  depositAmount.toFixed(2),
+                  "USD",
+                  "deposit",
+                  transaction.id
+                ).catch(() => {
+                });
+              }
+            } catch (_) {
+            }
           }
         }
         return res.json({ status: "success", message: "Payment verified and credited" });
@@ -8222,7 +9682,15 @@ async function registerRoutes(app2) {
         console.error(`\u274C User not found: ${userId}`);
         return res.status(404).json({ message: "User not found" });
       }
-      console.log(`\u{1F464} User ${user.fullName} (${user.email}) - KES Balance: ${user.kesBalance}`);
+      const airtimeCurrency = normalizeCurrency(currency);
+      if (airtimeCurrency !== "KES") {
+        return res.status(400).json({ message: "Airtime is currently payable from the KES wallet only." });
+      }
+      const wallet = await getUserWallet(userId, airtimeCurrency);
+      if (!wallet || !wallet.isActive || wallet.isSuspended) {
+        return res.status(400).json({ message: "Your KES wallet is not available for airtime purchases." });
+      }
+      console.log(`\u{1F464} User ${user.fullName} (${user.email}) - KES wallet balance: ${wallet.balance}`);
       const settings = await storage.getSystemSettings();
       const pinRequired = settings.some((s) => s.key === "pin_required" && s.value === "true");
       if (pinRequired && user.pinEnabled) {
@@ -8234,16 +9702,33 @@ async function registerRoutes(app2) {
           return res.status(401).json({ message: "Invalid PIN", success: false });
         }
       }
-      const kesBalance = parseFloat(user.kesBalance || "0");
       const purchaseAmount = parseFloat(amount);
+      const kesBalance = walletAvailableBalance(wallet);
       if (kesBalance < purchaseAmount) {
         console.warn(`\u26A0\uFE0F Insufficient balance - Required: ${purchaseAmount}, Available: ${kesBalance}`);
         return res.status(400).json({
           message: "Insufficient KES balance. Please convert USD to KES using the Exchange feature."
         });
       }
+      const debitResult = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND user_id = $3
+           AND is_active = true AND is_suspended = false
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [purchaseAmount, wallet.id, userId]
+      );
+      if (debitResult.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient KES balance" });
+      }
       console.log(`\u{1F4DE} Calling Statum API for airtime purchase...`);
-      const statumResponse = await statumService.purchaseAirtime(phoneNumber, purchaseAmount);
+      let statumResponse;
+      try {
+        statumResponse = await statumService.purchaseAirtime(phoneNumber, purchaseAmount);
+      } catch (providerError) {
+        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [purchaseAmount, wallet.id]);
+        throw providerError;
+      }
       console.log(`\u2705 Statum API response:`, statumResponse);
       const transaction = await storage.createTransaction({
         userId,
@@ -8264,7 +9749,6 @@ async function registerRoutes(app2) {
       });
       console.log(`\u{1F4BE} Transaction created: ${transaction.id}`);
       const newKesBalance = kesBalance - purchaseAmount;
-      await storage.updateUser(userId, { kesBalance: newKesBalance.toFixed(2) });
       console.log(`\u2705 Updated user balance: ${kesBalance} -> ${newKesBalance}`);
       console.log(`\u{1F389} Airtime purchase completed successfully`);
       res.json({
@@ -8299,17 +9783,44 @@ async function registerRoutes(app2) {
       }
       const bonusAmountSetting = await storage.getSystemSetting("general", "airtime_bonus_amount");
       const bonusEnabledSetting = await storage.getSystemSetting("general", "enable_airtime_bonus");
-      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "15"));
+      const requireKycSetting = await storage.getSystemSetting("general", "airtime_bonus_require_kyc");
+      const requireEmailSetting = await storage.getSystemSetting("general", "airtime_bonus_require_email");
+      const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "10"));
       const isEnabled = String(bonusEnabledSetting?.value) === "true";
+      const requireKyc = String(requireKycSetting?.value || "none");
+      const requireEmail = String(requireEmailSetting?.value) === "true";
       if (!isEnabled) {
         return res.status(400).json({ message: "Bonus claiming is currently disabled" });
       }
-      const currentKesBalance = parseFloat(user.kesBalance || "0");
+      if (requireKyc === "basic" && user.kycStatus !== "verified") {
+        return res.status(400).json({ message: "Basic KYC verification is required to claim this bonus" });
+      }
+      if (requireKyc === "advanced" && user.advancedKycStatus !== "verified") {
+        return res.status(400).json({ message: "Advanced KYC verification is required to claim this bonus" });
+      }
+      if (requireEmail && !user.isEmailVerified) {
+        return res.status(400).json({ message: "Email verification is required to claim this bonus" });
+      }
+      const wallet = await ensureUserWallet(userId, "KES");
+      if (!wallet) {
+        return res.status(400).json({ message: "KES wallet is not enabled. Please contact support." });
+      }
+      const claimResult = await pool.query(
+        `UPDATE users
+         SET has_claimed_airtime_bonus = true, updated_at = NOW()
+         WHERE id = $1 AND has_claimed_airtime_bonus IS NOT TRUE
+         RETURNING id`,
+        [userId]
+      );
+      if (claimResult.rowCount !== 1) {
+        return res.status(400).json({ message: "You have already claimed your airtime bonus" });
+      }
+      const currentKesBalance = walletAvailableBalance(wallet);
       const newKesBalance = currentKesBalance + bonusAmount;
-      await storage.updateUser(userId, {
-        kesBalance: newKesBalance.toFixed(2),
-        hasClaimedAirtimeBonus: true
-      });
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [bonusAmount, wallet.id]
+      );
       console.log(`\u{1F4B0} Bonus credited: ${currentKesBalance} -> ${newKesBalance} KES`);
       const transaction = await storage.createTransaction({
         userId,
@@ -8352,8 +9863,11 @@ async function registerRoutes(app2) {
         console.error(`\u274C User not found: ${userId}`);
         return res.status(404).json({ message: "User not found" });
       }
-      console.log(`\u{1F464} User ${user.fullName} - KES Balance: ${user.kesBalance}`);
-      const kesBalance = parseFloat(user.kesBalance || "0");
+      const kesWallet = await getUserWallet(userId, "KES");
+      if (!kesWallet) {
+        return res.status(400).json({ message: "KES wallet not found" });
+      }
+      const kesBalance = walletAvailableBalance(kesWallet);
       const paymentAmount = parseFloat(amount);
       if (kesBalance < paymentAmount) {
         console.warn(`\u26A0\uFE0F Insufficient balance - Required: ${paymentAmount}, Available: ${kesBalance}`);
@@ -8386,6 +9900,16 @@ async function registerRoutes(app2) {
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
+      const billDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND user_id = $3
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [paymentAmount, kesWallet.id, userId]
+      );
+      if (billDebit.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient KES balance" });
+      }
       console.log(`\u23F3 Bill payment pending verification with provider`);
       res.json({
         success: true,
@@ -8420,10 +9944,115 @@ async function registerRoutes(app2) {
       if (sessionUserId !== requestedUserId) {
         return res.status(403).json({ message: "Access denied" });
       }
-      const card = await storage.getVirtualCardByUserId(requestedUserId);
-      res.json({ card });
+      const cards = await storage.getVirtualCardsByUserId(requestedUserId);
+      const card = cards.find((c) => c.status === "active") || cards[0] || null;
+      res.json({ card, cards });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
+    }
+  });
+  app2.post("/api/virtual-card/:cardId/freeze", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      const { cardId } = req.params;
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== "active") return res.status(400).json({ message: "Only active cards can be frozen" });
+      const updated = await storage.updateVirtualCard(cardId, { status: "frozen", freezeReason: "Frozen by cardholder" });
+      res.json({ card: updated, message: "Card frozen successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error freezing card" });
+    }
+  });
+  app2.post("/api/virtual-card/:cardId/unfreeze", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      const { cardId } = req.params;
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== "frozen") return res.status(400).json({ message: "Card is not frozen" });
+      if (card.freezeReason && card.freezeReason !== "Frozen by cardholder") {
+        return res.status(403).json({ message: "This card was frozen by an admin and cannot be unfrozen by you" });
+      }
+      const updated = await storage.updateVirtualCard(cardId, { status: "active", freezeReason: null });
+      res.json({ card: updated, message: "Card unfrozen successfully" });
+    } catch (error) {
+      res.status(500).json({ message: "Error unfreezing card" });
+    }
+  });
+  app2.post("/api/virtual-card/transfer", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      const { cardId, direction, amount } = req.body;
+      if (!cardId || !direction || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "Invalid transfer parameters" });
+      }
+      const transferAmount = parseFloat(amount);
+      const card = await storage.getVirtualCardById(cardId);
+      if (!card) return res.status(404).json({ message: "Card not found" });
+      if (card.userId !== sessionUserId) return res.status(403).json({ message: "Access denied" });
+      if (card.status !== "active") return res.status(400).json({ message: "Card must be active to transfer funds" });
+      const user = await storage.getUser(sessionUserId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const wallet = await getUserWallet(sessionUserId, "USD");
+      if (!wallet) return res.status(400).json({ message: "USD wallet not found" });
+      const walletBalance = walletAvailableBalance(wallet);
+      const cardBalance = parseFloat(card.balance || "0");
+      if (direction === "wallet_to_card") {
+        const debitResult = await pool.query(
+          `UPDATE wallets
+           SET balance = balance - $1, updated_at = NOW()
+           WHERE id = $2 AND user_id = $3
+             AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+          [transferAmount, wallet.id, sessionUserId]
+        );
+        if (debitResult.rowCount !== 1) {
+          return res.status(400).json({ message: "Insufficient wallet balance" });
+        }
+        const newWalletBalance = (walletBalance - transferAmount).toFixed(2);
+        const newCardBalance = (cardBalance + transferAmount).toFixed(2);
+        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        await storage.createTransaction({
+          userId: sessionUserId,
+          type: "card_transfer",
+          amount: amount.toString(),
+          currency: "USD",
+          status: "completed",
+          description: `Wallet to card transfer`,
+          completedAt: /* @__PURE__ */ new Date(),
+          metadata: { direction: "wallet_to_card", cardId }
+        });
+        res.json({ message: "Funds transferred to card", walletBalance: newWalletBalance, cardBalance: newCardBalance });
+      } else if (direction === "card_to_wallet") {
+        if (cardBalance < transferAmount) {
+          return res.status(400).json({ message: "Insufficient card balance" });
+        }
+        const newCardBalance = (cardBalance - transferAmount).toFixed(2);
+        const newWalletBalance = (walletBalance + transferAmount).toFixed(2);
+        await pool.query(
+          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+          [transferAmount, wallet.id]
+        );
+        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        await storage.createTransaction({
+          userId: sessionUserId,
+          type: "card_transfer",
+          amount: amount.toString(),
+          currency: "USD",
+          status: "completed",
+          description: `Card to wallet transfer`,
+          completedAt: /* @__PURE__ */ new Date(),
+          metadata: { direction: "card_to_wallet", cardId }
+        });
+        res.json({ message: "Funds transferred to wallet", walletBalance: newWalletBalance, cardBalance: newCardBalance });
+      } else {
+        res.status(400).json({ message: "Invalid direction. Use 'wallet_to_card' or 'card_to_wallet'" });
+      }
+    } catch (error) {
+      console.error("Card transfer error:", error);
+      res.status(500).json({ message: "Error processing transfer" });
     }
   });
   const exchangeRateService2 = createExchangeRateService(storage);
@@ -8445,7 +10074,8 @@ async function registerRoutes(app2) {
   app2.get("/api/exchange-rates/:base", optionalApiKey, async (req, res) => {
     try {
       const { base } = req.params;
-      const targets = base.toUpperCase() === "USD" ? ["KES"] : ["USD"];
+      const ALL_CURRENCIES = ["KES", "EUR", "GBP", "NGN", "GHS", "TZS", "UGX", "ZAR", "CAD", "AUD", "JPY", "CNY", "INR", "AED", "SAR", "USD"];
+      const targets = ALL_CURRENCIES.filter((c) => c !== base.toUpperCase());
       const rates = await exchangeRateService2.getMultipleRates(base.toUpperCase(), targets);
       res.json({
         base: base.toUpperCase(),
@@ -8502,7 +10132,19 @@ async function registerRoutes(app2) {
             status: "completed"
           });
           const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
-          messagingService3.sendTransactionNotification(user.phone, "send", amount, currency, "completed").catch((err) => console.error("Transaction notification error:", err));
+          const { mailtrapService: sendMailtrap } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+          messagingService3.sendTransactionNotification(user.phone, "send", amount, currency, "completed", transaction.id).catch((err) => console.error("Transaction notification error:", err));
+          if (user.email) {
+            sendMailtrap.sendTransactionCompleted(
+              user.email,
+              user.firstName || user.fullName?.split(" ")[0] || "User",
+              user.lastName || user.fullName?.split(" ")[1] || "",
+              amount,
+              currency,
+              "send",
+              transaction.id
+            ).catch((err) => console.error("Transaction completed email error:", err));
+          }
         } catch (error) {
           console.error("Transaction completion error:", error);
         }
@@ -8537,8 +10179,14 @@ async function registerRoutes(app2) {
         description: `Received from ${senderDetails.name}`
       });
       const user = await storage.getUser(userId);
-      const newBalance = (parseFloat(user?.balance || "0") + parseFloat(amount)).toFixed(2);
-      await storage.updateUser(userId, { balance: newBalance });
+      const receiveCurrency = normalizeCurrency(currency);
+      const receiveWallet = await ensureUserWallet(userId, receiveCurrency);
+      if (!receiveWallet) return res.status(400).json({ message: `${receiveCurrency} wallet is not enabled` });
+      const newBalance = (walletAvailableBalance(receiveWallet) + parseFloat(amount)).toFixed(2);
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [parseFloat(amount), receiveWallet.id]
+      );
       await notificationService.sendTransactionNotification(userId, transaction);
       if (user) {
         const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
@@ -8951,7 +10599,7 @@ async function registerRoutes(app2) {
   app2.put("/api/users/:userId/settings", async (req, res) => {
     try {
       const { userId } = req.params;
-      const { defaultCurrency, pushNotificationsEnabled, twoFactorEnabled, biometricEnabled, ...settings } = req.body;
+      const { defaultCurrency, pushNotificationsEnabled, twoFactorEnabled, biometricEnabled, darkMode, ...settings } = req.body;
       const updateData = { ...settings };
       if (defaultCurrency) updateData.defaultCurrency = defaultCurrency;
       if (pushNotificationsEnabled !== void 0) updateData.pushNotificationsEnabled = pushNotificationsEnabled;
@@ -8959,6 +10607,25 @@ async function registerRoutes(app2) {
       if (biometricEnabled !== void 0) updateData.biometricEnabled = biometricEnabled;
       if (darkMode !== void 0) updateData.darkMode = darkMode;
       const user = await storage.updateUser(userId, updateData);
+      if (defaultCurrency && user) {
+        try {
+          const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+          const matchingWallet = userWallets.find((w) => w.currency === defaultCurrency);
+          if (matchingWallet) {
+            await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
+            await db.update(wallets).set({ isDefault: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, matchingWallet.id));
+          } else {
+            const enabledSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
+            const enabled = (enabledSetting.rows[0]?.value?.replace(/['"]/g, "") || "USD,KES").split(",");
+            if (enabled.includes(defaultCurrency)) {
+              await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
+              await db.insert(wallets).values({ userId, currency: defaultCurrency, isDefault: true, isActive: true });
+            }
+          }
+        } catch (walletSyncErr) {
+          console.error("Wallet sync error:", walletSyncErr);
+        }
+      }
       if (user) {
         const { password, ...userResponse } = user;
         res.json({ user: userResponse, message: "Settings updated successfully" });
@@ -8985,43 +10652,48 @@ async function registerRoutes(app2) {
       const totalDeducted = exchangeAmount + parseFloat(fee);
       const exchangeRate = await exchangeRateService2.getExchangeRate(fromCurrency, toCurrency);
       const convertedAmount = (exchangeAmount * exchangeRate).toFixed(2);
-      const currentUsdBalance = parseFloat(user.balance || "0");
-      const currentKesBalance = parseFloat(user.kesBalance || "0");
-      let newUsdBalance = currentUsdBalance;
-      let newKesBalance = currentKesBalance;
-      if (fromCurrency === "USD" && toCurrency === "KES") {
-        if (currentUsdBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient USD balance" });
-        }
-        newUsdBalance = currentUsdBalance - totalDeducted;
-        newKesBalance = currentKesBalance + parseFloat(convertedAmount);
-      } else if (fromCurrency === "KES" && toCurrency === "USD") {
-        if (currentKesBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient KES balance" });
-        }
-        newKesBalance = currentKesBalance - totalDeducted;
-        newUsdBalance = currentUsdBalance + parseFloat(convertedAmount);
-      } else {
-        if (currentUsdBalance < totalDeducted) {
-          return res.status(400).json({ message: "Insufficient USD balance" });
-        }
-        newUsdBalance = currentUsdBalance - totalDeducted;
+      const sourceCurrency = normalizeCurrency(fromCurrency);
+      const targetCurrency = normalizeCurrency(toCurrency);
+      const enabledCurrencies = await getEnabledCurrencyCodes();
+      if (!enabledCurrencies.includes(sourceCurrency) || !enabledCurrencies.includes(targetCurrency)) {
+        return res.status(400).json({ message: "Both currencies must be enabled" });
       }
-      await storage.updateUser(userId, {
-        balance: newUsdBalance.toFixed(2),
-        kesBalance: newKesBalance.toFixed(2)
-      });
+      if (sourceCurrency === targetCurrency) {
+        return res.status(400).json({ message: "Choose two different currencies" });
+      }
+      const sourceWallet = await getUserWallet(userId, sourceCurrency);
+      const targetWallet = await ensureUserWallet(userId, targetCurrency);
+      if (!sourceWallet || !targetWallet) {
+        return res.status(400).json({ message: "Create wallets for both currencies before exchanging" });
+      }
+      const available = walletAvailableBalance(sourceWallet);
+      if (available < totalDeducted) {
+        return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
+      }
+      const debit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [totalDeducted, sourceWallet.id]
+      );
+      if (debit.rowCount !== 1) {
+        return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
+      }
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [parseFloat(convertedAmount), targetWallet.id]
+      );
       const transaction = await storage.createTransaction({
         userId,
         type: "exchange",
         amount: amount.toString(),
-        currency: fromCurrency,
+        currency: sourceCurrency,
         status: "completed",
         fee,
         exchangeRate: exchangeRate.toString(),
-        description: `Exchanged ${amount} ${fromCurrency} to ${convertedAmount} ${toCurrency}`,
+        description: `Exchanged ${amount} ${sourceCurrency} to ${convertedAmount} ${targetCurrency}`,
         metadata: {
-          targetCurrency: toCurrency,
+          targetCurrency,
           convertedAmount,
           exchangeType: "instant"
         }
@@ -9452,33 +11124,277 @@ async function registerRoutes(app2) {
     try {
       const { id } = req.params;
       const { status, verificationNotes } = req.body;
+      const isReVerify = status === "re_verification_requested";
+      const docStatus = isReVerify ? "re_verification_requested" : status;
+      const userKycStatus = isReVerify ? "not_submitted" : status;
+      if (status === "verified") {
+        const kycDoc = await storage.getKycByUserId(
+          (await db.select({ userId: kycDocuments.userId }).from(kycDocuments).where(eq3(kycDocuments.id, id)))[0]?.userId
+        );
+        const decision = kycDoc?.diditDecision;
+        const idNumber = decision?.features?.document?.document_number || null;
+        if (idNumber) {
+          const existing = await db.select({ id: users.id }).from(users).where(eq3(users.kycIdNumber, idNumber));
+          const conflict = existing.find((u) => u.id !== kycDoc?.userId);
+          if (conflict) {
+            return res.status(409).json({ message: `This ID document (${idNumber}) is already linked to another account. Verification blocked to prevent duplicate accounts.` });
+          }
+        }
+      }
       const updatedKyc = await storage.updateKycDocument(id, {
-        status,
+        status: docStatus,
         verificationNotes,
-        verifiedAt: status === "verified" ? /* @__PURE__ */ new Date() : null
+        verifiedAt: status === "verified" ? /* @__PURE__ */ new Date() : null,
+        // Clear didit session so a fresh one is created on retry
+        ...isReVerify ? { diditSessionId: null, diditStatus: null } : {}
       });
       if (updatedKyc) {
-        await storage.updateUser(updatedKyc.userId, { kycStatus: status });
         if (status === "verified") {
-          const user = await storage.getUser(updatedKyc.userId);
-          if (user) {
+          const decision = updatedKyc.diditDecision;
+          const doc = decision?.features?.document || {};
+          const kycFields = {
+            kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(" ") || null,
+            kycDateOfBirth: doc.date_of_birth || null,
+            kycIdNumber: doc.document_number || null,
+            kycNationality: doc.nationality || null,
+            kycGender: doc.gender || null,
+            kycAddress: doc.address || null,
+            kycDocumentType: doc.document_type || null,
+            kycIdExpiryDate: doc.expiry_date || null,
+            kycIssuingCountry: doc.issuing_country || null
+          };
+          const filteredKycFields = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+          if (Object.keys(filteredKycFields).length > 0) {
+            await storage.updateUser(updatedKyc.userId, filteredKycFields);
+          }
+        }
+        await storage.updateUser(updatedKyc.userId, { kycStatus: userKycStatus });
+        const user = await storage.getUser(updatedKyc.userId);
+        if (user) {
+          if (status === "verified") {
             const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
             const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
             Promise.all([
               messagingService3.sendKYCVerified(user.phone),
               user.email ? mailtrapService3.sendKYCVerified(
                 user.email,
-                user.firstName || "User",
-                user.lastName || ""
+                user.fullName?.split(" ")[0] || "User",
+                user.fullName?.split(" ").slice(1).join(" ") || ""
               ) : Promise.resolve(false)
             ]).catch((err) => console.error("KYC notification error:", err));
           }
+          const notifMsg = isReVerify ? "Admin has requested you to re-verify your identity. Please complete a new verification." : status === "verified" ? "Your identity has been verified. You now have full access to all features." : status === "rejected" ? `Your KYC verification was rejected. ${verificationNotes ? "Reason: " + verificationNotes : "Please try again."}` : "Your KYC status has been updated.";
+          await storage.createNotification({
+            userId: updatedKyc.userId,
+            title: isReVerify ? "Re-verification Required" : status === "verified" ? "KYC Verified \u2705" : status === "rejected" ? "KYC Rejected \u274C" : "KYC Update",
+            message: notifMsg,
+            type: isReVerify ? "warning" : status === "verified" ? "success" : status === "rejected" ? "error" : "info",
+            isGlobal: false
+          });
         }
       }
       res.json({ kyc: updatedKyc });
     } catch (error) {
       console.error("KYC update error:", error);
       res.status(500).json({ message: "Failed to update KYC" });
+    }
+  });
+  app2.post("/api/admin/kyc/:id/poll-didit", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const [kyc] = await db.select().from(kycDocuments).where(eq3(kycDocuments.id, id));
+      if (!kyc) return res.status(404).json({ message: "KYC document not found" });
+      const sessionId = kyc.diditSessionId;
+      if (!sessionId) {
+        return res.status(400).json({ message: "No Didit session attached to this document" });
+      }
+      const { getSessionDecision: getSessionDecision2, mapDiditStatusToKyc: mapDiditStatusToKyc2, isTerminalStatus: isTerminalStatus2 } = await Promise.resolve().then(() => (init_didit(), didit_exports));
+      const decision = await getSessionDecision2(sessionId);
+      if (!decision) {
+        return res.status(502).json({ message: "Failed to fetch decision from Didit" });
+      }
+      const diditStatus = decision.status;
+      const kycStatus = mapDiditStatusToKyc2(diditStatus);
+      const docFeatures = decision.features?.document || {};
+      const extractedData = {
+        firstName: docFeatures.first_name || null,
+        lastName: docFeatures.last_name || null,
+        fullName: [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(" ") || null,
+        dateOfBirth: docFeatures.date_of_birth || null,
+        idNumber: docFeatures.document_number || null,
+        documentType: docFeatures.document_type || null,
+        nationality: docFeatures.nationality || null,
+        gender: docFeatures.gender || null,
+        expiryDate: docFeatures.expiry_date || null,
+        address: docFeatures.address || null,
+        issuingCountry: docFeatures.issuing_country || null
+      };
+      if (kycStatus === "verified" && extractedData.idNumber) {
+        const existing = await db.select({ id: users.id }).from(users).where(eq3(users.kycIdNumber, extractedData.idNumber));
+        if (existing.some((u) => u.id !== kyc.userId)) {
+          return res.status(409).json({ message: `This ID document (${extractedData.idNumber}) is already linked to another account. Verification blocked.` });
+        }
+      }
+      await storage.updateKycDocument(id, {
+        diditStatus,
+        status: kycStatus,
+        diditDecision: decision,
+        verifiedAt: kycStatus === "verified" ? /* @__PURE__ */ new Date() : void 0
+      });
+      await storage.updateUser(kyc.userId, { kycStatus });
+      if (kycStatus === "verified") {
+        const kycFields = {
+          kycFullName: extractedData.fullName || null,
+          kycDateOfBirth: extractedData.dateOfBirth || null,
+          kycIdNumber: extractedData.idNumber || null,
+          kycNationality: extractedData.nationality || null,
+          kycGender: extractedData.gender || null,
+          kycAddress: extractedData.address || null,
+          kycDocumentType: extractedData.documentType || null,
+          kycIdExpiryDate: extractedData.expiryDate || null,
+          kycIssuingCountry: extractedData.issuingCountry || null
+        };
+        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        if (Object.keys(filtered).length > 0) await storage.updateUser(kyc.userId, filtered);
+      }
+      if (isTerminalStatus2(diditStatus)) {
+        const user = await storage.getUser(kyc.userId);
+        if (user) {
+          const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+          const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+          if (kycStatus === "verified") {
+            Promise.all([
+              messagingService3.sendKYCVerified(user.phone),
+              user.email ? mailtrapService3.sendKYCVerified(user.email, user.fullName?.split(" ")[0] || "User", "") : Promise.resolve()
+            ]).catch((err) => console.error("[Didit] Notification error:", err));
+          }
+          await storage.createNotification({
+            userId: kyc.userId,
+            title: kycStatus === "verified" ? "KYC Verified \u2705" : "KYC Update",
+            message: kycStatus === "verified" ? "Your identity has been verified. You now have full access to all features." : kycStatus === "rejected" ? "Your KYC verification was not successful. Please try again." : "Your KYC is under review.",
+            type: kycStatus === "verified" ? "success" : kycStatus === "rejected" ? "error" : "info",
+            isGlobal: false
+          });
+        }
+      }
+      res.json({
+        diditStatus,
+        kycStatus,
+        decision,
+        extractedData,
+        sessionId
+      });
+    } catch (error) {
+      console.error("[Admin] Poll Didit error:", error);
+      res.status(500).json({ message: "Failed to poll Didit" });
+    }
+  });
+  app2.post("/api/kyc/advanced/submit", requireAuth, upload.fields([
+    { name: "facialPhoto", maxCount: 1 },
+    { name: "addressProof", maxCount: 1 }
+  ]), async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) return res.status(401).json({ message: "Unauthorized" });
+      const files = req.files;
+      const { addressProofType, fullAddress, city, postalCode, country } = req.body;
+      if (!files?.facialPhoto || !files?.addressProof) {
+        return res.status(400).json({ message: "Facial photo and address proof are required" });
+      }
+      if (!addressProofType || !fullAddress) {
+        return res.status(400).json({ message: "Address proof type and full address are required" });
+      }
+      const { advancedKycDocuments: advKycTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const existing = await db.select().from(advKycTable).where(eq3(advKycTable.userId, sessionUserId));
+      if (existing.length > 0 && existing[0].status === "pending") {
+        return res.status(409).json({ message: "Your advanced KYC is currently under review" });
+      }
+      if (existing.length > 0 && existing[0].status === "verified") {
+        return res.status(409).json({ message: "Your advanced KYC is already verified" });
+      }
+      let facialPhotoUrl = null;
+      let addressProofUrl = null;
+      try {
+        [facialPhotoUrl, addressProofUrl] = await Promise.all([
+          cloudinaryStorage2.uploadKycDocument(files.facialPhoto[0].buffer, files.facialPhoto[0].originalname, files.facialPhoto[0].mimetype),
+          cloudinaryStorage2.uploadKycDocument(files.addressProof[0].buffer, files.addressProof[0].originalname, files.addressProof[0].mimetype)
+        ]);
+      } catch (uploadErr) {
+        const buf1 = files.facialPhoto[0].buffer;
+        facialPhotoUrl = `data:${files.facialPhoto[0].mimetype};base64,${buf1.toString("base64")}`;
+        const buf2 = files.addressProof[0].buffer;
+        addressProofUrl = `data:${files.addressProof[0].mimetype};base64,${buf2.toString("base64")}`;
+      }
+      if (existing.length > 0) {
+        await db.update(advKycTable).set({
+          facialPhotoUrl,
+          addressProofUrl,
+          addressProofType,
+          fullAddress,
+          city,
+          postalCode,
+          country,
+          status: "pending",
+          verificationNotes: null,
+          verifiedAt: null,
+          updatedAt: /* @__PURE__ */ new Date()
+        }).where(eq3(advKycTable.userId, sessionUserId));
+      } else {
+        await db.insert(advKycTable).values({
+          userId: sessionUserId,
+          facialPhotoUrl,
+          addressProofUrl,
+          addressProofType,
+          fullAddress,
+          city,
+          postalCode,
+          country
+        });
+      }
+      await storage.updateUser(sessionUserId, { advancedKycStatus: "pending" });
+      res.json({ success: true, message: "Advanced KYC submitted successfully" });
+    } catch (e) {
+      console.error("Advanced KYC submit error:", e);
+      res.status(500).json({ message: "Failed to submit advanced KYC" });
+    }
+  });
+  app2.get("/api/kyc/advanced", requireAuth, async (req, res) => {
+    try {
+      const sessionUserId = req.session?.userId;
+      if (!sessionUserId) return res.status(401).json({ message: "Unauthorized" });
+      const { advancedKycDocuments: advKycTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const docs = await db.select().from(advKycTable).where(eq3(advKycTable.userId, sessionUserId));
+      res.json({ advancedKyc: docs[0] || null });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch advanced KYC" });
+    }
+  });
+  app2.get("/api/admin/kyc/advanced", requireAdminAuth, async (req, res) => {
+    try {
+      const { advancedKycDocuments: advKycTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const docs = await db.select().from(advKycTable).orderBy(advKycTable.createdAt);
+      res.json({ advancedKycDocuments: docs });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to fetch advanced KYC documents" });
+    }
+  });
+  app2.put("/api/admin/kyc/advanced/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, verificationNotes } = req.body;
+      const { advancedKycDocuments: advKycTable } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const [updated] = await db.update(advKycTable).set({
+        status,
+        verificationNotes,
+        verifiedAt: status === "verified" ? /* @__PURE__ */ new Date() : null,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq3(advKycTable.id, id)).returning();
+      if (updated) {
+        await storage.updateUser(updated.userId, { advancedKycStatus: status });
+      }
+      res.json({ advancedKyc: updated });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update advanced KYC" });
     }
   });
   app2.get("/api/admin/transactions", async (req, res) => {
@@ -9506,7 +11422,22 @@ async function registerRoutes(app2) {
   });
   app2.get("/api/admin/virtual-cards", async (req, res) => {
     try {
-      const cards = await storage.getAllVirtualCards();
+      const search = (req.query.search || "").toLowerCase().trim();
+      const allCards = await storage.getAllVirtualCards();
+      const enriched = await Promise.all(
+        allCards.map(async (card) => {
+          const user = await storage.getUser(card.userId);
+          return {
+            ...card,
+            userName: user?.fullName || "Unknown",
+            userEmail: user?.email || "",
+            userPhone: user?.phone || ""
+          };
+        })
+      );
+      const cards = search ? enriched.filter(
+        (c) => c.cardHolderName.toLowerCase().includes(search) || c.cardNumber.toLowerCase().includes(search) || c.userName.toLowerCase().includes(search) || c.userEmail.toLowerCase().includes(search) || c.userPhone.toLowerCase().includes(search) || c.userId.toLowerCase().includes(search)
+      ) : enriched;
       res.json({ cards });
     } catch (error) {
       console.error("Virtual cards fetch error:", error);
@@ -9520,6 +11451,56 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Admin logs fetch error:", error);
       res.status(500).json({ message: "Failed to fetch admin logs" });
+    }
+  });
+  app2.put("/api/admin/users/:id/profile", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const {
+        fullName,
+        email,
+        phone,
+        country,
+        kycFullName,
+        kycDateOfBirth,
+        kycIdNumber,
+        kycNationality,
+        kycGender,
+        kycAddress,
+        kycDocumentType,
+        kycIdExpiryDate,
+        kycIssuingCountry
+      } = req.body;
+      const updates = {};
+      if (fullName !== void 0) updates.fullName = fullName.trim();
+      if (email !== void 0) updates.email = email.trim().toLowerCase();
+      if (phone !== void 0) updates.phone = phone.trim();
+      if (country !== void 0) updates.country = country.trim();
+      if (kycFullName !== void 0) updates.kycFullName = kycFullName?.trim() || null;
+      if (kycDateOfBirth !== void 0) updates.kycDateOfBirth = kycDateOfBirth?.trim() || null;
+      if (kycIdNumber !== void 0) updates.kycIdNumber = kycIdNumber?.trim() || null;
+      if (kycNationality !== void 0) updates.kycNationality = kycNationality?.trim() || null;
+      if (kycGender !== void 0) updates.kycGender = kycGender?.trim() || null;
+      if (kycAddress !== void 0) updates.kycAddress = kycAddress?.trim() || null;
+      if (kycDocumentType !== void 0) updates.kycDocumentType = kycDocumentType?.trim() || null;
+      if (kycIdExpiryDate !== void 0) updates.kycIdExpiryDate = kycIdExpiryDate?.trim() || null;
+      if (kycIssuingCountry !== void 0) updates.kycIssuingCountry = kycIssuingCountry?.trim() || null;
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+      const updatedUser = await storage.updateUser(id, updates);
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "user_profile_updated",
+        details: `Admin updated profile for user ${user.email}: ${Object.keys(updates).join(", ")}`,
+        targetId: id
+      });
+      res.json({ user: updatedUser, message: "Profile updated successfully" });
+    } catch (error) {
+      console.error("Update user profile error:", error);
+      res.status(500).json({ message: "Failed to update user profile" });
     }
   });
   app2.put("/api/admin/users/:id/block", async (req, res) => {
@@ -9548,6 +11529,30 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to unblock user" });
     }
   });
+  app2.post("/api/admin/users/:id/request-advanced-kyc", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      await storage.updateUser(id, { advancedKycRequested: true });
+      res.json({ message: "Advanced KYC requested successfully" });
+    } catch (error) {
+      console.error("Request advanced KYC error:", error);
+      res.status(500).json({ message: "Failed to request advanced KYC" });
+    }
+  });
+  app2.post("/api/admin/users/:id/cancel-advanced-kyc-request", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const user = await storage.getUser(id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      await storage.updateUser(id, { advancedKycRequested: false });
+      res.json({ message: "Advanced KYC request cancelled" });
+    } catch (error) {
+      console.error("Cancel advanced KYC request error:", error);
+      res.status(500).json({ message: "Failed to cancel request" });
+    }
+  });
   app2.put("/api/admin/users/:id/account", async (req, res) => {
     try {
       const { id } = req.params;
@@ -9574,7 +11579,14 @@ async function registerRoutes(app2) {
           break;
         }
         case "unsuspend":
-          updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          if (pool) {
+            await pool.query(
+              `UPDATE users SET is_suspended = false, suspended_at = NULL, suspension_reason = NULL, updated_at = NOW() WHERE id = $1`,
+              [id]
+            );
+          } else {
+            updateData = { isSuspended: false, suspendedAt: null, suspensionReason: null };
+          }
           logMessage = `Admin unsuspended user account: ${user.email}`;
           break;
         case "force_logout":
@@ -9704,6 +11716,79 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to fetch user transactions" });
     }
   });
+  app2.get("/api/admin/users/:id/crypto-transactions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const txns = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.userId, id)).orderBy(desc2(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+  app2.put("/api/admin/transactions/:id/edit", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, currency, type, description, status, createdAt, fee } = req.body;
+      const existing = await storage.getTransaction(id);
+      if (!existing) return res.status(404).json({ message: "Transaction not found" });
+      const updates = {};
+      if (amount !== void 0) updates.amount = String(amount);
+      if (currency !== void 0) updates.currency = currency;
+      if (type !== void 0) updates.type = type;
+      if (description !== void 0) updates.description = description;
+      if (fee !== void 0) updates.fee = String(fee);
+      if (status !== void 0) updates.status = status;
+      if (createdAt !== void 0) updates.createdAt = new Date(createdAt);
+      updates.updatedAt = /* @__PURE__ */ new Date();
+      const updated = await storage.updateTransaction(id, updates);
+      res.json({ transaction: updated, message: "Transaction updated" });
+    } catch (error) {
+      console.error("Admin edit transaction error:", error);
+      res.status(500).json({ message: "Failed to update transaction" });
+    }
+  });
+  app2.delete("/api/admin/transactions/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await storage.getTransaction(id);
+      if (!existing) return res.status(404).json({ message: "Transaction not found" });
+      await db.delete(transactions).where(eq3(transactions.id, id));
+      res.json({ message: "Transaction deleted" });
+    } catch (error) {
+      console.error("Admin delete transaction error:", error);
+      res.status(500).json({ message: "Failed to delete transaction" });
+    }
+  });
+  app2.put("/api/admin/crypto/transactions/:id/edit", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { status, txHash, adminNotes, amount, usdValue, coin, network, createdAt } = req.body;
+      const updateData = { updatedAt: /* @__PURE__ */ new Date() };
+      if (status !== void 0) updateData.status = status;
+      if (txHash !== void 0) updateData.txHash = txHash;
+      if (adminNotes !== void 0) updateData.adminNotes = adminNotes;
+      if (amount !== void 0) updateData.amount = String(amount);
+      if (usdValue !== void 0) updateData.usdValue = String(usdValue);
+      if (coin !== void 0) updateData.coin = coin;
+      if (network !== void 0) updateData.network = network;
+      if (createdAt !== void 0) updateData.createdAt = new Date(createdAt);
+      if (status === "completed") updateData.completedAt = /* @__PURE__ */ new Date();
+      await db.update(cryptoTransactions).set(updateData).where(eq3(cryptoTransactions.id, id));
+      const [updated] = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.id, id));
+      res.json({ transaction: updated, message: "Crypto transaction updated" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update crypto transaction" });
+    }
+  });
+  app2.delete("/api/admin/crypto/transactions/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(cryptoTransactions).where(eq3(cryptoTransactions.id, id));
+      res.json({ message: "Crypto transaction deleted" });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete crypto transaction" });
+    }
+  });
   app2.put("/api/admin/transactions/:txId/status", async (req, res) => {
     try {
       const { txId } = req.params;
@@ -9712,8 +11797,38 @@ async function registerRoutes(app2) {
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
       }
+      const before = await storage.getTransaction(txId);
+      if (!before) return res.status(404).json({ message: "Transaction not found" });
       const updated = await storage.updateTransaction(txId, { status });
       if (!updated) return res.status(404).json({ message: "Transaction not found" });
+      const deductionTypes = ["send", "withdraw", "transfer", "exchange", "bills", "airtime", "card_purchase"];
+      const wasDeducted = ["pending", "processing", "completed"].includes(before.status || "");
+      const nowFailed = status === "failed" || status === "cancelled";
+      const wasFailed = before.status === "failed" || before.status === "cancelled";
+      if (deductionTypes.includes(before.type) && wasDeducted && nowFailed && !wasFailed) {
+        const user = await storage.getUser(before.userId);
+        if (user) {
+          const refundAmount = parseFloat(before.amount || "0") + parseFloat(before.fee || "0");
+          const refundCurrency = normalizeCurrency(before.currency || "USD");
+          const refundWallet = await ensureUserWallet(before.userId, refundCurrency);
+          if (refundWallet) {
+            await pool.query(
+              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+              [refundAmount, refundWallet.id]
+            );
+          }
+          console.log(`\u2705 Refunded ${before.currency} ${refundAmount} to user ${user.email} (admin marked ${status})`);
+          try {
+            await notificationService.sendNotification({
+              title: status === "cancelled" ? "Transaction Cancelled & Refunded" : "Transaction Failed & Refunded",
+              body: `Your ${before.type} of ${before.currency} ${refundAmount} was marked as ${status}. The amount has been refunded to your wallet.`,
+              userId: before.userId,
+              type: "transaction"
+            });
+          } catch {
+          }
+        }
+      }
       res.json({ transaction: updated });
     } catch (error) {
       console.error("Admin update transaction status error:", error);
@@ -10307,8 +12422,11 @@ async function registerRoutes(app2) {
       }
       const { amount, type, details, currency } = req.body;
       const targetCurrency = currency?.toUpperCase() || "USD";
-      const isKes = targetCurrency === "KES";
-      const currentBalance = parseFloat(isKes ? user.kesBalance || "0" : user.balance || "0");
+      const adjustmentWallet = await ensureUserWallet(req.params.id, targetCurrency);
+      if (!adjustmentWallet) {
+        return res.status(400).json({ error: `${targetCurrency} wallet is not enabled` });
+      }
+      const currentBalance = walletAvailableBalance(adjustmentWallet);
       const updateAmount = parseFloat(amount);
       let newBalance;
       let transactionType;
@@ -10328,8 +12446,14 @@ async function registerRoutes(app2) {
         default:
           return res.status(400).json({ error: "Invalid update type" });
       }
-      const balanceUpdate = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
-      const updatedUser = await storage.updateUser(req.params.id, balanceUpdate);
+      const adjustmentResult = await pool.query(
+        `UPDATE wallets SET balance = $1, updated_at = NOW() WHERE id = $2`,
+        [newBalance.toFixed(2), adjustmentWallet.id]
+      );
+      if (adjustmentResult.rowCount !== 1) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      const updatedUser = await storage.getUser(req.params.id);
       const transactionAmount = type === "set" ? Math.abs(newBalance - currentBalance) : updateAmount;
       const transactionData = {
         userId: req.params.id,
@@ -10510,32 +12634,6 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to update KYC document" });
     }
   });
-  app2.get("/api/admin/transactions", async (req, res) => {
-    try {
-      const page = parseInt(req.query.page) || 1;
-      const limit = parseInt(req.query.limit) || 20;
-      const status = req.query.status;
-      const result = await storage.getAllTransactions({ status, page, limit });
-      res.json(result);
-    } catch (error) {
-      console.error("Transactions fetch error:", error);
-      res.status(500).json({ message: "Failed to fetch transactions" });
-    }
-  });
-  app2.put("/api/admin/transactions/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      const updatedTransaction = await storage.updateTransaction(id, updates);
-      if (!updatedTransaction) {
-        return res.status(404).json({ message: "Transaction not found" });
-      }
-      res.json({ transaction: updatedTransaction });
-    } catch (error) {
-      console.error("Transaction update error:", error);
-      res.status(500).json({ message: "Failed to update transaction" });
-    }
-  });
   app2.put("/api/admin/transactions/:id/date", async (req, res) => {
     try {
       const { id } = req.params;
@@ -10556,30 +12654,7 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to update transaction date" });
     }
   });
-  app2.get("/api/admin/virtual-cards", async (req, res) => {
-    try {
-      const virtualCards2 = await storage.getAllVirtualCards();
-      res.json({ virtualCards: virtualCards2 });
-    } catch (error) {
-      console.error("Virtual cards fetch error:", error);
-      res.status(500).json({ message: "Failed to fetch virtual cards" });
-    }
-  });
-  app2.put("/api/admin/virtual-cards/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const updates = req.body;
-      const updatedCard = await storage.updateVirtualCard(id, updates);
-      if (!updatedCard) {
-        return res.status(404).json({ message: "Virtual card not found" });
-      }
-      res.json({ virtualCard: updatedCard });
-    } catch (error) {
-      console.error("Virtual card update error:", error);
-      res.status(500).json({ message: "Failed to update virtual card" });
-    }
-  });
-  app2.post("/api/admin/virtual-cards/:id/reissue", requireAdminAuth, async (req, res) => {
+  app2.post("/api/admin/virtual-cards/:id/reissue", async (req, res) => {
     try {
       const { id } = req.params;
       const oldCard = await storage.getVirtualCardById(id);
@@ -10591,7 +12666,7 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      await storage.updateVirtualCard(id, { status: "inactive" });
+      await storage.updateVirtualCard(id, { status: "blocked", blockReason: "Replaced by reissued card" });
       const newCardNumber = `4567${Math.random().toString().slice(2, 14)}`;
       const newCvv = Math.floor(100 + Math.random() * 900).toString();
       const expiryDate = /* @__PURE__ */ new Date();
@@ -10608,6 +12683,7 @@ async function registerRoutes(app2) {
         currency: "USD",
         purchaseDate: /* @__PURE__ */ new Date()
       });
+      await storage.updateUser(userId, { hasVirtualCard: true, cardStatus: "active" });
       await storage.createAdminLog({
         adminId: req.session?.admin?.id || null,
         action: "card_reissued",
@@ -10630,6 +12706,29 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Failed to reissue card" });
     }
   });
+  app2.get("/api/app-downloads", async (req, res) => {
+    try {
+      const keys = ["play_store_url", "app_store_url", "apk_url", "apk_version", "huawei_app_gallery_url"];
+      const out = {};
+      for (const key of keys) {
+        const setting = await storage.getSystemSetting("app_downloads", key);
+        if (setting) {
+          const v = setting.value;
+          out[key] = typeof v === "string" ? v : v?.value ?? String(v ?? "");
+        }
+      }
+      res.json({
+        playStoreUrl: out.play_store_url || "",
+        appStoreUrl: out.app_store_url || "",
+        apkUrl: out.apk_url || "",
+        apkVersion: out.apk_version || "",
+        huaweiUrl: out.huawei_app_gallery_url || ""
+      });
+    } catch (error) {
+      console.error("App downloads fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch app download links" });
+    }
+  });
   app2.get("/api/admin/settings", async (req, res) => {
     try {
       const settings = await storage.getSystemSettings();
@@ -10646,7 +12745,7 @@ async function registerRoutes(app2) {
       const stringValue = typeof value === "string" ? value : String(value);
       let category = req.body.category || "messaging";
       if (!req.body.category) {
-        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus") {
+        if (key.startsWith("maintenance_") || key === "maintenance_mode" || key === "maintenance_message" || key.startsWith("airtime_") || key === "enable_airtime_bonus" || key === "airtime_bonus_require_kyc" || key === "airtime_bonus_require_email") {
           category = "general";
         } else if (key.includes("fee") || key.includes("limit") || key.includes("amount")) {
           category = "fees";
@@ -10835,6 +12934,55 @@ async function registerRoutes(app2) {
     } catch (error) {
       console.error("Error retrieving login history:", error);
       res.status(500).json({ error: "Failed to retrieve login history" });
+    }
+  });
+  app2.get("/api/users/me/devices", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      const history = await storage.getLoginHistoryByUserId(userId, 20);
+      res.json({ devices: history });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve devices" });
+    }
+  });
+  app2.post("/api/users/me/revoke-all-sessions", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      const currentSid = req.session?.id;
+      await db.execute(
+        sql3`DELETE FROM user_sessions WHERE sess->>'userId' = ${userId} AND sid != ${currentSid}`
+      );
+      res.json({ message: "All other sessions revoked successfully" });
+    } catch (error) {
+      console.error("Revoke sessions error:", error);
+      res.status(500).json({ error: "Failed to revoke sessions" });
+    }
+  });
+  app2.get("/api/admin/users/:id/devices", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const history = await storage.getLoginHistoryByUserId(id, 30);
+      res.json({ devices: history });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to retrieve user devices" });
+    }
+  });
+  app2.post("/api/admin/users/:id/revoke-all-sessions", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const result = await db.execute(
+        sql3`DELETE FROM user_sessions WHERE sess->>'userId' = ${id}`
+      );
+      await storage.createAdminLog({
+        adminId: req.session?.admin?.id || null,
+        action: "revoke_user_sessions",
+        details: `Admin revoked all sessions for user ${id}`,
+        targetId: id
+      });
+      res.json({ message: "All sessions for user revoked" });
+    } catch (error) {
+      console.error("Admin revoke sessions error:", error);
+      res.status(500).json({ error: "Failed to revoke user sessions" });
     }
   });
   app2.get("/api/analytics/:userId/spending", requireAuth, async (req, res) => {
@@ -11033,14 +13181,20 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const userBalance = parseFloat(user.balance || "0");
       const contributionAmount = parseFloat(amount);
+      const savingsWallet = await getUserWallet(userId, "USD");
+      if (!savingsWallet) return res.status(400).json({ message: "USD wallet not found" });
+      const userBalance = walletAvailableBalance(savingsWallet);
       if (userBalance < contributionAmount) {
         return res.status(400).json({ message: "Insufficient balance" });
       }
-      await storage.updateUser(userId, {
-        balance: (userBalance - contributionAmount).toFixed(2)
-      });
+      const savingsDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [contributionAmount, savingsWallet.id]
+      );
+      if (savingsDebit.rowCount !== 1) return res.status(400).json({ message: "Insufficient balance" });
       const newAmount = parseFloat(savingsGoal.currentAmount || "0") + contributionAmount;
       await storage.updateSavingsGoal(id, {
         currentAmount: newAmount.toFixed(2)
@@ -11269,37 +13423,143 @@ async function registerRoutes(app2) {
   app2.get("/api/manual-payment-settings", async (req, res) => {
     try {
       const paybillSetting = await storage.getSystemSetting("manual_mpesa", "paybill");
-      const accountSetting = await storage.getSystemSetting("manual_mpesa", "account");
       res.json({
         paybill: paybillSetting?.value || "247",
-        account: accountSetting?.value || "4664"
+        account: "440200259037"
       });
     } catch (error) {
       console.error("Error fetching manual payment settings:", error);
       res.status(500).json({ message: "Error fetching manual payment settings" });
     }
   });
+  app2.get("/api/admin/deposit-settings", requireAdminAuth, async (req, res) => {
+    try {
+      const keys = [
+        "mpesa_enabled",
+        "crypto_enabled",
+        "bank_transfer_enabled",
+        "card_enabled",
+        "bank_name",
+        "bank_account_name",
+        "bank_account_number",
+        "bank_swift_code",
+        "bank_branch",
+        "bank_currency",
+        "bank_routing_number",
+        "bank_additional_info"
+      ];
+      const result = {};
+      for (const key of keys) {
+        const s = await storage.getSystemSetting("deposit_methods", key);
+        result[key] = s ? String(s.value) : "";
+      }
+      let bonuses = [];
+      try {
+        bonuses = await db.select().from(depositBonuses);
+      } catch (_) {
+      }
+      res.json({ methods: result, bonuses });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load deposit settings" });
+    }
+  });
+  app2.put("/api/admin/deposit-settings", requireAdminAuth, async (req, res) => {
+    try {
+      const { methods } = req.body;
+      if (!methods || typeof methods !== "object") {
+        return res.status(400).json({ message: "Invalid methods object" });
+      }
+      const allowedKeys = [
+        "mpesa_enabled",
+        "crypto_enabled",
+        "bank_transfer_enabled",
+        "card_enabled",
+        "bank_name",
+        "bank_account_name",
+        "bank_account_number",
+        "bank_swift_code",
+        "bank_branch",
+        "bank_currency",
+        "bank_routing_number",
+        "bank_additional_info"
+      ];
+      for (const key of allowedKeys) {
+        if (key in methods) {
+          await storage.setSystemSetting({ category: "deposit_methods", key, value: String(methods[key]), description: `Deposit method setting: ${key}` });
+        }
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to save deposit settings" });
+    }
+  });
+  app2.get("/api/admin/deposit-bonuses", requireAdminAuth, async (req, res) => {
+    try {
+      const bonuses = await db.select().from(depositBonuses);
+      res.json(bonuses);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to load bonuses" });
+    }
+  });
+  app2.post("/api/admin/deposit-bonuses", requireAdminAuth, async (req, res) => {
+    try {
+      const { method, minAmount, bonusAmount, bonusType, description, isActive } = req.body;
+      const [bonus] = await db.insert(depositBonuses).values({
+        method,
+        minAmount: String(minAmount),
+        bonusAmount: String(bonusAmount),
+        bonusType: bonusType || "fixed",
+        description,
+        isActive: isActive !== false
+      }).returning();
+      res.json(bonus);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to create bonus" });
+    }
+  });
+  app2.put("/api/admin/deposit-bonuses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { method, minAmount, bonusAmount, bonusType, description, isActive } = req.body;
+      const [bonus] = await db.update(depositBonuses).set({
+        method,
+        minAmount: String(minAmount),
+        bonusAmount: String(bonusAmount),
+        bonusType: bonusType || "fixed",
+        description,
+        isActive,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq3(depositBonuses.id, id)).returning();
+      res.json(bonus);
+    } catch (e) {
+      res.status(500).json({ message: "Failed to update bonus" });
+    }
+  });
+  app2.delete("/api/admin/deposit-bonuses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await db.delete(depositBonuses).where(eq3(depositBonuses.id, req.params.id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: "Failed to delete bonus" });
+    }
+  });
   app2.get("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
-      const emailSetting = await storage.getSystemSetting("messaging", "sms_app_id");
-      const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
+      const apiKeySetting = await storage.getSystemSetting("messaging", "commsGrid_api_key");
+      const senderIdSetting = await storage.getSystemSetting("messaging", "commsGrid_sender_id");
+      const deviceIdSetting = await storage.getSystemSetting("messaging", "commsGrid_device_id");
       const whatsappAccessTokenSetting = await storage.getSystemSetting("messaging", "whatsapp_access_token");
       const whatsappPhoneNumberIdSetting = await storage.getSystemSetting("messaging", "whatsapp_phone_number_id");
       const whatsappWabaIdSetting = await storage.getSystemSetting("messaging", "whatsapp_business_account_id");
       const settings = {
-        apiKey: apiKeySetting?.value || "",
-        accountEmail: emailSetting?.value || "",
-        senderId: senderIdSetting?.value || "",
+        commsGridApiKey: apiKeySetting?.value || "",
+        commsGridSenderId: senderIdSetting?.value || "",
+        commsGridDeviceId: deviceIdSetting?.value || "",
         whatsappAccessToken: whatsappAccessTokenSetting?.value || "",
         whatsappPhoneNumberId: String(whatsappPhoneNumberIdSetting?.value || ""),
         whatsappBusinessAccountId: String(whatsappWabaIdSetting?.value || "")
       };
-      console.log("[Messaging Settings] Retrieved:", {
-        sms: !!settings.apiKey && !!settings.accountEmail && !!settings.senderId,
-        whatsapp: !!settings.whatsappAccessToken && !!settings.whatsappPhoneNumberId,
-        wabaId: !!settings.whatsappBusinessAccountId
-      });
+      console.log("[Messaging Settings] Retrieved CommsGrid + WA settings");
       res.json(settings);
     } catch (error) {
       console.error("Error fetching messaging settings:", error);
@@ -11308,25 +13568,25 @@ async function registerRoutes(app2) {
   });
   app2.put("/api/admin/messaging-settings", async (req, res) => {
     try {
-      const { sms_api_key, sms_app_id, sms_sender_id, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
-      console.log("Admin updated messaging settings (SMS via Umeskia Software, WhatsApp via Meta)");
+      const { commsGridApiKey, commsGridSenderId, commsGridDeviceId, whatsapp_access_token, whatsapp_phone_number_id, whatsapp_business_account_id } = req.body;
+      console.log("Admin updated messaging settings (SMS via CommsGrid, WhatsApp via Meta)");
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_api_key",
-        value: (sms_api_key || "").trim(),
-        description: "Umeskia Software API key for SMS"
+        key: "commsGrid_api_key",
+        value: (commsGridApiKey || "").trim(),
+        description: "CommsGrid API key (Bearer token)"
       });
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_app_id",
-        value: (sms_app_id || "").trim(),
-        description: "Umeskia Software App ID"
+        key: "commsGrid_sender_id",
+        value: (commsGridSenderId || "").trim(),
+        description: "CommsGrid sender ID"
       });
       await storage.setSystemSetting({
         category: "messaging",
-        key: "sms_sender_id",
-        value: (sms_sender_id || "").trim(),
-        description: "SMS sender ID"
+        key: "commsGrid_device_id",
+        value: (commsGridDeviceId || "").trim(),
+        description: "CommsGrid device ID (optional)"
       });
       await storage.setSystemSetting({
         category: "messaging",
@@ -11346,14 +13606,13 @@ async function registerRoutes(app2) {
         value: String(whatsapp_business_account_id || "").trim(),
         description: "Meta WhatsApp Business Account ID (WABA ID)"
       });
+      if (commsGridApiKey) process.env.COMMSGRID_API_KEY = (commsGridApiKey || "").trim();
+      if (commsGridSenderId) process.env.COMMSGRID_SENDER_ID = (commsGridSenderId || "").trim();
+      if (commsGridDeviceId) process.env.COMMSGRID_DEVICE_ID = (commsGridDeviceId || "").trim();
       process.env.WHATSAPP_ACCESS_TOKEN = (whatsapp_access_token || "").trim();
       process.env.WHATSAPP_PHONE_NUMBER_ID = String(whatsapp_phone_number_id || "").trim();
       process.env.WHATSAPP_BUSINESS_ACCOUNT_ID = String(whatsapp_business_account_id || "").trim();
-      console.log("[Messaging Settings] Updated:", {
-        sms: !!sms_api_key && !!sms_app_id && !!sms_sender_id,
-        whatsapp: !!whatsapp_access_token && !!whatsapp_phone_number_id,
-        wabaId: !!whatsapp_business_account_id
-      });
+      console.log("[Messaging Settings] Updated CommsGrid SMS + WhatsApp");
       if (whatsapp_access_token && whatsapp_phone_number_id) {
         const { whatsappService: whatsappService2 } = await Promise.resolve().then(() => (init_whatsapp(), whatsapp_exports));
         await whatsappService2.refreshCredentials();
@@ -11720,8 +13979,14 @@ async function registerRoutes(app2) {
           return res.status(401).json({ message: "Invalid PIN", success: false });
         }
       }
-      const senderBalance = parseFloat(fromUser.balance || "0");
-      const recipientBalance = parseFloat(toUser.balance || "0");
+      const transferCurrency = normalizeCurrency(currency);
+      const senderWallet = await getUserWallet(fromUserId, transferCurrency);
+      const recipientWallet = await ensureUserWallet(toUserId, transferCurrency);
+      if (!senderWallet || !recipientWallet) {
+        return res.status(400).json({ message: `${transferCurrency} wallet is not available` });
+      }
+      const senderBalance = walletAvailableBalance(senderWallet);
+      const recipientBalance = walletAvailableBalance(recipientWallet);
       if (senderBalance < transferAmount) {
         console.error("[Transfer] Insufficient balance:", { senderBalance, transferAmount });
         return res.status(400).json({ message: "Insufficient balance" });
@@ -11741,7 +14006,7 @@ async function registerRoutes(app2) {
         userId: fromUserId,
         type: "send",
         amount,
-        currency,
+        currency: transferCurrency,
         status: "completed",
         description: description || `Transfer to ${toUser.fullName}`,
         recipient: toUser.fullName,
@@ -11753,7 +14018,7 @@ async function registerRoutes(app2) {
         userId: toUserId,
         type: "receive",
         amount,
-        currency,
+        currency: transferCurrency,
         status: "completed",
         description: description || `Transfer from ${fromUser.fullName}`,
         sender: fromUser.fullName,
@@ -11761,9 +14026,19 @@ async function registerRoutes(app2) {
         transferId,
         fee: "0"
       });
-      console.log("[Transfer] Updating balances - Sender:", senderNewBalance, "Recipient:", recipientNewBalance);
-      await storage.updateUser(fromUserId, { balance: senderNewBalance.toFixed(2) });
-      await storage.updateUser(toUserId, { balance: recipientNewBalance.toFixed(2) });
+      const senderDebit = await pool.query(
+        `UPDATE wallets
+         SET balance = balance - $1, updated_at = NOW()
+         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [transferAmount, senderWallet.id]
+      );
+      if (senderDebit.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient balance" });
+      }
+      await pool.query(
+        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+        [transferAmount, recipientWallet.id]
+      );
       const { MailtrapService: MailtrapService2 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
       const mailtrapService3 = new MailtrapService2();
       const transactionDate = (/* @__PURE__ */ new Date()).toISOString();
@@ -12018,6 +14293,16 @@ async function registerRoutes(app2) {
       res.status(500).json({ message: "Error updating notification" });
     }
   });
+  app2.delete("/api/notifications/:id", requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await storage.deleteNotification(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).json({ message: "Error deleting notification" });
+    }
+  });
   app2.get("/api/admin/withdrawals", async (req, res) => {
     try {
       const transactions2 = await storage.getAllTransactions();
@@ -12056,11 +14341,18 @@ async function registerRoutes(app2) {
           const withdrawalAmount = parseFloat(transaction.amount);
           const withdrawalFee = parseFloat(transaction.fee || "0");
           const totalDeduction = withdrawalAmount + withdrawalFee;
-          const isKesWithdrawal = transaction.currency?.toUpperCase() === "KES";
-          const currentBalance = parseFloat(isKesWithdrawal ? user.kesBalance || "0" : user.balance || "0");
-          const newBalance = (currentBalance - totalDeduction).toFixed(2);
-          const balanceUpdate = isKesWithdrawal ? { kesBalance: newBalance } : { balance: newBalance };
-          await storage.updateUser(user.id, balanceUpdate);
+          const wallet = await getUserWallet(user.id, transaction.currency);
+          if (!wallet) {
+            return res.status(400).json({ message: `${transaction.currency} wallet not found` });
+          }
+          await pool.query(
+            `UPDATE wallets
+             SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
+                 balance = GREATEST(0, balance - $1),
+                 updated_at = NOW()
+             WHERE id = $2`,
+            [totalDeduction, wallet.id]
+          );
           await notificationService.sendNotification({
             title: "Withdrawal Approved",
             body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
@@ -12087,13 +14379,18 @@ async function registerRoutes(app2) {
       if (transaction) {
         const user = await storage.getUser(transaction.userId);
         if (user) {
-          const isKes = transaction.currency?.toUpperCase() === "KES";
-          const currentBalance = isKes ? parseFloat(user.kesBalance || "0") : parseFloat(user.balance || "0");
           const refundAmount = parseFloat(transaction.amount) + parseFloat(transaction.fee || "0");
-          const newBalance = currentBalance + refundAmount;
-          const balanceUpdate = isKes ? { kesBalance: newBalance.toFixed(2) } : { balance: newBalance.toFixed(2) };
-          await storage.updateUser(transaction.userId, balanceUpdate);
-          console.log(`\u2705 Refunded ${transaction.currency} ${refundAmount} to user ${user.email}`);
+          const wallet = await getUserWallet(transaction.userId, transaction.currency);
+          if (wallet) {
+            await pool.query(
+              `UPDATE wallets
+               SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
+                   updated_at = NOW()
+               WHERE id = $2`,
+              [refundAmount, wallet.id]
+            );
+          }
+          console.log(`\u2705 Released ${transaction.currency} ${refundAmount} withdrawal hold for ${user.email}`);
           await notificationService.sendNotification({
             title: "Withdrawal Rejected & Refunded",
             body: `Your withdrawal request has been rejected. ${transaction.currency} ${refundAmount} has been refunded to your account. ${adminNotes || "Please contact support for details."}`,
@@ -12494,35 +14791,47 @@ async function registerRoutes(app2) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const userTransactions = await storage.getTransactionsByUserId(userId);
-      const isKesWithdrawal = currency?.toUpperCase() === "KES";
-      const realTimeBalance = userTransactions.reduce((balance, txn) => {
-        if (txn.status === "completed" || txn.status === "pending" && txn.type === "withdraw") {
-          const txnCurrency = txn.currency?.toUpperCase();
-          const matchesCurrency = isKesWithdrawal ? txnCurrency === "KES" : txnCurrency !== "KES";
-          if (matchesCurrency) {
-            if (txn.type === "receive" || txn.type === "deposit") {
-              return balance + parseFloat(txn.amount);
-            } else if (txn.type === "send" || txn.type === "withdraw") {
-              return balance - parseFloat(txn.amount) - parseFloat(txn.fee || "0");
-            }
-          }
-        }
-        return balance;
-      }, parseFloat(isKesWithdrawal ? user.kesBalance || "0" : user.balance || "0"));
-      if (realTimeBalance < withdrawAmount + withdrawFee) {
+      if (user.isSuspended) {
+        return res.status(403).json({ message: user.suspensionReason || "Your account is suspended. Withdrawals are disabled. Please contact support." });
+      }
+      const normalizedWithdrawalCurrency = normalizeCurrency(currency);
+      if (!(await getEnabledCurrencyCodes()).includes(normalizedWithdrawalCurrency)) {
+        return res.status(400).json({ message: `${normalizedWithdrawalCurrency} is not an enabled currency` });
+      }
+      const matchingWallet = await getUserWallet(userId, normalizedWithdrawalCurrency);
+      if (!matchingWallet) {
+        return res.status(400).json({ message: `Create a ${normalizedWithdrawalCurrency} wallet before withdrawing` });
+      }
+      if (matchingWallet?.isSuspended) {
+        return res.status(403).json({ message: matchingWallet.suspendReason || `${currency} wallet is suspended. Withdrawals are disabled.` });
+      }
+      const walletHoldAmount = parseFloat(matchingWallet.holdAmount || "0");
+      const withdrawableBalance = walletAvailableBalance(matchingWallet);
+      if (withdrawableBalance < withdrawAmount + withdrawFee) {
         return res.status(400).json({
           message: "Insufficient balance",
           currency,
-          available: realTimeBalance.toFixed(2),
+          available: withdrawableBalance.toFixed(2),
+          held: walletHoldAmount.toFixed(2),
           required: (withdrawAmount + withdrawFee).toFixed(2)
         });
+      }
+      const totalHold = withdrawAmount + withdrawFee;
+      const holdResult = await pool.query(
+        `UPDATE wallets
+         SET withdrawal_hold_amount = withdrawal_hold_amount + $1, updated_at = NOW()
+         WHERE id = $2 AND is_active = true AND is_suspended = false
+           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
+        [totalHold, matchingWallet.id]
+      );
+      if (holdResult.rowCount !== 1) {
+        return res.status(400).json({ message: "Insufficient balance" });
       }
       const transaction = await storage.createTransaction({
         userId,
         type: "withdraw",
         amount,
-        currency,
+        currency: normalizedWithdrawalCurrency,
         status: "pending",
         // Withdrawals start as pending for admin approval
         description,
@@ -14194,6 +16503,894 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       res.status(500).json({ message: "Failed to send notifications" });
     }
   });
+  app2.post("/api/admin/sms/send-user", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId, message } = req.body;
+      if (!userId || !message) return res.status(400).json({ message: "userId and message are required" });
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      if (!user.phone) return res.status(400).json({ message: "User has no phone number" });
+      const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+      const result = await messagingService3.sendMessage(user.phone, message);
+      await storage.createAdminLog({ adminId: req.session?.admin?.id || null, action: "sms_send_user", details: `SMS sent to ${user.fullName} (${user.phone})` });
+      res.json({ success: true, sms: result.sms, whatsapp: result.whatsapp });
+    } catch (error) {
+      console.error("Admin SMS send-user error:", error);
+      res.status(500).json({ message: "Failed to send SMS" });
+    }
+  });
+  app2.post("/api/admin/sms/broadcast", requireAdminAuth, async (req, res) => {
+    try {
+      const { userIds, all, message } = req.body;
+      if (!message) return res.status(400).json({ message: "message is required" });
+      let phones = [];
+      if (all) {
+        const allUsersResult = await storage.getAllUsers({ limit: 1e5 });
+        phones = (allUsersResult.users || []).filter((u) => u.phone).map((u) => ({ phone: u.phone }));
+      } else if (Array.isArray(userIds) && userIds.length > 0) {
+        const found = await Promise.all(userIds.map((id) => storage.getUser(id)));
+        phones = found.filter((u) => u?.phone).map((u) => ({ phone: u.phone }));
+      } else {
+        return res.status(400).json({ message: "Provide userIds array or all: true" });
+      }
+      const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
+      const phoneNumbers = phones.map((p) => p.phone);
+      const result = await messagingService3.sendSMSToMultiple(phoneNumbers, message);
+      await storage.createAdminLog({ adminId: req.session?.admin?.id || null, action: "sms_broadcast", details: `SMS broadcast to ${result.sent} users` });
+      res.json({ success: true, sent: result.sent, failed: result.failed, total: phoneNumbers.length });
+    } catch (error) {
+      console.error("Admin SMS broadcast error:", error);
+      res.status(500).json({ message: "Failed to send SMS broadcast" });
+    }
+  });
+  app2.get("/api/admin/email-templates", requireAdminAuth, async (req, res) => {
+    try {
+      const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+      const templates = await mailtrapService3.getAllTemplateUuids();
+      res.json({ templates });
+    } catch (error) {
+      console.error("Email templates fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch email templates" });
+    }
+  });
+  app2.put("/api/admin/email-templates", requireAdminAuth, async (req, res) => {
+    try {
+      const { templates } = req.body;
+      if (!templates || typeof templates !== "object") {
+        return res.status(400).json({ message: "templates object required" });
+      }
+      for (const [name, uuid] of Object.entries(templates)) {
+        await storage.setSystemSetting({
+          category: "email_templates",
+          key: name,
+          value: String(uuid || "").trim(),
+          description: `Email template UUID for ${name}`
+        });
+      }
+      res.json({ success: true, message: "Email template UUIDs saved" });
+    } catch (error) {
+      console.error("Email templates save error:", error);
+      res.status(500).json({ message: "Failed to save email templates" });
+    }
+  });
+  app2.post("/api/disputes", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { transactionId, reason, description } = req.body;
+      if (!transactionId || !reason) return res.status(400).json({ message: "transactionId and reason required" });
+      const [txn] = await db.select().from(transactions).where(eq3(transactions.id, transactionId));
+      if (!txn || txn.userId !== userId) return res.status(404).json({ message: "Transaction not found" });
+      const existing = await db.select().from(transactionDisputes).where(eq3(transactionDisputes.transactionId, transactionId));
+      if (existing.some((d) => d.status === "open" || d.status === "under_review")) {
+        return res.status(409).json({ message: "An open dispute already exists for this transaction" });
+      }
+      const [dispute] = await db.insert(transactionDisputes).values({
+        userId,
+        transactionId,
+        reason,
+        description: description || null
+      }).returning();
+      res.json({ dispute, message: "Dispute submitted successfully" });
+    } catch (error) {
+      console.error("Error creating dispute:", error);
+      res.status(500).json({ message: "Failed to submit dispute" });
+    }
+  });
+  app2.get("/api/disputes", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const disputes = await db.select().from(transactionDisputes).where(eq3(transactionDisputes.userId, userId)).orderBy(desc2(transactionDisputes.createdAt));
+      res.json({ disputes });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+  app2.get("/api/admin/disputes", requireAdminAuth, async (req, res) => {
+    try {
+      const disputes = await db.select({
+        id: transactionDisputes.id,
+        userId: transactionDisputes.userId,
+        transactionId: transactionDisputes.transactionId,
+        reason: transactionDisputes.reason,
+        description: transactionDisputes.description,
+        status: transactionDisputes.status,
+        adminNotes: transactionDisputes.adminNotes,
+        resolvedAt: transactionDisputes.resolvedAt,
+        createdAt: transactionDisputes.createdAt,
+        userFullName: users.fullName,
+        userEmail: users.email
+      }).from(transactionDisputes).leftJoin(users, eq3(transactionDisputes.userId, users.id)).orderBy(desc2(transactionDisputes.createdAt));
+      res.json({ disputes });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch disputes" });
+    }
+  });
+  app2.patch("/api/admin/disputes/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { status, adminNotes } = req.body;
+      const updateData = { updatedAt: /* @__PURE__ */ new Date() };
+      if (status) updateData.status = status;
+      if (adminNotes !== void 0) updateData.adminNotes = adminNotes;
+      if (status === "resolved" || status === "rejected") updateData.resolvedAt = /* @__PURE__ */ new Date();
+      const [updated] = await db.update(transactionDisputes).set(updateData).where(eq3(transactionDisputes.id, req.params.id)).returning();
+      res.json({ dispute: updated });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update dispute" });
+    }
+  });
+  const CRYPTO_RATES = {
+    BTC: 65e3,
+    ETH: 3200,
+    USDT: 1,
+    USDC: 1
+  };
+  const CRYPTO_NETWORKS = {
+    BTC: "bitcoin",
+    ETH: "ethereum",
+    USDT: "tron",
+    USDC: "ethereum"
+  };
+  function generateCryptoAddress(coin) {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const rand = () => chars[Math.floor(Math.random() * chars.length)];
+    if (coin === "BTC") return "1" + Array.from({ length: 33 }, rand).join("");
+    if (coin === "ETH" || coin === "USDC") return "0x" + Array.from({ length: 40 }, () => "0123456789abcdef"[Math.floor(Math.random() * 16)]).join("");
+    if (coin === "USDT") return "T" + Array.from({ length: 33 }, rand).join("");
+    return Array.from({ length: 34 }, rand).join("");
+  }
+  app2.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
+    try {
+      const addrs = await db.select().from(cryptoDepositAddresses).where(eq3(cryptoDepositAddresses.isActive, true)).orderBy(cryptoDepositAddresses.coin);
+      res.json({ addresses: addrs, rates: CRYPTO_RATES });
+    } catch (error) {
+      console.error("Deposit addresses fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch deposit addresses" });
+    }
+  });
+  app2.get("/api/crypto/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const wallets2 = await db.select().from(cryptoWallets).where(eq3(cryptoWallets.userId, userId));
+      const supported = ["BTC", "ETH", "USDT", "USDC"];
+      const existing = wallets2.map((w) => w.coin);
+      const toCreate = supported.filter((c) => !existing.includes(c));
+      const newWallets = [];
+      for (const coin of toCreate) {
+        const [w] = await db.insert(cryptoWallets).values({
+          userId,
+          coin,
+          network: CRYPTO_NETWORKS[coin],
+          address: ""
+          // no per-user address; admin master addresses are used
+        }).returning();
+        newWallets.push(w);
+      }
+      const allWallets = [...wallets2, ...newWallets].map((w) => ({
+        ...w,
+        usdRate: CRYPTO_RATES[w.coin] || 1,
+        usdBalance: (parseFloat(w.balance || "0") * (CRYPTO_RATES[w.coin] || 1)).toFixed(2)
+      }));
+      res.json({ wallets: allWallets, rates: CRYPTO_RATES });
+    } catch (error) {
+      console.error("Crypto wallets error:", error);
+      res.status(500).json({ message: "Failed to fetch crypto wallets" });
+    }
+  });
+  app2.post("/api/crypto/deposit", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { coin, amount, network } = req.body;
+      if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+      const cryptoAmount = parseFloat(amount);
+      const usdValue = cryptoAmount * rate;
+      const candidates = await db.select().from(cryptoDepositAddresses).where(eq3(cryptoDepositAddresses.coin, coin));
+      const active = candidates.filter((a) => a.isActive);
+      const chosen = (network ? active.find((a) => a.network === network) : active[0]) || active[0];
+      if (!chosen) {
+        return res.status(503).json({ message: `No deposit address configured by admin for ${coin}. Please contact support.` });
+      }
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "deposit",
+        coin,
+        network: chosen.network,
+        amount: cryptoAmount.toFixed(8),
+        usdValue: usdValue.toFixed(2),
+        toAddress: chosen.address,
+        status: "pending",
+        confirmations: 0,
+        requiredConfirmations: coin === "BTC" ? 3 : coin === "ETH" || coin === "USDC" ? 12 : 20
+      }).returning();
+      res.json({
+        cryptoTransaction: cryptoTx,
+        depositAddress: chosen.address,
+        memo: chosen.memo || null,
+        networkLabel: chosen.networkLabel,
+        message: `Send exactly ${cryptoAmount} ${coin} on ${chosen.networkLabel} to the address below. Your wallet will be credited after ${cryptoTx.requiredConfirmations} confirmations.`
+      });
+    } catch (error) {
+      console.error("Crypto deposit error:", error);
+      res.status(500).json({ message: "Failed to initiate deposit" });
+    }
+  });
+  app2.post("/api/crypto/withdraw", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { coin, amount, toAddress } = req.body;
+      if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+      const cryptoAmount = parseFloat(amount);
+      const usdValue = cryptoAmount * rate;
+      const [userRow] = await db.select().from(users).where(eq3(users.id, userId));
+      if (!userRow) return res.status(404).json({ message: "User not found" });
+      if (userRow.isSuspended) {
+        return res.status(403).json({ message: userRow.suspensionReason || "Your account is suspended. Crypto withdrawals are disabled. Please contact support." });
+      }
+      const [usdWallet] = await db.select().from(wallets).where(and2(eq3(wallets.userId, userId), eq3(wallets.currency, "USD"))).limit(1);
+      if (usdWallet?.isSuspended) {
+        return res.status(403).json({ message: usdWallet.suspendReason || "Your USD wallet is suspended. Crypto withdrawals are disabled." });
+      }
+      const availableUsd = parseFloat(userRow.balance || "0") - parseFloat(usdWallet?.holdAmount || "0");
+      if (availableUsd < usdValue) {
+        return res.status(400).json({ message: "Insufficient available wallet balance", available: availableUsd.toFixed(2), held: parseFloat(usdWallet?.holdAmount || "0").toFixed(2) });
+      }
+      await db.update(users).set({
+        balance: (parseFloat(userRow.balance || "0") - usdValue).toFixed(2)
+      }).where(eq3(users.id, userId));
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "withdrawal",
+        coin,
+        network: CRYPTO_NETWORKS[coin] || "unknown",
+        amount: cryptoAmount.toFixed(8),
+        usdValue: usdValue.toFixed(2),
+        toAddress,
+        status: "pending",
+        confirmations: 0,
+        requiredConfirmations: 1
+      }).returning();
+      await db.insert(transactions).values({
+        userId,
+        type: "withdraw",
+        amount: usdValue.toFixed(2),
+        currency: "USD",
+        status: "pending",
+        description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
+        reference: cryptoTx.id
+      });
+      res.json({ cryptoTransaction: cryptoTx, message: "Withdrawal initiated. Processing may take 30\u201360 minutes." });
+    } catch (error) {
+      console.error("Crypto withdrawal error:", error);
+      res.status(500).json({ message: "Failed to process withdrawal" });
+    }
+  });
+  app2.post("/api/crypto/buy-card", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { coin } = req.body;
+      if (!coin) return res.status(400).json({ message: "coin required" });
+      const rate = CRYPTO_RATES[coin];
+      if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+      const cardPriceSetting = await storage.getSystemSetting("general", "card_price");
+      const cardPriceUSD = parseFloat(cardPriceSetting?.value || "60.00");
+      const cryptoAmount = cardPriceUSD / rate;
+      const [cryptoTx] = await db.insert(cryptoTransactions).values({
+        userId,
+        type: "card_purchase",
+        coin,
+        network: CRYPTO_NETWORKS[coin] || "unknown",
+        amount: cryptoAmount.toFixed(8),
+        usdValue: cardPriceUSD.toFixed(2),
+        status: "pending",
+        requiredConfirmations: coin === "BTC" ? 3 : 12
+      }).returning();
+      res.json({
+        cryptoTransaction: cryptoTx,
+        cryptoAmount: cryptoAmount.toFixed(8),
+        coin,
+        usdValue: cardPriceUSD,
+        message: `Send exactly ${cryptoAmount.toFixed(8)} ${coin} to receive your virtual card after confirmation.`
+      });
+    } catch (error) {
+      console.error("Crypto buy card error:", error);
+      res.status(500).json({ message: "Failed to initiate card purchase" });
+    }
+  });
+  app2.get("/api/crypto/transactions", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const txns = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.userId, userId)).orderBy(desc2(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+  app2.get("/api/admin/crypto/transactions", requireAdminAuth, async (req, res) => {
+    try {
+      const txns = await db.select({
+        id: cryptoTransactions.id,
+        userId: cryptoTransactions.userId,
+        type: cryptoTransactions.type,
+        coin: cryptoTransactions.coin,
+        network: cryptoTransactions.network,
+        amount: cryptoTransactions.amount,
+        usdValue: cryptoTransactions.usdValue,
+        txHash: cryptoTransactions.txHash,
+        fromAddress: cryptoTransactions.fromAddress,
+        toAddress: cryptoTransactions.toAddress,
+        status: cryptoTransactions.status,
+        confirmations: cryptoTransactions.confirmations,
+        requiredConfirmations: cryptoTransactions.requiredConfirmations,
+        fee: cryptoTransactions.fee,
+        adminNotes: cryptoTransactions.adminNotes,
+        completedAt: cryptoTransactions.completedAt,
+        createdAt: cryptoTransactions.createdAt,
+        userFullName: users.fullName,
+        userEmail: users.email
+      }).from(cryptoTransactions).leftJoin(users, eq3(cryptoTransactions.userId, users.id)).orderBy(desc2(cryptoTransactions.createdAt));
+      res.json({ transactions: txns });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch crypto transactions" });
+    }
+  });
+  app2.patch("/api/admin/crypto/transactions/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { status, txHash, adminNotes, confirmations } = req.body;
+      const updateData = { updatedAt: /* @__PURE__ */ new Date() };
+      if (status) updateData.status = status;
+      if (txHash) updateData.txHash = txHash;
+      if (adminNotes !== void 0) updateData.adminNotes = adminNotes;
+      if (confirmations !== void 0) updateData.confirmations = confirmations;
+      if (status === "completed") {
+        updateData.completedAt = /* @__PURE__ */ new Date();
+        const [cryptoTx] = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.id, req.params.id));
+        if (cryptoTx && cryptoTx.type === "deposit") {
+          const [userRow] = await db.select().from(users).where(eq3(users.id, cryptoTx.userId));
+          if (userRow) {
+            await db.update(users).set({
+              balance: (parseFloat(userRow.balance || "0") + parseFloat(cryptoTx.usdValue)).toFixed(2)
+            }).where(eq3(users.id, cryptoTx.userId));
+            await db.insert(transactions).values({
+              userId: cryptoTx.userId,
+              type: "deposit",
+              amount: cryptoTx.usdValue,
+              currency: "USD",
+              status: "completed",
+              description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
+              reference: cryptoTx.id,
+              completedAt: /* @__PURE__ */ new Date()
+            });
+          }
+        }
+        if (cryptoTx && cryptoTx.type === "card_purchase") {
+          const [userRow] = await db.select().from(users).where(eq3(users.id, cryptoTx.userId));
+          if (userRow) {
+            await db.insert(transactions).values({
+              userId: cryptoTx.userId,
+              type: "card_purchase",
+              amount: cryptoTx.usdValue,
+              currency: "USD",
+              status: "completed",
+              description: `Virtual card purchase via ${cryptoTx.coin}`,
+              reference: cryptoTx.id,
+              completedAt: /* @__PURE__ */ new Date()
+            });
+          }
+        }
+      }
+      const [updated] = await db.update(cryptoTransactions).set(updateData).where(eq3(cryptoTransactions.id, req.params.id)).returning();
+      res.json({ transaction: updated });
+    } catch (error) {
+      console.error("Admin crypto update error:", error);
+      res.status(500).json({ message: "Failed to update crypto transaction" });
+    }
+  });
+  app2.get("/api/admin/crypto/addresses", requireAdminAuth, async (req, res) => {
+    try {
+      const addrs = await db.select().from(cryptoDepositAddresses).orderBy(cryptoDepositAddresses.coin);
+      res.json({ addresses: addrs });
+    } catch (error) {
+      console.error("Admin fetch crypto addresses error:", error);
+      res.status(500).json({ message: "Failed to fetch addresses" });
+    }
+  });
+  app2.post("/api/admin/crypto/addresses", requireAdminAuth, async (req, res) => {
+    try {
+      const { coin, network, networkLabel, address, memo, qrCodeUrl, minDeposit, isActive, notes } = req.body;
+      if (!coin || !network || !networkLabel || !address) {
+        return res.status(400).json({ message: "coin, network, networkLabel and address are required" });
+      }
+      const [created] = await db.insert(cryptoDepositAddresses).values({
+        coin: coin.toUpperCase(),
+        network,
+        networkLabel,
+        address,
+        memo: memo || null,
+        qrCodeUrl: qrCodeUrl || null,
+        minDeposit: minDeposit ? String(minDeposit) : "0.00000000",
+        isActive: isActive !== false,
+        notes: notes || null
+      }).returning();
+      res.json({ address: created });
+    } catch (error) {
+      console.error("Admin create crypto address error:", error);
+      res.status(500).json({ message: "Failed to create address" });
+    }
+  });
+  app2.put("/api/admin/crypto/addresses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const updates = { ...req.body, updatedAt: /* @__PURE__ */ new Date() };
+      if (updates.coin) updates.coin = String(updates.coin).toUpperCase();
+      if (updates.minDeposit !== void 0) updates.minDeposit = String(updates.minDeposit);
+      const [updated] = await db.update(cryptoDepositAddresses).set(updates).where(eq3(cryptoDepositAddresses.id, req.params.id)).returning();
+      if (!updated) return res.status(404).json({ message: "Address not found" });
+      res.json({ address: updated });
+    } catch (error) {
+      console.error("Admin update crypto address error:", error);
+      res.status(500).json({ message: "Failed to update address" });
+    }
+  });
+  app2.delete("/api/admin/crypto/addresses/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await db.delete(cryptoDepositAddresses).where(eq3(cryptoDepositAddresses.id, req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Admin delete crypto address error:", error);
+      res.status(500).json({ message: "Failed to delete address" });
+    }
+  });
+  app2.get("/api/admin/users/:id/cards", async (req, res) => {
+    try {
+      const cards = await storage.getVirtualCardsByUserId(req.params.id);
+      res.json({ cards });
+    } catch (error) {
+      console.error("Admin fetch user cards error:", error);
+      res.status(500).json({ message: "Failed to fetch user cards" });
+    }
+  });
+  app2.post("/api/transactions/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const tx = await storage.getTransactionById(req.params.id);
+      if (!tx) return res.status(404).json({ message: "Transaction not found" });
+      if (tx.userId !== userId) return res.status(403).json({ message: "Not your transaction" });
+      if (tx.status !== "pending" && tx.status !== "processing") {
+        return res.status(400).json({ message: "Only pending transactions can be cancelled" });
+      }
+      const deductionTypes = ["send", "withdraw", "transfer", "exchange", "bills", "airtime", "card_purchase"];
+      if (deductionTypes.includes(tx.type)) {
+        const user = await storage.getUser(userId);
+        if (user) {
+          const refundAmount = parseFloat(tx.amount || "0") + parseFloat(tx.fee || "0");
+          const refundCurrency = normalizeCurrency(tx.currency || "USD");
+          const refundWallet = await getUserWallet(userId, refundCurrency);
+          if (refundWallet) {
+            if (tx.type === "withdraw") {
+              await pool.query(
+                `UPDATE wallets SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1), updated_at = NOW() WHERE id = $2`,
+                [refundAmount, refundWallet.id]
+              );
+            } else {
+              await pool.query(
+                `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
+                [refundAmount, refundWallet.id]
+              );
+            }
+          }
+        }
+      }
+      const updated = await storage.updateTransaction(tx.id, {
+        status: "cancelled",
+        description: (tx.description || "") + " (cancelled by user)"
+      });
+      res.json({ transaction: updated, message: "Transaction cancelled and balance refunded" });
+    } catch (error) {
+      console.error("Cancel transaction error:", error);
+      res.status(500).json({ message: "Failed to cancel transaction" });
+    }
+  });
+  app2.get("/api/analytics/summary", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const allTxns = await db.select().from(transactions).where(eq3(transactions.userId, userId)).orderBy(desc2(transactions.createdAt));
+      const now = /* @__PURE__ */ new Date();
+      const months = [];
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        months.push({
+          label: d.toLocaleString("default", { month: "short" }),
+          month: d.getMonth(),
+          year: d.getFullYear(),
+          sent: 0,
+          received: 0
+        });
+      }
+      const categoryMap = {
+        "Send Money": 0,
+        "Deposits": 0,
+        "Withdrawals": 0,
+        "Card Purchase": 0,
+        "Exchange": 0,
+        "Bills": 0,
+        "Airtime": 0,
+        "Other": 0
+      };
+      for (const txn of allTxns) {
+        if (txn.status !== "completed") continue;
+        const amt = parseFloat(txn.amount || "0");
+        const usdAmt = txn.currency === "KES" ? amt / 130 : amt;
+        const txDate = new Date(txn.createdAt);
+        const mo = months.find((m) => m.month === txDate.getMonth() && m.year === txDate.getFullYear());
+        if (mo) {
+          if (["send", "withdraw", "card_purchase", "exchange", "airtime", "bill"].includes(txn.type)) mo.sent += usdAmt;
+          else if (["receive", "deposit"].includes(txn.type)) mo.received += usdAmt;
+        }
+        if (txn.type === "send") categoryMap["Send Money"] += usdAmt;
+        else if (txn.type === "deposit") categoryMap["Deposits"] += usdAmt;
+        else if (txn.type === "withdraw") categoryMap["Withdrawals"] += usdAmt;
+        else if (txn.type === "card_purchase") categoryMap["Card Purchase"] += usdAmt;
+        else if (txn.type === "exchange") categoryMap["Exchange"] += usdAmt;
+        else if (txn.type === "bill") categoryMap["Bills"] += usdAmt;
+        else if (txn.type === "airtime") categoryMap["Airtime"] += usdAmt;
+        else categoryMap["Other"] += usdAmt;
+      }
+      const categoryData = Object.entries(categoryMap).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value: parseFloat(value.toFixed(2)) }));
+      const totalIn = months.reduce((s, m) => s + m.received, 0);
+      const totalOut = months.reduce((s, m) => s + m.sent, 0);
+      const txCount = allTxns.filter((t) => t.status === "completed").length;
+      res.json({
+        monthlyData: months.map((m) => ({ label: m.label, sent: parseFloat(m.sent.toFixed(2)), received: parseFloat(m.received.toFixed(2)) })),
+        categoryData,
+        summary: {
+          totalIn: parseFloat(totalIn.toFixed(2)),
+          totalOut: parseFloat(totalOut.toFixed(2)),
+          txCount,
+          netFlow: parseFloat((totalIn - totalOut).toFixed(2))
+        }
+      });
+    } catch (error) {
+      console.error("Analytics error:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+  app2.get("/api/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map((c) => [c.code, c]));
+      let userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+      if (userWallets.length === 0) {
+        try {
+          const userRecord = await db.select().from(users).where(eq3(users.id, userId)).limit(1);
+          const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+          const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, "") || userRecord[0]?.defaultCurrency || "USD";
+          const [newWallet] = await db.insert(wallets).values({ userId, currency: defCurrency, isDefault: true, isActive: true }).returning();
+          userWallets = [newWallet];
+        } catch (autoCreateErr) {
+          console.error("Wallet auto-create error:", autoCreateErr);
+        }
+      }
+      const enriched = userWallets.map((w) => ({
+        ...w,
+        availableBalance: walletAvailableBalance(w),
+        currencyMeta: currencyMeta[w.currency] || null
+      }));
+      res.json({ wallets: enriched });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.post("/api/wallets", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ message: "currency required" });
+      const normalizedCurrency = normalizeCurrency(currency);
+      const knownCodes = await getEnabledCurrencyCodes();
+      if (!knownCodes.includes(normalizedCurrency)) return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
+      const existing = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+      if (existing.some((w) => w.currency === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
+      const isDefault = existing.length === 0;
+      const [newWallet] = await db.insert(wallets).values({ userId, currency: normalizedCurrency, isDefault, isActive: true }).returning();
+      res.json({ wallet: newWallet });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/wallets/:id/default", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { id } = req.params;
+      await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
+      await db.update(wallets).set({ isDefault: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.get("/api/currencies", async (req, res) => {
+    try {
+      const enabled = await getEnabledCurrencyCodes();
+      const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+      const defaultCurrency = (defSetting.rows[0]?.value || "USD").replace(/['"]/g, "").trim();
+      const currencies = NEXUSPAY_CURRENCIES.filter((c) => enabled.includes(c.code));
+      res.json({ currencies, defaultCurrency, enabled });
+    } catch (e) {
+      res.json({ currencies: NEXUSPAY_CURRENCIES, defaultCurrency: "USD", enabled: NEXUSPAY_CURRENCIES.map((c) => c.code) });
+    }
+  });
+  app2.post("/api/deposit/nexuspay", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
+      if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
+      const normalizedCurrency = normalizeCurrency(currency);
+      if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
+        return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
+      }
+      if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
+      const [wallet_] = await db.select().from(wallets).where(eq3(wallets.id, walletId));
+      if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
+      if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
+      if (wallet_.currency !== normalizedCurrency) {
+        return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
+      }
+      const currencyMeta = NEXUSPAY_CURRENCIES.find((c) => c.code === normalizedCurrency);
+      const channel = currencyMeta?.channel || "card";
+      const result = await nexusPayService.checkout({ amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent, description: description || `Deposit to ${normalizedCurrency} wallet` });
+      await db.insert(transactions).values({
+        userId,
+        type: "deposit",
+        amount: String(amount),
+        currency: normalizedCurrency,
+        status: "pending",
+        reference: result.reference,
+        description: `NexusPay ${currency} deposit`,
+        metadata: { walletId, channel, gateway: currencyMeta?.gateway, redirectUrl: result.redirectUrl }
+      });
+      res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
+    } catch (e) {
+      console.error("NexusPay deposit error:", e);
+      res.status(500).json({ message: e.message || "Deposit failed" });
+    }
+  });
+  app2.get("/api/deposit/nexuspay/status/:reference", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { reference } = req.params;
+      const status = await nexusPayService.getStatus(reference);
+      if (status.status === "completed") {
+        const [txn] = await db.select().from(transactions).where(eq3(transactions.reference, reference));
+        if (txn && txn.status !== "completed") {
+          const meta = txn.metadata;
+          const walletId = meta?.walletId;
+          if (walletId) {
+            await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [parseFloat(status.amount), walletId, userId]);
+          }
+          await db.update(transactions).set({ status: "completed", completedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.reference, reference));
+        }
+      } else if (status.status === "failed") {
+        await db.update(transactions).set({ status: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.reference, reference));
+      }
+      res.json({ status: status.status, reference, amount: status.amount, currency: status.currency });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.post("/api/exchange/swap", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { fromWalletId, toWalletId, amount } = req.body;
+      if (!fromWalletId || !toWalletId || !amount) return res.status(400).json({ message: "fromWalletId, toWalletId, and amount are required" });
+      const fromAmt = parseFloat(amount);
+      if (fromAmt <= 0) return res.status(400).json({ message: "Amount must be > 0" });
+      const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+      const fromWallet = userWallets.find((w) => w.id === fromWalletId);
+      const toWallet = userWallets.find((w) => w.id === toWalletId);
+      if (!fromWallet || !toWallet) return res.status(404).json({ message: "Wallet not found" });
+      if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
+      const fromBalance = parseFloat(fromWallet.balance || "0") - parseFloat(fromWallet.holdAmount || "0");
+      if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
+      const exchangeRateSvc = createExchangeRateService(storage);
+      const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
+      const FEE_RATE = 0.015;
+      const fee = fromAmt * FEE_RATE;
+      const toAmount = (fromAmt - fee) * rate;
+      await pool.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [fromAmt, fromWalletId]);
+      await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [toAmount, toWalletId]);
+      const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      await db.insert(transactions).values({
+        userId,
+        type: "exchange",
+        amount: String(fromAmt),
+        currency: fromWallet.currency,
+        fee: String(fee.toFixed(4)),
+        exchangeRate: String(rate.toFixed(6)),
+        status: "completed",
+        reference: ref,
+        completedAt: /* @__PURE__ */ new Date(),
+        description: `Exchange ${fromWallet.currency} \u2192 ${toWallet.currency}`,
+        metadata: { fromWalletId, toWalletId, toCurrency: toWallet.currency, toAmount: toAmount.toFixed(4) }
+      });
+      res.json({ success: true, fromAmount: fromAmt.toFixed(4), fromCurrency: fromWallet.currency, toAmount: toAmount.toFixed(4), toCurrency: toWallet.currency, rate: rate.toFixed(6), fee: fee.toFixed(4), reference: ref });
+    } catch (e) {
+      console.error("Exchange error:", e);
+      res.status(500).json({ message: e.message || "Exchange failed" });
+    }
+  });
+  app2.get("/api/admin/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const search = (req.query.search || "").toLowerCase();
+      const allWallets = await pool.query(`
+        SELECT w.*, u.full_name, u.email, u.phone
+        FROM wallets w JOIN users u ON w.user_id = u.id
+        WHERE ($1 = '' OR LOWER(u.full_name) LIKE '%' || $1 || '%'
+           OR LOWER(u.email) LIKE '%' || $1 || '%' OR LOWER(u.phone) LIKE '%' || $1 || '%')
+        ORDER BY u.full_name ASC, w.currency ASC
+      `, [search]);
+      const grouped = {};
+      for (const row of allWallets.rows) {
+        if (!grouped[row.user_id]) grouped[row.user_id] = [];
+        grouped[row.user_id].push({
+          id: row.id,
+          userId: row.user_id,
+          currency: row.currency,
+          label: row.label,
+          balance: row.balance,
+          holdAmount: row.hold_amount,
+          isDefault: row.is_default,
+          isActive: row.is_active,
+          isSuspended: row.is_suspended,
+          suspendReason: row.suspend_reason,
+          createdAt: row.created_at,
+          user: { fullName: row.full_name, email: row.email, phone: row.phone }
+        });
+      }
+      res.json({ wallets: allWallets.rows, grouped });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.get("/api/admin/users/:userId/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+      res.json({ wallets: userWallets });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.post("/api/admin/users/:userId/wallets", requireAdminAuth, async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { currency } = req.body;
+      if (!currency) return res.status(400).json({ message: "currency required" });
+      const existing = await db.select().from(wallets).where(eq3(wallets.userId, userId));
+      if (existing.some((w) => w.currency === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
+      const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault: existing.length === 0, isActive: true }).returning();
+      res.json({ wallet: newWallet });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/admin/wallets/:id/suspend", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      await db.update(wallets).set({ isSuspended: true, suspendReason: reason || null, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/admin/wallets/:id/unsuspend", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.update(wallets).set({ isSuspended: false, suspendReason: null, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/admin/wallets/:id/hold", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount } = req.body;
+      await db.update(wallets).set({ holdAmount: String(parseFloat(amount || "0")), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/admin/wallets/:id/balance", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { amount, type } = req.body;
+      const adj = parseFloat(amount || "0");
+      if (adj <= 0) return res.status(400).json({ message: "Amount must be > 0" });
+      if (type === "credit") {
+        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [adj, id]);
+      } else if (type === "debit") {
+        await pool.query(`UPDATE wallets SET balance = GREATEST(0, balance - $1), updated_at = NOW() WHERE id = $2`, [adj, id]);
+      } else {
+        return res.status(400).json({ message: "type must be 'credit' or 'debit'" });
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.delete("/api/admin/wallets/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      await db.delete(wallets).where(eq3(wallets.id, id));
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.get("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key')`);
+      const map = {};
+      for (const row of result.rows) map[row.key] = row.value;
+      const fallbackResult = await pool.query(`SELECT key, value FROM system_settings WHERE category = 'exchange_rate_fallback'`);
+      const fallbackRates = {};
+      for (const row of fallbackResult.rows) fallbackRates[row.key] = row.value;
+      res.json({
+        defaultCurrency: map.default_currency || "USD",
+        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(","),
+        nexusApiKey: map.nexuspay_api_key || "",
+        fallbackRates
+      });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+  app2.put("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const { defaultCurrency, enabledCurrencies, nexusApiKey, fallbackRates } = req.body;
+      const upsert = async (key, value, category) => {
+        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), updated_at = NOW()`, [key, value, category]);
+      };
+      if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
+      if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
+      if (nexusApiKey !== void 0) {
+        await upsert("nexuspay_api_key", nexusApiKey, "payment");
+        if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey;
+      }
+      if (fallbackRates && typeof fallbackRates === "object") {
+        for (const [code, rate] of Object.entries(fallbackRates)) {
+          if (rate) await upsert(code, String(rate), "exchange_rate_fallback");
+        }
+      }
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ message: e.message });
+    }
+  });
   return httpServer;
 }
 
@@ -14229,6 +17426,9 @@ var vite_config_default = defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true
+  },
+  optimizeDeps: {
+    exclude: ["@capacitor/push-notifications", "@capacitor/core"]
   },
   server: {
     allowedHosts: true,

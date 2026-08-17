@@ -35,6 +35,7 @@ import KycPage from "@/pages/kyc";
 import AirtimePage from "@/pages/airtime";
 import BillsPage from "@/pages/bills";
 import StatusPage from "@/pages/status";
+import MaintenancePage from "@/pages/maintenance";
 import LoadingScreen from "@/components/loading-screen";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PWAInstallPrompt } from "@/components/pwa-install";
@@ -93,6 +94,7 @@ import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
 import AdminWalletsPage from "@/pages/admin-wallets";
 import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
 import { useFCM } from "@/hooks/use-fcm";
+import { useSystemSettings } from "@/hooks/use-system-settings";
 
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -230,7 +232,8 @@ function Router() {
 
 function AppContent() {
   const [location] = useLocation();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
+  const { getMaintenanceMode } = useSystemSettings();
   
   // Initialize FCM push notifications
   useFCM();
@@ -239,6 +242,18 @@ function AppContent() {
   const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
   const isAdminPage = location.startsWith('/admin');
+  const maintenanceRoutes = [
+    '/dashboard', '/transactions', '/virtual-card', '/virtual-accounts',
+    '/settings', '/support', '/live-chat', '/deposit', '/withdraw',
+    '/exchange', '/kyc', '/airtime', '/bills', '/crypto', '/analytics',
+    '/payment-requests', '/receive-money', '/send-money', '/send-amount',
+    '/send-confirm', '/payment-processing', '/payment-success', '/payment-failed',
+  ];
+  const isUserAppRoute = maintenanceRoutes.some(
+    (route) => location === route || location.startsWith(`${route}/`),
+  );
+  const showMaintenance = !isLoading && !isAdminPage && getMaintenanceMode() &&
+    (isAuthenticated || isUserAppRoute);
 
   const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
 
@@ -253,7 +268,7 @@ function AppContent() {
       <OfflineIndicator />
       {showAppShell && <DesktopSidebar />}
       <div className={showAppShell ? "md:pl-64" : ""}>
-        <Router />
+        {showMaintenance ? <MaintenancePage /> : <Router />}
       </div>
       {!isAdminPage && <BottomNavigation />}
       {!isAdminPage && <PWAInstallPrompt />}

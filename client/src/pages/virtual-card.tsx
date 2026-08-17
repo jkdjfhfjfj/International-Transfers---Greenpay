@@ -12,6 +12,7 @@ import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLef
 import { SiVisa, SiMastercard } from "react-icons/si";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
+import { useWallets } from "@/hooks/use-wallets";
 
 export default function VirtualCardPage() {
   const [, setLocation] = useLocation();
@@ -77,7 +78,8 @@ export default function VirtualCardPage() {
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;
   const showDiscount = discountEnabled && discountPct > 0;
-  const realTimeBalance = parseFloat(user?.balance || '0');
+  const { wallets: userWallets } = useWallets();
+  const realTimeBalance = userWallets.find((wallet) => wallet.currency === "USD")?.availableBalance || 0;
   const isBlocked = card?.status === 'blocked';
   const isFrozen = card?.status === 'frozen';
   const isExpired = card?.status === 'expired';
