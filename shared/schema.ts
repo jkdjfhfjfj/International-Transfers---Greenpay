@@ -924,6 +924,46 @@ export const virtualAccountApplications = pgTable("virtual_account_applications"
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// User-owned virtual accounts. The bank details are still configured centrally
+// in virtual_account_settings, while funds and holds are isolated per user.
+export const virtualAccounts = pgTable("virtual_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  applicationId: varchar("application_id").references(() => virtualAccountApplications.id, { onDelete: "cascade" }).notNull().unique(),
+  currency: text("currency").notNull(),
+  balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+  holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Append-only source of truth for every wallet, card, and virtual-account
+// balance change. amount is signed: credits are positive and debits negative.
+export const ledgerEntries = pgTable("ledger_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),
+  walletId: varchar("wallet_id").references(() => wallets.id, { onDelete: "cascade" }),
+  virtualAccountId: varchar("virtual_account_id").references(() => virtualAccounts.id, { onDelete: "cascade" }),
+  cardId: varchar("card_id").references(() => virtualCards.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 18, scale: 4 }).notNull(),
+  entryType: text("entry_type").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertVirtualAccountSchema = createInsertSchema(virtualAccounts).omit({ id: true, createdAt: true, updatedAt: true });
+export type VirtualAccount = typeof virtualAccounts.$inferSelect;
+export type InsertVirtualAccount = z.infer<typeof insertVirtualAccountSchema>;
+
+export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({ id: true, createdAt: true });
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
+
 export const insertVirtualAccountSettingSchema = createInsertSchema(virtualAccountSettings).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertVirtualAccountApplicationSchema = createInsertSchema(virtualAccountApplications).omit({ id: true, status: true, adminNotes: true, reviewedBy: true, reviewedAt: true, createdAt: true, updatedAt: true });
 export type VirtualAccountSetting = typeof virtualAccountSettings.$inferSelect;

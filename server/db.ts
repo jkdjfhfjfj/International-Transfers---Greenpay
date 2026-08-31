@@ -120,6 +120,55 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS virtual_account_applications_user_currency_idx ON virtual_account_applications(user_id, currency)`,
+    // User-owned virtual accounts and their separately held balances
+    `CREATE TABLE IF NOT EXISTS virtual_accounts (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      application_id VARCHAR NOT NULL UNIQUE REFERENCES virtual_account_applications(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      balance DECIMAL(18,4) DEFAULT 0.0000,
+      hold_amount DECIMAL(18,4) DEFAULT 0.0000,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS virtual_accounts_user_currency_idx ON virtual_accounts(user_id, currency)`,
+    // Append-only ledger for wallets, virtual accounts, and virtual cards.
+    `CREATE TABLE IF NOT EXISTS ledger_entries (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      wallet_id VARCHAR REFERENCES wallets(id) ON DELETE CASCADE,
+      virtual_account_id VARCHAR REFERENCES virtual_accounts(id) ON DELETE CASCADE,
+      card_id VARCHAR REFERENCES virtual_cards(id) ON DELETE CASCADE,
+      amount DECIMAL(18,4) NOT NULL,
+      entry_type TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      transaction_id VARCHAR REFERENCES transactions(id) ON DELETE SET NULL,
+      description TEXT,
+      metadata JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_wallet_idx ON ledger_entries(wallet_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_virtual_account_idx ON ledger_entries(virtual_account_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_card_idx ON ledger_entries(card_id, created_at)`,
+    // Seed one immutable opening entry for each existing cached balance. This
+    // makes the migration lossless while all future changes use the ledger.
+    `INSERT INTO ledger_entries (user_id, currency, wallet_id, amount, entry_type, idempotency_key, description)
+     SELECT user_id, currency, id, COALESCE(balance, 0), 'opening_balance', 'wallet-opening:' || id, 'Opening balance migrated to ledger'
+     FROM wallets
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'wallet-opening:' || wallets.id
+     )`,
+    `INSERT INTO ledger_entries (user_id, currency, card_id, amount, entry_type, idempotency_key, description)
+     SELECT user_id, 'USD', id, COALESCE(balance, 0), 'opening_balance', 'card-opening:' || id, 'Card balance migrated to ledger'
+     FROM virtual_cards
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'card-opening:' || virtual_cards.id
+     )`,
+    `INSERT INTO system_settings (key, value, category)
+     VALUES ('virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts')
+     ON CONFLICT (key) DO NOTHING`,
     // Deposit bonuses table (admin-configured bonus offers per deposit method)
     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),

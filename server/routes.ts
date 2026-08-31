@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -57,7 +57,13 @@ async function getUserWallet(userId: string, currency: unknown) {
     .from(wallets)
     .where(and(eq(wallets.userId, userId), eq(wallets.currency, code)))
     .limit(1);
-  return wallet;
+  if (!wallet || !pool) return wallet;
+  const balance = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries
+     WHERE wallet_id = $1 AND user_id = $2`,
+    [wallet.id, userId],
+  );
+  return { ...wallet, balance: String(balance.rows[0]?.balance ?? wallet.balance ?? "0") };
 }
 
 async function ensureUserWallet(userId: string, currency: unknown) {
@@ -84,6 +90,130 @@ function walletAvailableBalance(wallet: { balance?: string | null; holdAmount?: 
     parseFloat(wallet.balance || "0") -
       parseFloat(wallet.holdAmount || "0") -
       parseFloat(wallet.withdrawalHoldAmount || "0"),
+  );
+}
+
+type LedgerTarget = {
+  walletId?: string;
+  virtualAccountId?: string;
+  cardId?: string;
+};
+
+/**
+ * All monetary movements go through this function. The ledger insert is
+ * idempotent and the target balance is updated under the same row lock, so a
+ * retry or concurrent request cannot create a second debit.
+ */
+async function applyLedgerEntry(params: LedgerTarget & {
+  userId: string;
+  currency: string;
+  amount: number;
+  entryType: string;
+  idempotencyKey: string;
+  transactionId?: string;
+  description?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (!pool) throw new Error("Database is not configured");
+  const target = params.walletId
+    ? { table: "wallets", column: "wallet_id", id: params.walletId, holds: "COALESCE(hold_amount, 0) + COALESCE(withdrawal_hold_amount, 0)" }
+    : params.virtualAccountId
+      ? { table: "virtual_accounts", column: "virtual_account_id", id: params.virtualAccountId, holds: "COALESCE(hold_amount, 0)" }
+      : { table: "virtual_cards", column: "card_id", id: params.cardId!, holds: "0" };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query(
+      `SELECT id, user_id, currency, balance, ${target.holds} AS holds
+       FROM ${target.table} WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [target.id, params.userId],
+    );
+    if (!row.rows[0]) throw new Error("Balance account not found");
+    const account = row.rows[0];
+    if (normalizeCurrency(account.currency) !== normalizeCurrency(params.currency)) {
+      throw new Error("Currency does not match balance account");
+    }
+
+    const ledgerBalance = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE ${target.column} = $1`,
+      [target.id],
+    );
+    const currentBalance = Number(ledgerBalance.rows[0]?.balance || 0);
+    const available = currentBalance - Number(account.holds || 0);
+    if (params.amount < 0 && available + params.amount < -0.0000001) {
+      throw new Error(`Insufficient ${normalizeCurrency(params.currency)} available balance`);
+    }
+
+    const inserted = await client.query(
+      `INSERT INTO ledger_entries
+        (user_id, currency, ${target.column}, amount, entry_type, idempotency_key, transaction_id, description, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [
+        params.userId,
+        normalizeCurrency(params.currency),
+        target.id,
+        params.amount,
+        params.entryType,
+        params.idempotencyKey,
+        params.transactionId || null,
+        params.description || null,
+        params.metadata ? JSON.stringify(params.metadata) : null,
+      ],
+    );
+
+    const nextBalance = inserted.rowCount
+      ? currentBalance + params.amount
+      : currentBalance;
+    if (inserted.rowCount) {
+      await client.query(
+        `UPDATE ${target.table} SET balance = $1, updated_at = NOW() WHERE id = $2`,
+        [nextBalance, target.id],
+      );
+    }
+    await client.query("COMMIT");
+    return {
+      applied: Boolean(inserted.rowCount),
+      balance: nextBalance,
+      availableBalance: Math.max(0, nextBalance - Number(account.holds || 0)),
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function getLedgerBalance(target: LedgerTarget, fallback = 0) {
+  if (!pool) return fallback;
+  const [column, id] = target.walletId
+    ? ["wallet_id", target.walletId]
+    : target.virtualAccountId
+      ? ["virtual_account_id", target.virtualAccountId]
+      : ["card_id", target.cardId!];
+  const result = await pool.query(`SELECT COALESCE(SUM(amount), $2) AS balance FROM ledger_entries WHERE ${column} = $1`, [id, fallback]);
+  return Number(result.rows[0]?.balance || 0);
+}
+
+async function reserveWalletWithdrawal(walletId: string, userId: string, amount: number) {
+  const result = await pool.query(
+    `UPDATE wallets
+     SET withdrawal_hold_amount = COALESCE(withdrawal_hold_amount, 0) + $1, updated_at = NOW()
+     WHERE id = $2 AND user_id = $3 AND is_active = true AND is_suspended = false
+       AND COALESCE(balance, 0) - COALESCE(hold_amount, 0) - COALESCE(withdrawal_hold_amount, 0) >= $1
+     RETURNING balance, hold_amount, withdrawal_hold_amount`,
+    [amount, walletId, userId],
+  );
+  return result.rows[0] || null;
+}
+
+async function releaseWalletWithdrawal(walletId: string, amount: number) {
+  await pool.query(
+    `UPDATE wallets SET withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1), updated_at = NOW()
+     WHERE id = $2`,
+    [amount, walletId],
   );
 }
 
@@ -309,18 +439,43 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  const supportedVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
+  const defaultVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
+  const allVirtualAccountCurrencies = getSupportedCurrencyCodes();
+
+  async function getVirtualAccountCurrencies() {
+    try {
+      const result = await pool.query(`SELECT value FROM system_settings WHERE key = 'virtual_account_currencies' LIMIT 1`);
+      const configured = String(result.rows[0]?.value || "").replace(/['"]/g, "");
+      const currencies = configured.split(",").map(normalizeCurrency)
+        .filter(currency => allVirtualAccountCurrencies.includes(currency));
+      return currencies.length ? currencies : defaultVirtualAccountCurrencies;
+    } catch {
+      return defaultVirtualAccountCurrencies;
+    }
+  }
 
   app.get("/api/virtual-accounts", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
       const applications = await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.userId, userId));
       const settings = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.isActive, true));
+      const accounts = await db.select().from(virtualAccounts).where(eq(virtualAccounts.userId, userId));
+      const supportedCurrencies = await getVirtualAccountCurrencies();
       res.json({
-        supportedCurrencies: supportedVirtualAccountCurrencies,
+        supportedCurrencies,
         applications: applications.map((app: any) => ({
           ...app,
           accountDetails: app.status === "approved" ? settings.find((s: any) => s.currency === app.currency) || null : null,
+          virtualAccount: app.status === "approved"
+            ? (() => {
+                const account = accounts.find((a: any) => a.applicationId === app.id);
+                return account ? {
+                  ...account,
+                  balance: account.balance,
+                  availableBalance: Math.max(0, Number(account.balance || 0) - Number(account.holdAmount || 0)),
+                } : null;
+              })()
+            : null,
         })),
       });
     } catch (error) {
@@ -333,7 +488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const userId = req.session.userId;
       const schema = z.object({
-        currency: z.enum(["USD", "GBP", "EUR"]),
+        currency: z.string().transform(normalizeCurrency),
         sourceOfIncome: z.string().min(2),
         monthlyVolume: z.string().min(1),
         purpose: z.string().min(5),
@@ -356,6 +511,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       const data = parsed.data;
+      if (!(await getVirtualAccountCurrencies()).includes(data.currency)) {
+        return res.status(400).json({ message: `${data.currency} virtual accounts are not currently available` });
+      }
       if (!Object.values(data.declarations).every(Boolean)) {
         return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
       }
@@ -374,7 +532,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const applications = await db.select({ application: virtualAccountApplications, user: users }).from(virtualAccountApplications).leftJoin(users, eq(virtualAccountApplications.userId, users.id)).orderBy(desc(virtualAccountApplications.createdAt));
       const settings = await db.select().from(virtualAccountSettings).orderBy(virtualAccountSettings.currency);
-      res.json({ applications, settings, supportedCurrencies: supportedVirtualAccountCurrencies });
+      const accounts = await db.select().from(virtualAccounts).orderBy(virtualAccounts.createdAt);
+      res.json({ applications, settings, accounts, supportedCurrencies: await getVirtualAccountCurrencies(), allCurrencies: allVirtualAccountCurrencies });
     } catch (error) {
       res.status(500).json({ message: "Failed to load virtual account admin data" });
     }
@@ -383,7 +542,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/virtual-accounts/settings/:currency", requireAdminAuth, async (req: any, res) => {
     try {
       const currency = String(req.params.currency).toUpperCase();
-      if (!supportedVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
+      if (!allVirtualAccountCurrencies.includes(currency)) return res.status(400).json({ message: "Unsupported currency" });
       const bodySchema = z.object({
         accountName: z.string().min(2, "Account name must be at least 2 characters."),
         bankName: z.string().min(2, "Bank name must be at least 2 characters."),
@@ -411,6 +570,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to save account details" }); }
   });
 
+  app.put("/api/admin/virtual-accounts/currencies", requireAdminAuth, async (req: any, res) => {
+    try {
+      const currencies = z.array(z.string()).transform(values =>
+        Array.from(new Set(values.map(normalizeCurrency).filter(currency => allVirtualAccountCurrencies.includes(currency))))
+      ).parse(req.body.currencies);
+      if (!currencies.length) return res.status(400).json({ message: "Select at least one virtual-account currency" });
+      await pool.query(
+        `INSERT INTO system_settings (key, value, category) VALUES ('virtual_account_currencies', to_json($1::text), 'virtual_accounts')
+         ON CONFLICT (key) DO UPDATE SET value = to_json($1::text), updated_at = NOW()`,
+        [currencies.join(",")],
+      );
+      res.json({ supportedCurrencies: currencies });
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || "Failed to save virtual-account currencies" });
+    }
+  });
+
   app.patch("/api/admin/virtual-accounts/applications/:id", requireAdminAuth, async (req: any, res) => {
     try {
       const status = req.body.status;
@@ -419,6 +595,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!application) return res.status(404).json({ message: "Application not found" });
       const [user] = await db.select().from(users).where(eq(users.id, application.userId));
       const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
+      if (status === "approved") {
+        await pool.query(
+          `INSERT INTO virtual_accounts (user_id, application_id, currency)
+           VALUES ($1, $2, $3) ON CONFLICT (application_id) DO NOTHING`,
+          [application.userId, application.id, application.currency],
+        );
+      }
       const [firstName, ...rest] = (user?.fullName || "User").split(" ");
       if (user && status === "approved") {
         await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Approved`, message: "Your virtual account details are now available. Check Virtual Accounts to view your bank details.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
@@ -452,6 +635,83 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(application);
     } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to review application" }); }
+  });
+
+  app.put("/api/admin/virtual-accounts/:id/hold", requireAdminAuth, async (req: any, res) => {
+    try {
+      const amount = Number(req.body.amount);
+      if (!Number.isFinite(amount) || amount < 0) return res.status(400).json({ message: "Hold amount must be zero or greater" });
+      const result = await pool.query(
+        `UPDATE virtual_accounts SET hold_amount = $1, updated_at = NOW()
+         WHERE id = $2 AND balance - $1 >= 0
+         RETURNING *`,
+        [amount, req.params.id],
+      );
+      if (!result.rows[0]) return res.status(400).json({ message: "Hold cannot exceed the virtual-account balance or account was not found" });
+      res.json({ account: result.rows[0] });
+    } catch (error: any) { res.status(500).json({ message: error?.message || "Failed to update virtual-account hold" }); }
+  });
+
+  app.put("/api/admin/virtual-accounts/:id/balance", requireAdminAuth, async (req: any, res) => {
+    try {
+      const amount = Number(req.body.amount);
+      const type = req.body.type;
+      if (!Number.isFinite(amount) || amount <= 0 || !["credit", "debit"].includes(type)) {
+        return res.status(400).json({ message: "Enter a positive amount and choose credit or debit" });
+      }
+      const account = await db.query.virtualAccounts.findFirst({ where: eq(virtualAccounts.id, req.params.id) });
+      if (!account) return res.status(404).json({ message: "Virtual account not found" });
+      const result = await applyLedgerEntry({
+        virtualAccountId: account.id,
+        userId: account.userId,
+        currency: account.currency,
+        amount: type === "credit" ? amount : -amount,
+        entryType: `admin_virtual_account_${type}`,
+        idempotencyKey: `admin-va:${account.id}:${Date.now()}:${Math.random()}`,
+        description: `Admin ${type} to virtual account`,
+      });
+      res.json({ account: { ...account, balance: result.balance, availableBalance: result.availableBalance } });
+    } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to update virtual-account balance" }); }
+  });
+
+  app.post("/api/virtual-accounts/:id/transfer", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const amount = Number(req.body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Enter a valid transfer amount" });
+      const account = await db.query.virtualAccounts.findFirst({ where: and(eq(virtualAccounts.id, req.params.id), eq(virtualAccounts.userId, userId)) });
+      if (!account || !account.isActive) return res.status(404).json({ message: "Virtual account not found or inactive" });
+      const wallet = await ensureUserWallet(userId, account.currency);
+      if (!wallet) return res.status(400).json({ message: `${account.currency} wallet is not enabled` });
+      const reference = `VA-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      const debit = await applyLedgerEntry({
+        virtualAccountId: account.id, userId, currency: account.currency, amount: -amount,
+        entryType: "virtual_account_transfer_out", idempotencyKey: `${reference}:debit`,
+        description: `Transfer from ${account.currency} virtual account`,
+      });
+      try {
+        const credit = await applyLedgerEntry({
+          walletId: wallet.id, userId, currency: wallet.currency, amount,
+          entryType: "virtual_account_transfer_in", idempotencyKey: `${reference}:credit`,
+          description: `Transfer from ${account.currency} virtual account`,
+        });
+        const transaction = await storage.createTransaction({
+          userId, type: "receive", amount: String(amount), currency: account.currency, status: "completed",
+          reference, description: `Transfer from ${account.currency} virtual account`,
+          metadata: { source: "virtual_account", virtualAccountId: account.id, walletId: wallet.id },
+        });
+        res.json({ transaction, virtualAccountBalance: debit.availableBalance, walletBalance: credit.availableBalance });
+      } catch (creditError) {
+        await applyLedgerEntry({
+          virtualAccountId: account.id, userId, currency: account.currency, amount,
+          entryType: "virtual_account_transfer_rollback", idempotencyKey: `${reference}:rollback`,
+          description: "Rollback failed virtual-account transfer",
+        });
+        throw creditError;
+      }
+    } catch (error: any) {
+      res.status(400).json({ message: error?.message || "Virtual-account transfer failed" });
+    }
   });
 
   // Demo API Keys endpoint - shows available demo keys for testing
@@ -2372,10 +2632,16 @@ p{color:#6b7280;font-size:14px;}</style>
             if (!depositWallet) {
               throw new Error(`${depositCurrency} wallet is not enabled`);
             }
-            await pool.query(
-              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-              [depositAmount, depositWallet.id],
-            );
+            await applyLedgerEntry({
+              walletId: depositWallet.id,
+              userId: transaction.userId,
+              currency: depositCurrency,
+              amount: depositAmount,
+              entryType: "deposit",
+              idempotencyKey: `deposit:${transaction.id}`,
+              transactionId: transaction.id,
+              description: transaction.description || "Deposit",
+            });
 
             notificationService.sendNotification({
               userId: transaction.userId,
@@ -2419,10 +2685,15 @@ p{color:#6b7280;font-size:14px;}</style>
 
               if (eligible.length > 0) {
                 const { bonus, value: bonusValue } = eligible[0];
-                await pool.query(
-                  `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-                  [bonusValue, depositWallet.id],
-                );
+                await applyLedgerEntry({
+                  walletId: depositWallet.id,
+                  userId: transaction.userId,
+                  currency: depositCurrency,
+                  amount: bonusValue,
+                  entryType: "deposit_bonus",
+                  idempotencyKey: `deposit-bonus:${transaction.id}:${bonus.id}`,
+                  description: bonus.description || "Deposit bonus",
+                });
                 await storage.createTransaction({
                   userId: transaction.userId,
                   type: 'deposit',
@@ -2946,11 +3217,17 @@ p{color:#6b7280;font-size:14px;}</style>
             const depositCurrency = normalizeCurrency(transaction.currency || "USD");
             const depositWallet = await ensureUserWallet(user.id, depositCurrency);
             if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
-            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
-            await pool.query(
-              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-              [depositAmount, depositWallet.id],
-            );
+            const balanceResult = await applyLedgerEntry({
+              walletId: depositWallet.id,
+              userId: user.id,
+              currency: depositCurrency,
+              amount: depositAmount,
+              entryType: "deposit",
+              idempotencyKey: `deposit:${transaction.id}`,
+              transactionId: transaction.id,
+              description: transaction.description || "Deposit",
+            });
+            const newBalance = balanceResult.balance.toFixed(2);
             
             // 3. Send in-app notification
             await notificationService.sendNotification({
@@ -3108,11 +3385,17 @@ p{color:#6b7280;font-size:14px;}</style>
             const depositCurrency = normalizeCurrency(transaction.currency || "USD");
             const depositWallet = await ensureUserWallet(user.id, depositCurrency);
             if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
-            const newBalance = (walletAvailableBalance(depositWallet) + depositAmount).toFixed(2);
-            await pool.query(
-              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-              [depositAmount, depositWallet.id],
-            );
+            const balanceResult = await applyLedgerEntry({
+              walletId: depositWallet.id,
+              userId: user.id,
+              currency: depositCurrency,
+              amount: depositAmount,
+              entryType: "deposit",
+              idempotencyKey: `deposit:${transaction.id}`,
+              transactionId: transaction.id,
+              description: transaction.description || "Deposit",
+            });
+            const newBalance = balanceResult.balance.toFixed(2);
             
             await notificationService.sendNotification({
               userId: user.id,
@@ -3217,16 +3500,15 @@ p{color:#6b7280;font-size:14px;}</style>
         });
       }
 
-      const debitResult = await pool.query(
-        `UPDATE wallets
-         SET balance = balance - $1, updated_at = NOW()
-         WHERE id = $2 AND user_id = $3
-           AND is_active = true AND is_suspended = false
-           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [purchaseAmount, wallet.id, userId],
-      );
-      if (debitResult.rowCount !== 1) {
-        return res.status(400).json({ message: "Insufficient KES balance" });
+      let airtimeDebit;
+      try {
+        airtimeDebit = await applyLedgerEntry({
+          walletId: wallet.id, userId, currency: "KES", amount: -purchaseAmount,
+          entryType: "airtime", idempotencyKey: `airtime:${userId}:${Date.now()}`,
+          description: `Airtime purchase for ${phoneNumber}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || "Insufficient KES balance" });
       }
 
       // Call Statum API to purchase airtime
@@ -3235,7 +3517,11 @@ p{color:#6b7280;font-size:14px;}</style>
       try {
         statumResponse = await statumService.purchaseAirtime(phoneNumber, purchaseAmount);
       } catch (providerError) {
-        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [purchaseAmount, wallet.id]);
+        await applyLedgerEntry({
+          walletId: wallet.id, userId, currency: "KES", amount: purchaseAmount,
+          entryType: "airtime_rollback", idempotencyKey: `airtime-rollback:${userId}:${Date.now()}`,
+          description: "Rollback failed airtime purchase",
+        });
         throw providerError;
       }
       
@@ -3351,11 +3637,16 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "You have already claimed your airtime bonus" });
       }
       const currentKesBalance = walletAvailableBalance(wallet);
-      const newKesBalance = currentKesBalance + bonusAmount;
-      await pool.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [bonusAmount, wallet.id],
-      );
+      const bonusResult = await applyLedgerEntry({
+        walletId: wallet.id,
+        userId,
+        currency: "KES",
+        amount: bonusAmount,
+        entryType: "airtime_bonus",
+        idempotencyKey: `airtime-bonus:${userId}`,
+        description: "Welcome airtime bonus",
+      });
+      const newKesBalance = bonusResult.balance;
 
       console.log(`💰 Bonus credited: ${currentKesBalance} -> ${newKesBalance} KES`);
 
@@ -3456,15 +3747,14 @@ p{color:#6b7280;font-size:14px;}</style>
         metadata: { billPaymentId: billPayment.id, provider }
       });
 
-      const billDebit = await pool.query(
-        `UPDATE wallets
-         SET balance = balance - $1, updated_at = NOW()
-         WHERE id = $2 AND user_id = $3
-           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [paymentAmount, kesWallet.id, userId],
-      );
-      if (billDebit.rowCount !== 1) {
-        return res.status(400).json({ message: "Insufficient KES balance" });
+      try {
+        await applyLedgerEntry({
+          walletId: kesWallet.id, userId, currency: "KES", amount: -paymentAmount,
+          entryType: "bill_payment", idempotencyKey: `bill:${billPayment.id}`,
+          description: `Bill payment - ${provider}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || "Insufficient KES balance" });
       }
 
       // The amount is debited once and the bill remains pending until provider
@@ -3584,23 +3874,31 @@ p{color:#6b7280;font-size:14px;}</style>
       const wallet = await getUserWallet(sessionUserId, "USD");
       if (!wallet) return res.status(400).json({ message: "USD wallet not found" });
       const walletBalance = walletAvailableBalance(wallet);
-      const cardBalance = parseFloat(card.balance || '0');
+      const cardBalance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
       
       if (direction === 'wallet_to_card') {
-        const debitResult = await pool.query(
-          `UPDATE wallets
-           SET balance = balance - $1, updated_at = NOW()
-           WHERE id = $2 AND user_id = $3
-             AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-          [transferAmount, wallet.id, sessionUserId],
-        );
-        if (debitResult.rowCount !== 1) {
-          return res.status(400).json({ message: "Insufficient wallet balance" });
+        const walletDebit = await applyLedgerEntry({
+          walletId: wallet.id, userId: sessionUserId, currency: "USD", amount: -transferAmount,
+          entryType: "card_funding", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-debit`,
+          description: "Transfer from wallet to virtual card",
+        });
+        let cardCredit;
+        try {
+          cardCredit = await applyLedgerEntry({
+            cardId: card.id, userId: sessionUserId, currency: "USD", amount: transferAmount,
+            entryType: "card_funding", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-credit`,
+            description: "Transfer from wallet to virtual card",
+          });
+        } catch (error) {
+          await applyLedgerEntry({
+            walletId: wallet.id, userId: sessionUserId, currency: "USD", amount: transferAmount,
+            entryType: "card_funding_rollback", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-rollback`,
+            description: "Rollback failed card funding",
+          });
+          throw error;
         }
-        const newWalletBalance = (walletBalance - transferAmount).toFixed(2);
-        const newCardBalance = (cardBalance + transferAmount).toFixed(2);
-        
-        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        const newWalletBalance = walletDebit.availableBalance.toFixed(2);
+        const newCardBalance = cardCredit.balance.toFixed(2);
         
         await storage.createTransaction({
           userId: sessionUserId,
@@ -3618,14 +3916,28 @@ p{color:#6b7280;font-size:14px;}</style>
         if (cardBalance < transferAmount) {
           return res.status(400).json({ message: "Insufficient card balance" });
         }
-        const newCardBalance = (cardBalance - transferAmount).toFixed(2);
-        const newWalletBalance = (walletBalance + transferAmount).toFixed(2);
-        
-        await pool.query(
-          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-          [transferAmount, wallet.id],
-        );
-        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        const cardDebit = await applyLedgerEntry({
+          cardId: card.id, userId: sessionUserId, currency: "USD", amount: -transferAmount,
+          entryType: "card_withdrawal", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-debit`,
+          description: "Transfer from virtual card to wallet",
+        });
+        let walletCredit;
+        try {
+          walletCredit = await applyLedgerEntry({
+            walletId: wallet.id, userId: sessionUserId, currency: "USD", amount: transferAmount,
+            entryType: "card_withdrawal", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-credit`,
+            description: "Transfer from virtual card to wallet",
+          });
+        } catch (error) {
+          await applyLedgerEntry({
+            cardId: card.id, userId: sessionUserId, currency: "USD", amount: transferAmount,
+            entryType: "card_withdrawal_rollback", idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-rollback`,
+            description: "Rollback failed card withdrawal",
+          });
+          throw error;
+        }
+        const newCardBalance = cardDebit.balance.toFixed(2);
+        const newWalletBalance = walletCredit.availableBalance.toFixed(2);
         
         await storage.createTransaction({
           userId: sessionUserId,
@@ -3808,10 +4120,16 @@ p{color:#6b7280;font-size:14px;}</style>
       const receiveWallet = await ensureUserWallet(userId, receiveCurrency);
       if (!receiveWallet) return res.status(400).json({ message: `${receiveCurrency} wallet is not enabled` });
       const newBalance = (walletAvailableBalance(receiveWallet) + parseFloat(amount)).toFixed(2);
-      await pool.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [parseFloat(amount), receiveWallet.id],
-      );
+      await applyLedgerEntry({
+        walletId: receiveWallet.id,
+        userId,
+        currency: receiveCurrency,
+        amount: parseFloat(amount),
+        entryType: "receive",
+        idempotencyKey: `receive:${transaction.id}`,
+        transactionId: transaction.id,
+        description: transaction.description || "Received funds",
+      });
       
       // Send notification
       await notificationService.sendTransactionNotification(userId, transaction);
@@ -4432,19 +4750,21 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
       }
 
-      const debit = await pool.query(
-        `UPDATE wallets
-         SET balance = balance - $1, updated_at = NOW()
-         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [totalDeducted, sourceWallet.id],
-      );
-      if (debit.rowCount !== 1) {
-        return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
+      const exchangeReference = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      try {
+        await applyLedgerEntry({
+          walletId: sourceWallet.id, userId, currency: sourceCurrency, amount: -totalDeducted,
+          entryType: "exchange", idempotencyKey: `exchange:${exchangeReference}:debit`,
+          description: `Exchange ${sourceCurrency} to ${targetCurrency}`,
+        });
+        await applyLedgerEntry({
+          walletId: targetWallet.id, userId, currency: targetCurrency, amount: parseFloat(convertedAmount),
+          entryType: "exchange", idempotencyKey: `exchange:${exchangeReference}:credit`,
+          description: `Exchange from ${sourceCurrency}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || `Insufficient ${sourceCurrency} balance` });
       }
-      await pool.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [parseFloat(convertedAmount), targetWallet.id],
-      );
       
       // Create exchange transaction
       const transaction = await storage.createTransaction({
@@ -5820,10 +6140,16 @@ p{color:#6b7280;font-size:14px;}</style>
           const refundCurrency = normalizeCurrency(before.currency || "USD");
           const refundWallet = await ensureUserWallet(before.userId, refundCurrency);
           if (refundWallet) {
-            await pool.query(
-              `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-              [refundAmount, refundWallet.id],
-            );
+            await applyLedgerEntry({
+              walletId: refundWallet.id,
+              userId: before.userId,
+              currency: refundCurrency,
+              amount: refundAmount,
+              entryType: "admin_transaction_refund",
+              idempotencyKey: `admin-refund:${before.id}`,
+              transactionId: before.id,
+              description: `Refund for ${before.type}`,
+            });
           }
           console.log(`✅ Refunded ${before.currency} ${refundAmount} to user ${user.email} (admin marked ${status})`);
 
@@ -6595,8 +6921,11 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!adjustmentWallet) {
         return res.status(400).json({ error: `${targetCurrency} wallet is not enabled` });
       }
-      const currentBalance = walletAvailableBalance(adjustmentWallet);
+      const currentBalance = Number(adjustmentWallet.balance || 0);
       const updateAmount = parseFloat(amount);
+      if (!Number.isFinite(updateAmount) || updateAmount <= 0) {
+        return res.status(400).json({ error: "Amount must be greater than zero" });
+      }
       
       let newBalance: number;
       let transactionType: 'receive' | 'send' | 'deposit';
@@ -6607,7 +6936,7 @@ p{color:#6b7280;font-size:14px;}</style>
           transactionType = 'deposit'; // Admin deposits should be labeled as 'deposit'
           break;
         case "subtract":
-          newBalance = Math.max(0, currentBalance - updateAmount);
+          newBalance = currentBalance - updateAmount;
           transactionType = 'send';
           break;
         case "set":
@@ -6617,18 +6946,26 @@ p{color:#6b7280;font-size:14px;}</style>
         default:
           return res.status(400).json({ error: "Invalid update type" });
       }
-      
-      const adjustmentResult = await pool.query(
-        `UPDATE wallets SET balance = $1, updated_at = NOW() WHERE id = $2`,
-        [newBalance.toFixed(2), adjustmentWallet.id],
-      );
-      if (adjustmentResult.rowCount !== 1) {
-        return res.status(404).json({ error: "Wallet not found" });
+      const delta = newBalance - currentBalance;
+      if (delta !== 0) {
+        try {
+          await applyLedgerEntry({
+            walletId: adjustmentWallet.id,
+            userId: req.params.id,
+            currency: targetCurrency,
+            amount: delta,
+            entryType: `admin_balance_${type}`,
+            idempotencyKey: `admin-balance:${adjustmentWallet.id}:${Date.now()}:${Math.random()}`,
+            description: details || `Admin ${type} ${targetCurrency} balance adjustment`,
+          });
+        } catch (error: any) {
+          return res.status(400).json({ error: error?.message || "Balance adjustment exceeds available funds" });
+        }
       }
       const updatedUser = await storage.getUser(req.params.id);
       
       // Create transaction record for history with correct currency
-      const transactionAmount = type === 'set' ? Math.abs(newBalance - currentBalance) : updateAmount;
+      const transactionAmount = Math.abs(delta);
       const transactionData = {
         userId: req.params.id,
         type: transactionType,
@@ -7571,13 +7908,15 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Insufficient balance" });
       }
       
-      const savingsDebit = await pool.query(
-        `UPDATE wallets
-         SET balance = balance - $1, updated_at = NOW()
-         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [contributionAmount, savingsWallet.id],
-      );
-      if (savingsDebit.rowCount !== 1) return res.status(400).json({ message: "Insufficient balance" });
+      try {
+        await applyLedgerEntry({
+          walletId: savingsWallet.id, userId, currency: "USD", amount: -contributionAmount,
+          entryType: "savings_contribution", idempotencyKey: `savings:${id}:${Date.now()}`,
+          description: `Contribution to savings goal`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || "Insufficient balance" });
+      }
       
       // Update savings goal
       const newAmount = parseFloat(savingsGoal.currentAmount || "0") + contributionAmount;
@@ -8552,19 +8891,20 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Update both wallets atomically enough to prevent spending more than
       // the sender's available balance during concurrent transfers.
-      const senderDebit = await pool.query(
-        `UPDATE wallets
-         SET balance = balance - $1, updated_at = NOW()
-         WHERE id = $2 AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [transferAmount, senderWallet.id],
-      );
-      if (senderDebit.rowCount !== 1) {
-        return res.status(400).json({ message: "Insufficient balance" });
+      try {
+        await applyLedgerEntry({
+          walletId: senderWallet.id, userId: fromUserId, currency: transferCurrency, amount: -transferAmount,
+          entryType: "user_transfer", idempotencyKey: `transfer:${transferId}:debit`,
+          transactionId: senderTransaction.id, description: description || `Transfer to ${toUser.fullName}`,
+        });
+        await applyLedgerEntry({
+          walletId: recipientWallet.id, userId: toUserId, currency: transferCurrency, amount: transferAmount,
+          entryType: "user_transfer", idempotencyKey: `transfer:${transferId}:credit`,
+          transactionId: recipientTransaction.id, description: description || `Transfer from ${fromUser.fullName}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
-      await pool.query(
-        `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-        [transferAmount, recipientWallet.id],
-      );
 
       // Send email to recipient with fund receipt using Mailtrap
       const { MailtrapService } = await import('./services/mailtrap');
@@ -8949,6 +9289,11 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const { id } = req.params;
       const { adminNotes } = req.body;
+      const previousTransaction = await storage.getTransactionById(id);
+      if (!previousTransaction) return res.status(404).json({ message: "Withdrawal not found" });
+      if (previousTransaction.status === "completed") {
+        return res.json({ transaction: previousTransaction, message: "Withdrawal was already approved" });
+      }
       
       const transaction = await storage.updateTransaction(id, {
         status: 'completed',
@@ -8970,14 +9315,17 @@ p{color:#6b7280;font-size:14px;}</style>
           }
           // The amount was reserved when the withdrawal was submitted. Approval
           // consumes that reservation without subtracting the balance twice.
-          await pool.query(
-            `UPDATE wallets
-             SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
-                 balance = GREATEST(0, balance - $1),
-                 updated_at = NOW()
-             WHERE id = $2`,
-            [totalDeduction, wallet.id],
-          );
+          await applyLedgerEntry({
+            walletId: wallet.id,
+            userId: user.id,
+            currency: normalizeCurrency(transaction.currency),
+            amount: -totalDeduction,
+            entryType: "withdrawal_settlement",
+            idempotencyKey: `withdrawal:${transaction.id}:settled`,
+            transactionId: transaction.id,
+            description: "Withdrawal approved",
+          });
+          await releaseWalletWithdrawal(wallet.id, totalDeduction);
           
           await notificationService.sendNotification({
             title: "Withdrawal Approved",
@@ -9013,13 +9361,7 @@ p{color:#6b7280;font-size:14px;}</style>
           const refundAmount = parseFloat(transaction.amount) + parseFloat(transaction.fee || '0');
           const wallet = await getUserWallet(transaction.userId, transaction.currency);
           if (wallet) {
-            await pool.query(
-              `UPDATE wallets
-               SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1),
-                   updated_at = NOW()
-               WHERE id = $2`,
-              [refundAmount, wallet.id],
-            );
+            await releaseWalletWithdrawal(wallet.id, refundAmount);
           }
           console.log(`✅ Released ${transaction.currency} ${refundAmount} withdrawal hold for ${user.email}`);
           
@@ -9544,14 +9886,8 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Create withdrawal transaction with pending status
       const totalHold = withdrawAmount + withdrawFee;
-      const holdResult = await pool.query(
-        `UPDATE wallets
-         SET withdrawal_hold_amount = withdrawal_hold_amount + $1, updated_at = NOW()
-         WHERE id = $2 AND is_active = true AND is_suspended = false
-           AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-        [totalHold, matchingWallet.id],
-      );
-      if (holdResult.rowCount !== 1) {
+      const holdResult = await reserveWalletWithdrawal(matchingWallet.id, userId, totalHold);
+      if (!holdResult) {
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
@@ -12201,15 +12537,18 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           const refundWallet = await getUserWallet(userId, refundCurrency);
           if (refundWallet) {
             if (tx.type === "withdraw") {
-              await pool.query(
-                `UPDATE wallets SET withdrawal_hold_amount = GREATEST(0, withdrawal_hold_amount - $1), updated_at = NOW() WHERE id = $2`,
-                [refundAmount, refundWallet.id],
-              );
+              await releaseWalletWithdrawal(refundWallet.id, refundAmount);
             } else {
-              await pool.query(
-                `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-                [refundAmount, refundWallet.id],
-              );
+              await applyLedgerEntry({
+                walletId: refundWallet.id,
+                userId,
+                currency: refundCurrency,
+                amount: refundAmount,
+                entryType: "transaction_refund",
+                idempotencyKey: `refund:${tx.id}`,
+                transactionId: tx.id,
+                description: "Refund for cancelled transaction",
+              });
             }
           }
         }
@@ -12415,7 +12754,20 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           const meta = txn.metadata as any;
           const walletId = meta?.walletId;
           if (walletId) {
-            await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`, [parseFloat(status.amount), walletId, userId]);
+            const [wallet] = await db.select().from(wallets).where(eq(wallets.id, walletId));
+            if (!wallet || wallet.userId !== userId) {
+              return res.status(403).json({ message: "Wallet not found" });
+            }
+            await applyLedgerEntry({
+              walletId: wallet.id,
+              userId,
+              currency: normalizeCurrency(wallet.currency),
+              amount: parseFloat(status.amount),
+              entryType: "deposit",
+              idempotencyKey: `deposit:${txn.id}`,
+              transactionId: txn.id,
+              description: txn.description || "NexusPay deposit",
+            });
           }
           await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.reference, reference));
         }
@@ -12438,16 +12790,28 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const toWallet = userWallets.find(w => w.id === toWalletId);
       if (!fromWallet || !toWallet) return res.status(404).json({ message: "Wallet not found" });
       if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
-      const fromBalance = parseFloat(fromWallet.balance || "0") - parseFloat(fromWallet.holdAmount || "0");
+      const fromBalance = walletAvailableBalance(fromWallet);
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
       const FEE_RATE = 0.015;
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;
-      await pool.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [fromAmt, fromWalletId]);
-      await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [toAmount, toWalletId]);
       const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      try {
+        await applyLedgerEntry({
+          walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: -fromAmt,
+          entryType: "exchange", idempotencyKey: `exchange:${ref}:debit`,
+          description: `Exchange ${fromWallet.currency} to ${toWallet.currency}`,
+        });
+        await applyLedgerEntry({
+          walletId: toWallet.id, userId, currency: normalizeCurrency(toWallet.currency), amount: toAmount,
+          entryType: "exchange", idempotencyKey: `exchange:${ref}:credit`,
+          description: `Exchange from ${fromWallet.currency}`,
+        });
+      } catch (error: any) {
+        return res.status(400).json({ message: error?.message || "Insufficient balance" });
+      }
       await db.insert(transactions).values({
         userId, type: "exchange", amount: String(fromAmt), currency: fromWallet.currency,
         fee: String(fee.toFixed(4)), exchangeRate: String(rate.toFixed(6)),
@@ -12537,12 +12901,25 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const { amount, type } = req.body;
       const adj = parseFloat(amount || "0");
       if (adj <= 0) return res.status(400).json({ message: "Amount must be > 0" });
-      if (type === "credit") {
-        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [adj, id]);
-      } else if (type === "debit") {
-        await pool.query(`UPDATE wallets SET balance = GREATEST(0, balance - $1), updated_at = NOW() WHERE id = $2`, [adj, id]);
-      } else { return res.status(400).json({ message: "type must be 'credit' or 'debit'" }); }
-      res.json({ success: true });
+      if (type !== "credit" && type !== "debit") {
+        return res.status(400).json({ message: "type must be 'credit' or 'debit'" });
+      }
+      const [wallet] = await db.select().from(wallets).where(eq(wallets.id, id));
+      if (!wallet) return res.status(404).json({ message: "Wallet not found" });
+      try {
+        const result = await applyLedgerEntry({
+          walletId: wallet.id,
+          userId: wallet.userId,
+          currency: normalizeCurrency(wallet.currency),
+          amount: type === "credit" ? adj : -adj,
+          entryType: `admin_wallet_${type}`,
+          idempotencyKey: `admin-wallet:${wallet.id}:${Date.now()}:${Math.random()}`,
+          description: `Admin ${type} adjustment`,
+        });
+        res.json({ success: true, balance: result.balance.toFixed(2), availableBalance: result.availableBalance.toFixed(2) });
+      } catch (error: any) {
+        res.status(400).json({ message: error?.message || "Balance adjustment failed" });
+      }
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
