@@ -24,8 +24,8 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
 export class MailtrapService {
   private apiKey: string | null = null;
   private apiUrl = 'https://send.api.mailtrap.io/api/send';
-  private fromEmail = 'support@greenpay.world';
-  private fromName = 'GreenPay';
+  private fromEmail = 'support@geepay.us';
+  private fromName = 'Geepay';
 
   constructor() {
     // Load API key from environment only; do not fall back to a hard-coded key.
