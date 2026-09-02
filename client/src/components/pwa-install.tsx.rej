@@ -1,0 +1,54 @@
+diff a/client/src/components/pwa-install.tsx b/client/src/components/pwa-install.tsx	(rejected hunks)
+@@ -93,51 +93,51 @@ export function PWAInstallPrompt() {
+   };
+ 
+   // Don'\''t show if already installed, dismissed this session, or no prompt available
+   if (isInstalled || !showInstallPrompt || !deferredPrompt) {
+     return null;
+   }
+ 
+   // Don'\''t show if dismissed this session
+   if (sessionStorage.getItem('\''pwa-install-dismissed'\'')) {
+     return null;
+   }
+ 
+   return (
+     <AnimatePresence>
+       <motion.div
+         initial={{ opacity: 0, y: 100 }}
+         animate={{ opacity: 1, y: 0 }}
+         exit={{ opacity: 0, y: 100 }}
+         className="fixed bottom-20 left-4 right-4 z-50 bg-card border border-border rounded-xl p-4 shadow-lg elevation-3"
+       >
+         <div className="flex items-start space-x-3">
+           <div className="w-12 h-12 bg-gradient-to-br from-primary to-secondary rounded-xl flex items-center justify-center flex-shrink-0">
+             <span className="material-icons text-white">get_app</span>
+           </div>
+           <div className="flex-1">
+-            <h3 className="font-semibold text-sm">Install GreenPay</h3>
++            <h3 className="font-semibold text-sm">Install Geepay</h3>
+             <p className="text-xs text-muted-foreground mb-3">
+               Get the full app experience with faster loading and offline access
+             </p>
+             <div className="flex space-x-2">
+               <Button
+                 onClick={handleInstallClick}
+                 size="sm"
+                 className="bg-primary hover:bg-primary/90 text-xs"
+                 data-testid="button-install-app"
+               >
+                 Install App
+               </Button>
+               <Button
+                 onClick={handleDismiss}
+                 variant="ghost"
+                 size="sm"
+                 className="text-xs"
+                 data-testid="button-dismiss-install"
+               >
+                 Not now
+               </Button>
+             </div>
+           </div>
+           <button
+             onClick={handleDismiss}

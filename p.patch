@@ -1,0 +1,366 @@
+diff --git a/android/app/src/main/AndroidManifest.xml b/android/app/src/main/AndroidManifest.xml
+index 5b0a4421c51ecd724cdffb280b1b689e063e20b3..71a460dc5542b729d05612ade18574376e0ace1c 100644
+--- a/android/app/src/main/AndroidManifest.xml
++++ b/android/app/src/main/AndroidManifest.xml
+@@ -27,44 +27,44 @@
+             android:value="false" />
+         <meta-data
+             android:name="firebase_analytics_collection_enabled"
+             android:value="false" />
+         <meta-data
+             android:name="com.google.firebase.messaging.default_notification_channel_id"
+             android:value="greenpay_notifications" />
+ 
+         <activity
+             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation"
+             android:name=".MainActivity"
+             android:label="@string/title_activity_main"
+             android:theme="@style/AppTheme.NoActionBarLaunch"
+             android:launchMode="singleTask"
+             android:exported="true">
+ 
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+                 <category android:name="android.intent.category.LAUNCHER" />
+             </intent-filter>
+ 
+         </activity>
+ 
+         <!-- Firebase Cloud Messaging Service -->
+         <service
+-            android:name=".GreenPayMessagingService"
++            android:name=".GeepayMessagingService"
+             android:exported="false">
+             <intent-filter>
+                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
+             </intent-filter>
+         </service>
+ 
+         <provider
+             android:name="androidx.core.content.FileProvider"
+             android:authorities="${applicationId}.fileprovider"
+             android:exported="false"
+             android:grantUriPermissions="true">
+             <meta-data
+                 android:name="android.support.FILE_PROVIDER_PATHS"
+                 android:resource="@xml/file_paths"></meta-data>
+         </provider>
+     </application>
+ 
+ </manifest>
+diff --git a/android/app/src/main/java/com/greenpay/mobile/GreenPayMessagingService.java b/android/app/src/main/java/com/greenpay/mobile/GeepayMessagingService.java
+similarity index 85%
+rename from android/app/src/main/java/com/greenpay/mobile/GreenPayMessagingService.java
+rename to android/app/src/main/java/com/greenpay/mobile/GeepayMessagingService.java
+index 458de98a5436eee8b6e7f545b18a97fa34a6fa0a..fd2e67f1c284405de4f91531d810a72fb19bfbd4 100644
+--- a/android/app/src/main/java/com/greenpay/mobile/GreenPayMessagingService.java
++++ b/android/app/src/main/java/com/greenpay/mobile/GeepayMessagingService.java
+@@ -1,82 +1,82 @@
+ package com.greenpay.mobile;
+ 
+ import android.app.NotificationChannel;
+ import android.app.NotificationManager;
+ import android.content.Context;
+ import android.os.Build;
+ 
+ import com.google.firebase.messaging.FirebaseMessagingService;
+ import com.google.firebase.messaging.RemoteMessage;
+ 
+ import androidx.core.app.NotificationCompat;
+ 
+ /**
+- * Firebase Cloud Messaging Service for GreenPay
++ * Firebase Cloud Messaging Service for Geepay
+  * Handles incoming push notifications
+  */
+-public class GreenPayMessagingService extends FirebaseMessagingService {
++public class GeepayMessagingService extends FirebaseMessagingService {
+     private static final String CHANNEL_ID = "greenpay_notifications";
+-    private static final String CHANNEL_NAME = "GreenPay Notifications";
++    private static final String CHANNEL_NAME = "Geepay Notifications";
+ 
+     @Override
+     public void onMessageReceived(RemoteMessage remoteMessage) {
+         super.onMessageReceived(remoteMessage);
+ 
+         // Get notification data
+         String title = remoteMessage.getNotification() != null 
+             ? remoteMessage.getNotification().getTitle() 
+-            : "GreenPay";
++            : "Geepay";
+         String body = remoteMessage.getNotification() != null 
+             ? remoteMessage.getNotification().getBody() 
+             : "New notification";
+         String notificationType = remoteMessage.getData().get("type");
+ 
+         // Create and display notification
+         sendNotification(title, body, notificationType);
+     }
+ 
+     @Override
+     public void onNewToken(String token) {
+         super.onNewToken(token);
+-        android.util.Log.d("GreenPayFCM", "FCM Token refreshed");
++        android.util.Log.d("GeepayFCM", "FCM Token refreshed");
+     }
+ 
+     private void sendNotification(String title, String body, String type) {
+         try {
+             NotificationManager notificationManager =
+                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+ 
+             if (notificationManager == null) return;
+ 
+             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                 NotificationChannel channel = new NotificationChannel(
+                     CHANNEL_ID,
+                     CHANNEL_NAME,
+                     NotificationManager.IMPORTANCE_HIGH
+                 );
+-                channel.setDescription("GreenPay financial notifications");
++                channel.setDescription("Geepay financial notifications");
+                 channel.enableVibration(true);
+                 channel.enableLights(true);
+                 notificationManager.createNotificationChannel(channel);
+             }
+ 
+             NotificationCompat.Builder notificationBuilder =
+                 new NotificationCompat.Builder(this, CHANNEL_ID)
+                     .setContentTitle(title)
+                     .setContentText(body)
+                     .setSmallIcon(android.R.drawable.ic_dialog_info)
+                     .setAutoCancel(true)
+                     .setPriority(NotificationCompat.PRIORITY_HIGH)
+                     .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                     .setVibrate(new long[]{0, 250, 250, 250})
+                     .setColor(0xFF2E7D32);
+ 
+             notificationManager.notify(
+                 (int) System.currentTimeMillis(),
+                 notificationBuilder.build()
+             );
+         } catch (Exception e) {
+-            android.util.Log.e("GreenPayFCM", "Error sending notification", e);
++            android.util.Log.e("GeepayFCM", "Error sending notification", e);
+         }
+     }
+ }
+diff --git a/android/app/src/main/java/com/greenpay/mobile/MainActivity.java b/android/app/src/main/java/com/greenpay/mobile/MainActivity.java
+index 8945867ae3669f39bd57c7764ec5e8f9d398295f..3f30767c688ac613c64b8503654ae543e7c99d85 100644
+--- a/android/app/src/main/java/com/greenpay/mobile/MainActivity.java
++++ b/android/app/src/main/java/com/greenpay/mobile/MainActivity.java
+@@ -1,17 +1,17 @@
+ package com.greenpay.mobile;
+ 
+ import com.getcapacitor.BridgeActivity;
+ import com.getcapacitor.Plugin;
+ import android.os.Bundle;
+ 
+ /**
+- * GreenPay Mobile Application
++ * Geepay Mobile Application
+  * Main activity for the Capacitor application
+  */
+ public class MainActivity extends BridgeActivity {
+     @Override
+     public void onCreate(Bundle savedInstanceState) {
+         super.onCreate(savedInstanceState);
+-        // Firebase Cloud Messaging handled by GreenPayMessagingService
++        // Firebase Cloud Messaging handled by GeepayMessagingService
+     }
+ }
+diff --git a/android/app/src/main/res/values/strings.xml b/android/app/src/main/res/values/strings.xml
+index 633ee27c5ab5b4e9ba9613806ff7e50a6e95026f..6f940158ce692c7c8fca770118ab781abb84c4f6 100644
+--- a/android/app/src/main/res/values/strings.xml
++++ b/android/app/src/main/res/values/strings.xml
+@@ -1,7 +1,7 @@
+ <?xml version='1.0' encoding='utf-8'?>
+ <resources>
+-    <string name="app_name">GreenPay</string>
+-    <string name="title_activity_main">GreenPay</string>
++    <string name="app_name">Geepay</string>
++    <string name="title_activity_main">Geepay</string>
+     <string name="package_name">com.greenpay.mobile</string>
+     <string name="custom_url_scheme">com.greenpay.mobile</string>
+ </resources>
+diff --git a/capacitor.config.ts b/capacitor.config.ts
+index 3064a4fc6745711100583221ca40d4d4d2277b09..c47edcb580697212ef0c46ae904c19171b645ef6 100644
+--- a/capacitor.config.ts
++++ b/capacitor.config.ts
+@@ -1,28 +1,28 @@
+ import { CapacitorConfig } from '@capacitor/cli';
+ 
+ const isDev = !!process.env.CAPACITOR_SERVER_URL;
+ 
+ const config: CapacitorConfig = {
+   appId: 'com.greenpay.mobile',
+-  appName: 'GreenPay',
++  appName: 'Geepay',
+   webDir: 'dist/public',
+   server: isDev
+     ? {
+         androidScheme: 'https',
+         url: process.env.CAPACITOR_SERVER_URL,
+         cleartext: process.env.CAPACITOR_ALLOW_CLEARTEXT === 'true',
+       }
+     : {
+         androidScheme: 'https',
+       },
+   plugins: {
+     SplashScreen: {
+       launchShowDuration: 0,
+     },
+     PushNotifications: {
+       presentationOptions: ['badge', 'sound', 'alert'],
+     },
+   },
+ };
+ 
+ export default config;
+diff --git a/client/index.html b/client/index.html
+index ce5907159e303810470cdb868147864f03cb0ccf..dcd7bf58ec1d17c6d14b572f9cc312ce4ee1442d 100644
+--- a/client/index.html
++++ b/client/index.html
+@@ -1,224 +1,224 @@
+ <!DOCTYPE html>
+ <html lang="en">
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+     <meta name="theme-color" content="#16a34a" media="(prefers-color-scheme: light)" />
+     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+     <meta name="mobile-web-app-capable" content="yes" />
+-    <meta name="application-name" content="GreenPay" />
++    <meta name="application-name" content="Geepay" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+     
+     <!-- Primary SEO Meta Tags -->
+-    <title>GreenPay - Send Money to Kenya | USD to KES Exchange | Virtual Cards</title>
+-    <meta name="title" content="GreenPay - Send Money to Kenya | USD to KES Exchange | Virtual Cards" />
+-    <meta name="description" content="Send money to Kenya instantly with GreenPay. Best USD to KES exchange rates, virtual cards for online shopping, and secure international money transfers. Sign up free today!" />
++    <title>Geepay - Send Money to Kenya | USD to KES Exchange | Virtual Cards</title>
++    <meta name="title" content="Geepay - Send Money to Kenya | USD to KES Exchange | Virtual Cards" />
++    <meta name="description" content="Send money to Kenya instantly with Geepay. Best USD to KES exchange rates, virtual cards for online shopping, and secure international money transfers. Sign up free today!" />
+     <meta name="keywords" content="send money to Kenya, USD to KES, international money transfer, Kenya remittance, virtual card, M-Pesa, Kenya payment, diaspora banking, Africa money transfer, exchange USD KES, international remittance, digital wallet Kenya" />
+-    <meta name="author" content="GreenPay" />
++    <meta name="author" content="Geepay" />
+     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+     <link rel="canonical" href="https://greenpay.world/" />
+     
+     <!-- Open Graph / Facebook -->
+     <meta property="og:type" content="website" />
+     <meta property="og:url" content="https://greenpay.world/" />
+-    <meta property="og:title" content="GreenPay - Send Money to Kenya | Best USD to KES Rates" />
++    <meta property="og:title" content="Geepay - Send Money to Kenya | Best USD to KES Rates" />
+     <meta property="og:description" content="Send money to Kenya instantly with the best exchange rates. Virtual cards, secure transfers, and real-time tracking. Join thousands sending money home." />
+     <meta property="og:image" content="https://greenpay.world/og-image.png" />
+     <meta property="og:image:width" content="1200" />
+     <meta property="og:image:height" content="630" />
+-    <meta property="og:site_name" content="GreenPay" />
++    <meta property="og:site_name" content="Geepay" />
+     <meta property="og:locale" content="en_US" />
+     
+     <!-- Twitter Card -->
+     <meta name="twitter:card" content="summary_large_image" />
+     <meta name="twitter:url" content="https://greenpay.world/" />
+-    <meta name="twitter:title" content="GreenPay - Send Money to Kenya | Best USD to KES Rates" />
++    <meta name="twitter:title" content="Geepay - Send Money to Kenya | Best USD to KES Rates" />
+     <meta name="twitter:description" content="Send money to Kenya instantly with the best exchange rates. Virtual cards, secure transfers, and real-time tracking." />
+     <meta name="twitter:image" content="https://greenpay.world/twitter-image.png" />
+-    <meta name="twitter:creator" content="@GreenPayApp" />
++    <meta name="twitter:creator" content="@GeepayApp" />
+     
+     <!-- Additional SEO -->
+     <meta name="geo.region" content="KE" />
+     <meta name="geo.placename" content="Kenya" />
+     <meta name="language" content="English" />
+     <meta name="coverage" content="Worldwide" />
+     <meta name="distribution" content="Global" />
+     <meta name="rating" content="General" />
+     
+     <!-- PWA Manifest -->
+     <link rel="manifest" href="/manifest.json" />
+     
+     <!-- Theme Colors for Mobile -->
+     <meta name="theme-color" content="#16a34a" />
+     <meta name="msapplication-TileColor" content="#16a34a" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+-    <meta name="apple-mobile-web-app-title" content="GreenPay" />
++    <meta name="apple-mobile-web-app-title" content="Geepay" />
+     <meta name="mobile-web-app-capable" content="yes" />
+     
+     <!-- iOS Splash Screens -->
+     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1536-2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1284-2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1170-2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1125-2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-828-1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     
+     <!-- Apple Touch Icons -->
+     <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
+     <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+     <link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144x144.png" />
+     <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-120x120.png" />
+     <link rel="apple-touch-icon" sizes="114x114" href="/icons/icon-114x114.png" />
+     <link rel="apple-touch-icon" sizes="76x76" href="/icons/icon-76x76.png" />
+     <link rel="apple-touch-icon" sizes="72x72" href="/icons/icon-72x72.png" />
+     <link rel="apple-touch-icon" sizes="60x60" href="/icons/icon-60x60.png" />
+     <link rel="apple-touch-icon" sizes="57x57" href="/icons/icon-57x57.png" />
+     
+     <!-- Standard Favicon -->
+     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
+     <link rel="shortcut icon" href="/icons/favicon.ico" />
+     
+     <!-- Windows Tiles -->
+     <meta name="msapplication-config" content="/icons/browserconfig.xml" />
+     <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
+     
+     <!-- Fonts -->
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+     
+     <!-- Font Awesome -->
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVJkEZSMUkrQ6usKu8zTKHWEhdNIlG6zcnnUYdhxqnWlXUnitInPWpEsqvvamNNVqXbsysxPrNQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+     
+     <!-- Structured Data (JSON-LD) for Rich Search Results -->
+     <script type="application/ld+json">
+     {
+       "@context": "https://schema.org",
+       "@type": "FinancialService",
+-      "name": "GreenPay",
++      "name": "Geepay",
+       "description": "Send money to Kenya instantly with the best USD to KES exchange rates. Virtual cards, secure international money transfers, and digital wallet services.",
+       "url": "https://greenpay.world",
+       "logo": "https://greenpay.world/icons/icon-512x512.png",
+       "image": "https://greenpay.world/og-image.png",
+-      "telephone": "+1-800-GREENPAY",
++      "telephone": "+1-800-GEEPAY",
+       "email": "support@greenpay.world",
+       "address": {
+         "@type": "PostalAddress",
+         "addressCountry": "KE"
+       },
+       "areaServed": {
+         "@type": "Country",
+         "name": "Kenya"
+       },
+       "sameAs": [
+-        "https://twitter.com/GreenPayApp",
+-        "https://facebook.com/GreenPayApp",
++        "https://twitter.com/GeepayApp",
++        "https://facebook.com/GeepayApp",
+         "https://linkedin.com/company/greenpay"
+       ],
+       "serviceType": [
+         "International Money Transfer",
+         "Currency Exchange",
+         "Virtual Cards",
+         "Digital Wallet"

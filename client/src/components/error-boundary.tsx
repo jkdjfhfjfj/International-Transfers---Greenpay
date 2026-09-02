@@ -31,7 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
           overflowY: "auto", zIndex: 99999, fontSize: "13px",
         }}>
           <div style={{ color: "#fff", fontSize: "18px", marginBottom: "12px" }}>
-            GreenPay — App Error
+            Geepay — App Error
           </div>
           <div style={{ marginBottom: "12px", color: "#ff6666" }}>
             {this.state.error.message}

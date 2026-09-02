@@ -280,7 +280,7 @@ export default function AdminDepositSettingsPage() {
               <CardContent className="space-y-4">
                 {[
                   { key: "bank_name" as const, label: "Bank Name", placeholder: "e.g. NCBA Bank Kenya" },
-                  { key: "bank_account_name" as const, label: "Account Name", placeholder: "e.g. GreenPay Limited" },
+                  { key: "bank_account_name" as const, label: "Account Name", placeholder: "e.g. Geepay Limited" },
                   { key: "bank_account_number" as const, label: "Account Number / IBAN", placeholder: "e.g. 1234567890" },
                   { key: "bank_swift_code" as const, label: "SWIFT / BIC Code", placeholder: "e.g. NCBAKENA" },
                   { key: "bank_branch" as const, label: "Branch", placeholder: "e.g. Westlands Branch" },
@@ -305,7 +305,7 @@ export default function AdminDepositSettingsPage() {
                     id="bank_additional_info"
                     value={methods.bank_additional_info}
                     onChange={e => setMethods(prev => ({ ...prev, bank_additional_info: e.target.value }))}
-                    placeholder="e.g. Include your GreenPay account number as payment reference. Transfers may take 1-3 business days."
+                    placeholder="e.g. Include your Geepay account number as payment reference. Transfers may take 1-3 business days."
                     rows={3}
                     className="w-full border border-input rounded-xl px-3 py-2 text-sm bg-background resize-none focus:outline-none focus:ring-2 focus:ring-ring"
                     data-testid="input-bank_additional_info"

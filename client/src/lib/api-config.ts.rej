@@ -1,0 +1,30 @@
+diff a/client/src/lib/api-config.ts b/client/src/lib/api-config.ts	(rejected hunks)
+@@ -1,27 +1,27 @@
+ /**
+- * API Configuration for GreenPay
++ * API Configuration for Geepay
+  * Handles both web and mobile (Capacitor) environments
+  */
+ 
+ function isNativePlatform(): boolean {
+   try {
+     const cap = (window as any).Capacitor;
+     if (!cap) return false;
+     if (typeof cap.isNativePlatform === "function") return cap.isNativePlatform();
+     // Fallback: if platform is android or ios, it'\''s native
+     return cap.platform === "android" || cap.platform === "ios";
+   } catch {
+     return false;
+   }
+ }
+ 
+ export function getApiBaseUrl(): string {
+   // Native app (Android / iOS) — always call the production server
+   if (isNativePlatform()) {
+     return import.meta.env.VITE_API_URL || "https://greenpay.world";
+   }
+ 
+   // Build-time env var override
+   if (import.meta.env.VITE_API_URL) {
+     return import.meta.env.VITE_API_URL;
+   }

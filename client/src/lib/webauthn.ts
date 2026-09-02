@@ -4,7 +4,7 @@ export async function enrollBiometric(userName: string, userEmail: string): Prom
   const publicKeyCreationOptions: PublicKeyCredentialCreationOptions = {
     challenge: challenge,
     rp: {
-      name: "GreenPay",
+      name: "Geepay",
       id: window.location.hostname,
     },
     user: {

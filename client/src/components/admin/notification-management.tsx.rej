@@ -1,0 +1,54 @@
+diff a/client/src/components/admin/notification-management.tsx b/client/src/components/admin/notification-management.tsx	(rejected hunks)
+@@ -504,51 +504,51 @@ export default function NotificationManagement() {
+                 <FormItem>
+                   <FormLabel>Recipients</FormLabel>
+                   <Select onValueChange={field.onChange} defaultValue={field.value}>
+                     <FormControl><SelectTrigger><SelectValue /></SelectTrigger></FormControl>
+                     <SelectContent>
+                       <SelectItem value="all">All Users</SelectItem>
+                       <SelectItem value="user">Specific User</SelectItem>
+                     </SelectContent>
+                   </Select>
+                   <FormMessage />
+                 </FormItem>
+               )} />
+ 
+               {smsTarget === '\''user'\'' && (
+                 <FormField control={smsForm.control} name="userId" render={({ field }) => (
+                   <FormItem>
+                     <FormLabel>User ID</FormLabel>
+                     <FormControl><Input placeholder="Paste user ID" {...field} className="font-mono text-sm" data-testid="sms-userId" /></FormControl>
+                     <FormMessage />
+                   </FormItem>
+                 )} />
+               )}
+ 
+               <FormField control={smsForm.control} name="message" render={({ field }) => (
+                 <FormItem>
+-                  <FormLabel>Message <span className="text-xs text-muted-foreground">([GREENPAY] prefix added automatically)</span></FormLabel>
++                  <FormLabel>Message <span className="text-xs text-muted-foreground">([GEEPAY] prefix added automatically)</span></FormLabel>
+                   <FormControl>
+                     <Textarea
+                       placeholder="Enter SMS message..."
+                       className="min-h-[80px]"
+                       maxLength={160}
+                       {...field}
+                       data-testid="sms-message"
+                     />
+                   </FormControl>
+                   <p className="text-xs text-muted-foreground text-right">{field.value?.length || 0}/160</p>
+                   <FormMessage />
+                 </FormItem>
+               )} />
+ 
+               {smsTarget === '\''all'\'' && (
+                 <div className="bg-yellow-50 border border-yellow-200 rounded p-3 text-sm text-yellow-800">
+                   This will send an SMS to all users who have phone numbers. Use with caution.
+                 </div>
+               )}
+ 
+               <DialogFooter>
+                 <Button variant="outline" type="button" onClick={() => setSmsDialogOpen(false)}>Cancel</Button>
+                 <Button type="submit" disabled={smsMutation.isPending} className="bg-green-600 hover:bg-green-700" data-testid="button-send-sms">
+                   {smsMutation.isPending ? '\''Sending...'\'' : <><Send className="w-4 h-4 mr-2" />Send SMS</>}
+                 </Button>

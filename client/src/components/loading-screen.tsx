@@ -37,7 +37,7 @@ export default function LoadingScreen() {
               transition={{ delay: 0.2, duration: 0.5 }}
               className="text-2xl font-bold text-white mb-2"
             >
-              GreenPay
+              Geepay
             </motion.h1>
             <motion.p
               initial={{ y: 20, opacity: 0 }}

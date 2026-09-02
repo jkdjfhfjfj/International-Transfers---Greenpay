@@ -1,0 +1,125 @@
+diff a/client/public/offline.html b/client/public/offline.html	(rejected hunks)
+@@ -1,31 +1,31 @@
+ <!DOCTYPE html>
+ <html lang="en">
+ <head>
+     <meta charset="UTF-8">
+     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+-    <title>GreenPay - Offline Mode</title>
++    <title>Geepay - Offline Mode</title>
+     <style>
+         * {
+             margin: 0;
+             padding: 0;
+             box-sizing: border-box;
+         }
+         
+         body {
+             font-family: -apple-system, BlinkMacSystemFont, '\''Segoe UI'\'', '\''Roboto'\'', '\''Oxygen'\'', '\''Ubuntu'\'', '\''Cantarell'\'', '\''Fira Sans'\'', '\''Droid Sans'\'', '\''Helvetica Neue'\'', sans-serif;
+             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+             min-height: 100vh;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             padding: 20px;
+         }
+         
+         .container {
+             background: white;
+             border-radius: 20px;
+             padding: 40px;
+             max-width: 500px;
+             width: 100%;
+             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+             text-align: center;
+@@ -150,87 +150,87 @@
+         }
+         
+         .reconnect-indicator {
+             margin-top: 20px;
+         }
+         
+         @media (max-width: 600px) {
+             .container {
+                 padding: 30px 20px;
+             }
+             
+             h1 {
+                 font-size: 24px;
+             }
+             
+             .subtitle {
+                 font-size: 16px;
+             }
+         }
+     </style>
+ </head>
+ <body>
+     <div class="container">
+         <span class="icon">📡</span>
+         <h1>You'\''re Offline</h1>
+-        <p class="subtitle">You don'\''t have an internet connection, but GreenPay is ready to work offline!</p>
++        <p class="subtitle">You don'\''t have an internet connection, but Geepay is ready to work offline!</p>
+         
+         <div class="features">
+             <h3>📊 Available Offline:</h3>
+             <ul>
+                 <li>View your account balance</li>
+                 <li>Check transaction history</li>
+                 <li>View virtual cards</li>
+                 <li>Read announcements</li>
+                 <li>Access settings</li>
+                 <li>Browse help & FAQs</li>
+             </ul>
+         </div>
+         
+         <div class="status" id="status">
+             <div class="spinner"></div>
+             <p><strong>Checking for connection...</strong></p>
+         </div>
+         
+         <button class="button" onclick="retryConnection()">Retry Now</button>
+-        <button class="button" onclick="goHome()" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Open GreenPay</button>
++        <button class="button" onclick="goHome()" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Open Geepay</button>
+     </div>
+ 
+     <script>
+         const statusEl = document.getElementById('\''status'\'');
+         
+         // Check if online
+         function updateStatus() {
+             if (navigator.onLine) {
+                 statusEl.classList.remove('\''loading'\'');
+                 statusEl.innerHTML = '\''<p>✅ <strong>You\'\''re back online! Syncing data...</strong></p>'\'';
+                 setTimeout(() => {
+                     window.location.href = '\''/'\'';
+                 }, 1500);
+             } else {
+                 statusEl.classList.add('\''loading'\'');
+-                statusEl.innerHTML = '\''<p><span class="spinner"></span><strong>Still offline. You can still use GreenPay offline.</strong></p>'\'';
++                statusEl.innerHTML = '\''<p><span class="spinner"></span><strong>Still offline. You can still use Geepay offline.</strong></p>'\'';
+             }
+         }
+         
+         // Listen for online event
+         window.addEventListener('\''online'\'', updateStatus);
+         window.addEventListener('\''offline'\'', updateStatus);
+         
+         // Initial check
+         updateStatus();
+         
+         // Retry connection
+         function retryConnection() {
+             fetch('\''/api/health'\'', { method: '\''HEAD'\'' })
+                 .then(() => {
+                     window.location.href = '\''/'\'';
+                 })
+                 .catch(() => {
+                     statusEl.classList.add('\''loading'\'');
+                     statusEl.innerHTML = '\''<p>Still offline. You can browse cached content below.</p>'\'';
+                 });
+         }
+         
+         // Go home (will show cached version if offline)
+         function goHome() {
+             window.location.href = '\''/'\'';

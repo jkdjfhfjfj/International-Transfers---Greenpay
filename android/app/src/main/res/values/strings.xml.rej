@@ -1,0 +1,11 @@
+diff a/android/app/src/main/res/values/strings.xml b/android/app/src/main/res/values/strings.xml	(rejected hunks)
+@@ -1,7 +1,7 @@
+ <?xml version='\''1.0'\'' encoding='\''utf-8'\''?>
+ <resources>
+-    <string name="app_name">GreenPay</string>
+-    <string name="title_activity_main">GreenPay</string>
++    <string name="app_name">Geepay</string>
++    <string name="title_activity_main">Geepay</string>
+     <string name="package_name">com.greenpay.mobile</string>
+     <string name="custom_url_scheme">com.greenpay.mobile</string>
+ </resources>

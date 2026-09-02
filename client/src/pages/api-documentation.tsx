@@ -234,7 +234,7 @@ export default function APIDocumentationPage() {
             <div>
               <h2 className="text-2xl font-bold mb-4">Authentication</h2>
               <p className="text-muted-foreground mb-6">
-                GreenPay supports two authentication methods:
+                Geepay supports two authentication methods:
               </p>
             </div>
 

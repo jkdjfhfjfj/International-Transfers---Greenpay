@@ -112,7 +112,7 @@ export default function SignupPage() {
             >
               <span className="material-icons text-white text-2xl">attach_money</span>
             </motion.div>
-            <h2 className="text-2xl font-bold mb-2">Join GreenPay</h2>
+            <h2 className="text-2xl font-bold mb-2">Join Geepay</h2>
             <p className="text-muted-foreground">Create your account to start sending money</p>
             <p className="text-xs text-muted-foreground mt-3 px-2">Account verification requires a valid phone number on WhatsApp with SMS capability, a verified email address, and identification that matches your registered name.</p>
           </div>

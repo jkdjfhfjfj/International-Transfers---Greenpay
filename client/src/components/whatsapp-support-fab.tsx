@@ -2,7 +2,7 @@ import { MessageCircle } from "lucide-react";
 
 export function WhatsAppSupportFAB() {
   const phoneNumber = "+14704657028";
-  const whatsappLink = `https://wa.me/14704657028?text=${encodeURIComponent("Hi, I need support with GreenPay")}`;
+  const whatsappLink = `https://wa.me/14704657028?text=${encodeURIComponent("Hi, I need support with Geepay")}`;
 
   return (
     <a

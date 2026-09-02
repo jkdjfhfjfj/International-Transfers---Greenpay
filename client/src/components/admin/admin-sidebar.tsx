@@ -50,7 +50,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout }: Admin
     <div className="w-64 h-screen bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col overflow-y-auto">
       {/* Logo */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">GreenPay Admin</h2>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">Geepay Admin</h2>
         <p className="text-xs text-gray-500 dark:text-gray-400">Administrative Panel</p>
       </div>
 

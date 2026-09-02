@@ -1,0 +1,116 @@
+diff a/server/services/whatsapp.ts b/server/services/whatsapp.ts	(rejected hunks)
+@@ -922,111 +922,111 @@ export class WhatsAppService {
+           sentParams: paramArray.length,
+           statusCode: response.status
+         });
+         return { success: false, error: errorMsg };
+       }
+     } catch (error) {
+       const errorMsg = String(error);
+       console.error(`[WhatsApp] Error sending generic template "${templateName}":`, error);
+       return { success: false, error: errorMsg };
+     }
+   }
+ 
+   /**
+    * Create all required WhatsApp templates via Meta API - Compliant with Meta'\''s API requirements
+    */
+   async createAllTemplates(): Promise<{ success: string[]; failed: string[] }> {
+     // Refresh credentials first to ensure we have latest token
+     await this.refreshCredentials();
+     
+     const results = { success: [], failed: [] };
+ 
+     // 1. Account Creation template - MARKETING with welcome message and CTA
+     const createAccSuccess = await this.createTemplate('\''create_acc'\'', '\''MARKETING'\'', [
+       {
+         type: '\''BODY'\'',
+-        text: '\''Welcome to GreenPay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers.'\''
++        text: '\''Welcome to Geepay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers.'\''
+       },
+       {
+         type: '\''BUTTONS'\'',
+         buttons: [
+           {
+             type: '\''URL'\'',
+             text: '\''Get Started'\'',
+             url: '\''https://app.greenpay.world/dashboard'\''
+           }
+         ]
+       }
+     ]);
+     if (createAccSuccess) results.success.push('\''create_acc'\'');
+     else results.failed.push('\''create_acc'\'');
+ 
+     // 2. Login Alert template - UTILITY with security notification and action
+     const loginSuccess = await this.createTemplate('\''login_alert'\'', '\''UTILITY'\'', [
+       {
+         type: '\''BODY'\'',
+-        text: '\''New login on your GreenPay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn\'\''t you, secure your account now.'\''
++        text: '\''New login on your Geepay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn\'\''t you, secure your account now.'\''
+       },
+       {
+         type: '\''BUTTONS'\'',
+         buttons: [
+           {
+             type: '\''URL'\'',
+             text: '\''Secure Now'\'',
+             url: '\''https://app.greenpay.world/security'\''
+           }
+         ]
+       }
+     ]);
+     if (loginSuccess) results.success.push('\''login_alert'\'');
+     else results.failed.push('\''login_alert'\'');
+ 
+     // 3. Fund Receipt template - UTILITY with transaction details
+     const fundSuccess = await this.createTemplate('\''fund_receipt'\'', '\''UTILITY'\'', [
+       {
+         type: '\''BODY'\'',
+         text: '\''You received {{1}} {{2}} from {{3}}\n\nRef: {{4}}\n\nView your wallet for details.'\''
+       },
+       {
+         type: '\''BUTTONS'\'',
+         buttons: [
+           {
+             type: '\''URL'\'',
+             text: '\''View Wallet'\'',
+             url: '\''https://app.greenpay.world/wallet'\''
+           }
+         ]
+       }
+     ]);
+     if (fundSuccess) results.success.push('\''fund_receipt'\'');
+     else results.failed.push('\''fund_receipt'\'');
+ 
+     // 4. Card Activation template - UTILITY with card ready notification
+     const cardSuccess = await this.createTemplate('\''card_activation'\'', '\''UTILITY'\'', [
+       {
+         type: '\''BODY'\'',
+-        text: '\''Your GreenPay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers.'\''
++        text: '\''Your Geepay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers.'\''
+       },
+       {
+         type: '\''BUTTONS'\'',
+         buttons: [
+           {
+             type: '\''URL'\'',
+             text: '\''View Card'\'',
+             url: '\''https://app.greenpay.world/cards'\''
+           }
+         ]
+       }
+     ]);
+     if (cardSuccess) results.success.push('\''card_activation'\'');
+     else results.failed.push('\''card_activation'\'');
+ 
+     // 5. KYC Verified template - MARKETING with verification confirmation
+     const kycSuccess = await this.createTemplate('\''kyc_verified'\'', '\''MARKETING'\'', [
+       {
+         type: '\''BODY'\'',
+         text: '\''Great {{1}}! Your identity is verified.\n\nUnlock higher limits, virtual cards, and premium features.'\''
+       },
+       {
+         type: '\''BUTTONS'\'',
+         buttons: [
+           {

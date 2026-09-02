@@ -1,0 +1,54 @@
+diff a/server/services/nexuspay.ts b/server/services/nexuspay.ts	(rejected hunks)
+@@ -61,51 +61,51 @@ export class NexusPayService {
+   }
+ 
+   private headers(apiKey: string) {
+     return {
+       '\''Content-Type'\'': '\''application/json'\'',
+       '\''Authorization'\'': `Bearer ${apiKey}`,
+     };
+   }
+ 
+   async checkout(params: {
+     amount: number;
+     currency: string;
+     channel: '\''mobile_money'\'' | '\''card'\'' | '\''other'\'';
+     phone?: string;
+     email?: string;
+     correspondent?: string;
+     description?: string;
+   }): Promise<{ reference: string; status: string; redirectUrl: string | null }> {
+     const apiKey = await this.getApiKey();
+     if (!apiKey) throw new Error('\''NexusPay API key not configured. Set NEXUSPAY_API_KEY or configure it in admin settings.'\'');
+ 
+     const body: Record<string, any> = {
+       amount: params.amount,
+       currency: params.currency,
+       channel: params.channel,
+-      description: params.description || '\''GreenPay wallet deposit'\'',
++      description: params.description || '\''Geepay wallet deposit'\'',
+     };
+ 
+     if (params.phone) body.phone = params.phone;
+     if (params.email) body.email = params.email;
+     if (params.correspondent) body.correspondent = params.correspondent;
+ 
+     const response = await fetch(`${this.baseUrl}/checkout`, {
+       method: '\''POST'\'',
+       headers: this.headers(apiKey),
+       body: JSON.stringify(body),
+     });
+ 
+     const data = await response.json() as any;
+     if (!response.ok) throw new Error(data.error || `NexusPay checkout failed: ${response.status}`);
+     return data;
+   }
+ 
+   async getStatus(reference: string): Promise<{
+     id: number;
+     reference: string;
+     gateway: string;
+     status: '\''pending'\'' | '\''completed'\'' | '\''failed'\'';
+     amount: string;
+     currency: string;
+     completedAt?: string;

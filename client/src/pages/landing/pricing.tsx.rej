@@ -1,0 +1,42 @@
+diff a/client/src/pages/landing/pricing.tsx b/client/src/pages/landing/pricing.tsx	(rejected hunks)
+@@ -1,38 +1,38 @@
+ import { Link } from "wouter";
+ import { Button } from "@/components/ui/button";
+ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+ import { Check, ArrowRight } from "lucide-react";
+ import { SEO } from "@/components/seo";
+ 
+ export default function PricingLanding() {
+   return (
+     <>
+       <SEO
+-        title="Pricing & Fees | Transparent Money Transfer Costs | GreenPay"
++        title="Pricing & Fees | Transparent Money Transfer Costs | Geepay"
+         description="Clear, transparent pricing for money transfers to Kenya. 2-3% transfer fees, $5 virtual cards, no hidden costs. See exactly what you'\''ll pay before you send."
+-        keywords="GreenPay pricing, money transfer fees, Kenya transfer cost, virtual card price, remittance fees"
++        keywords="Geepay pricing, money transfer fees, Kenya transfer cost, virtual card price, remittance fees"
+         canonical="https://greenpay.world/pricing"
+       />
+       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
+       <div className="max-w-6xl mx-auto px-4 py-12">
+         <header className="text-center mb-12">
+           <h1 className="text-4xl font-bold text-gray-900 mb-4">Transparent Pricing & Fees</h1>
+           <p className="text-xl text-gray-600 mb-8">
+             No hidden fees. Pay exactly what you see. Simple and transparent.
+           </p>
+         </header>
+ 
+         <div className="grid md:grid-cols-2 gap-8 mb-12">
+           <Card className="border-2 border-green-200">
+             <CardHeader>
+               <CardTitle className="text-2xl">Money Transfers</CardTitle>
+               <CardDescription>Send money to Kenya</CardDescription>
+             </CardHeader>
+             <CardContent>
+               <div className="mb-6">
+                 <div className="text-4xl font-bold text-green-600 mb-2">2-3%</div>
+                 <div className="text-gray-600">Transaction Fee</div>
+               </div>
+               <ul className="space-y-3">
+                 <li className="flex items-start gap-2">
+                   <Check className="h-5 w-5 text-green-600 mt-0.5" />

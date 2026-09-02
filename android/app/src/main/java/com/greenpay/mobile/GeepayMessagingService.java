@@ -11,12 +11,12 @@ import com.google.firebase.messaging.RemoteMessage;
 import androidx.core.app.NotificationCompat;
 
 /**
- * Firebase Cloud Messaging Service for GreenPay
+ * Firebase Cloud Messaging Service for Geepay
  * Handles incoming push notifications
  */
-public class GreenPayMessagingService extends FirebaseMessagingService {
+public class GeepayMessagingService extends FirebaseMessagingService {
     private static final String CHANNEL_ID = "greenpay_notifications";
-    private static final String CHANNEL_NAME = "GreenPay Notifications";
+    private static final String CHANNEL_NAME = "Geepay Notifications";
 
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
@@ -25,7 +25,7 @@ public class GreenPayMessagingService extends FirebaseMessagingService {
         // Get notification data
         String title = remoteMessage.getNotification() != null 
             ? remoteMessage.getNotification().getTitle() 
-            : "GreenPay";
+            : "Geepay";
         String body = remoteMessage.getNotification() != null 
             ? remoteMessage.getNotification().getBody() 
             : "New notification";
@@ -38,7 +38,7 @@ public class GreenPayMessagingService extends FirebaseMessagingService {
     @Override
     public void onNewToken(String token) {
         super.onNewToken(token);
-        android.util.Log.d("GreenPayFCM", "FCM Token refreshed");
+        android.util.Log.d("GeepayFCM", "FCM Token refreshed");
     }
 
     private void sendNotification(String title, String body, String type) {
@@ -54,7 +54,7 @@ public class GreenPayMessagingService extends FirebaseMessagingService {
                     CHANNEL_NAME,
                     NotificationManager.IMPORTANCE_HIGH
                 );
-                channel.setDescription("GreenPay financial notifications");
+                channel.setDescription("Geepay financial notifications");
                 channel.enableVibration(true);
                 channel.enableLights(true);
                 notificationManager.createNotificationChannel(channel);
@@ -76,7 +76,7 @@ public class GreenPayMessagingService extends FirebaseMessagingService {
                 notificationBuilder.build()
             );
         } catch (Exception e) {
-            android.util.Log.e("GreenPayFCM", "Error sending notification", e);
+            android.util.Log.e("GeepayFCM", "Error sending notification", e);
         }
     }
 }

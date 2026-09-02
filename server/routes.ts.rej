@@ -1,0 +1,665 @@
+diff a/server/routes.ts b/server/routes.ts	(rejected hunks)
+@@ -587,51 +587,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
+     }
+   });
+ 
+   app.patch("/api/admin/virtual-accounts/applications/:id", requireAdminAuth, async (req: any, res) => {
+     try {
+       const status = req.body.status;
+       if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+       const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(virtualAccountApplications.id, req.params.id)).returning();
+       if (!application) return res.status(404).json({ message: "Application not found" });
+       const [user] = await db.select().from(users).where(eq(users.id, application.userId));
+       const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
+       if (status === "approved") {
+         await pool.query(
+           `INSERT INTO virtual_accounts (user_id, application_id, currency)
+            VALUES ($1, $2, $3) ON CONFLICT (application_id) DO NOTHING`,
+           [application.userId, application.id, application.currency],
+         );
+       }
+       const [firstName, ...rest] = (user?.fullName || "User").split(" ");
+       if (user && status === "approved") {
+         await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Approved`, message: "Your virtual account details are now available. Check Virtual Accounts to view your bank details.", type: "success", isGlobal: false, actionUrl: "/virtual-accounts" });
+         const { mailtrapService } = await import('\''./services/mailtrap'\'');
+         mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+           currency: application.currency,
+           application_id: application.id,
+-          account_name: account?.accountName || "GreenPay",
++          account_name: account?.accountName || "Geepay",
+           bank_name: account?.bankName || "",
+           account_number: account?.accountNumber || "",
+           routing_number: account?.routingNumber || "",
+           sort_code: account?.sortCode || "",
+           iban: account?.iban || "",
+           swift_code: account?.swiftCode || "",
+           bank_address: account?.bankAddress || "",
+           beneficiary_address: account?.beneficiaryAddress || "",
+           payment_instructions: account?.paymentInstructions || "",
+         }).catch(console.error);
+       }
+       if (user && status === "rejected") {
+         await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Application`, message: req.body.adminNotes || "Your virtual account application was not approved at this time. You may re-apply.", type: "error", isGlobal: false, actionUrl: "/virtual-accounts" });
+         const { mailtrapService } = await import('\''./services/mailtrap'\'');
+         // Send generic email notification for rejection
+         mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+           currency: application.currency,
+           application_id: application.id,
+           account_name: "N/A",
+           bank_name: "", account_number: "", routing_number: "", sort_code: "", iban: "", swift_code: "", bank_address: "", beneficiary_address: "",
+           payment_instructions: `Your ${application.currency} virtual account application was not approved. Reason: ${req.body.adminNotes || "Please contact support for details."}`,
+         }).catch(console.error);
+       }
+       res.json(application);
+     } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to review application" }); }
+@@ -777,99 +777,99 @@ export async function registerRoutes(app: Express): Promise<Server> {
+       }
+       
+       console.log(`✅ Authenticated - downloading: ${objectKey} for ${adminId ? '\''admin'\'' : '\''user'\''} ${adminId || userId}`);
+       
+       // Download and stream the file
+       // Note: Cloudinary serves files via URLs
+       // File keys use UUIDs making them non-guessable
+       await cloudinaryStorage.downloadToResponse(objectKey, res);
+     } catch (error) {
+       if (error instanceof ObjectNotFoundError) {
+         console.warn(`⚠️ File not found: ${req.params.objectPath}`);
+         return res.status(404).json({ message: "File not found" });
+       }
+       console.error('\''❌ File download error:'\'', error);
+       return res.status(500).json({ message: "Failed to serve file" });
+     }
+   });
+ 
+   // Create default admin account if none exists
+   try {
+     const existingAdmin = await storage.getAdminByEmail("admin@greenpay.com");
+     if (!existingAdmin) {
+       await storage.createAdmin({
+         email: "admin@greenpay.com",
+         password: "Admin123!@#",
+-        fullName: "GreenPay Administrator",
++        fullName: "Geepay Administrator",
+         role: "admin",
+         twoFactorEnabled: false
+       });
+       console.log("✅ Default admin account created");
+     }
+   } catch (error) {
+     console.error("Failed to create default admin:", error);
+   }
+   // Authentication routes with real WhatsApp integration
+   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
+     try {
+       const userData = insertUserSchema.parse(req.body);
+       
+       // Format phone number consistently (+254XXXXXXXXX)
+       const { messagingService } = await import('\''./services/messaging'\'');
+       userData.phone = messagingService.formatPhoneNumber(userData.phone);
+       
+       // Check if user already exists
+       const existingUser = await storage.getUserByEmail(userData.email);
+       if (existingUser) {
+         return res.status(400).json({ message: "User already exists" });
+       }
+ 
+       // Create user with hashed password (now handled in storage)
+       const user = await storage.createUser(userData);
+       
+       // Auto-verify phone and email for smoother onboarding
+       await storage.updateUser(user.id, { 
+         isPhoneVerified: true, 
+         isEmailVerified: true
+       });
+ 
+       // Send welcome SMS/WhatsApp/Email with instructions
+       if (user.phone || user.email) {
+         const { messagingService } = await import('\''./services/messaging'\'');
+         const { whatsappService } = await import('\''./services/whatsapp'\'');
+         const domain = process.env.REPLIT_DOMAINS || '\''greenpay.app'\'';
+         const loginUrl = `https://${domain.split('\'','\'')[0]}/login`;
+         
+         if (user.phone) {
+           // Send WhatsApp create_acc template if WhatsApp is configured
+           whatsappService.sendAccountCreation(user.phone, user.fullName || '\''User'\'')
+             .catch(err => console.error('\''[Signup] WhatsApp account creation error:'\'', err));
+           
+           // Also send fallback SMS message
+           messagingService.sendMessage(
+             user.phone,
+-            `Welcome to GreenPay! To send and receive money, you need to: 1) Purchase a virtual card 2) Verify your KYC. Login here: ${loginUrl}`
++            `Welcome to Geepay! To send and receive money, you need to: 1) Purchase a virtual card 2) Verify your KYC. Login here: ${loginUrl}`
+           ).catch(err => console.error('\''Welcome message error:'\'', err));
+         }
+         
+         if (user.email) {
+           // Send welcome email
+           const { mailtrapService } = await import('\''./services/mailtrap'\'');
+           mailtrapService.sendWelcome(user.email, user.fullName?.split('\'' '\'')[0] || '\''User'\'', user.fullName?.split('\'' '\'')[1] || '\'''\'')
+             .catch(err => console.error('\''[Signup] Email welcome error:'\'', err));
+         }
+       }
+       
+       // Auto-create default wallet for new user
+       try {
+         const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = '\''default_currency'\'' LIMIT 1`);
+         const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['\''"]/g, '\'''\'') || "USD";
+         await db.insert(wallets).values({ userId: user.id, currency: defCurrency, isDefault: true, isActive: true });
+       } catch (walletErr) {
+         console.error('\''[Signup] Wallet auto-create error:'\'', walletErr);
+       }
+ 
+       // Remove password from response
+       const { password, ...userResponse } = user;
+       
+       // Redirect to login after signup
+       // (req.session as any).userId = user.id;
+@@ -900,51 +900,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
+ 
+   const googleOAuthStates = new Map<string, number>(); // state → expiry timestamp
+   setInterval(() => {
+     const now = Date.now();
+     for (const [k, v] of googleOAuthStates) { if (now > v) googleOAuthStates.delete(k); }
+   }, 60_000);
+ 
+   function getGoogleRedirectUri(req: any): string {
+     if (process.env.GOOGLE_REDIRECT_URI) return process.env.GOOGLE_REDIRECT_URI;
+     const domains = process.env.REPLIT_DOMAINS || process.env.REPLIT_DEV_DOMAIN;
+     if (domains) return `https://${domains.split('\'','\'')[0]}/auth/google/callback`;
+     return `${req.protocol}://${req.get('\''host'\'')}/auth/google/callback`;
+   }
+ 
+   function googlePopupHtml(result: string, message: string): string {
+     const redirectMap: Record<string, string> = {
+       login: '\''/dashboard'\'',
+       new_user: '\''/auth/google/complete'\'',
+       cancelled: '\''/login'\'',
+       suspended: '\''/login'\'',
+       error: '\''/login'\'',
+     };
+     const fallback = redirectMap[result] || '\''/login'\'';
+     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
+ <meta name="viewport" content="width=device-width,initial-scale=1">
+-<title>GreenPay</title>
++<title>Geepay</title>
+ <style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#f0fdf4;}
+ .card{background:#fff;border-radius:16px;padding:32px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+ .dot{width:40px;height:40px;border-radius:50%;background:#22c55e;margin:0 auto 16px;display:flex;align-items:center;justify-content:center;}
+ p{color:#6b7280;font-size:14px;}</style>
+ </head><body>
+ <div class="card">
+   <div class="dot"><svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+   <p>${message}</p>
+ </div>
+ <script>
+ (function(){
+   var result='\''${result}'\'';
+   function done(){
+     if(window.opener&&!window.opener.closed){
+       try{window.opener.postMessage({googleAuth:result},'\''*'\'');}catch(e){}
+       setTimeout(function(){window.close();},300);
+     } else {
+       window.location.href='\''${fallback}'\'';
+     }
+   }
+   done();
+ })();
+ </script></body></html>`;
+   }
+ 
+@@ -1672,51 +1672,51 @@ p{color:#6b7280;font-size:14px;}</style>
+       } else {
+         const formattedPhone = messagingService.formatPhoneNumber(contact);
+         user = await storage.getUserByPhone(formattedPhone);
+       }
+       
+       if (!user) {
+         // Return 200 even if user not found for security
+         return res.json({ 
+           success: true, 
+           message: "If an account exists, a reset code has been sent." 
+         });
+       }
+ 
+       const otpCode = messagingService.generateOTP();
+       const otpExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+ 
+       // Store OTP in database
+       await storage.updateUserOtp(user.id, otpCode, otpExpiry);
+ 
+       // Send via messaging services
+       const { mailtrapService } = await import('\''./services/mailtrap'\'');
+       const { whatsappService } = await import('\''./services/whatsapp'\'');
+ 
+       // Attempt multi-channel delivery
+       const results = await Promise.allSettled([
+-        user.phone ? messagingService.sendMessage(user.phone, `Your GreenPay password reset code is: ${otpCode}`) : Promise.resolve(false),
++        user.phone ? messagingService.sendMessage(user.phone, `Your Geepay password reset code is: ${otpCode}`) : Promise.resolve(false),
+         user.phone ? whatsappService.sendOTP(user.phone, otpCode) : Promise.resolve(false),
+         user.email ? mailtrapService.sendTemplate(user.email, '\''b54e3d3c-9a2c-4b6e-8e8e-8a9e9a9e9a9e'\'', {
+           first_name: user.firstName || '\''User'\'',
+           otp_code: otpCode
+         }) : Promise.resolve(false)
+       ]);
+ 
+       console.log(`[ForgotPassword] Reset code sent to user ${user.id}`);
+ 
+       res.json({ 
+         success: true, 
+         message: "Reset code sent successfully",
+         sentVia: user.email && contact.includes('\''@'\'') ? '\''email'\'' : '\''phone'\''
+       });
+     } catch (error) {
+       console.error('\''Forgot password error:'\'', error);
+       res.status(500).json({ message: "Failed to process request" });
+     }
+   });
+ 
+   // Reset password - Verify code and update password
+   app.post("/api/auth/reset-password", async (req, res) => {
+     try {
+       const { phone, code, newPassword } = req.body;
+       
+@@ -1896,51 +1896,51 @@ p{color:#6b7280;font-size:14px;}</style>
+         console.log(`[MESSAGES PRIVACY] ACCESS DENIED - User ${userId?.substring(0, 8)}... tried to send message to conversation owned by ${conversation.userId.substring(0, 8)}...`);
+         return res.status(403).json({ message: "Access denied" });
+       }
+ 
+       // Determine sender type and ID based on who is authenticated
+       const senderId = adminId || userId;
+       const senderType = adminId ? "admin" : "user";
+ 
+       console.log(`[MESSAGES PRIVACY] Creating message from ${senderType} ${senderId?.substring(0, 8)}... in conversation ${messageData.conversationId.substring(0, 8)}...`);
+ 
+       // Create the message
+       const message = await storage.createMessage({
+         ...messageData,
+         senderId: senderId!,
+         senderType
+       } as any);
+ 
+       // If sender is admin, notify user via SMS
+       if (senderType === '\''admin'\'') {
+         try {
+           const { messagingService } = await import('\''./services/messaging'\'');
+           const user = await storage.getUser(conversation.userId);
+           if (user && user.phone) {
+             const domain = process.env.REPLIT_DOMAINS || '\''greenpay.app'\'';
+             const loginUrl = `https://${domain.split('\'','\'')[0]}/login`;
+-            const notification = `You have a new message from GreenPay support. Login to reply: ${loginUrl}`;
++            const notification = `You have a new message from Geepay support. Login to reply: ${loginUrl}`;
+             await messagingService.sendMessage(user.phone, notification);
+           }
+         } catch (smsError) {
+           console.error('\''Failed to send user chat notification:'\'', smsError);
+         }
+       }
+ 
+       res.json({ message });
+     } catch (error) {
+       console.error('\''Create message error:'\'', error);
+       res.status(400).json({ message: "Invalid message data" });
+     }
+   });
+ 
+   app.put("/api/messages/:id/read", async (req, res) => {
+     try {
+       const { id } = req.params;
+       const userId = (req.session as any)?.userId;
+       const adminId = (req.session as any)?.admin?.id;
+       
+       if (!userId && !adminId) {
+         return res.status(401).json({ message: "Authentication required" });
+       }
+ 
+       const message = await storage.markMessageAsRead(id);
+@@ -3025,52 +3025,52 @@ p{color:#6b7280;font-size:14px;}</style>
+ 
+   // KYC endpoints
+   app.get("/api/kyc/:userId", async (req, res) => {
+     try {
+       const { userId } = req.params;
+       const kyc = await storage.getKycByUserId(userId);
+       res.json({ kyc });
+     } catch (error) {
+       console.error('\''KYC fetch error:'\'', error);
+       res.status(500).json({ message: "Failed to fetch KYC data" });
+     }
+   });
+ 
+   // 2FA setup endpoint
+   app.post("/api/auth/setup-2fa", async (req, res) => {
+     try {
+       const { userId } = req.body;
+       
+       const user = await storage.getUser(userId);
+       if (!user) {
+         return res.status(404).json({ message: "User not found" });
+       }
+       
+       // Generate proper 2FA secret and QR code
+       const secret = speakeasy.generateSecret({
+-        name: `GreenPay (${user.email})`,
+-        issuer: '\''GreenPay'\''
++        name: `Geepay (${user.email})`,
++        issuer: '\''Geepay'\''
+       });
+       
+       const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
+       
+       // Save secret to user (in production, save encrypted)
+       await storage.updateUser(userId, { twoFactorSecret: secret.base32 });
+       
+       res.json({ 
+         qrCodeUrl,
+         secret: secret.base32, // Don'\''t send in production
+         message: "Scan QR code with your authenticator app"
+       });
+     } catch (error) {
+       console.error('\''2FA setup error:'\'', error);
+       res.status(500).json({ message: "Failed to setup 2FA" });
+     }
+   });
+ 
+   // Biometric setup endpoint
+   app.post("/api/auth/setup-biometric", async (req, res) => {
+     try {
+       const { userId } = req.body;
+       
+       // In production, use WebAuthn for proper biometric authentication
+       await storage.updateUser(userId, { biometricEnabled: true });
+@@ -4924,51 +4924,51 @@ p{color:#6b7280;font-size:14px;}</style>
+   });
+ 
+   // Get unique receive payment link for user
+   app.get("/api/receive-payment-link", requireAuth, async (req, res) => {
+     try {
+       const sessionUserId = (req as any).session?.userId;
+       
+       if (!sessionUserId) {
+         return res.status(401).json({ message: "Authentication required" });
+       }
+       
+       const user = await storage.getUser(sessionUserId);
+       if (!user) {
+         return res.status(404).json({ message: "User not found" });
+       }
+       
+       // Generate unique receive link
+       const receiveLink = `${req.protocol}://${req.get('\''host'\'')}/pay-to/${sessionUserId}`;
+       const qrValue = `greenpay://pay/${sessionUserId}`;
+       
+       res.json({ 
+         receiveLink,
+         qrValue,
+         accountNumber: `GP-${sessionUserId.slice(-9)}`,
+         accountName: user.fullName,
+-        bankName: "GreenPay Digital Bank"
++        bankName: "Geepay Digital Bank"
+       });
+     } catch (error) {
+       console.error('\''Error generating receive link:'\'', error);
+       res.status(500).json({ message: "Error generating receive link" });
+     }
+   });
+ 
+   // Admin Authentication Routes
+   app.post("/api/admin/login", async (req, res) => {
+     try {
+       const { email, password, twoFactorCode } = req.body;
+       
+       const admin = await storage.getAdminByEmail(email);
+       if (!admin || !admin.isActive) {
+         return res.status(401).json({ message: "Invalid credentials" });
+       }
+ 
+       const validPassword = await bcrypt.compare(password, admin.password);
+       if (!validPassword) {
+         return res.status(401).json({ message: "Invalid credentials" });
+       }
+ 
+       // Check 2FA if enabled
+       if (admin.twoFactorEnabled && admin.twoFactorSecret) {
+         if (!twoFactorCode) {
+@@ -8617,51 +8617,51 @@ p{color:#6b7280;font-size:14px;}</style>
+       });
+     } catch (error) {
+       console.error('\''Error sending message:'\'', error);
+       res.status(500).json({ message: "Error sending message" });
+     }
+   });
+ 
+   // Email settings endpoints
+   app.get("/api/admin/email-settings", requireAdminAuth, async (req, res) => {
+     try {
+       const smtpHostSetting = await storage.getSystemSetting("email", "smtp_host");
+       const smtpPortSetting = await storage.getSystemSetting("email", "smtp_port");
+       const smtpSecureSetting = await storage.getSystemSetting("email", "smtp_secure");
+       const smtpUsernameSetting = await storage.getSystemSetting("email", "smtp_username");
+       const smtpPasswordSetting = await storage.getSystemSetting("email", "smtp_password");
+       const fromEmailSetting = await storage.getSystemSetting("email", "from_email");
+       const fromNameSetting = await storage.getSystemSetting("email", "from_name");
+       
+       const settings = {
+         smtpHost: smtpHostSetting?.value || "",
+         smtpPort: smtpPortSetting?.value || "465",
+         smtpSecure: smtpSecureSetting?.value || "true",
+         smtpUsername: smtpUsernameSetting?.value || "",
+         smtpPassword: smtpPasswordSetting?.value || "",
+         fromEmail: fromEmailSetting?.value || "",
+-        fromName: fromNameSetting?.value || "GreenPay",
++        fromName: fromNameSetting?.value || "Geepay",
+       };
+       
+       res.json(settings);
+     } catch (error) {
+       console.error('\''Error fetching email settings:'\'', error);
+       res.status(500).json({ message: "Error fetching email settings" });
+     }
+   });
+ 
+   app.put("/api/admin/email-settings", requireAdminAuth, async (req, res) => {
+     try {
+       const { smtpHost, smtpPort, smtpSecure, smtpUsername, smtpPassword, fromEmail, fromName } = req.body;
+       
+       console.log('\''Admin updated email settings'\'');
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "smtp_host",
+         value: (smtpHost || '\'''\'').trim(),
+         description: "SMTP server hostname"
+       });
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "smtp_port",
+@@ -8678,51 +8678,51 @@ p{color:#6b7280;font-size:14px;}</style>
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "smtp_username",
+         value: (smtpUsername || '\'''\'').trim(),
+         description: "SMTP username"
+       });
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "smtp_password",
+         value: (smtpPassword || '\'''\'').trim(),
+         description: "SMTP password"
+       });
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "from_email",
+         value: (fromEmail || '\'''\'').trim(),
+         description: "From email address"
+       });
+       
+       await storage.setSystemSetting({
+         category: "email",
+         key: "from_name",
+-        value: (fromName || '\''GreenPay'\'').trim(),
++        value: (fromName || '\''Geepay'\'').trim(),
+         description: "From name"
+       });
+       
+       res.json({ 
+         success: true, 
+         message: "Email settings updated successfully"
+       });
+     } catch (error) {
+       console.error('\''Error updating email settings:'\'', error);
+       res.status(500).json({ message: "Error updating email settings" });
+     }
+   });
+ 
+   // Send test email endpoint
+   app.post("/api/admin/send-test-email", requireAdminAuth, async (req, res) => {
+     try {
+       const { email } = req.body;
+       
+       if (!email) {
+         return res.status(400).json({ message: "Email address is required" });
+       }
+       
+       const { emailService } = await import('\''./services/email'\'');
+       const result = await emailService.sendTestEmail(email);
+       
+@@ -10423,78 +10423,78 @@ p{color:#6b7280;font-size:14px;}</style>
+       res.json({
+         success: true,
+         message: "Database restored successfully",
+         recordsRestored
+       });
+     } catch (error) {
+       console.error("Database restore error (public):", error);
+       res.status(500).json({ 
+         success: false,
+         error: error instanceof Error ? error.message : "Failed to restore database" 
+       });
+     }
+   });
+ 
+   // SEO - XML Sitemap for Google Search Console
+   app.get('\''/sitemap.xml'\'', async (req, res) => {
+     try {
+       const baseUrl = '\''https://greenpay.world'\'';
+       const today = new Date().toISOString().split('\''T'\'')[0];
+ 
+       // Define all public pages that should be indexed by Google
+       // Only include pages accessible without authentication
+       const publicPages = [
+         // Core marketing pages
+         { url: '\''/'\'', priority: '\''1.0'\'', changefreq: '\''daily'\'', desc: '\''Homepage - International Money Transfer to Kenya'\'' },
+-        { url: '\''/login'\'', priority: '\''0.9'\'', changefreq: '\''monthly'\'', desc: '\''Login to GreenPay Account'\'' },
+-        { url: '\''/signup'\'', priority: '\''0.9'\'', changefreq: '\''monthly'\'', desc: '\''Sign Up for GreenPay'\'' },
++        { url: '\''/login'\'', priority: '\''0.9'\'', changefreq: '\''monthly'\'', desc: '\''Login to Geepay Account'\'' },
++        { url: '\''/signup'\'', priority: '\''0.9'\'', changefreq: '\''monthly'\'', desc: '\''Sign Up for Geepay'\'' },
+         { url: '\''/status'\'', priority: '\''0.8'\'', changefreq: '\''daily'\'', desc: '\''System Status & Service Health'\'' },
+         
+         // Auth flow pages (public but lower priority)
+         { url: '\''/auth/forgot-password'\'', priority: '\''0.5'\'', changefreq: '\''monthly'\'', desc: '\''Reset Password'\'' },
+         { url: '\''/auth/reset-password'\'', priority: '\''0.5'\'', changefreq: '\''monthly'\'', desc: '\''Create New Password'\'' },
+         { url: '\''/auth/otp-verification'\'', priority: '\''0.4'\'', changefreq: '\''monthly'\'', desc: '\''OTP Verification'\'' },
+         
+         // Feature landing pages (for SEO targeting)
+         { url: '\''/features/send-money'\'', priority: '\''0.9'\'', changefreq: '\''weekly'\'', desc: '\''Send Money to Kenya - Fast & Secure'\'' },
+         { url: '\''/features/virtual-cards'\'', priority: '\''0.9'\'', changefreq: '\''weekly'\'', desc: '\''Virtual Cards for Online Payments'\'' },
+         { url: '\''/features/exchange'\'', priority: '\''0.8'\'', changefreq: '\''weekly'\'', desc: '\''USD to KES Exchange - Best Rates'\'' },
+         { url: '\''/features/airtime'\'', priority: '\''0.7'\'', changefreq: '\''weekly'\'', desc: '\''Buy Airtime for Kenya'\'' },
+         
+         // Information pages
+-        { url: '\''/about'\'', priority: '\''0.7'\'', changefreq: '\''monthly'\'', desc: '\''About GreenPay'\'' },
++        { url: '\''/about'\'', priority: '\''0.7'\'', changefreq: '\''monthly'\'', desc: '\''About Geepay'\'' },
+         { url: '\''/pricing'\'', priority: '\''0.8'\'', changefreq: '\''weekly'\'', desc: '\''Pricing & Fees'\'' },
+         { url: '\''/security'\'', priority: '\''0.7'\'', changefreq: '\''monthly'\'', desc: '\''Security & Compliance'\'' },
+         { url: '\''/help'\'', priority: '\''0.6'\'', changefreq: '\''weekly'\'', desc: '\''Help Center & FAQ'\'' },
+         { url: '\''/contact'\'', priority: '\''0.6'\'', changefreq: '\''monthly'\'', desc: '\''Contact Support'\'' },
+       ];
+ 
+       // Generate XML sitemap with comments
+       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+ <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+-  <!-- GreenPay - International Money Transfer & Digital Wallet -->
++  <!-- Geepay - International Money Transfer & Digital Wallet -->
+   <!-- Target Keywords: send money to Kenya, USD to KES, international remittance, virtual cards -->
+ ${publicPages.map(page => `  <url>
+     <loc>${baseUrl}${page.url}</loc>
+     <lastmod>${today}</lastmod>
+     <changefreq>${page.changefreq}</changefreq>
+     <priority>${page.priority}</priority>
+   </url>`).join('\''\n'\'')}
+ </urlset>`;
+ 
+       res.header('\''Content-Type'\'', '\''application/xml'\'');
+       res.header('\''Cache-Control'\'', '\''public, max-age=3600'\''); // Cache for 1 hour
+       res.send(sitemap);
+     } catch (error) {
+       console.error('\''Error generating sitemap:'\'', error);
+       res.status(500).send('\''Error generating sitemap'\'');
+     }
+   });
+ 
+   // Robots.txt for search engines
+   app.get('\''/robots.txt'\'', (req, res) => {
+     const robotsTxt = `User-agent: *
+ Disallow: /admin/
+ Disallow: /api/
+ 
+ Sitemap: https://greenpay.world/sitemap.xml`;
+@@ -11663,51 +11663,51 @@ Sitemap: https://greenpay.world/sitemap.xml`;
+           // Escape values that contain special characters
+           const escapedValue = typeof value === '\''string'\'' && value.includes('\''"'\'') 
+             ? `'\''${value}'\''` 
+             : `${value}`;
+           envContent += `${key}=${escapedValue}\n`;
+         }
+       }
+ 
+       res.json({ 
+         success: true, 
+         content: envContent,
+         fileName: `.env-${new Date().toISOString().split('\''T'\'')[0]}`,
+         count: Object.keys(envVars).length 
+       });
+       
+       console.log('\''[Dev] Environment variables exported'\'');
+     } catch (error: any) {
+       console.error('\''Export env error:'\'', error);
+       res.status(500).json({ error: '\''Failed to export environment variables'\'' });
+     }
+   });
+ 
+   // Send initial system info
+   setTimeout(() => {
+     LogStreamService.broadcast(
+-      LogStreamService.createLogEntry('\''info'\'', `GreenPay server started on port ${process.env.PORT || 5000}`, '\''system'\'')
++      LogStreamService.createLogEntry('\''info'\'', `Geepay server started on port ${process.env.PORT || 5000}`, '\''system'\'')
+     );
+   }, 1000);
+ 
+   // Announcement Media Upload (images + videos via Cloudinary)
+   app.post("/api/admin/announcements/upload-media", requireAdminAuth, upload.single("file"), async (req, res) => {
+     try {
+       const file = req.file;
+       if (!file) return res.status(400).json({ message: "No file provided" });
+       const isVideo = file.mimetype.startsWith("video/");
+       const folder = isVideo ? "announcements/video" : "announcements/image";
+       const url = await cloudinaryStorage.uploadFile(`${folder}/${Date.now()}-${file.originalname}`, file.buffer, file.mimetype);
+       res.json({ url, type: isVideo ? "video" : "image" });
+     } catch (error) {
+       console.error("Announcement media upload error:", error);
+       res.status(500).json({ message: "Failed to upload media" });
+     }
+   });
+ 
+   // Announcements API
+   app.get("/api/announcements", async (req, res) => {
+     try {
+       const announcements = await storage.getActiveAnnouncements();
+       res.json({ announcements });
+     } catch (error) {
+       console.error('\''Fetch announcements error:'\'', error);

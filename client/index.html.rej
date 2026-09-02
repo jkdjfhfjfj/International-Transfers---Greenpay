@@ -1,0 +1,247 @@
+diff a/client/index.html b/client/index.html	(rejected hunks)
+@@ -1,224 +1,224 @@
+ <!DOCTYPE html>
+ <html lang="en">
+   <head>
+     <meta charset="UTF-8" />
+     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no" />
+     <meta name="theme-color" content="#16a34a" media="(prefers-color-scheme: light)" />
+     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+     <meta name="mobile-web-app-capable" content="yes" />
+-    <meta name="application-name" content="GreenPay" />
++    <meta name="application-name" content="Geepay" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+     
+     <!-- Primary SEO Meta Tags -->
+-    <title>GreenPay - Send Money to Kenya | USD to KES Exchange | Virtual Cards</title>
+-    <meta name="title" content="GreenPay - Send Money to Kenya | USD to KES Exchange | Virtual Cards" />
+-    <meta name="description" content="Send money to Kenya instantly with GreenPay. Best USD to KES exchange rates, virtual cards for online shopping, and secure international money transfers. Sign up free today!" />
++    <title>Geepay - Send Money to Kenya | USD to KES Exchange | Virtual Cards</title>
++    <meta name="title" content="Geepay - Send Money to Kenya | USD to KES Exchange | Virtual Cards" />
++    <meta name="description" content="Send money to Kenya instantly with Geepay. Best USD to KES exchange rates, virtual cards for online shopping, and secure international money transfers. Sign up free today!" />
+     <meta name="keywords" content="send money to Kenya, USD to KES, international money transfer, Kenya remittance, virtual card, M-Pesa, Kenya payment, diaspora banking, Africa money transfer, exchange USD KES, international remittance, digital wallet Kenya" />
+-    <meta name="author" content="GreenPay" />
++    <meta name="author" content="Geepay" />
+     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+     <link rel="canonical" href="https://greenpay.world/" />
+     
+     <!-- Open Graph / Facebook -->
+     <meta property="og:type" content="website" />
+     <meta property="og:url" content="https://greenpay.world/" />
+-    <meta property="og:title" content="GreenPay - Send Money to Kenya | Best USD to KES Rates" />
++    <meta property="og:title" content="Geepay - Send Money to Kenya | Best USD to KES Rates" />
+     <meta property="og:description" content="Send money to Kenya instantly with the best exchange rates. Virtual cards, secure transfers, and real-time tracking. Join thousands sending money home." />
+     <meta property="og:image" content="https://greenpay.world/og-image.png" />
+     <meta property="og:image:width" content="1200" />
+     <meta property="og:image:height" content="630" />
+-    <meta property="og:site_name" content="GreenPay" />
++    <meta property="og:site_name" content="Geepay" />
+     <meta property="og:locale" content="en_US" />
+     
+     <!-- Twitter Card -->
+     <meta name="twitter:card" content="summary_large_image" />
+     <meta name="twitter:url" content="https://greenpay.world/" />
+-    <meta name="twitter:title" content="GreenPay - Send Money to Kenya | Best USD to KES Rates" />
++    <meta name="twitter:title" content="Geepay - Send Money to Kenya | Best USD to KES Rates" />
+     <meta name="twitter:description" content="Send money to Kenya instantly with the best exchange rates. Virtual cards, secure transfers, and real-time tracking." />
+     <meta name="twitter:image" content="https://greenpay.world/twitter-image.png" />
+-    <meta name="twitter:creator" content="@GreenPayApp" />
++    <meta name="twitter:creator" content="@GeepayApp" />
+     
+     <!-- Additional SEO -->
+     <meta name="geo.region" content="KE" />
+     <meta name="geo.placename" content="Kenya" />
+     <meta name="language" content="English" />
+     <meta name="coverage" content="Worldwide" />
+     <meta name="distribution" content="Global" />
+     <meta name="rating" content="General" />
+     
+     <!-- PWA Manifest -->
+     <link rel="manifest" href="/manifest.json" />
+     
+     <!-- Theme Colors for Mobile -->
+     <meta name="theme-color" content="#16a34a" />
+     <meta name="msapplication-TileColor" content="#16a34a" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+-    <meta name="apple-mobile-web-app-title" content="GreenPay" />
++    <meta name="apple-mobile-web-app-title" content="Geepay" />
+     <meta name="mobile-web-app-capable" content="yes" />
+     
+     <!-- iOS Splash Screens -->
+     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-2048-2732.png" media="(device-width: 1024px) and (device-height: 1366px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1668-2388.png" media="(device-width: 834px) and (device-height: 1194px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1536-2048.png" media="(device-width: 768px) and (device-height: 1024px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1284-2778.png" media="(device-width: 428px) and (device-height: 926px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1170-2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-1125-2436.png" media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-828-1792.png" media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     <link rel="apple-touch-startup-image" href="/icons/apple-splash-750-1334.png" media="(device-width: 375px) and (device-height: 667px) and (-webkit-device-pixel-ratio: 2) and (orientation: portrait)" />
+     
+     <!-- Apple Touch Icons -->
+     <link rel="apple-touch-icon" href="/icons/icon-180x180.png" />
+     <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png" />
+     <link rel="apple-touch-icon" sizes="144x144" href="/icons/icon-144x144.png" />
+     <link rel="apple-touch-icon" sizes="120x120" href="/icons/icon-120x120.png" />
+     <link rel="apple-touch-icon" sizes="114x114" href="/icons/icon-114x114.png" />
+     <link rel="apple-touch-icon" sizes="76x76" href="/icons/icon-76x76.png" />
+     <link rel="apple-touch-icon" sizes="72x72" href="/icons/icon-72x72.png" />
+     <link rel="apple-touch-icon" sizes="60x60" href="/icons/icon-60x60.png" />
+     <link rel="apple-touch-icon" sizes="57x57" href="/icons/icon-57x57.png" />
+     
+     <!-- Standard Favicon -->
+     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32x32.png" />
+     <link rel="icon" type="image/png" sizes="16x16" href="/icons/favicon-16x16.png" />
+     <link rel="shortcut icon" href="/icons/favicon.ico" />
+     
+     <!-- Windows Tiles -->
+     <meta name="msapplication-config" content="/icons/browserconfig.xml" />
+     <meta name="msapplication-TileImage" content="/icons/icon-144x144.png" />
+     
+     <!-- Fonts -->
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&family=Fira+Code:wght@300..700&family=Geist+Mono:wght@100..900&family=Geist:wght@100..900&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400..700;1,400..700&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Montserrat:ital,wght@0,100..900;1,100..900&family=Open+Sans:ital,wght@0,300..800;1,300..800&family=Outfit:wght@100..900&family=Oxanium:wght@200..800&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Source+Code+Pro:ital,wght@0,200..900;1,200..900&family=Source+Serif+4:ital,opsz,wght@0,8..60,200..900;1,8..60,200..900&family=Space+Grotesk:wght@300..700&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+     
+     <!-- Font Awesome -->
+     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" integrity="sha512-iecdLmaskl7CVJkEZSMUkrQ6usKu8zTKHWEhdNIlG6zcnnUYdhxqnWlXUnitInPWpEsqvvamNNVqXbsysxPrNQ==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+     
+     <!-- Structured Data (JSON-LD) for Rich Search Results -->
+     <script type="application/ld+json">
+     {
+       "@context": "https://schema.org",
+       "@type": "FinancialService",
+-      "name": "GreenPay",
++      "name": "Geepay",
+       "description": "Send money to Kenya instantly with the best USD to KES exchange rates. Virtual cards, secure international money transfers, and digital wallet services.",
+       "url": "https://greenpay.world",
+       "logo": "https://greenpay.world/icons/icon-512x512.png",
+       "image": "https://greenpay.world/og-image.png",
+-      "telephone": "+1-800-GREENPAY",
++      "telephone": "+1-800-GEEPAY",
+       "email": "support@greenpay.world",
+       "address": {
+         "@type": "PostalAddress",
+         "addressCountry": "KE"
+       },
+       "areaServed": {
+         "@type": "Country",
+         "name": "Kenya"
+       },
+       "sameAs": [
+-        "https://twitter.com/GreenPayApp",
+-        "https://facebook.com/GreenPayApp",
++        "https://twitter.com/GeepayApp",
++        "https://facebook.com/GeepayApp",
+         "https://linkedin.com/company/greenpay"
+       ],
+       "serviceType": [
+         "International Money Transfer",
+         "Currency Exchange",
+         "Virtual Cards",
+         "Digital Wallet",
+         "Remittance Services"
+       ],
+       "priceRange": "$$",
+       "aggregateRating": {
+         "@type": "AggregateRating",
+         "ratingValue": "4.8",
+         "ratingCount": "1250",
+         "bestRating": "5",
+         "worstRating": "1"
+       }
+     }
+     </script>
+     
+     <script type="application/ld+json">
+     {
+       "@context": "https://schema.org",
+       "@type": "FAQPage",
+       "mainEntity": [
+         {
+           "@type": "Question",
+-          "name": "How do I send money to Kenya with GreenPay?",
++          "name": "How do I send money to Kenya with Geepay?",
+           "acceptedAnswer": {
+             "@type": "Answer",
+-            "text": "Sign up for a free GreenPay account, add funds in USD, select Kenya as the destination, enter the recipient details, and confirm your transfer. Money arrives instantly."
++            "text": "Sign up for a free Geepay account, add funds in USD, select Kenya as the destination, enter the recipient details, and confirm your transfer. Money arrives instantly."
+           }
+         },
+         {
+           "@type": "Question",
+           "name": "What is the USD to KES exchange rate?",
+           "acceptedAnswer": {
+             "@type": "Answer",
+-            "text": "GreenPay offers live exchange rates updated in real-time. Current rate is approximately 129 KES per 1 USD. Check our app for the latest rates."
++            "text": "Geepay offers live exchange rates updated in real-time. Current rate is approximately 129 KES per 1 USD. Check our app for the latest rates."
+           }
+         },
+         {
+           "@type": "Question",
+           "name": "How long does it take to send money to Kenya?",
+           "acceptedAnswer": {
+             "@type": "Answer",
+             "text": "Transfers to Kenya are instant. Once you confirm your transaction, the recipient receives the money immediately in their digital wallet or M-Pesa account."
+           }
+         },
+         {
+           "@type": "Question",
+           "name": "Are virtual cards included?",
+           "acceptedAnswer": {
+             "@type": "Answer",
+-            "text": "Yes! GreenPay offers virtual Mastercard cards that you can use for online shopping worldwide. Purchase a virtual card from your dashboard."
++            "text": "Yes! Geepay offers virtual Mastercard cards that you can use for online shopping worldwide. Purchase a virtual card from your dashboard."
+           }
+         }
+       ]
+     }
+     </script>
+     
+     <script type="application/ld+json">
+     {
+       "@context": "https://schema.org",
+       "@type": "Organization",
+-      "name": "GreenPay",
++      "name": "Geepay",
+       "url": "https://greenpay.world",
+       "logo": "https://greenpay.world/icons/icon-512x512.png",
+       "contactPoint": {
+         "@type": "ContactPoint",
+-        "telephone": "+1-800-GREENPAY",
++        "telephone": "+1-800-GEEPAY",
+         "contactType": "Customer Service",
+         "areaServed": "Worldwide",
+         "availableLanguage": "English"
+       },
+       "founder": {
+         "@type": "Organization",
+-        "name": "GreenPay Inc."
++        "name": "Geepay Inc."
+       }
+     }
+     </script>
+   </head>
+   <body>
+     <div id="root"></div>
+     <script>
+       // Force reload if page hangs on blank screen
+       window.onload = function() {
+         setTimeout(() => {
+           const root = document.getElementById('\''root'\'');
+           if (root && root.innerHTML === "") {
+             console.log("App failed to render. Attempting hard reload...");
+             window.location.href = window.location.origin + "/?clear_cache=1&s=1";
+           }
+         }, 3000);
+       };
+ 
+       // Global error handler to catch boot crashes
+       window.addEventListener('\''error'\'', function(e) {
+         console.error('\''Runtime error caught:'\'', e.error);
+         // Only trigger auto-clear if it'\''s a critical boot error (root is empty)
+         setTimeout(() => {
+           const root = document.getElementById('\''root'\'');
+           if (root && root.innerHTML === "") {

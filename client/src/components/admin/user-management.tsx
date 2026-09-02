@@ -1684,7 +1684,7 @@ function UserDetailsDialog({ user }: { user: User }) {
                 <div className="absolute bottom-0 left-0 w-24 h-24 bg-black/10 rounded-full translate-y-12 -translate-x-12" />
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-6">
-                    <p className="text-xs text-white/70 font-medium">GreenPay Virtual</p>
+                    <p className="text-xs text-white/70 font-medium">Geepay Virtual</p>
                     <Badge className={`text-[10px] ${
                       card.status === "active" ? "bg-green-400/30 text-white border-green-400/30" :
                       card.status === "frozen" ? "bg-blue-400/30 text-white border-blue-400/30" :

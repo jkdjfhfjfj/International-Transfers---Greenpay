@@ -1,0 +1,54 @@
+diff a/client/src/components/desktop-sidebar.tsx b/client/src/components/desktop-sidebar.tsx	(rejected hunks)
+@@ -30,51 +30,51 @@ export default function DesktopSidebar() {
+     '\''/'\'', '\''/login'\'', '\''/signup'\'', '\''/splash'\'', '\''/landing'\'', '\''/help'\'', '\''/about'\'', '\''/pricing'\'',
+     '\''/security'\'', '\''/contact'\'', '\''/terms'\'', '\''/privacy'\'', '\''/admin-login'\'',
+     '\''/auth/otp-verification'\'', '\''/auth/google/complete'\'', '\''/auth/kyc-verification'\'',
+     '\''/auth/forgot-password'\'', '\''/auth/reset-password'\'', '\''/auth/virtual-card-purchase'\'',
+   ].includes(location) && !location.startsWith('\''/features/'\'');
+ 
+   if (!showSidebar) return null;
+ 
+   const isActive = (path: string) =>
+     location === path || (path !== "/dashboard" && location.startsWith(path));
+ 
+   return (
+     <motion.aside
+       initial={{ x: -264 }}
+       animate={{ x: 0 }}
+       transition={{ type: "spring", stiffness: 300, damping: 30 }}
+       className="hidden md:flex fixed left-0 top-0 bottom-0 w-64 bg-background border-r border-border/60 flex-col z-40 shadow-lg"
+     >
+       {/* Logo */}
+       <div className="p-5 border-b border-border/40">
+         <button onClick={() => setLocation("/dashboard")} className="flex items-center gap-3 group">
+           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-md group-hover:shadow-emerald-200 transition-shadow">
+             <span className="text-white font-extrabold text-base">G</span>
+           </div>
+           <div>
+-            <p className="font-bold text-base text-foreground leading-tight">GreenPay</p>
++            <p className="font-bold text-base text-foreground leading-tight">Geepay</p>
+             <p className="text-[10px] text-muted-foreground leading-tight">Money Transfer</p>
+           </div>
+         </button>
+       </div>
+ 
+       {/* Primary nav */}
+       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
+         {NAV_ITEMS.map((item) => {
+           const active = isActive(item.path);
+           const Icon = item.icon;
+           return (
+             <button
+               key={item.id}
+               onClick={() => setLocation(item.path)}
+               className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-left
+                 ${active
+                   ? "bg-primary/10 text-primary"
+                   : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                 }`}
+             >
+               <Icon className={`w-4.5 h-4.5 shrink-0 ${active ? "text-primary" : "text-muted-foreground"}`} style={{ width: "18px", height: "18px" }} />
+               {item.label}
+               {active && (
+                 <motion.div
+                   layoutId="sidebar-active"

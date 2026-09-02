@@ -90,7 +90,7 @@ export default function AdminLogin() {
       }
 
       if (res.ok) {
-        toast({ title: "Welcome back!", description: "Signed in to GreenPay Admin." });
+        toast({ title: "Welcome back!", description: "Signed in to Geepay Admin." });
         setLocation("/admin/dashboard");
       } else {
         toast({
@@ -113,7 +113,7 @@ export default function AdminLogin() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-green-500/20 border border-green-500/30 mb-4">
             <Shield className="w-8 h-8 text-green-400" />
           </div>
-          <h1 className="text-3xl font-bold text-white mb-1">GreenPay Admin</h1>
+          <h1 className="text-3xl font-bold text-white mb-1">Geepay Admin</h1>
           <p className="text-slate-400 text-sm">Secure administrative access</p>
         </div>
 
@@ -248,7 +248,7 @@ export default function AdminLogin() {
                 className="flex-1 bg-slate-700/40 border-slate-600 text-slate-300 hover:bg-slate-700/60 hover:text-white text-xs"
                 onClick={() => {
                   const subject = "Admin Support Request";
-                  const body = "Hello GreenPay Admin Support,\n\nI need assistance with my admin account.\n\nDetails: ";
+                  const body = "Hello Geepay Admin Support,\n\nI need assistance with my admin account.\n\nDetails: ";
                   window.location.href = `mailto:support@greenpay.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
                 }}
               >

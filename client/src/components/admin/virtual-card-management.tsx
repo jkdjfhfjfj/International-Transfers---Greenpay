@@ -496,7 +496,7 @@ export default function VirtualCardManagement() {
                 <div className="relative z-10">
                   <div className="flex justify-between items-start mb-6">
                     <div>
-                      <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
+                      <p className="text-green-200 text-xs font-medium">Geepay Card</p>
                       <p className="text-white/60 text-xs">Virtual</p>
                     </div>
                     <div className="flex gap-1.5">

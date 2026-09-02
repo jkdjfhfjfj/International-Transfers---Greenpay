@@ -1,0 +1,159 @@
+diff a/client/src/pages/settings.tsx b/client/src/pages/settings.tsx	(rejected hunks)
+@@ -391,51 +391,51 @@ export default function SettingsPage() {
+       toast({
+         title: "2FA Disabled",
+         description: "Two-factor authentication has been disabled",
+       });
+     },
+     onError: (error: any) => {
+       toast({
+         title: "Disable Failed",
+         description: error.message || "Unable to disable 2FA",
+         variant: "destructive",
+       });
+     },
+   });
+ 
+   const setupFingerprintMutation = useMutation({
+     mutationFn: async () => {
+       // Check if WebAuthn is supported
+       if (!window.PublicKeyCredential) {
+         throw new Error("Your device doesn'\''t support biometric authentication");
+       }
+ 
+       // Request biometric from device
+       const challenge = crypto.getRandomValues(new Uint8Array(32));
+       const publicKeyCreationOptions = {
+         challenge,
+-        rp: { name: "GreenPay", id: window.location.hostname },
++        rp: { name: "Geepay", id: window.location.hostname },
+         user: {
+           id: crypto.getRandomValues(new Uint8Array(16)),
+           name: user?.email || "user",
+           displayName: user?.fullName || "User",
+         },
+         pubKeyCredParams: [
+           { alg: -7, type: "public-key" as const },
+           { alg: -257, type: "public-key" as const },
+         ],
+         timeout: 60000,
+         userVerification: "preferred",
+       } as PublicKeyCredentialCreationOptions;
+ 
+       const credential = await navigator.credentials.create({
+         publicKey: publicKeyCreationOptions,
+       }) as PublicKeyCredential | null;
+ 
+       if (!credential) {
+         throw new Error("Biometric enrollment was cancelled or failed");
+       }
+ 
+       // Send to server for storage - store credential ID as is
+       const response = await apiRequest("POST", `/api/auth/biometric/setup`, {
+         userId: user?.id,
+         credentialId: credential.id,
+@@ -1608,101 +1608,101 @@ export default function SettingsPage() {
+           {appDownloads?.huaweiUrl && (
+             <motion.a
+               href={appDownloads.huaweiUrl}
+               target="_blank"
+               rel="noopener noreferrer"
+               whileHover={{ scale: 1.01 }}
+               whileTap={{ scale: 0.99 }}
+               className="w-full bg-red-600 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+               data-testid="button-huawei"
+             >
+               <div className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center shrink-0">
+                 <span className="material-icons text-white">storefront</span>
+               </div>
+               <div className="flex-1">
+                 <p className="text-xs text-red-100">EXPLORE IT ON</p>
+                 <p className="font-bold text-base leading-tight">AppGallery</p>
+               </div>
+               <span className="material-icons text-red-100 text-sm">open_in_new</span>
+             </motion.a>
+           )}
+ 
+           {/* Manual APK download */}
+           {(appDownloads?.apkUrl || appDownloads === undefined) && (
+             <motion.a
+               href={appDownloads?.apkUrl || "/greenpay.apk"}
+-              download="GreenPay.apk"
++              download="Geepay.apk"
+               target={appDownloads?.apkUrl?.startsWith("http") ? "_blank" : undefined}
+               rel="noopener noreferrer"
+               whileHover={{ scale: 1.01 }}
+               whileTap={{ scale: 0.99 }}
+               className="w-full bg-gradient-to-r from-green-600 to-emerald-700 p-4 rounded-xl flex items-center gap-3 text-white elevation-2 cursor-pointer"
+               data-testid="button-download-apk"
+             >
+               <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                 <Download className="w-5 h-5 text-white" />
+               </div>
+               <div className="flex-1">
+                 <p className="font-semibold">Download APK Directly</p>
+                 <p className="text-sm text-green-100">Android · {appDownloads?.apkVersion ? `Version ${appDownloads.apkVersion}` : "Latest version"}</p>
+               </div>
+               <span className="material-icons text-white/80">android</span>
+             </motion.a>
+           )}
+ 
+           {/* If no links are configured at all */}
+           {appDownloads &&
+            !appDownloads.playStoreUrl &&
+            !appDownloads.appStoreUrl &&
+            !appDownloads.apkUrl &&
+            !appDownloads.huaweiUrl && (
+             <div className="bg-card border border-border rounded-xl p-4 text-center">
+               <p className="text-sm text-muted-foreground">App download links are not yet available. Please check back soon.</p>
+             </div>
+           )}
+ 
+           {/* Manual install instructions */}
+           <motion.div className="bg-card border border-border rounded-xl overflow-hidden elevation-1">
+             <button
+               onClick={() => setShowInstallGuide(prev => !prev)}
+               className="w-full p-4 flex items-center justify-between text-sm font-medium"
+             >
+               <div className="flex items-center gap-2">
+                 <span className="material-icons text-primary text-base">help_outline</span>
+                 How to install the APK manually
+               </div>
+               <span className="material-icons text-muted-foreground text-sm">{showInstallGuide ? "expand_less" : "expand_more"}</span>
+             </button>
+             {showInstallGuide && (
+               <div className="px-4 pb-4 space-y-2 border-t border-border">
+                 {[
+                   { step: 1, text: '\''Download the APK file using the "Download APK" button above.'\'' },
+                   { step: 2, text: '\''Open your phone\'\''s Settings → Security (or Privacy).'\'' },
+                   { step: 3, text: '\''Enable "Install unknown apps" or "Allow from this source".'\'' },
+-                  { step: 4, text: '\''Open the downloaded GreenPay.apk file from your Downloads folder.'\'' },
++                  { step: 4, text: '\''Open the downloaded Geepay.apk file from your Downloads folder.'\'' },
+                   { step: 5, text: '\''Tap "Install" and wait for the installation to complete.'\'' },
+-                  { step: 6, text: '\''Open GreenPay and log in with your existing account.'\'' },
++                  { step: 6, text: '\''Open Geepay and log in with your existing account.'\'' },
+                 ].map(({ step, text }) => (
+                   <div key={step} className="flex items-start gap-3 pt-2">
+                     <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                       <span className="text-xs font-bold text-primary">{step}</span>
+                     </div>
+                     <p className="text-sm text-muted-foreground leading-snug">{text}</p>
+                   </div>
+                 ))}
+               </div>
+             )}
+           </motion.div>
+         </motion.div>
+ 
+         {/* Support & Legal */}
+         <motion.div
+           initial={{ opacity: 0, y: 30 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.5 }}
+           className="space-y-3"
+         >
+           <h3 className="font-semibold text-sm text-muted-foreground">SUPPORT & LEGAL</h3>
+           
+           <motion.button
+             whileHover={{ scale: 1.01 }}
+             whileTap={{ scale: 0.99 }}

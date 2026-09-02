@@ -8,8 +8,8 @@ export default function SendMoneyLanding() {
   return (
     <>
       <SEO
-        title="Send Money to Kenya Instantly | GreenPay - Best USD to KES Rates"
-        description="Send money to Kenya instantly with GreenPay. Best USD to KES exchange rates, low fees, instant M-Pesa delivery. Join thousands sending money home today!"
+        title="Send Money to Kenya Instantly | Geepay - Best USD to KES Rates"
+        description="Send money to Kenya instantly with Geepay. Best USD to KES exchange rates, low fees, instant M-Pesa delivery. Join thousands sending money home today!"
         keywords="send money to Kenya, USD to KES, international money transfer, Kenya remittance, M-Pesa, send money home, Kenya diaspora"
         canonical="https://greenpay.world/features/send-money"
       />
@@ -100,7 +100,7 @@ export default function SendMoneyLanding() {
 
         <Card className="bg-green-50 border-green-200">
           <CardHeader>
-            <CardTitle className="text-2xl">Why Choose GreenPay?</CardTitle>
+            <CardTitle className="text-2xl">Why Choose Geepay?</CardTitle>
           </CardHeader>
           <CardContent>
             <ul className="space-y-3">

@@ -501,7 +501,7 @@ export default function AdminSystemSettingsPage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-sm">Platform Name</Label>
-                    <Input value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="GreenPay" className="rounded-xl" />
+                    <Input value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="Geepay" className="rounded-xl" />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm">Support Email</Label>

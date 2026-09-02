@@ -1,0 +1,56 @@
+diff a/client/src/pages/receive-money.tsx b/client/src/pages/receive-money.tsx	(rejected hunks)
+@@ -121,52 +121,52 @@ export default function ReceiveMoneyPage() {
+         el.value = text;
+         el.style.position = "fixed";
+         el.style.opacity = "0";
+         document.body.appendChild(el);
+         el.select();
+         document.execCommand("copy");
+         document.body.removeChild(el);
+         doToast();
+       });
+     } else {
+       const el = document.createElement("textarea");
+       el.value = text;
+       el.style.position = "fixed";
+       el.style.opacity = "0";
+       document.body.appendChild(el);
+       el.select();
+       document.execCommand("copy");
+       document.body.removeChild(el);
+       doToast();
+     }
+   };
+ 
+   const handleShare = () => {
+     if (navigator.share) {
+       navigator.share({
+-        title: '\''GreenPay QR Code'\'',
+-        text: '\''Scan this QR code to send me money via GreenPay'\'',
++        title: '\''Geepay QR Code'\'',
++        text: '\''Scan this QR code to send me money via Geepay'\'',
+       });
+     } else {
+       toast({
+         title: "QR Code ready",
+         description: "Save or screenshot the QR code to share.",
+       });
+     }
+   };
+ 
+   return (
+     <div className="min-h-screen bg-background pb-20 md:pb-6">
+       {/* Header */}
+       <WavyHeader
+         
+         
+         size="sm"
+       />
+ 
+       <div className="p-6 space-y-6">
+         {/* Tab Navigation */}
+         <motion.div
+           initial={{ opacity: 0, y: 20 }}
+           animate={{ opacity: 1, y: 0 }}
+           transition={{ delay: 0.1 }}
+           className="flex space-x-1 bg-muted p-1 rounded-lg"

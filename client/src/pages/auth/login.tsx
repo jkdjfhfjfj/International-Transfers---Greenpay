@@ -322,7 +322,7 @@ export default function LoginPage() {
               <span className="material-icons text-white text-2xl">attach_money</span>
             </motion.div>
             <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
-            <p className="text-muted-foreground">Sign in to your GreenPay account</p>
+            <p className="text-muted-foreground">Sign in to your Geepay account</p>
           </div>
 
           <Form {...form}>

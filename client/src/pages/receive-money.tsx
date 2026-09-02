@@ -255,7 +255,7 @@ export default function ReceiveMoneyPage() {
                 <h3 className="font-semibold">Share Account Details</h3>
                 <button
                   onClick={() => {
-                    const details = `Account: GP-${user?.id?.slice(-9)}\nBank: GreenPay Digital Bank\nName: ${user?.fullName}`;
+                    const details = `Account: GP-${user?.id?.slice(-9)}\nBank: Geepay Digital Bank\nName: ${user?.fullName}`;
                     navigator.clipboard.writeText(details);
                     toast({ title: "All details copied!" });
                   }}
@@ -285,11 +285,11 @@ export default function ReceiveMoneyPage() {
                 <div className="flex justify-between items-center p-3 bg-muted rounded-xl">
                   <div>
                     <p className="text-sm text-muted-foreground">Bank Name</p>
-                    <p className="font-medium">GreenPay Digital Bank</p>
+                    <p className="font-medium">Geepay Digital Bank</p>
                   </div>
                   <motion.button
                     whileTap={{ scale: 0.95 }}
-                    onClick={() => handleCopyAccountDetail("GreenPay Digital Bank", "Bank name")}
+                    onClick={() => handleCopyAccountDetail("Geepay Digital Bank", "Bank name")}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary transition-colors"
                     data-testid="button-copy-bank"
                   >

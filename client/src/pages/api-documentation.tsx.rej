@@ -1,0 +1,287 @@
+diff a/client/src/pages/api-documentation.tsx b/client/src/pages/api-documentation.tsx	(rejected hunks)
+@@ -64,116 +64,116 @@ export default function APIDocumentationPage() {
+         <button
+           onClick={() => copyToClipboard(code, id)}
+           className="text-xs text-primary hover:text-primary/80 flex items-center gap-1"
+         >
+           {copiedCode === id ? <Check size={14} /> : <Copy size={14} />}
+           {copiedCode === id ? "Copied" : "Copy"}
+         </button>
+       </div>
+       <pre className="text-xs overflow-x-auto max-h-96">
+         <code>{code}</code>
+       </pre>
+     </div>
+   );
+ 
+   return (
+     <div className="min-h-screen bg-background pb-20">
+       <WavyHeader size="sm" />
+ 
+       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+         {/* Header */}
+         <motion.div
+           initial={{ opacity: 0, y: 20 }}
+           animate={{ opacity: 1, y: 0 }}
+           className="space-y-4"
+         >
+-          <h1 className="text-4xl font-bold">GreenPay API Documentation</h1>
++          <h1 className="text-4xl font-bold">Geepay API Documentation</h1>
+           <p className="text-lg text-muted-foreground">
+-            Complete REST API reference for integrating GreenPay into your applications
++            Complete REST API reference for integrating Geepay into your applications
+           </p>
+           <div className="flex flex-wrap gap-3">
+             <div className="flex items-center gap-2 text-sm">
+               <Globe size={16} className="text-primary" />
+               <span>Base URL: <code className="bg-muted px-2 py-1 rounded">{API_BASE_URL}</code></span>
+             </div>
+             <div className="flex items-center gap-2 text-sm">
+               <Zap size={16} className="text-primary" />
+               <span>Rate Limit: 1000 requests/hour</span>
+             </div>
+             <div className="flex items-center gap-2 text-sm">
+               <Shield size={16} className="text-primary" />
+               <span>HTTPS Required</span>
+             </div>
+           </div>
+         </motion.div>
+ 
+         {/* Tab Navigation */}
+         <motion.div
+           initial={{ opacity: 0 }}
+           animate={{ opacity: 1 }}
+           className="flex flex-wrap gap-2 border-b border-border"
+         >
+           {["overview", "auth", "endpoints", "examples", "test"].map((tab) => (
+             <button
+               key={tab}
+               onClick={() => setActiveTab(tab as any)}
+               className={`pb-3 px-4 font-medium transition-colors ${
+                 activeTab === tab
+                   ? "border-b-2 border-primary text-primary"
+                   : "text-muted-foreground hover:text-foreground"
+               }`}
+             >
+               {tab.charAt(0).toUpperCase() + tab.slice(1)}
+             </button>
+           ))}
+         </motion.div>
+ 
+         {/* OVERVIEW TAB */}
+         {activeTab === "overview" && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             className="space-y-6"
+           >
+             <div>
+               <h2 className="text-2xl font-bold mb-4">Getting Started</h2>
+               <p className="text-muted-foreground mb-4">
+-                GreenPay provides a comprehensive REST API for financial transactions, user management, and more.
++                Geepay provides a comprehensive REST API for financial transactions, user management, and more.
+               </p>
+             </div>
+ 
+             {/* Getting Started */}
+             <div className="bg-card border border-primary/20 p-6 rounded-lg space-y-4">
+               <div className="flex items-start gap-3">
+                 <AlertCircle className="text-primary mt-1" size={20} />
+                 <div>
+                   <h3 className="font-bold mb-2">🚀 Get Started in 3 Steps</h3>
+                   <ol className="space-y-3 text-sm">
+                     <li className="flex gap-3">
+                       <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">1</span>
+                       <div>
+-                        <span className="font-semibold">Log in to your GreenPay account</span>
++                        <span className="font-semibold">Log in to your Geepay account</span>
+                         <p className="text-muted-foreground text-xs">Go to Settings → API Keys</p>
+                       </div>
+                     </li>
+                     <li className="flex gap-3">
+                       <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">2</span>
+                       <div>
+                         <span className="font-semibold">Click "Generate New Key"</span>
+                         <p className="text-muted-foreground text-xs">Configure name, scope, and rate limits</p>
+                       </div>
+                     </li>
+                     <li className="flex gap-3">
+                       <span className="bg-primary text-white rounded-full w-6 h-6 flex items-center justify-center flex-shrink-0 text-xs">3</span>
+                       <div>
+                         <span className="font-semibold">Copy and store securely</span>
+                         <p className="text-muted-foreground text-xs">Save in environment variables, never commit to version control</p>
+                       </div>
+                     </li>
+                   </ol>
+                 </div>
+               </div>
+               <Button 
+                 onClick={() => setLocation('\''/api-service'\'')}
+                 className="w-full mt-4"
+               >
+                 Generate API Key Now
+@@ -277,51 +277,51 @@ Authorization: Bearer gpay_demo_test
+ // Example with curl
+ curl -X GET ${API_BASE_URL}/api/endpoint \\
+   -H "Authorization: Bearer gpay_demo_test" \\
+   -H "Content-Type: application/json"`}
+                 language="bash"
+                 id="api-key-auth"
+               />
+             </div>
+ 
+             {/* Creating API Keys */}
+             <div className="bg-card border border-border p-6 rounded-lg space-y-4">
+               <h3 className="text-lg font-bold">Generating Your API Keys</h3>
+               <ol className="space-y-3 text-sm list-decimal list-inside">
+                 <li><strong>Create your account</strong> - Sign up at greenpay.world</li>
+                 <li><strong>Verify email & phone</strong> - Complete KYC verification</li>
+                 <li><strong>Navigate to Settings</strong> - Go to Settings → API Keys in your dashboard</li>
+                 <li><strong>Generate Key</strong> - Click "Generate New Key"</li>
+                 <li><strong>Configure scopes</strong> - Select read, write, or all permissions</li>
+                 <li><strong>Copy immediately</strong> - You won'\''t be able to see it again</li>
+                 <li><strong>Store securely</strong> - Use environment variables in production</li>
+               </ol>
+               <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded mt-4">
+                 <p className="text-sm"><strong>⚠️ Important:</strong> Each API key is unique and personal. Never share your keys or commit them to version control.</p>
+               </div>
+               <div className="bg-muted p-3 rounded text-sm font-mono mt-4">
+-                export GREENPAY_API_KEY="gpay_your_unique_key_here"
++                export GEEPAY_API_KEY="gpay_your_unique_key_here"
+               </div>
+             </div>
+ 
+             {/* Security Best Practices */}
+             <div className="space-y-4">
+               <h3 className="text-lg font-bold">🔒 Security Best Practices</h3>
+               <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 p-4 rounded space-y-3 text-sm">
+                 <div>✓ Never commit API keys to version control</div>
+                 <div>✓ Use environment variables for production</div>
+                 <div>✓ Rotate keys regularly</div>
+                 <div>✓ Use HTTPS for all requests</div>
+                 <div>✓ Revoke compromised keys immediately</div>
+                 <div>✓ Use different keys for dev/prod/test</div>
+               </div>
+             </div>
+           </motion.div>
+         )}
+ 
+         {/* ENDPOINTS TAB */}
+         {activeTab === "endpoints" && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             className="space-y-8"
+           >
+@@ -557,107 +557,107 @@ curl -X GET ${API_BASE_URL}/api/endpoint \\
+                 </div>
+               )}
+             </div>
+           </motion.div>
+         )}
+ 
+         {/* EXAMPLES TAB */}
+         {activeTab === "examples" && (
+           <motion.div
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             className="space-y-6"
+           >
+             <div>
+               <h2 className="text-2xl font-bold mb-4">Code Examples</h2>
+               <p className="text-muted-foreground mb-6">
+                 Production-ready examples using demo API keys
+               </p>
+             </div>
+ 
+             {/* JavaScript Example */}
+             <div className="space-y-3">
+               <h3 className="text-xl font-bold">JavaScript/Node.js</h3>
+               <CodeBlock
+                 code={`// Get your API key from Settings → API Keys dashboard
+-const API_KEY = process.env.GREENPAY_API_KEY;
++const API_KEY = process.env.GEEPAY_API_KEY;
+ const BASE_URL = '\''${API_BASE_URL}'\'';
+ 
+ if (!API_KEY) {
+-  throw new Error('\''GREENPAY_API_KEY environment variable not set'\'');
++  throw new Error('\''GEEPAY_API_KEY environment variable not set'\'');
+ }
+ 
+ // Send money
+ async function sendMoney(recipientId, amount, currency) {
+   const response = await fetch(\`\${BASE_URL}/api/transactions/send\`, {
+     method: '\''POST'\'',
+     headers: {
+       '\''Authorization'\'': \`Bearer \${API_KEY}\`,
+       '\''Content-Type'\'': '\''application/json'\''
+     },
+     body: JSON.stringify({
+       amount,
+       currency,
+       recipientDetails: { userId: recipientId }
+     })
+   });
+   
+   if (!response.ok) {
+     throw new Error(\`API Error: \${response.status}\`);
+   }
+   
+   return await response.json();
+ }
+ 
+ // Get exchange rate
+ async function getExchangeRate(from, to) {
+   const response = await fetch(
+     \`\${BASE_URL}/api/exchange-rates/\${from}/\${to}\`,
+     {
+       headers: { '\''Authorization'\'': \`Bearer \${API_KEY}\` }
+     }
+   );
+   return await response.json();
+ }`}
+                 language="javascript"
+                 id="js-example"
+               />
+             </div>
+ 
+             {/* Python Example */}
+             <div className="space-y-3">
+               <h3 className="text-xl font-bold">Python</h3>
+               <CodeBlock
+                 code={`import requests
+ import os
+ 
+ # Get your API key from Settings → API Keys dashboard
+-API_KEY = os.getenv('\''GREENPAY_API_KEY'\'')
++API_KEY = os.getenv('\''GEEPAY_API_KEY'\'')
+ BASE_URL = '\''${API_BASE_URL}'\''
+ 
+ if not API_KEY:
+-    raise ValueError('\''GREENPAY_API_KEY environment variable not set'\'')
++    raise ValueError('\''GEEPAY_API_KEY environment variable not set'\'')
+ 
+ headers = {
+     '\''Authorization'\'': f'\''Bearer {API_KEY}'\'',
+     '\''Content-Type'\'': '\''application/json'\''
+ }
+ 
+ # Send money
+ def send_money(recipient_id, amount, currency):
+     response = requests.post(
+         f'\''{BASE_URL}/api/transactions/send'\'',
+         headers=headers,
+         json={
+             '\''amount'\'': amount,
+             '\''currency'\'': currency,
+             '\''recipientDetails'\'': {'\''userId'\'': recipient_id}
+         }
+     )
+     return response.json()
+ 
+ # Get transaction history
+ def get_transactions(user_id):
+     response = requests.get(
+         f'\''{BASE_URL}/api/transactions/{user_id}'\'',
+         headers=headers
+     )

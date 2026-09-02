@@ -8,7 +8,7 @@ export default function AirtimeLanding() {
   return (
     <>
       <SEO
-        title="Buy Airtime for Kenya | Safaricom, Airtel, Telkom Top-Up | GreenPay"
+        title="Buy Airtime for Kenya | Safaricom, Airtel, Telkom Top-Up | Geepay"
         description="Top up mobile airtime for Kenya instantly. Support for Safaricom, Airtel Kenya, and Telkom. Fast delivery, transparent pricing. Buy airtime now!"
         keywords="Kenya airtime, Safaricom airtime, Airtel Kenya top-up, Telkom Kenya, mobile airtime, buy airtime Kenya"
         canonical="https://greenpay.world/features/airtime"

@@ -96,7 +96,7 @@ export default function AdminMessagingSMSPage() {
   useEffect(() => {
     if (settingsData) {
       setCommsGridApiKey(settingsData.commsGridApiKey || "");
-      setCommsGridSenderId(settingsData.commsGridSenderId || "GREENPAY");
+      setCommsGridSenderId(settingsData.commsGridSenderId || "GEEPAY");
       setCommsGridDeviceId(settingsData.commsGridDeviceId || "");
       setWaToken(settingsData.whatsappAccessToken || "");
       setWaPhoneId(settingsData.whatsappPhoneNumberId || "");
@@ -265,7 +265,7 @@ export default function AdminMessagingSMSPage() {
                   <Input
                     value={commsGridSenderId}
                     onChange={(e) => setCommsGridSenderId(e.target.value)}
-                    placeholder="e.g., GREENPAY"
+                    placeholder="e.g., GEEPAY"
                     className="rounded-xl"
                     data-testid="input-commsgrid-sender-id"
                   />
@@ -336,7 +336,7 @@ export default function AdminMessagingSMSPage() {
                   {selectedUserIds.length > 0 && <p className="text-xs text-blue-600 font-medium">{selectedUserIds.length} user(s) selected</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-sm">Message <span className="text-xs text-gray-400">([GREENPAY] prefix added automatically)</span></Label>
+                  <Label className="text-sm">Message <span className="text-xs text-gray-400">([GEEPAY] prefix added automatically)</span></Label>
                   <Textarea
                     value={testMessage}
                     onChange={(e) => setTestMessage(e.target.value)}

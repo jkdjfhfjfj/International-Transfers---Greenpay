@@ -167,7 +167,7 @@ export default function AdminShell({ children, title }: AdminShellProps) {
           <div className="flex items-center justify-between h-16 px-5 border-b border-gray-200 flex-shrink-0">
             <div className="flex items-center gap-2">
               <Shield className="w-7 h-7 text-green-600" />
-              <span className="font-bold text-gray-900 text-base">GreenPay Admin</span>
+              <span className="font-bold text-gray-900 text-base">Geepay Admin</span>
             </div>
             <button
               className="lg:hidden p-1 rounded text-gray-500 hover:text-gray-900"

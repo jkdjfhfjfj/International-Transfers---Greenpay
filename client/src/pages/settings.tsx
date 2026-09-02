@@ -1735,7 +1735,7 @@ export default function SettingsPage() {
         </motion.div>
 
         <div className="text-center pt-6 pb-4">
-          <p className="text-sm text-muted-foreground">GreenPay v2.1.0</p>
+          <p className="text-sm text-muted-foreground">Geepay v2.1.0</p>
         </div>
       </div>
     </div>

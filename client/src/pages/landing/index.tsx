@@ -389,7 +389,7 @@ export default function LandingPage() {
               Start sending money<br className="hidden md:block" /> to Kenya today
             </h2>
             <p className="text-gray-400 mt-4 max-w-lg mx-auto text-lg leading-relaxed">
-              Join 50,000+ people who trust GreenPay for fast, secure, and affordable international transfers.
+              Join 50,000+ people who trust Geepay for fast, secure, and affordable international transfers.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center mt-10">
               <Button size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl px-10 text-base shadow-lg shadow-emerald-900/30"
@@ -421,7 +421,7 @@ export default function LandingPage() {
                 <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow">
                   <span className="text-white font-bold text-sm">G</span>
                 </div>
-                <span className="font-bold text-lg text-white">GreenPay</span>
+                <span className="font-bold text-lg text-white">Geepay</span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
                 The fastest way to send money to Kenya. Trusted by thousands of families worldwide.
@@ -451,7 +451,7 @@ export default function LandingPage() {
             ))}
           </div>
           <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center justify-between gap-4">
-            <p className="text-gray-600 text-sm">© 2025 GreenPay. All rights reserved.</p>
+            <p className="text-gray-600 text-sm">© 2025 Geepay. All rights reserved.</p>
             <div className="flex items-center gap-3 text-gray-600 text-sm">
               <Shield className="w-4 h-4 text-emerald-500" />
               <span>Bank-level encryption · Licensed & regulated</span>

@@ -1,0 +1,54 @@
+diff a/server/services/didit.ts b/server/services/didit.ts	(rejected hunks)
+@@ -21,51 +21,51 @@ export interface DiditDecision {
+   status: string;
+   environment: string;
+   workflow_id: string;
+   vendor_data: string | null;
+   features?: any;
+ }
+ 
+ export interface DiditWebhookPayload {
+   session_id: string;
+   session_number: number;
+   vendor_data: string | null;
+   status: string;
+   workflow_id: string;
+   [key: string]: any;
+ }
+ 
+ function getApiKey(): string | null {
+   return process.env.DIDIT_API_KEY || null;
+ }
+ 
+ function getWorkflowId(): string | null {
+   return process.env.DIDIT_WORKFLOW_ID || null;
+ }
+ 
+ /**
+- * Map a didit session status to a GreenPay KYC status
++ * Map a didit session status to a Geepay KYC status
+  */
+ export function mapDiditStatusToKyc(diditStatus: string): '\''pending'\'' | '\''verified'\'' | '\''rejected'\'' {
+   switch (diditStatus) {
+     case '\''Approved'\'':
+       return '\''verified'\'';
+     case '\''Declined'\'':
+       return '\''rejected'\'';
+     case '\''Expired'\'':
+     case '\''Abandoned'\'':
+     case '\''Kyc Expired'\'':
+       return '\''rejected'\'';
+     case '\''In Review'\'':
+     case '\''Awaiting User'\'':
+     case '\''Resubmitted'\'':
+     case '\''In Progress'\'':
+     case '\''Not Started'\'':
+     default:
+       return '\''pending'\'';
+   }
+ }
+ 
+ /**
+  * Determine if a didit status is terminal (won'\''t change further)
+  */
+ export function isTerminalStatus(diditStatus: string): boolean {

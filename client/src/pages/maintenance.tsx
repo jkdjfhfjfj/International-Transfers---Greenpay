@@ -12,7 +12,7 @@ export default function MaintenancePage() {
           <Wrench className="h-10 w-10" aria-hidden="true" />
         </div>
         <p className="mb-2 text-sm font-semibold uppercase tracking-[0.2em] text-primary">
-          GreenPay
+          Geepay
         </p>
         <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
           We’ll be back shortly

@@ -12,10 +12,10 @@ export default function HelpLanding() {
     "mainEntity": [
       {
         "@type": "Question",
-        "name": "How do I send money to Kenya with GreenPay?",
+        "name": "How do I send money to Kenya with Geepay?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Sign up for a free GreenPay account, add funds in USD, select Kenya as the destination, enter the recipient details, and confirm your transfer. Money arrives instantly."
+          "text": "Sign up for a free Geepay account, add funds in USD, select Kenya as the destination, enter the recipient details, and confirm your transfer. Money arrives instantly."
         }
       },
       {
@@ -23,7 +23,7 @@ export default function HelpLanding() {
         "name": "What is the USD to KES exchange rate?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "GreenPay offers live exchange rates updated in real-time. Current rate is approximately 129 KES per 1 USD. Check our app for the latest rates."
+          "text": "Geepay offers live exchange rates updated in real-time. Current rate is approximately 129 KES per 1 USD. Check our app for the latest rates."
         }
       }
     ]
@@ -32,9 +32,9 @@ export default function HelpLanding() {
   return (
     <>
       <SEO
-        title="Help Center & FAQ | GreenPay Support - Money Transfer Questions"
-        description="Find answers to common questions about sending money to Kenya, USD to KES rates, virtual cards, and airtime. Get help with GreenPay international transfers."
-        keywords="GreenPay help, money transfer FAQ, Kenya transfer questions, USD to KES help, virtual card support"
+        title="Help Center & FAQ | Geepay Support - Money Transfer Questions"
+        description="Find answers to common questions about sending money to Kenya, USD to KES rates, virtual cards, and airtime. Get help with Geepay international transfers."
+        keywords="Geepay help, money transfer FAQ, Kenya transfer questions, USD to KES help, virtual card support"
         canonical="https://greenpay.world/help"
         structuredData={faqData}
       />
@@ -45,7 +45,7 @@ export default function HelpLanding() {
             Help Center & FAQ
           </h1>
           <p className="text-xl text-gray-600 mb-8">
-            Find answers to common questions about GreenPay
+            Find answers to common questions about Geepay
           </p>
         </header>
 
@@ -56,9 +56,9 @@ export default function HelpLanding() {
           <CardContent>
             <Accordion type="single" collapsible>
               <AccordionItem value="item-1">
-                <AccordionTrigger>How do I send money to Kenya with GreenPay?</AccordionTrigger>
+                <AccordionTrigger>How do I send money to Kenya with Geepay?</AccordionTrigger>
                 <AccordionContent>
-                  Sign up for a free GreenPay account, add funds in USD, select Kenya as the destination, 
+                  Sign up for a free Geepay account, add funds in USD, select Kenya as the destination,
                   enter the recipient details, and confirm your transfer. Money arrives instantly.
                 </AccordionContent>
               </AccordionItem>
@@ -66,7 +66,7 @@ export default function HelpLanding() {
               <AccordionItem value="item-2">
                 <AccordionTrigger>What is the USD to KES exchange rate?</AccordionTrigger>
                 <AccordionContent>
-                  GreenPay offers live exchange rates updated in real-time. Current rate is approximately 
+                  Geepay offers live exchange rates updated in real-time. Current rate is approximately
                   129 KES per 1 USD. Check our app for the latest rates.
                 </AccordionContent>
               </AccordionItem>
@@ -74,7 +74,7 @@ export default function HelpLanding() {
               <AccordionItem value="item-3">
                 <AccordionTrigger>How long does it take to send money to Kenya?</AccordionTrigger>
                 <AccordionContent>
-                  Transfers to Kenya are instant. Once you confirm your transaction, the recipient receives 
+                  Transfers to Kenya are instant. Once you confirm your transaction, the recipient receives
                   the money immediately in their digital wallet or M-Pesa account.
                 </AccordionContent>
               </AccordionItem>
@@ -82,24 +82,24 @@ export default function HelpLanding() {
               <AccordionItem value="item-4">
                 <AccordionTrigger>Are virtual cards included?</AccordionTrigger>
                 <AccordionContent>
-                  Yes! GreenPay offers virtual Mastercard cards that you can use for online shopping worldwide. 
+                  Yes! Geepay offers virtual Mastercard cards that you can use for online shopping worldwide.
                   Purchase a virtual card from your dashboard.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-5">
-                <AccordionTrigger>What fees does GreenPay charge?</AccordionTrigger>
+                <AccordionTrigger>What fees does Geepay charge?</AccordionTrigger>
                 <AccordionContent>
-                  GreenPay offers transparent pricing with no hidden fees. You see the exact fees before 
+                  Geepay offers transparent pricing with no hidden fees. You see the exact fees before
                   confirming any transaction. Typically fees are 2-3% for international transfers.
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value="item-6">
-                <AccordionTrigger>Is GreenPay secure?</AccordionTrigger>
+                <AccordionTrigger>Is Geepay secure?</AccordionTrigger>
                 <AccordionContent>
-                  Yes. GreenPay uses bank-level encryption and security measures to protect your money and 
-                  personal information. We comply with all financial regulations and use secure payment 
+                  Yes. Geepay uses bank-level encryption and security measures to protect your money and
+                  personal information. We comply with all financial regulations and use secure payment
                   processing partners.
                 </AccordionContent>
               </AccordionItem>

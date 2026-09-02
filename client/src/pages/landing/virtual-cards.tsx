@@ -8,7 +8,7 @@ export default function VirtualCardsLanding() {
   return (
     <>
       <SEO
-        title="Virtual Mastercard for Online Shopping | GreenPay Digital Wallet"
+        title="Virtual Mastercard for Online Shopping | Geepay Digital Wallet"
         description="Get instant virtual Mastercard for online shopping worldwide. Use on Amazon, Netflix, any website. Secure, instant issuance. Purchase your virtual card today!"
         keywords="virtual card, virtual Mastercard, online shopping, digital card, international payments, virtual debit card"
         canonical="https://greenpay.world/features/virtual-cards"

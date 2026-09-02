@@ -181,7 +181,7 @@ export default function KYCPage() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Identity Verification</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Verify your identity to unlock all GreenPay features
+            Verify your identity to unlock all Geepay features
           </p>
         </div>
 
@@ -417,7 +417,7 @@ export default function KYCPage() {
                 Fully Verified!
               </h3>
               <p className="text-sm text-green-700 dark:text-green-300">
-                Your identity is confirmed. You have access to all GreenPay features.
+                Your identity is confirmed. You have access to all Geepay features.
               </p>
               <Button
                 onClick={() => setLocation("/dashboard")}
