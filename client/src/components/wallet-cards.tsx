@@ -35,8 +35,6 @@ const CURRENCY_FLAGS: Record<string, string> = {
   RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
 };
 
-const VIRTUAL_ACCOUNT_LIVE = new Set(["USD", "GBP", "EUR"]);
-
 const CURRENCY_NAMES: Record<string, string> = {
   USD: 'US Dollar', KES: 'Kenyan Shilling', UGX: 'Ugandan Shilling',
   GHS: 'Ghanaian Cedi', NGN: 'Nigerian Naira', ZAR: 'South African Rand',
@@ -113,7 +111,7 @@ export default function WalletCards({
           const balance = parseFloat(wallet.balance || "0");
           const hold = parseFloat(wallet.holdAmount || "0");
           const withdrawalHold = parseFloat(wallet.withdrawalHoldAmount || "0");
-          const available = balance - hold - withdrawalHold;
+           const available = Number(wallet.availableBalance ?? (balance - hold - withdrawalHold));
           const isSelected = wallet.id === selectedWalletId || (!selectedWalletId && i === activeIndex);
 
           return (
@@ -188,7 +186,7 @@ export default function WalletCards({
                       onClick={e => { e.stopPropagation(); setLocation(`/virtual-accounts?currency=${wallet.currency}`); }}
                       className="text-white/85 hover:text-white text-[10px] font-semibold bg-white/15 rounded-full px-2 py-1 flex items-center gap-1"
                     >
-                      <Building2 className="w-3 h-3" /> {VIRTUAL_ACCOUNT_LIVE.has(wallet.currency) ? "Account" : "Soon"}
+                       <Building2 className="w-3 h-3" /> Account
                     </button>
                     {onToggleBalance && (
                       <button

@@ -76,14 +76,14 @@ export default function ResetPasswordPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-background pb-20">
+    <div className="min-h-screen flex flex-col bg-background">
       <WavyHeader
         
         
         size="sm"
       />
 
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 pb-36 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -177,21 +177,6 @@ export default function ResetPasswordPage() {
                 )}
               />
 
-              <Button
-                type="submit"
-                className="w-full h-12 text-base font-semibold"
-                disabled={resetPasswordMutation.isPending}
-              >
-                {resetPasswordMutation.isPending ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                    Resetting Password...
-                  </div>
-                ) : (
-                  "Reset Password"
-                )}
-              </Button>
-
               <div className="text-center">
                 <Button
                   type="button"
@@ -205,6 +190,22 @@ export default function ResetPasswordPage() {
             </form>
           </Form>
         </motion.div>
+      </div>
+
+      {/* Fixed bottom action matches the sign-up flow and stays reachable on mobile. */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div className="max-w-sm mx-auto p-4">
+          <Button
+            type="button"
+            onClick={form.handleSubmit(onSubmit)}
+            className="w-full ripple"
+            style={{ height: 52 }}
+            disabled={resetPasswordMutation.isPending}
+            data-testid="button-reset-password"
+          >
+            {resetPasswordMutation.isPending ? "Resetting Password..." : "Reset Password"}
+          </Button>
+        </div>
       </div>
     </div>
   );

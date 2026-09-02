@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -18,6 +18,8 @@ import {
   ShieldCheck,
   ChevronRight,
   ArrowLeft,
+  Wallet,
+  ArrowRightLeft,
 } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +40,13 @@ type Application = {
   status: string;
   adminNotes?: string;
   accountDetails?: Record<string, any> | null;
+  virtualAccount?: {
+    id: string;
+    balance: string | number;
+    holdAmount: string | number;
+    availableBalance: string | number;
+    isActive: boolean;
+  } | null;
 };
 
 const ACCOUNT_FIELDS: { key: string; label: string }[] = [
@@ -67,7 +76,7 @@ export default function VirtualAccountsPage() {
 
   const [currency, setCurrency] = useState(() => {
     const p = new URLSearchParams(window.location.search).get("currency")?.toUpperCase();
-    return p && ["USD", "GBP", "EUR"].includes(p) ? p : "USD";
+    return p || "USD";
   });
   const [step, setStep]           = useState(1);
   const [applying, setApplying]   = useState(false);
@@ -84,7 +93,15 @@ export default function VirtualAccountsPage() {
   });
 
   const applications      = data?.applications || [];
+  const supportedCurrencies = data?.supportedCurrencies || Object.keys(currencyMeta).filter(code => currencyMeta[code].enabled);
+  const selectedCurrencyMeta = currencyMeta[currency] || { flag: "🌍", name: currency, enabled: true };
   const selectedApp       = useMemo(() => applications.find(a => a.currency === currency), [applications, currency]);
+
+  useEffect(() => {
+    if (supportedCurrencies.length > 0 && !supportedCurrencies.includes(currency)) {
+      setCurrency(supportedCurrencies[0]);
+    }
+  }, [supportedCurrencies, currency]);
 
   const applyMutation = useMutation({
     mutationFn: async () =>
@@ -113,6 +130,23 @@ export default function VirtualAccountsPage() {
     toast({ title: "Copied to clipboard" });
   };
 
+  const [transferAmount, setTransferAmount] = useState("");
+  const transferMutation = useMutation({
+    mutationFn: async ({ accountId, amount }: { accountId: string; amount: number }) => {
+      const response = await apiRequest("POST", `/api/virtual-accounts/${accountId}/transfer`, { amount });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Transfer failed");
+      return result;
+    },
+    onSuccess: () => {
+      setTransferAmount("");
+      toast({ title: "Transfer complete", description: `Funds moved to your ${currency} wallet.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/virtual-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+    },
+    onError: (error: any) => toast({ title: "Transfer failed", description: error.message, variant: "destructive" }),
+  });
+
   const step1Valid = form.sourceOfIncome.trim().length >= 2
     && form.monthlyVolume.trim().length > 0
     && form.purpose.trim().length >= 5;
@@ -121,32 +155,39 @@ export default function VirtualAccountsPage() {
   // ─── Currency selector ────────────────────────────────────────────────────
   const CurrencySelector = (
     <div className="grid grid-cols-3 gap-2">
-      {Object.entries(currencyMeta).map(([code, meta]) => (
+      {supportedCurrencies.map((code) => {
+        const meta = currencyMeta[code] || { flag: "🌍", name: code, enabled: true };
+        return (
         <button
           key={code}
-          onClick={() => { if (meta.enabled) { setCurrency(code); setApplying(false); setStep(1); } }}
-          disabled={!meta.enabled}
+          onClick={() => { setCurrency(code); setApplying(false); setStep(1); }}
           className={[
             "relative rounded-2xl border-2 p-3 text-left transition-all",
-            meta.enabled ? "hover:shadow-md cursor-pointer" : "opacity-50 cursor-not-allowed",
-            currency === code && meta.enabled
+            "hover:shadow-md cursor-pointer",
+            currency === code
               ? "border-emerald-500 bg-emerald-50 shadow-sm"
               : "border-transparent bg-white shadow-sm",
           ].join(" ")}
         >
           <div className="text-2xl mb-1">{meta.flag}</div>
           <div className="font-bold text-sm text-slate-800">{code}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">{meta.enabled ? meta.name : "Coming soon"}</div>
-          {currency === code && meta.enabled && (
+          <div className="text-[10px] text-slate-400 mt-0.5">{meta.name}</div>
+          {currency === code && (
             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500" />
           )}
         </button>
-      ))}
+        );
+      })}
     </div>
   );
 
   // ─── Approved state ───────────────────────────────────────────────────────
-  const ApprovedCard = ({ app }: { app: Application }) => (
+  const ApprovedCard = ({ app }: { app: Application }) => {
+    const account = app.virtualAccount;
+    const balance = Number(account?.balance || 0);
+    const held = Number(account?.holdAmount || 0);
+    const available = Number(account?.availableBalance ?? Math.max(0, balance - held));
+    return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3">
         <CheckCircle2 className="text-emerald-600 w-5 h-5 shrink-0" />
@@ -183,8 +224,49 @@ export default function VirtualAccountsPage() {
           <p className="text-xs leading-relaxed">{app.accountDetails.paymentInstructions}</p>
         </div>
       )}
+
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          ["Balance", balance],
+          ["On hold", held],
+          ["Available", available],
+        ].map(([label, value]) => (
+          <div key={label as string} className="rounded-xl border bg-white p-3">
+            <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+            <p className="mt-1 font-bold text-slate-800">{Number(value).toFixed(2)} {currency}</p>
+          </div>
+        ))}
+      </div>
+
+      {account && account.isActive && (
+        <div className="rounded-2xl border bg-white p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Wallet className="w-4 h-4 text-emerald-600" />
+            <p className="font-semibold text-sm">Move funds to your wallet</p>
+          </div>
+          <p className="text-xs text-slate-500">Only your available virtual-account balance can be transferred.</p>
+          <div className="flex gap-2">
+            <Input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={transferAmount}
+              onChange={e => setTransferAmount(e.target.value)}
+              placeholder={`Amount in ${currency}`}
+            />
+            <Button
+              disabled={transferMutation.isPending || !transferAmount || Number(transferAmount) <= 0 || Number(transferAmount) > available}
+              onClick={() => transferMutation.mutate({ accountId: account.id, amount: Number(transferAmount) })}
+              className="shrink-0 gap-1"
+            >
+              <ArrowRightLeft className="w-4 h-4" /> Transfer
+            </Button>
+          </div>
+        </div>
+      )}
     </motion.div>
-  );
+    );
+  };
 
   // ─── Pending / rejected states ────────────────────────────────────────────
   const StatusCard = ({ app }: { app: Application }) => {
@@ -348,7 +430,7 @@ export default function VirtualAccountsPage() {
       <div>
         <p className="font-bold text-slate-800">Apply for a {currency} account</p>
         <p className="text-sm text-slate-500 mt-1">
-          Get dedicated {currencyMeta[currency]?.name} bank details to receive international payments.
+          Get dedicated {selectedCurrencyMeta.name} bank details to receive international payments.
         </p>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
@@ -376,7 +458,7 @@ export default function VirtualAccountsPage() {
           </div>
           <div>
             <h1 className="font-bold text-slate-900">Virtual Accounts</h1>
-            <p className="text-xs text-slate-500">Receive USD, GBP &amp; EUR payments</p>
+        <p className="text-xs text-slate-500">Receive payments in your configured currencies</p>
           </div>
         </div>
 

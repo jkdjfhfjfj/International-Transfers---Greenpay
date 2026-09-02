@@ -18,7 +18,7 @@ import { WavyHeader } from "@/components/wavy-header";
 import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight } from "lucide-react";
 
 const withdrawSchema = z.object({
-  amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) >= 100, "Minimum withdrawal is KSh 100"),
+  amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than zero"),
   currency: z.string().min(1, "Please select a currency"),
   withdrawMethod: z.string().min(1, "Please select a withdrawal method"),
   accountDetails: z.object({
@@ -42,17 +42,15 @@ export default function WithdrawPage() {
   const defaultWallet = userWallets.find(w => w.isDefault) || userWallets[0] || null;
   const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
   const activeWallet = userWallets.find(w => w.id === selectedWalletId) || defaultWallet;
-  const realTimeBalance = activeWallet
-    ? Math.max(0, parseFloat(activeWallet.balance || '0') - parseFloat(activeWallet.holdAmount || '0') - parseFloat(activeWallet.withdrawalHoldAmount || '0'))
-    : 0;
+  const realTimeBalance = activeWallet ? Number(activeWallet.availableBalance ?? 0) : 0;
   const activeSymbol = getCurrencySymbol(activeWallet?.currency || 'KES').trim();
-  const usdBalance = parseFloat(userWallets.find(w => w.currency === "USD")?.balance || '0');
+  const usdBalance = Number(userWallets.find(w => w.currency === "USD")?.availableBalance ?? 0);
 
   const form = useForm<WithdrawForm>({
     resolver: zodResolver(withdrawSchema),
     defaultValues: {
       amount: "",
-      currency: "KES",
+      currency: activeWallet?.currency || "USD",
       withdrawMethod: "",
       accountDetails: {
         bankName: "",
@@ -96,7 +94,7 @@ export default function WithdrawPage() {
   });
 
   const onSubmit = (data: WithdrawForm) => {
-    withdrawMutation.mutate(data);
+    withdrawMutation.mutate({ ...data, currency: activeWallet?.currency || data.currency });
   };
 
   const withdrawMethods = [
@@ -234,7 +232,14 @@ export default function WithdrawPage() {
                   name="currency"
                   render={({ field }) => (
                     <FormItem>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                         <Select
+                           onValueChange={(value) => {
+                             field.onChange(value);
+                             const wallet = userWallets.find(w => w.currency === value);
+                             if (wallet) setSelectedWalletId(wallet.id);
+                           }}
+                           value={activeWallet?.currency || field.value}
+                         >
                         <FormControl>
                           <SelectTrigger data-testid="select-currency">
                             <SelectValue />
@@ -276,7 +281,7 @@ export default function WithdrawPage() {
 
               {/* Quick Amount Buttons */}
               <div className="grid grid-cols-4 gap-2">
-                {["50", "100", "250", "500"].map((amount) => (
+                {["10", "25", "50", "100"].map((amount) => (
                   <motion.button
                     key={amount}
                     type="button"

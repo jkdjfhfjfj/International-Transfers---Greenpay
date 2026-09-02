@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Search, Send, DollarSign, Users, CheckCircle } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 import { PINModal } from "@/components/pin-modal";
+import { useWallets } from "@/hooks/use-wallets";
+import { getCurrencySymbol } from "@/lib/formatters";
 
 interface UserSearchResult {
   id: string;
@@ -36,6 +38,7 @@ export default function SendMoneyPage() {
   const [pendingTransferData, setPendingTransferData] = useState<any>(null);
   
   const { user } = useAuth();
+  const { defaultWallet } = useWallets();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -56,9 +59,8 @@ export default function SendMoneyPage() {
 
   const transactions = (transactionData as any)?.transactions || [];
   
-  // Use the actual stored balance from server (already includes all completed transactions)
-  // Server maintains balance accuracy by updating it directly when transactions complete
-  const realTimeBalance = parseFloat(user?.balance || '0');
+  const transferCurrency = defaultWallet?.currency || "USD";
+  const realTimeBalance = Number(defaultWallet?.availableBalance ?? 0);
 
   // Search GreenPay users
   const searchGreenPayUsersMutation = useMutation({
@@ -111,7 +113,7 @@ export default function SendMoneyPage() {
     onSuccess: () => {
       toast({
         title: "Transfer Successful",
-        description: `$${transferAmount} sent to ${selectedGreenPayUser?.fullName} successfully!`,
+        description: `${getCurrencySymbol(transferCurrency)}${transferAmount} sent to ${selectedGreenPayUser?.fullName} successfully!`,
       });
       
       // Reset form
@@ -211,7 +213,7 @@ export default function SendMoneyPage() {
       fromUserId: user.id,
       toUserId: selectedGreenPayUser.id,
       amount: transferAmount,
-      currency: "USD",
+      currency: transferCurrency,
       description: transferDescription || `Transfer to ${selectedGreenPayUser.fullName}`
     };
     
@@ -389,7 +391,7 @@ export default function SendMoneyPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="greenpay-amount">Amount (USD)</Label>
+                  <Label htmlFor="greenpay-amount">Amount ({transferCurrency})</Label>
                   <div className="relative">
                     <DollarSign className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
                     <Input
@@ -483,13 +485,13 @@ export default function SendMoneyPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-green-200 text-sm">Available Balance</p>
-              <p className="text-3xl font-bold">${realTimeBalance.toFixed(2)}</p>
+              <p className="text-3xl font-bold">{getCurrencySymbol(transferCurrency)}{realTimeBalance.toFixed(2)}</p>
             </div>
             <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center">
               <DollarSign className="w-6 h-6" />
             </div>
           </div>
-          <p className="text-green-200 text-sm">GreenPay Wallet</p>
+          <p className="text-green-200 text-sm">GreenPay Wallet · {transferCurrency}</p>
         </motion.div>
 
         {/* GreenPay User Transfers */}

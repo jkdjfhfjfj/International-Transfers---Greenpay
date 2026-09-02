@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 const CURRENCIES = ["USD", "GBP", "EUR"] as const;
-type Currency = typeof CURRENCIES[number];
+type Currency = string;
 
 const CURRENCY_META: Record<Currency, { flag: string; name: string }> = {
   USD: { flag: "🇺🇸", name: "US Dollar"     },
@@ -123,6 +123,7 @@ export default function AdminVirtualAccountsPage() {
   const [saveError, setSaveError] = useState("");
   const [expandedApp, setExpandedApp] = useState<string | null>(null);
   const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
+  const [accountAmounts, setAccountAmounts] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ["/api/admin/virtual-accounts"],
@@ -131,6 +132,9 @@ export default function AdminVirtualAccountsPage() {
 
   const settings     = (data?.settings     || []) as any[];
   const applications = (data?.applications || []) as any[];
+  const accounts     = (data?.accounts     || []) as any[];
+  const supportedCurrencies: string[] = data?.supportedCurrencies || [...CURRENCIES];
+  const allCurrencies: string[] = data?.allCurrencies || supportedCurrencies;
 
   const setting = settings.find((s: any) => s.currency === currency) || {};
   const get = (k: string) => draft[k] ?? setting[k] ?? "";
@@ -169,6 +173,36 @@ export default function AdminVirtualAccountsPage() {
     },
   });
 
+  const currencyMutation = useMutation({
+    mutationFn: async (nextCurrencies: string[]) =>
+      (await apiRequest("PUT", "/api/admin/virtual-accounts/currencies", { currencies: nextCurrencies })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account currencies updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Currency update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const balanceMutation = useMutation({
+    mutationFn: async ({ id, amount, type }: { id: string; amount: string; type: "credit" | "debit" }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/balance`, { amount, type })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account balance updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Balance update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const holdMutation = useMutation({
+    mutationFn: async ({ id, amount }: { id: string; amount: string }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/hold`, { amount })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account hold updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Hold update failed", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <AdminShell title="Virtual Accounts">
       <div className="max-w-5xl space-y-6">
@@ -181,9 +215,37 @@ export default function AdminVirtualAccountsPage() {
             <p className="text-sm text-slate-400 ml-1">— configure details sent to approved users</p>
           </div>
 
+          {/* Enabled virtual-account currencies */}
+          <div className="p-5 border-b space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-700">Currencies available to users</p>
+              <p className="text-xs text-slate-400">Only enabled currencies appear in the application form.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {allCurrencies.map(c => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    const next = supportedCurrencies.includes(c)
+                      ? supportedCurrencies.filter(item => item !== c)
+                      : [...supportedCurrencies, c];
+                    if (next.length) currencyMutation.mutate(next);
+                  }}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    supportedCurrencies.includes(c)
+                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                      : "border-slate-200 bg-white text-slate-400"
+                  }`}
+                >
+                  {CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"} {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Currency tabs */}
           <div className="flex border-b bg-slate-50">
-            {CURRENCIES.map(c => (
+            {supportedCurrencies.map(c => (
               <button
                 key={c}
                 onClick={() => { setCurrency(c); setDraft({}); setSaveError(""); }}
@@ -194,7 +256,7 @@ export default function AdminVirtualAccountsPage() {
                     : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60",
                 ].join(" ")}
               >
-                <span>{CURRENCY_META[c].flag}</span>
+                <span>{CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"}</span>
                 <span>{c}</span>
                 {settings.find((s: any) => s.currency === c) && (
                   <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -281,6 +343,7 @@ export default function AdminVirtualAccountsPage() {
               {applications.map((item: any) => {
                 const app  = item.application ?? item;
                 const user = item.user;
+                const account = accounts.find((entry: any) => entry.applicationId === app.id);
                 const isOpen = expandedApp === app.id;
 
                 return (
@@ -329,6 +392,81 @@ export default function AdminVirtualAccountsPage() {
                             </div>
                           ))}
                         </div>
+
+                        {account && (
+                          <div className="bg-white rounded-xl border p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-slate-700">Account balance controls</p>
+                                <p className="text-xs text-slate-400">Ledger-backed balance and hold management</p>
+                              </div>
+                              <StatusBadge status={account.isActive ? "approved" : "rejected"} />
+                            </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[
+                                ["Balance", account.balance],
+                                ["On hold", account.holdAmount],
+                                ["Available", account.availableBalance ?? Math.max(0, Number(account.balance || 0) - Number(account.holdAmount || 0))],
+                              ].map(([label, value]) => (
+                                <div key={label as string} className="rounded-lg bg-slate-50 p-2">
+                                  <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
+                                  <p className="font-bold text-sm text-slate-700">{Number(value || 0).toFixed(2)} {account.currency}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label className="text-xs text-slate-500">Credit or debit</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    placeholder="Amount"
+                                    value={accountAmounts[`balance:${account.id}`] || ""}
+                                    onChange={e => setAccountAmounts({ ...accountAmounts, [`balance:${account.id}`]: e.target.value })}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    disabled={balanceMutation.isPending || !accountAmounts[`balance:${account.id}`]}
+                                    onClick={() => balanceMutation.mutate({ id: account.id, amount: accountAmounts[`balance:${account.id}`], type: "credit" })}
+                                  >
+                                    + Credit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={balanceMutation.isPending || !accountAmounts[`balance:${account.id}`]}
+                                    onClick={() => balanceMutation.mutate({ id: account.id, amount: accountAmounts[`balance:${account.id}`], type: "debit" })}
+                                  >
+                                    − Debit
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs text-slate-500">Set held amount</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Hold amount"
+                                    value={accountAmounts[`hold:${account.id}`] ?? String(account.holdAmount || "0")}
+                                    onChange={e => setAccountAmounts({ ...accountAmounts, [`hold:${account.id}`]: e.target.value })}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={holdMutation.isPending || accountAmounts[`hold:${account.id}`] === undefined}
+                                    onClick={() => holdMutation.mutate({ id: account.id, amount: accountAmounts[`hold:${account.id}`] })}
+                                  >
+                                    Save hold
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Declarations */}
                         {app.declarations && (

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { formatNumber } from "@/lib/formatters";
+import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import {
   Smartphone, Bitcoin, Building2, CreditCard, Copy, Check,
@@ -93,6 +93,10 @@ export default function DepositPage() {
   const queryClient = useQueryClient();
   const { wallets: userWallets } = useWallets();
   const { initiate: initiateNexus, isInitiating: nexusInitiating, pollStatus: pollNexusStatus } = useNexusDeposit();
+  const displayWallet = userWallets.find(w => w.id === nexusWalletId)
+    || userWallets.find(w => w.isDefault)
+    || userWallets[0]
+    || null;
 
   useEffect(() => { refreshUser(); }, []);
 
@@ -140,14 +144,15 @@ export default function DepositPage() {
       if (data.status === "completed") {
         setMpesaStatus("completed");
         refreshUser();
+        queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
         queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-        toast({ title: "Deposit Successful!", description: `$${amount} has been credited to your wallet.` });
+        toast({ title: "Deposit Successful!", description: `${getCurrencySymbol(displayWallet?.currency || "USD")} ${amount} has been credited to your wallet.` });
       } else if (data.status === "failed") {
         setMpesaStatus("failed");
         toast({ title: "Payment Failed", description: "M-Pesa payment was declined or cancelled.", variant: "destructive" });
       }
     } catch (e) {}
-  }, [mpesaRef, amount, refreshUser, queryClient, toast]);
+  }, [mpesaRef, amount, displayWallet?.currency, refreshUser, queryClient, toast]);
 
   useEffect(() => {
     if (mpesaStatus !== "pending") return;
@@ -270,8 +275,10 @@ export default function DepositPage() {
         {/* Balance Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
           className="bg-gradient-to-r from-primary to-emerald-600 rounded-2xl p-4 text-white">
-          <p className="text-xs text-white/70 mb-1">Available Balance</p>
-          <p className="text-2xl font-bold" data-testid="text-current-balance">${formatNumber(parseFloat(user?.balance || "0"))}</p>
+          <p className="text-xs text-white/70 mb-1">Available Balance {displayWallet ? `(${displayWallet.currency})` : ""}</p>
+          <p className="text-2xl font-bold" data-testid="text-current-balance">
+            {getCurrencySymbol(displayWallet?.currency || "USD")} {formatNumber(Number(displayWallet?.availableBalance ?? 0))}
+          </p>
           {user?.accountNumber && (
             <p className="text-xs text-white/60 mt-1">Account: {user.accountNumber}</p>
           )}

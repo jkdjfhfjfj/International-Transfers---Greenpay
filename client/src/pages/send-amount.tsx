@@ -10,6 +10,8 @@ import { useExchangeRates } from "@/hooks/use-exchange-rates";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
+import { useWallets } from "@/hooks/use-wallets";
+import { getCurrencySymbol } from "@/lib/formatters";
 
 export default function SendAmountPage() {
   const [, setLocation] = useLocation();
@@ -19,6 +21,7 @@ export default function SendAmountPage() {
   const [targetCurrency, setTargetCurrency] = useState("KES");
   const [selectedRecipient, setSelectedRecipient] = useState<any>(null);
   const { user } = useAuth();
+  const { wallets } = useWallets();
   const { toast } = useToast();
   const { data: exchangeRates } = useExchangeRates(sourceCurrency);
 
@@ -44,6 +47,8 @@ export default function SendAmountPage() {
   const convertedAmount = amountNum ? formatNumber(convertedAmountNum) : "0.00";
   const fee = amountNum ? formatNumber(feeNum) : "0.00";
   const total = amountNum ? formatNumber(totalNum) : "0.00";
+  const sourceWallet = wallets.find(wallet => wallet.currency === sourceCurrency);
+  const sourceAvailableBalance = Number(sourceWallet?.availableBalance ?? 0);
 
   const handleContinue = () => {
     if (!amount || parseFloat(amount) <= 0) {
@@ -55,7 +60,7 @@ export default function SendAmountPage() {
       return;
     }
 
-    if (parseFloat(amount) > (parseFloat(user?.balance || "0"))) {
+    if (parseFloat(amount) > sourceAvailableBalance) {
       toast({
         title: "Insufficient Balance",
         description: "You don't have enough balance for this transfer",
@@ -252,7 +257,7 @@ export default function SendAmountPage() {
           className="text-center"
         >
           <p className="text-sm text-muted-foreground">
-            Available balance: <span className="font-semibold">${formatNumber(parseFloat(user?.balance || "0"))} USD</span>
+             Available balance: <span className="font-semibold">{getCurrencySymbol(sourceCurrency)}{formatNumber(sourceAvailableBalance)} {sourceCurrency}</span>
           </p>
         </motion.div>
 

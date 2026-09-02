@@ -65,7 +65,9 @@ export function useWallets() {
   });
 
   const totalUSDValue = wallets.reduce((sum, w) => {
-    return sum + Math.max(0, parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0") - parseFloat(w.withdrawalHoldAmount || "0"));
+    return sum + Math.max(0, Number(w.availableBalance ?? (
+      parseFloat(w.balance || "0") - parseFloat(w.holdAmount || "0") - parseFloat(w.withdrawalHoldAmount || "0")
+    )));
   }, 0);
 
   return {
