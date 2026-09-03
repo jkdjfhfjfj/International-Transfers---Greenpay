@@ -1,6 +1,6 @@
-# GreenPay Public API Documentation
+# Geepay Public API Documentation
 
-**Base URL:** `https://greenpay.world/api`
+**Base URL:** `https://geepay.us/api`
 
 **Latest Version:** 1.0.0  
 **Last Updated:** November 2025
@@ -28,7 +28,7 @@ Authorization: Bearer gpay_xxxxxxxxxxxxx
 ```
 
 **Generate API Keys:**
-1. Log in to GreenPay Admin Panel
+1. Log in to Geepay Admin Panel
 2. Navigate to **Settings** → **API Keys**
 3. Click **Generate New Key**
 4. Copy the key (shown only once)
@@ -309,7 +309,7 @@ Response:
   "amount": "1000",
   "currency": "KES",
   "status": "pending",
-  "paymentLink": "https://pay.greenpay.world/...",
+  "paymentLink": "https://pay.geepay.us/...",
   "expiresAt": "2024-01-15T11:30:00Z"
 }
 ```
@@ -355,7 +355,7 @@ Response:
   "paymentId": "pay-id",
   "amount": "1000",
   "currency": "KES",
-  "paymentLink": "https://pay.greenpay.world/..."
+  "paymentLink": "https://pay.geepay.us/..."
 }
 ```
 
@@ -445,7 +445,7 @@ Response:
     "amount": "5000",
     "currency": "KES",
     "status": "pending",
-    "paymentLink": "https://pay.greenpay.world/...",
+    "paymentLink": "https://pay.geepay.us/...",
     "expiresAt": "2024-01-22T10:30:00Z"
   }
 }
@@ -629,7 +629,7 @@ Response:
     "id": "ticket-id",
     "status": "open",
     "createdAt": "2024-01-15T10:30:00Z",
-    "trackingUrl": "https://support.greenpay.world/tickets/..."
+    "trackingUrl": "https://support.geepay.us/tickets/..."
   }
 }
 ```
@@ -771,7 +771,7 @@ console.log(`Rate limited. Retry after ${delay}ms`);
 const fetch = require('node-fetch');
 
 async function sendMoney() {
-  const response = await fetch('https://greenpay.world/api/transactions/send', {
+  const response = await fetch('https://geepay.us/api/transactions/send', {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer gpay_xxxxx',
@@ -794,7 +794,7 @@ async function sendMoney() {
 import requests
 
 response = requests.post(
-  'https://greenpay.world/api/transactions/send',
+  'https://geepay.us/api/transactions/send',
   headers={'Authorization': 'Bearer gpay_xxxxx'},
   json={
     'recipientId': 'user-id',
@@ -809,7 +809,7 @@ print(data)
 
 ### cURL
 ```bash
-curl -X POST https://greenpay.world/api/transactions/send \
+curl -X POST https://geepay.us/api/transactions/send \
   -H "Authorization: Bearer gpay_xxxxx" \
   -H "Content-Type: application/json" \
   -d '{
@@ -850,7 +850,7 @@ Configure webhooks to receive real-time notifications:
 
 ## Support
 
-- **Documentation**: https://docs.greenpay.world
-- **Support Email**: api-support@greenpay.world
-- **Status Page**: https://status.greenpay.world
-- **Issues**: https://github.com/greenpay/issues
+- **Documentation**: https://docs.geepay.us
+- **Support Email**: api-support@geepay.us
+- **Status Page**: https://status.geepay.us
+- **Issues**: https://github.com/geepay/issues
