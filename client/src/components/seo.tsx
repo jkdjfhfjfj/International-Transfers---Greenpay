@@ -14,9 +14,9 @@ export function SEO({
   title,
   description,
   keywords,
-  canonical = "https://greenpay.world",
+  canonical = "https://geepay.us",
   ogType = "website",
-  ogImage = "https://greenpay.world/og-image.png",
+  ogImage = "https://geepay.us/og-image.png",
   structuredData
 }: SEOProps) {
   return (
