@@ -3,8 +3,8 @@ import { CapacitorConfig } from '@capacitor/cli';
 const isDev = !!process.env.CAPACITOR_SERVER_URL;
 
 const config: CapacitorConfig = {
-  appId: 'com.greenpay.mobile',
-  appName: 'GreenPay',
+  appId: 'com.geepay.mobile',
+  appName: 'Geepay',
   webDir: 'dist/public',
   server: isDev
     ? {
