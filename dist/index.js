@@ -18479,7 +18479,7 @@ app.use((req, res, next) => {
       reusePort: true
     }, () => {
       log(`serving on port ${port}`);
-      const renderExternalUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_APP_URL;
+      const renderExternalUrl = process.env.PUBLIC_APP_URL || "https://geepay.us";
       const selfPingEnabled = isProduction && !!renderExternalUrl && process.env.DISABLE_SELF_PING !== "true";
       if (selfPingEnabled) {
         const healthUrl = `${renderExternalUrl.replace(/\/+$/, "")}/health`;

@@ -63,18 +63,19 @@ npm start
 ## Keep a Free Render Service Awake
 
 Render Free web services sleep after a period without incoming traffic. The
-production server now uses Render's automatically provided
-`RENDER_EXTERNAL_URL` to request the lightweight `/health` endpoint every 10
-minutes while the app is running.
+production server now requests the lightweight
+`https://geepay.us/health` endpoint every 10 minutes while the app is running.
+This is the custom domain linked to the Render service.
 
 No GitHub secret or external monitor is required. After deploying the latest
 version, check the Render logs for:
 
 ```text
-[self-ping] enabled; checking https://your-app.onrender.com/health every 10 minutes
-[self-ping] health check succeeded: https://your-app.onrender.com/health
+[self-ping] enabled; checking https://geepay.us/health every 10 minutes
+[self-ping] health check succeeded: https://geepay.us/health
 ```
 
+Set `PUBLIC_APP_URL` in Render if the public domain changes. 
 Set `DISABLE_SELF_PING=true` in Render only if you want to turn this behavior
 off. A paid Render instance remains the reliable option for latency-sensitive
 or production-critical traffic.

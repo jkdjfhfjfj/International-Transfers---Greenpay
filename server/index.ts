@@ -237,7 +237,10 @@ app.use((req, res, next) => {
     // Render Free sleeps services after a period without incoming traffic.
     // Render provides RENDER_EXTERNAL_URL automatically, so the running
     // service can keep its public endpoint warm without affecting local dev.
-    const renderExternalUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_APP_URL;
+    // Use the custom Render-linked domain first so the heartbeat reaches the
+    // same public URL customers use. Environment variables remain available
+    // for staging or a future domain change.
+    const renderExternalUrl = process.env.PUBLIC_APP_URL || "https://geepay.us";
     const selfPingEnabled =
       isProduction &&
       !!renderExternalUrl &&
