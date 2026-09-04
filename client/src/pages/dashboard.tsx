@@ -247,8 +247,14 @@ export default function DashboardPage() {
   const announcementsList = (announcementsData as any)?.announcements || [];
 
   const { settings, isLoaded } = useSystemSettings();
-  const airtimeBonusAmount = settings?.general?.airtime_bonus_amount || "15";
-  const isAirtimeBonusEnabled = settings?.general?.enable_airtime_bonus !== false && settings?.general?.enable_airtime_bonus !== 'false';
+  const airtimeBonusSetting = settings?.general?.enable_airtime_bonus;
+  const airtimeBonusAmountSetting = settings?.general?.airtime_bonus_amount;
+  const airtimeBonusAmount = String(
+    airtimeBonusAmountSetting?.value ?? airtimeBonusAmountSetting ?? "10",
+  );
+  const airtimeBonusEnabledValue = airtimeBonusSetting?.value ?? airtimeBonusSetting;
+  const isAirtimeBonusEnabled = isLoaded &&
+    ["true", "1", "yes", "on"].includes(String(airtimeBonusEnabledValue ?? "").toLowerCase());
 
 
   const showAnnouncement = isLoaded && (settings?.general?.show_announcement === true || settings?.general?.show_announcement === 'true');
@@ -564,10 +570,10 @@ export default function DashboardPage() {
                         variant: "destructive",
                       });
                     }
-                  } catch (error) {
+                  } catch (error: any) {
                     toast({
                       title: "Error",
-                      description: "Failed to claim bonus. Please try again.",
+                      description: error?.message || "Failed to claim bonus. Please try again.",
                       variant: "destructive",
                     });
                   }

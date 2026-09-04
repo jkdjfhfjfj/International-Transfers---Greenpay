@@ -176,10 +176,14 @@ export default function AdminSystemSettingsPage() {
       setHuaweiUrl(settingsData.app_downloads?.huawei_app_gallery_url || "");
 
       const g = settingsData.general as any;
-      setAirtimeBonusEnabled(g?.enable_airtime_bonus !== false && g?.enable_airtime_bonus !== 'false');
-      setAirtimeBonusAmount(g?.airtime_bonus_amount || "10");
-      setAirtimeBonusRequireKyc(g?.airtime_bonus_require_kyc || "none");
-      setAirtimeBonusRequireEmail(g?.airtime_bonus_require_email === true || g?.airtime_bonus_require_email === 'true');
+      const airtimeEnabledValue = g?.enable_airtime_bonus?.value ?? g?.enable_airtime_bonus;
+      const airtimeAmountValue = g?.airtime_bonus_amount?.value ?? g?.airtime_bonus_amount;
+      const airtimeKycValue = g?.airtime_bonus_require_kyc?.value ?? g?.airtime_bonus_require_kyc;
+      const airtimeEmailValue = g?.airtime_bonus_require_email?.value ?? g?.airtime_bonus_require_email;
+      setAirtimeBonusEnabled(["true", "1", "yes", "on"].includes(String(airtimeEnabledValue ?? "").toLowerCase()));
+      setAirtimeBonusAmount(String(airtimeAmountValue ?? "10"));
+      setAirtimeBonusRequireKyc(String(airtimeKycValue ?? "none"));
+      setAirtimeBonusRequireEmail(["true", "1", "yes", "on"].includes(String(airtimeEmailValue ?? "").toLowerCase()));
     }
   }, [settingsData]);
 

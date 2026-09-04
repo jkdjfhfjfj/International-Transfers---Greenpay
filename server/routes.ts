@@ -2552,16 +2552,12 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Check if user already has an ACTIVE card
-      const existingCard = await storage.getVirtualCardByUserId(userId);
-      if (existingCard && existingCard.status === "active") {
-        return res.status(400).json({ message: "User already has an active virtual card" });
-      }
-      // Never create another card when a previous card record exists. This
-      // prevents a repurchase from creating multiple cards for one user.
-      if (existingCard) {
+      // Users may purchase up to four cards. A card's status does not reduce
+      // the count, so retries or inactive cards cannot be used to bypass the cap.
+      const existingCards = await storage.getVirtualCardsByUserId(userId);
+      if (existingCards.length >= 4) {
         return res.status(400).json({
-          message: `You already have a ${existingCard.status} virtual card. Please contact support.`,
+          message: "You have reached the maximum of 4 virtual cards.",
         });
       }
 
@@ -10106,10 +10102,10 @@ p{color:#6b7280;font-size:14px;}</style>
           }
 
           // Webhook retries must not create a second active card.
-          const existingCard = await storage.getVirtualCardByUserId(userId);
-          if (existingCard?.status === "active") {
-            console.log(`Virtual card already exists for user ${userId}; skipping duplicate callback`);
-            return res.status(200).json({ message: "Virtual card already exists" });
+          const existingCards = await storage.getVirtualCardsByUserId(userId);
+          if (existingCards.length >= 4) {
+            console.log(`Virtual card limit reached for user ${userId}; skipping callback`);
+            return res.status(200).json({ message: "Virtual card limit reached" });
           }
 
           // Create virtual card for the user

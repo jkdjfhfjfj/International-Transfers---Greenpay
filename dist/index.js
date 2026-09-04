@@ -9292,13 +9292,10 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const existingCard = await storage.getVirtualCardByUserId(userId);
-      if (existingCard && existingCard.status === "active") {
-        return res.status(400).json({ message: "User already has an active virtual card" });
-      }
-      if (existingCard) {
+      const existingCards = await storage.getVirtualCardsByUserId(userId);
+      if (existingCards.length >= 4) {
         return res.status(400).json({
-          message: `You already have a ${existingCard.status} virtual card. Please contact support.`
+          message: "You have reached the maximum of 4 virtual cards."
         });
       }
       const reference = payHeroService.generateReference();
@@ -15488,10 +15485,10 @@ p{color:#6b7280;font-size:14px;}</style>
             console.error("Could not find user for payment reference:", paymentResult.reference, "phone:", userPhone);
             return res.status(200).json({ message: "Payment processed but user not found" });
           }
-          const existingCard = await storage.getVirtualCardByUserId(userId);
-          if (existingCard?.status === "active") {
-            console.log(`Virtual card already exists for user ${userId}; skipping duplicate callback`);
-            return res.status(200).json({ message: "Virtual card already exists" });
+          const existingCards = await storage.getVirtualCardsByUserId(userId);
+          if (existingCards.length >= 4) {
+            console.log(`Virtual card limit reached for user ${userId}; skipping callback`);
+            return res.status(200).json({ message: "Virtual card limit reached" });
           }
           const cardData = {
             userId,
