@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
+import { useWallets } from "@/hooks/use-wallets";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
@@ -45,6 +46,7 @@ export default function CryptoPage() {
   const [withdrawAddress, setWithdrawAddress] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const { user } = useAuth();
+  const { wallets: userWallets } = useWallets();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -108,6 +110,7 @@ export default function CryptoPage() {
 
   const wallets: any[] = (walletsData as any)?.wallets || [];
   const rates: Record<string, number> = (walletsData as any)?.rates || {};
+  const availableUsdBalance = Number(userWallets.find(wallet => wallet.currency === "USD")?.availableBalance ?? 0);
   const history: any[] = (historyData as any)?.transactions || [];
   const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
 
@@ -396,7 +399,7 @@ export default function CryptoPage() {
                 </div>
 
                 <div className="bg-muted rounded-xl p-3">
-                  <p className="text-xs text-muted-foreground">Your available USD balance: <span className="font-bold text-foreground">${parseFloat(user?.balance || "0").toFixed(2)}</span></p>
+                  <p className="text-xs text-muted-foreground">Your available USD balance: <span className="font-bold text-foreground">${availableUsdBalance.toFixed(2)}</span></p>
                 </div>
 
                 <button

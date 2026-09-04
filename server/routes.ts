@@ -3804,9 +3804,13 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       const cards = await storage.getVirtualCardsByUserId(requestedUserId);
+      const ledgerCards = await Promise.all(cards.map(async card => {
+        const balance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
+        return { ...card, balance: balance.toString(), availableBalance: balance.toString() };
+      }));
       // Also return the primary card (most recent active) for backward compat
-      const card = cards.find(c => c.status === 'active') || cards[0] || null;
-      res.json({ card, cards });
+      const card = ledgerCards.find(c => c.status === 'active') || ledgerCards[0] || null;
+      res.json({ card, cards: ledgerCards });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
     }
@@ -4745,24 +4749,34 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!sourceWallet || !targetWallet) {
         return res.status(400).json({ message: "Create wallets for both currencies before exchanging" });
       }
-      const available = walletAvailableBalance(sourceWallet);
+      const sourceLedgerBalance = await getLedgerBalance({ walletId: sourceWallet.id }, Number(sourceWallet.balance || 0));
+      const available = walletAvailableBalance({ ...sourceWallet, balance: sourceLedgerBalance.toString() });
       if (available < totalDeducted) {
         return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
       }
 
       const exchangeReference = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      let sourceDebited = false;
       try {
         await applyLedgerEntry({
           walletId: sourceWallet.id, userId, currency: sourceCurrency, amount: -totalDeducted,
           entryType: "exchange", idempotencyKey: `exchange:${exchangeReference}:debit`,
           description: `Exchange ${sourceCurrency} to ${targetCurrency}`,
         });
+        sourceDebited = true;
         await applyLedgerEntry({
           walletId: targetWallet.id, userId, currency: targetCurrency, amount: parseFloat(convertedAmount),
           entryType: "exchange", idempotencyKey: `exchange:${exchangeReference}:credit`,
           description: `Exchange from ${sourceCurrency}`,
         });
       } catch (error: any) {
+        if (sourceDebited) {
+          await applyLedgerEntry({
+            walletId: sourceWallet.id, userId, currency: sourceCurrency, amount: totalDeducted,
+            entryType: "exchange_rollback", idempotencyKey: `exchange:${exchangeReference}:rollback`,
+            description: "Rollback failed exchange",
+          }).catch(() => {});
+        }
         return res.status(400).json({ message: error?.message || `Insufficient ${sourceCurrency} balance` });
       }
       
@@ -5286,9 +5300,25 @@ p{color:#6b7280;font-size:14px;}</style>
       // Pagination
       const startIndex = (Number(page) - 1) * Number(limit);
       const paginatedUsers = users.slice(startIndex, startIndex + Number(limit));
+      const usersWithLedgerBalances = await Promise.all(paginatedUsers.map(async user => {
+        const userWallets = await db.select().from(wallets).where(eq(wallets.userId, user.id));
+        const balances: Record<string, number> = {};
+        for (const wallet of userWallets) {
+          const ledgerBalance = await getLedgerBalance({ walletId: wallet.id }, Number(wallet.balance || 0));
+          balances[normalizeCurrency(wallet.currency)] = walletAvailableBalance({
+            ...wallet,
+            balance: ledgerBalance.toString(),
+          });
+        }
+        return {
+          ...user,
+          balance: (balances.USD ?? Number(user.balance || 0)).toFixed(2),
+          kesBalance: (balances.KES ?? Number((user as any).kesBalance || 0)).toFixed(2),
+        };
+      }));
 
       res.json({
-        users: paginatedUsers,
+        users: usersWithLedgerBalances,
         total: users.length,
         page: Number(page),
         totalPages: Math.ceil(users.length / Number(limit))
@@ -5678,8 +5708,11 @@ p{color:#6b7280;font-size:14px;}</style>
       const enriched = await Promise.all(
         allCards.map(async (card) => {
           const user = await storage.getUser(card.userId);
+          const balance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
           return {
             ...card,
+            balance: balance.toString(),
+            availableBalance: balance.toString(),
             userName: user?.fullName || "Unknown",
             userEmail: user?.email || "",
             userPhone: user?.phone || "",
@@ -8860,6 +8893,7 @@ p{color:#6b7280;font-size:14px;}</style>
       // Create transfer transactions
       const now = new Date().toISOString();
       const transferId = storage.generateTransactionReference();
+      let senderDebited = false;
 
       // Sender transaction (debit)
       const senderTransaction = await storage.createTransaction({
@@ -8897,12 +8931,22 @@ p{color:#6b7280;font-size:14px;}</style>
           entryType: "user_transfer", idempotencyKey: `transfer:${transferId}:debit`,
           transactionId: senderTransaction.id, description: description || `Transfer to ${toUser.fullName}`,
         });
+        senderDebited = true;
         await applyLedgerEntry({
           walletId: recipientWallet.id, userId: toUserId, currency: transferCurrency, amount: transferAmount,
           entryType: "user_transfer", idempotencyKey: `transfer:${transferId}:credit`,
           transactionId: recipientTransaction.id, description: description || `Transfer from ${fromUser.fullName}`,
         });
       } catch (error: any) {
+        if (senderDebited) {
+          await applyLedgerEntry({
+            walletId: senderWallet.id, userId: fromUserId, currency: transferCurrency, amount: transferAmount,
+            entryType: "user_transfer_rollback", idempotencyKey: `transfer:${transferId}:rollback`,
+            description: "Rollback failed user transfer",
+          }).catch(() => {});
+        }
+        await storage.updateTransaction(senderTransaction.id, { status: "failed" });
+        await storage.updateTransaction(recipientTransaction.id, { status: "failed" });
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
 
@@ -12509,7 +12553,11 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   app.get("/api/admin/users/:id/cards", async (req, res) => {
     try {
       const cards = await storage.getVirtualCardsByUserId(req.params.id);
-      res.json({ cards });
+      const enriched = await Promise.all(cards.map(async card => {
+        const balance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
+        return { ...card, balance: balance.toString(), availableBalance: balance.toString() };
+      }));
+      res.json({ cards: enriched });
     } catch (error) {
       console.error("Admin fetch user cards error:", error);
       res.status(500).json({ message: "Failed to fetch user cards" });
@@ -12668,10 +12716,17 @@ Sitemap: https://greenpay.world/sitemap.xml`;
         }
       }
 
-      const enriched = userWallets.map(w => ({
-        ...w,
-        availableBalance: walletAvailableBalance(w),
-        currencyMeta: currencyMeta[w.currency] || null,
+      const enriched = await Promise.all(userWallets.map(async w => {
+        const ledgerBalance = await getLedgerBalance({ walletId: w.id }, Number(w.balance || 0));
+        return {
+          ...w,
+          balance: ledgerBalance.toString(),
+          availableBalance: walletAvailableBalance({
+            ...w,
+            balance: ledgerBalance.toString(),
+          }),
+          currencyMeta: currencyMeta[w.currency] || null,
+        };
       }));
       res.json({ wallets: enriched });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -12790,7 +12845,8 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const toWallet = userWallets.find(w => w.id === toWalletId);
       if (!fromWallet || !toWallet) return res.status(404).json({ message: "Wallet not found" });
       if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
-      const fromBalance = walletAvailableBalance(fromWallet);
+      const fromLedgerBalance = await getLedgerBalance({ walletId: fromWallet.id }, Number(fromWallet.balance || 0));
+      const fromBalance = walletAvailableBalance({ ...fromWallet, balance: fromLedgerBalance.toString() });
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
@@ -12798,18 +12854,27 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;
       const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      let fromDebited = false;
       try {
         await applyLedgerEntry({
           walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: -fromAmt,
           entryType: "exchange", idempotencyKey: `exchange:${ref}:debit`,
           description: `Exchange ${fromWallet.currency} to ${toWallet.currency}`,
         });
+        fromDebited = true;
         await applyLedgerEntry({
           walletId: toWallet.id, userId, currency: normalizeCurrency(toWallet.currency), amount: toAmount,
           entryType: "exchange", idempotencyKey: `exchange:${ref}:credit`,
           description: `Exchange from ${fromWallet.currency}`,
         });
       } catch (error: any) {
+        if (fromDebited) {
+          await applyLedgerEntry({
+            walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: fromAmt,
+            entryType: "exchange_rollback", idempotencyKey: `exchange:${ref}:rollback`,
+            description: "Rollback failed exchange",
+          }).catch(() => {});
+        }
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
       await db.insert(transactions).values({
@@ -12837,15 +12902,33 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       `, [search]);
       const grouped: Record<string, any[]> = {};
       for (const row of allWallets.rows) {
+        const ledgerBalance = await getLedgerBalance({ walletId: row.id }, Number(row.balance || 0));
+        const availableBalance = walletAvailableBalance({
+          balance: ledgerBalance.toString(),
+          holdAmount: row.hold_amount,
+          withdrawalHoldAmount: row.withdrawal_hold_amount,
+        });
         if (!grouped[row.user_id]) grouped[row.user_id] = [];
         grouped[row.user_id].push({
           id: row.id, userId: row.user_id, currency: row.currency, label: row.label,
-          balance: row.balance, holdAmount: row.hold_amount, isDefault: row.is_default,
+          balance: ledgerBalance.toString(), availableBalance, holdAmount: row.hold_amount, withdrawalHoldAmount: row.withdrawal_hold_amount, isDefault: row.is_default,
           isActive: row.is_active, isSuspended: row.is_suspended, suspendReason: row.suspend_reason,
           createdAt: row.created_at, user: { fullName: row.full_name, email: row.email, phone: row.phone },
         });
       }
-      res.json({ wallets: allWallets.rows, grouped });
+      const walletsWithLedgerBalances = await Promise.all(allWallets.rows.map(async row => {
+        const ledgerBalance = await getLedgerBalance({ walletId: row.id }, Number(row.balance || 0));
+        return {
+          ...row,
+          balance: ledgerBalance.toString(),
+          available_balance: walletAvailableBalance({
+            balance: ledgerBalance.toString(),
+            holdAmount: row.hold_amount,
+            withdrawalHoldAmount: row.withdrawal_hold_amount,
+          }),
+        };
+      }));
+      res.json({ wallets: walletsWithLedgerBalances, grouped });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
@@ -12853,7 +12936,15 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     try {
       const { userId } = req.params;
       const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
-      res.json({ wallets: userWallets });
+      const enriched = await Promise.all(userWallets.map(async wallet => {
+        const balance = await getLedgerBalance({ walletId: wallet.id }, Number(wallet.balance || 0));
+        return {
+          ...wallet,
+          balance: balance.toString(),
+          availableBalance: walletAvailableBalance({ ...wallet, balance: balance.toString() }),
+        };
+      }));
+      res.json({ wallets: enriched });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

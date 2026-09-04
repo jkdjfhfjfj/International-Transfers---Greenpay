@@ -124,7 +124,7 @@ export default function BillsPage() {
       return;
     }
 
-    const kesBalance = parseFloat(user?.kesBalance || "0");
+    const kesBalance = Number(wallets.find(wallet => wallet.currency === "KES")?.availableBalance ?? 0);
     const paymentAmount = parseFloat(amount);
 
     if (paymentAmount < 100) {

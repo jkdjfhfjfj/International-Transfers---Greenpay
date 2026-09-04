@@ -68,7 +68,7 @@ export default function ExchangePage() {
   const netAmount = amountNum - feeNum;
   const receiveAmount = exchangeRate ? netAmount * exchangeRate : 0;
 
-  const fromBalance = fromWallet ? parseFloat(fromWallet.balance || "0") - parseFloat(fromWallet.holdAmount || "0") : 0;
+  const fromBalance = fromWallet ? Number(fromWallet.availableBalance ?? 0) : 0;
 
   const handleSwap = () => {
     const tmp = fromWalletId;
@@ -245,7 +245,7 @@ export default function ExchangePage() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">You Receive</label>
                   <span className="text-xs text-muted-foreground">
-                    Current: {CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatNumber(parseFloat(toWallet?.balance || "0") - parseFloat(toWallet?.holdAmount || "0"), 4)}
+                    Current: {CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatNumber(Number(toWallet?.availableBalance ?? 0), 4)}
                   </span>
                 </div>
 

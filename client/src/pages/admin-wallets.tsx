@@ -42,6 +42,8 @@ interface WalletRecord {
   isActive: boolean;
   isSuspended: boolean;
   suspendReason: string | null;
+  availableBalance?: string | number;
+  withdrawalHoldAmount?: string | number;
   createdAt: string;
   user?: { fullName: string; email: string; phone: string };
 }
@@ -371,9 +373,9 @@ export default function AdminWalletsPage() {
                       <div className="px-4 pb-4 bg-gray-50 border-t border-gray-100">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-3">
                           {userWallets.map(wallet => {
-                            const balance = parseFloat(wallet.balance || "0");
+                            const balance = parseFloat(String(wallet.balance || "0"));
                             const hold = parseFloat(wallet.holdAmount || "0");
-                            const available = balance - hold;
+                            const available = Number(wallet.availableBalance ?? Math.max(0, balance - hold - Number(wallet.withdrawalHoldAmount || 0)));
 
                             return (
                               <div key={wallet.id} className={`bg-white rounded-xl p-3 border ${wallet.isSuspended ? 'border-red-200' : 'border-gray-200'}`}>
