@@ -35,7 +35,7 @@ export default function HelpLanding() {
         title="Help Center & FAQ | Geepay Support - Money Transfer Questions"
         description="Find answers to common questions about sending money to Kenya, USD to KES rates, virtual cards, and airtime. Get help with Geepay international transfers."
         keywords="Geepay help, money transfer FAQ, Kenya transfer questions, USD to KES help, virtual card support"
-        canonical="https://greenpay.world/help"
+        canonical="https://geepay.us/help"
         structuredData={faqData}
       />
       <div className="min-h-screen bg-white">

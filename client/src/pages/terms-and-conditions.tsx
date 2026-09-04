@@ -49,7 +49,7 @@ export default function TermsAndConditionsPage() {
               Terms and Conditions
             </h1>
             <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-              Important legal information for using GreenPay
+              Important legal information for using Geepay
             </p>
           </div>
         </motion.div>
@@ -100,7 +100,7 @@ export default function TermsAndConditionsPage() {
               </div>
             </div>
             <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-              By accessing and using GreenPay ("the Application"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
+              By accessing and using Geepay ("the Application"), you accept and agree to be bound by the terms and provision of this agreement. If you do not agree to abide by the above, please do not use this service.
             </p>
           </motion.section>
 

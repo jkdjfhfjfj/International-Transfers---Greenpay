@@ -1,5 +1,5 @@
 /**
- * API Configuration for GreenPay
+ * API Configuration for Geepay
  * Handles both web and mobile (Capacitor) environments
  */
 
@@ -18,7 +18,7 @@ function isNativePlatform(): boolean {
 export function getApiBaseUrl(): string {
   // Native app (Android / iOS) — always call the production server
   if (isNativePlatform()) {
-    return import.meta.env.VITE_API_URL || "https://greenpay.world";
+    return import.meta.env.VITE_API_URL || "https://geepay.us";
   }
 
   // Build-time env var override
@@ -35,12 +35,12 @@ export function getApiBaseUrl(): string {
     return window.location.origin;
   }
 
-  return "https://greenpay.world";
+  return "https://geepay.us";
 }
 
 /**
  * Construct full API URL from path
- * @example apiUrl('/api/auth/login') → 'https://greenpay.world/api/auth/login'
+ * @example apiUrl('/api/auth/login') → 'https://geepay.us/api/auth/login'
  */
 export function apiUrl(path: string): string {
   const base = getApiBaseUrl();

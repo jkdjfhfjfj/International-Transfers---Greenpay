@@ -944,7 +944,7 @@ export class WhatsAppService {
     const createAccSuccess = await this.createTemplate('create_acc', 'MARKETING', [
       {
         type: 'BODY',
-        text: 'Welcome to GreenPay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers.'
+        text: 'Welcome to Geepay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers.'
       },
       {
         type: 'BUTTONS',
@@ -952,7 +952,7 @@ export class WhatsAppService {
           {
             type: 'URL',
             text: 'Get Started',
-            url: 'https://app.greenpay.world/dashboard'
+            url: 'https://geepay.us/dashboard'
           }
         ]
       }
@@ -964,7 +964,7 @@ export class WhatsAppService {
     const loginSuccess = await this.createTemplate('login_alert', 'UTILITY', [
       {
         type: 'BODY',
-        text: 'New login on your GreenPay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn\'t you, secure your account now.'
+        text: 'New login on your Geepay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn\'t you, secure your account now.'
       },
       {
         type: 'BUTTONS',
@@ -972,7 +972,7 @@ export class WhatsAppService {
           {
             type: 'URL',
             text: 'Secure Now',
-            url: 'https://app.greenpay.world/security'
+            url: 'https://geepay.us/security'
           }
         ]
       }
@@ -992,7 +992,7 @@ export class WhatsAppService {
           {
             type: 'URL',
             text: 'View Wallet',
-            url: 'https://app.greenpay.world/wallet'
+            url: 'https://geepay.us/wallet'
           }
         ]
       }
@@ -1004,7 +1004,7 @@ export class WhatsAppService {
     const cardSuccess = await this.createTemplate('card_activation', 'UTILITY', [
       {
         type: 'BODY',
-        text: 'Your GreenPay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers.'
+        text: 'Your Geepay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers.'
       },
       {
         type: 'BUTTONS',
@@ -1012,7 +1012,7 @@ export class WhatsAppService {
           {
             type: 'URL',
             text: 'View Card',
-            url: 'https://app.greenpay.world/cards'
+            url: 'https://geepay.us/cards'
           }
         ]
       }
@@ -1032,7 +1032,7 @@ export class WhatsAppService {
           {
             type: 'URL',
             text: 'Explore Features',
-            url: 'https://app.greenpay.world/dashboard'
+            url: 'https://geepay.us/dashboard'
           }
         ]
       }

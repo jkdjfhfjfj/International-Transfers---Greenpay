@@ -323,6 +323,9 @@ export default function LoginPage() {
             </motion.div>
             <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
             <p className="text-muted-foreground">Sign in to your Geepay account</p>
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">
+              GreenPay is now Geepay. We moved from <strong>greenpay.world</strong> to <strong>geepay.us</strong> — your existing account still works.
+            </div>
           </div>
 
           <Form {...form}>

@@ -6,7 +6,7 @@ import { WavyHeader } from "@/components/wavy-header";
 import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, ExternalLink, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-const API_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/api` : "https://greenpay.world/api";
+const API_BASE_URL = typeof window !== 'undefined' ? `${window.location.origin}/api` : "https://geepay.us/api";
 
 export default function APIDocumentationPage() {
   const [, setLocation] = useLocation();
@@ -771,7 +771,7 @@ try {
           <div className="bg-card p-6 rounded-lg">
             <h3 className="font-bold mb-3">📞 Support</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li>📧 Email: api-support@greenpay.world</li>
+              <li>📧 Email: api-support@geepay.us</li>
               <li>🐛 Issues: github.com/greenpay/api-issues</li>
               <li>📚 Docs: docs.greenpay.world</li>
               <li>💬 Community: community.greenpay.world</li>

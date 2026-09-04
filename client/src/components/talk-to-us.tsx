@@ -29,7 +29,7 @@ export function TalkToUs() {
   const [remainingRequests, setRemainingRequests] = useState<number>(5);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const whatsappLink = `https://wa.me/14704657028?text=${encodeURIComponent("Hi, I need support with GreenPay")}`;
+  const whatsappLink = `https://wa.me/14704657028?text=${encodeURIComponent("Hi, I need support with Geepay")}`;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -73,11 +73,11 @@ export function TalkToUs() {
         content: replyContent,
         timestamp: new Date(),
       }]);
-    } catch {
+    } catch (error: any) {
       setMessages(prev => [...prev, {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Connection error. Please check your internet and try again.',
+        content: error?.message || 'Unable to reach Ask AI. Please try again.',
         timestamp: new Date(),
       }]);
     } finally {
@@ -105,7 +105,7 @@ export function TalkToUs() {
             <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white p-4 rounded-t-2xl flex items-center justify-between flex-shrink-0">
               <div>
                 <h3 className="font-semibold text-base">Ask AI</h3>
-                <p className="text-xs text-emerald-100">Get help with GreenPay</p>
+                <p className="text-xs text-emerald-100">Get help with Geepay</p>
                 <p className="text-xs text-emerald-50 mt-0.5">
                   {remainingRequests} request{remainingRequests !== 1 ? 's' : ''} remaining today
                 </p>
@@ -227,7 +227,7 @@ export function TalkToUs() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
-              href="mailto:support@greenpay.world?subject=GreenPay Support"
+              href="mailto:support@geepay.us?subject=Geepay Support"
               onClick={() => setMenuOpen(false)}
               className="flex items-center gap-3 bg-white dark:bg-gray-800 text-gray-800 dark:text-white px-4 py-3 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all group"
             >

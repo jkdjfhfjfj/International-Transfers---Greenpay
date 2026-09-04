@@ -115,7 +115,7 @@ export function PWAInstallPrompt() {
             <span className="material-icons text-white">get_app</span>
           </div>
           <div className="flex-1">
-            <h3 className="font-semibold text-sm">Install GreenPay</h3>
+            <h3 className="font-semibold text-sm">Install Geepay</h3>
             <p className="text-xs text-muted-foreground mb-3">
               Get the full app experience with faster loading and offline access
             </p>

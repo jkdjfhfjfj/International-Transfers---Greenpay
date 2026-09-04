@@ -50,15 +50,15 @@ export async function generateTransactionPDF(transactions: Transaction[], userDa
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   
-  // Header with GreenPay branding
+  // Header with Geepay branding
   doc.setFillColor(greenColor[0], greenColor[1], greenColor[2]);
   doc.rect(0, 0, pageWidth, 40, 'F');
   
-  // GreenPay Logo/Title
+  // Geepay Logo/Title
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('GreenPay', 14, 20);
+  doc.text('Geepay', 14, 20);
   
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
@@ -199,7 +199,7 @@ export async function generateTransactionPDF(transactions: Transaction[], userDa
       );
       
       doc.text(
-        'GreenPay - Trusted International Money Transfer Service',
+        'Geepay - Trusted International Money Transfer Service',
         pageWidth / 2,
         pageHeight - 15,
         { align: 'center' }
@@ -207,7 +207,7 @@ export async function generateTransactionPDF(transactions: Transaction[], userDa
       
       doc.setFontSize(7);
       doc.text(
-        'support@greenpay.world | www.greenpay.world',
+        'support@geepay.us | www.geepay.us',
         pageWidth / 2,
         pageHeight - 20,
         { align: 'center' }

@@ -413,7 +413,7 @@ export default function SettingsPage() {
       const challenge = crypto.getRandomValues(new Uint8Array(32));
       const publicKeyCreationOptions = {
         challenge,
-        rp: { name: "GreenPay", id: window.location.hostname },
+        rp: { name: "Geepay", id: window.location.hostname },
         user: {
           id: crypto.getRandomValues(new Uint8Array(16)),
           name: user?.email || "user",
@@ -1630,7 +1630,7 @@ export default function SettingsPage() {
           {(appDownloads?.apkUrl || appDownloads === undefined) && (
             <motion.a
               href={appDownloads?.apkUrl || "/greenpay.apk"}
-              download="GreenPay.apk"
+              download="Geepay.apk"
               target={appDownloads?.apkUrl?.startsWith("http") ? "_blank" : undefined}
               rel="noopener noreferrer"
               whileHover={{ scale: 1.01 }}
@@ -1678,9 +1678,9 @@ export default function SettingsPage() {
                   { step: 1, text: 'Download the APK file using the "Download APK" button above.' },
                   { step: 2, text: 'Open your phone\'s Settings → Security (or Privacy).' },
                   { step: 3, text: 'Enable "Install unknown apps" or "Allow from this source".' },
-                  { step: 4, text: 'Open the downloaded GreenPay.apk file from your Downloads folder.' },
+                  { step: 4, text: 'Open the downloaded Geepay.apk file from your Downloads folder.' },
                   { step: 5, text: 'Tap "Install" and wait for the installation to complete.' },
-                  { step: 6, text: 'Open GreenPay and log in with your existing account.' },
+                  { step: 6, text: 'Open Geepay and log in with your existing account.' },
                 ].map(({ step, text }) => (
                   <div key={step} className="flex items-start gap-3 pt-2">
                     <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">

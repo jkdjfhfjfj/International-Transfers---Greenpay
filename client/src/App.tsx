@@ -82,9 +82,6 @@ import SecurityLanding from "@/pages/landing/security";
 import ContactLanding from "@/pages/landing/contact";
 import TermsAndConditionsPage from "@/pages/terms-and-conditions";
 import PrivacyPolicyPage from "@/pages/privacy-policy";
-import LoansPage from "@/pages/loans";
-import APIServicePage from "@/pages/api-service";
-import ApiDocumentationPage from "@/pages/api-documentation";
 import UserSupportTickets from "@/pages/user-support-tickets";
 import CryptoPage from "@/pages/crypto";
 import AnalyticsPage from "@/pages/analytics";
@@ -183,9 +180,6 @@ function Router() {
       <Route path="/contact" component={ContactLanding} />
       <Route path="/terms" component={TermsAndConditionsPage} />
       <Route path="/privacy" component={PrivacyPolicyPage} />
-      <Route path="/loans" component={LoansPage} />
-      <Route path="/api-service" component={APIServicePage} />
-      <Route path="/api-documentation" component={ApiDocumentationPage} />
       <Route path="/crypto">
         <ProtectedRoute component={CryptoPage} />
       </Route>
@@ -239,7 +233,7 @@ function AppContent() {
   useFCM();
   
   // Landing/public pages and admin pages that should not show user widgets
-  const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/loans', '/api-service', '/api-documentation', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
+  const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
   const isAdminPage = location.startsWith('/admin');
   const maintenanceRoutes = [

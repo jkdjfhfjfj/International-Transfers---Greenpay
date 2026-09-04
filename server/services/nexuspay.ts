@@ -83,7 +83,7 @@ export class NexusPayService {
       amount: params.amount,
       currency: params.currency,
       channel: params.channel,
-      description: params.description || 'GreenPay wallet deposit',
+      description: params.description || 'Geepay wallet deposit',
     };
 
     if (params.phone) body.phone = params.phone;

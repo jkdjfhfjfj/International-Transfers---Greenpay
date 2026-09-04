@@ -450,7 +450,7 @@ export default function VirtualCardPage() {
                 <div className="relative z-10 mt-2">
                   <div className="flex items-center justify-between mb-6">
                     <div className="pt-4">
-                      <p className="text-green-200 text-xs font-medium">GreenPay Card</p>
+                      <p className="text-green-200 text-xs font-medium">Geepay Card</p>
                       <p className="text-white/40 text-[10px]">Virtual Visa</p>
                     </div>
                     <div className="flex gap-1.5">

@@ -27,7 +27,7 @@ const COMING_SOON = [
   { icon: Shield,      label: 'Insurance',       description: 'Health & travel coverage',           color: 'from-purple-500 to-violet-600' },
   { icon: BarChart2,   label: 'Investments',     description: 'Stocks, bonds & ETFs',              color: 'from-amber-500 to-orange-600' },
   { icon: Users,       label: 'Group Payments',  description: 'Split bills & collect from groups', color: 'from-teal-500 to-cyan-600' },
-  { icon: ShoppingBag, label: 'Merchant Pay',    description: 'Pay at stores with GreenPay',       color: 'from-red-500 to-pink-600' },
+  { icon: ShoppingBag, label: 'Merchant Pay',    description: 'Pay at stores with Geepay',       color: 'from-red-500 to-pink-600' },
   { icon: Wallet,      label: 'Crypto Wallet',   description: 'Buy, sell & hold crypto',           color: 'from-yellow-500 to-amber-600' },
 ];
 
@@ -121,7 +121,7 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
             <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-gray-900 dark:text-white">More</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Explore GreenPay features</p>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Explore Geepay features</p>
               </div>
               <button
                 onClick={onClose}
@@ -150,7 +150,7 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
               {activeTab === 'rates' && <RatesPanel />}
               {activeTab === 'features' && (
                 <div className="space-y-3">
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Exciting new features coming soon to GreenPay</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mb-4">Exciting new features coming soon to Geepay</p>
                   {COMING_SOON.map(({ icon: Icon, label, description, color }) => (
                     <div key={label} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-2xl">
                       <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${color} flex items-center justify-center flex-shrink-0 shadow-md`}>

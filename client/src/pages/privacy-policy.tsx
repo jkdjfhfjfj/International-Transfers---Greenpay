@@ -264,7 +264,7 @@ export default function PrivacyPolicyPage() {
               </div>
             </div>
             <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-              GreenPay is not intended for users under 18 years of age. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will delete such information immediately and terminate the child's account.
+              Geepay is not intended for users under 18 years of age. We do not knowingly collect personal information from children. If we become aware that a child has provided us with personal information, we will delete such information immediately and terminate the child's account.
             </p>
           </motion.section>
 
@@ -278,7 +278,7 @@ export default function PrivacyPolicyPage() {
               </div>
             </div>
             <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-              We may update this Privacy Policy periodically to reflect changes in our practices, technology, legal requirements, or other factors. We will notify you of material changes via email or through a prominent notice on our platform. Your continued use of GreenPay following such notification constitutes your acceptance of the updated Privacy Policy.
+              We may update this Privacy Policy periodically to reflect changes in our practices, technology, legal requirements, or other factors. We will notify you of material changes via email or through a prominent notice on our platform. Your continued use of Geepay following such notification constitutes your acceptance of the updated Privacy Policy.
             </p>
           </motion.section>
 

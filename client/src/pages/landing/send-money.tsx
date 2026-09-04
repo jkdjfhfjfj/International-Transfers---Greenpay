@@ -11,7 +11,7 @@ export default function SendMoneyLanding() {
         title="Send Money to Kenya Instantly | Geepay - Best USD to KES Rates"
         description="Send money to Kenya instantly with Geepay. Best USD to KES exchange rates, low fees, instant M-Pesa delivery. Join thousands sending money home today!"
         keywords="send money to Kenya, USD to KES, international money transfer, Kenya remittance, M-Pesa, send money home, Kenya diaspora"
-        canonical="https://greenpay.world/features/send-money"
+        canonical="https://geepay.us/features/send-money"
       />
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="max-w-6xl mx-auto px-4 py-12">

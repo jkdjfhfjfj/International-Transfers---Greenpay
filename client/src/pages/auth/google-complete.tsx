@@ -296,7 +296,7 @@ export default function GoogleCompletePage() {
                     className="mt-0.5 w-4 h-4 rounded border-border text-primary"
                   />
                   <span className="text-sm text-muted-foreground leading-relaxed">
-                    I agree to GreenPay's{" "}
+                    I agree to Geepay's{" "}
                     <a href="/terms" target="_blank" className="text-primary underline font-medium">Terms and Conditions</a>
                     {" "}and{" "}
                     <a href="/privacy" target="_blank" className="text-primary underline font-medium">Privacy Policy</a>
@@ -316,7 +316,7 @@ export default function GoogleCompletePage() {
                 <CheckCircle2 className="w-10 h-10 text-green-600" />
               </motion.div>
               <div>
-                <h2 className="text-2xl font-bold">Welcome to GreenPay!</h2>
+                <h2 className="text-2xl font-bold">Welcome to Geepay!</h2>
                 <p className="text-muted-foreground mt-2 text-sm">Your account is ready. Taking you to your dashboard…</p>
               </div>
               <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto" />

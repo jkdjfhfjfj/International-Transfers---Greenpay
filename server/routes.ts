@@ -55,7 +55,7 @@ async function getUserWallet(userId: string, currency: unknown) {
   const [wallet] = await db
     .select()
     .from(wallets)
-    .where(and(eq(wallets.userId, userId), eq(wallets.currency, code)))
+    .where(and(eq(wallets.userId, userId), sql`UPPER(${wallets.currency}) = ${code}`))
     .limit(1);
   if (!wallet || !pool) return wallet;
   const balance = await pool.query(
@@ -215,6 +215,57 @@ async function releaseWalletWithdrawal(walletId: string, amount: number) {
      WHERE id = $2`,
     [amount, walletId],
   );
+}
+
+async function settleWalletWithdrawal(walletId: string, userId: string, currency: string, amount: number, transactionId: string) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const walletResult = await client.query(
+      `SELECT id, currency, balance, COALESCE(withdrawal_hold_amount, 0) AS withdrawal_hold_amount
+       FROM wallets WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [walletId, userId],
+    );
+    const wallet = walletResult.rows[0];
+    if (!wallet) throw new Error("Wallet not found");
+    if (normalizeCurrency(wallet.currency) !== normalizeCurrency(currency)) throw new Error("Currency does not match wallet");
+    if (Number(wallet.withdrawal_hold_amount) < amount - 0.0000001) throw new Error("Withdrawal hold not found");
+
+    const existing = await client.query(
+      `SELECT id FROM ledger_entries WHERE idempotency_key = $1`,
+      [`withdrawal:${transactionId}:settled`],
+    );
+    if (existing.rowCount === 0) {
+      await client.query(
+        `INSERT INTO ledger_entries
+          (user_id, currency, wallet_id, amount, entry_type, idempotency_key, transaction_id, description)
+         VALUES ($1, $2, $3, $4, 'withdrawal_settlement', $5, $6, 'Withdrawal approved')`,
+        [userId, normalizeCurrency(currency), walletId, -amount, `withdrawal:${transactionId}:settled`, transactionId],
+      );
+      await client.query(
+        `UPDATE wallets
+         SET balance = COALESCE(balance, 0) - $1,
+             withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [amount, walletId],
+      );
+    } else {
+      await client.query(
+        `UPDATE wallets
+         SET withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [amount, walletId],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 // Configure multer for file uploads with memory storage (for cloud upload)
@@ -2098,6 +2149,7 @@ p{color:#6b7280;font-size:14px;}</style>
         await storage.updateKycDocument(existingKyc.id, {
           diditSessionId: session.session_id,
           diditStatus: session.status,
+          diditDecision: { sessionUrl: session.url } as any,
           status: 'pending',
         } as any);
       } else {
@@ -2108,6 +2160,7 @@ p{color:#6b7280;font-size:14px;}</style>
           status: 'pending',
           diditSessionId: session.session_id,
           diditStatus: session.status,
+          diditDecision: { sessionUrl: session.url } as any,
         } as any);
       }
 
@@ -2145,6 +2198,7 @@ p{color:#6b7280;font-size:14px;}</style>
           status: (kyc as any).diditStatus,
           kycStatus: (kyc as any).status,
           sessionId: (kyc as any).diditSessionId,
+          sessionUrl: (kyc as any).diditDecision?.sessionUrl || null,
         });
       }
 
@@ -2181,6 +2235,7 @@ p{color:#6b7280;font-size:14px;}</style>
         status: diditStatus,
         kycStatus,
         sessionId: (kyc as any).diditSessionId,
+        sessionUrl: (kyc as any).diditDecision?.sessionUrl || null,
         decision: isTerminalStatus(diditStatus) ? decision : undefined,
       });
     } catch (error) {
@@ -2481,9 +2536,9 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Virtual Card routes with Paystack integration
-  app.post("/api/virtual-card/initialize-payment", async (req, res) => {
+  app.post("/api/virtual-card/initialize-payment", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.body;
+      const userId = (req as any).session?.userId;
       console.log('Card payment request - userId:', userId, 'type:', typeof userId);
       
       if (!userId) {
@@ -2502,9 +2557,12 @@ p{color:#6b7280;font-size:14px;}</style>
       if (existingCard && existingCard.status === "active") {
         return res.status(400).json({ message: "User already has an active virtual card" });
       }
-      // Allow repurchase if card is blocked, deactivated, or expired
-      if (existingCard && (existingCard.status === "blocked" || existingCard.status === "inactive")) {
-        console.log(`🔄 User ${user.email} repurchasing card (current status: ${existingCard.status})`);
+      // Never create another card when a previous card record exists. This
+      // prevents a repurchase from creating multiple cards for one user.
+      if (existingCard) {
+        return res.status(400).json({
+          message: `You already have a ${existingCard.status} virtual card. Please contact support.`,
+        });
       }
 
       // Allow card purchase for production - KYC verification can be added later
@@ -3567,6 +3625,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
   // Claim airtime bonus endpoint
   app.post("/api/airtime/claim-bonus", requireAuth, async (req, res) => {
+    let bonusClaimReserved = false;
     try {
       const sessionUserId = (req as any).session?.userId;
 
@@ -3600,12 +3659,15 @@ p{color:#6b7280;font-size:14px;}</style>
       const requireEmailSetting = await storage.getSystemSetting("general", "airtime_bonus_require_email");
 
       const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "10"));
-      const isEnabled = String(bonusEnabledSetting?.value) === "true";
-      const requireKyc = String(requireKycSetting?.value || "none"); // none, basic, advanced
-      const requireEmail = String(requireEmailSetting?.value) === "true";
+      const isEnabled = ["true", "1", "yes", "on"].includes(String(bonusEnabledSetting?.value ?? "").toLowerCase());
+      const requireKyc = String(requireKycSetting?.value || "none").toLowerCase(); // none, basic, advanced
+      const requireEmail = ["true", "1", "yes", "on"].includes(String(requireEmailSetting?.value ?? "").toLowerCase());
 
       if (!isEnabled) {
         return res.status(400).json({ message: "Bonus claiming is currently disabled" });
+      }
+      if (!Number.isFinite(bonusAmount) || bonusAmount <= 0) {
+        return res.status(400).json({ message: "A valid positive airtime bonus amount is not configured" });
       }
 
       // Check KYC requirement
@@ -3636,6 +3698,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (claimResult.rowCount !== 1) {
         return res.status(400).json({ message: "You have already claimed your airtime bonus" });
       }
+      bonusClaimReserved = true;
       const currentKesBalance = walletAvailableBalance(wallet);
       const bonusResult = await applyLedgerEntry({
         walletId: wallet.id,
@@ -3663,6 +3726,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
       console.log(`💾 Bonus transaction created: ${transaction.id}`);
       console.log(`✅ Airtime bonus claimed successfully`);
+      bonusClaimReserved = false;
 
       res.json({
         success: true,
@@ -3673,6 +3737,12 @@ p{color:#6b7280;font-size:14px;}</style>
       });
     } catch (error) {
       console.error('❌ Claim bonus error:', error);
+      if (bonusClaimReserved) {
+        await pool.query(
+          `UPDATE users SET has_claimed_airtime_bonus = false, updated_at = NOW() WHERE id = $1`,
+          [(req as any).session?.userId],
+        ).catch(() => {});
+      }
       res.status(500).json({ message: "Error claiming airtime bonus" });
     }
   });
@@ -4679,7 +4749,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (defaultCurrency && user) {
         try {
           const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
-          const matchingWallet = userWallets.find(w => w.currency === defaultCurrency);
+          const matchingWallet = userWallets.find(w => normalizeCurrency(w.currency) === normalizeCurrency(defaultCurrency));
           if (matchingWallet) {
             // Set this wallet as default, unset others
             await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
@@ -8279,7 +8349,7 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Invalid methods object" });
       }
       const allowedKeys = [
-        "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled",
+        "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled","global_enabled",
         "bank_name","bank_account_name","bank_account_number","bank_swift_code",
         "bank_branch","bank_currency","bank_routing_number","bank_additional_info"
       ];
@@ -9302,9 +9372,9 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin withdrawal management endpoints
-  app.get("/api/admin/withdrawals", async (req, res) => {
+  app.get("/api/admin/withdrawals", requireAdminAuth, async (req, res) => {
     try {
-      const transactions = await storage.getAllTransactions();
+      const { transactions } = await storage.getAllTransactions();
       const withdrawals = transactions.filter(t => t.type === 'withdraw');
       
       // Get user info for each withdrawal
@@ -9313,6 +9383,8 @@ p{color:#6b7280;font-size:14px;}</style>
           const user = await storage.getUser(withdrawal.userId);
           return {
             ...withdrawal,
+            adminNotes: withdrawal.failureReason,
+            processedAt: withdrawal.completedAt,
             userInfo: {
               fullName: user?.fullName || 'Unknown',
               email: user?.email || 'Unknown',
@@ -9329,55 +9401,44 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/admin/withdrawals/:id/approve", async (req, res) => {
+  app.post("/api/admin/withdrawals/:id/approve", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { adminNotes } = req.body;
-      const previousTransaction = await storage.getTransactionById(id);
+      const previousTransaction = await storage.getTransaction(id);
       if (!previousTransaction) return res.status(404).json({ message: "Withdrawal not found" });
       if (previousTransaction.status === "completed") {
         return res.json({ transaction: previousTransaction, message: "Withdrawal was already approved" });
       }
+      if (previousTransaction.status !== "pending") {
+        return res.status(409).json({ message: `Withdrawal is already ${previousTransaction.status}` });
+      }
       
+      const user = await storage.getUser(previousTransaction.userId);
+      if (!user) return res.status(404).json({ message: "Withdrawal owner not found" });
+      const totalDeduction = parseFloat(previousTransaction.amount) + parseFloat(previousTransaction.fee || "0");
+      const wallet = await getUserWallet(user.id, previousTransaction.currency);
+      if (!wallet) return res.status(400).json({ message: `${previousTransaction.currency} wallet not found` });
+
+      // Settle the hold and ledger debit atomically before marking the request
+      // completed. This prevents a failed settlement from creating a false
+      // successful withdrawal.
+      await settleWalletWithdrawal(wallet.id, user.id, previousTransaction.currency, totalDeduction, previousTransaction.id);
+      const notes = adminNotes || "Approved by admin";
       const transaction = await storage.updateTransaction(id, {
-        status: 'completed',
-        adminNotes: adminNotes || 'Approved by admin',
-        processedAt: new Date()
+        status: "completed",
+        description: previousTransaction.description,
+        failureReason: notes,
+        completedAt: new Date(),
       });
-      
+
       if (transaction) {
-        // Deduct balance from user's account (correct wallet based on currency)
-        const user = await storage.getUser(transaction.userId);
-        if (user) {
-          const withdrawalAmount = parseFloat(transaction.amount);
-          const withdrawalFee = parseFloat(transaction.fee || '0');
-          const totalDeduction = withdrawalAmount + withdrawalFee;
-          
-          const wallet = await getUserWallet(user.id, transaction.currency);
-          if (!wallet) {
-            return res.status(400).json({ message: `${transaction.currency} wallet not found` });
-          }
-          // The amount was reserved when the withdrawal was submitted. Approval
-          // consumes that reservation without subtracting the balance twice.
-          await applyLedgerEntry({
-            walletId: wallet.id,
-            userId: user.id,
-            currency: normalizeCurrency(transaction.currency),
-            amount: -totalDeduction,
-            entryType: "withdrawal_settlement",
-            idempotencyKey: `withdrawal:${transaction.id}:settled`,
-            transactionId: transaction.id,
-            description: "Withdrawal approved",
-          });
-          await releaseWalletWithdrawal(wallet.id, totalDeduction);
-          
-          await notificationService.sendNotification({
-            title: "Withdrawal Approved",
-            body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
-            userId: user.id,
-            type: "transaction"
-          });
-        }
+        await notificationService.sendNotification({
+          title: "Withdrawal Approved",
+          body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
+          userId: user.id,
+          type: "transaction"
+        });
       }
       
       res.json({ transaction, message: "Withdrawal approved successfully" });
@@ -9387,15 +9448,19 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/admin/withdrawals/:id/reject", async (req, res) => {
+  app.post("/api/admin/withdrawals/:id/reject", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { adminNotes } = req.body;
       
+      const previousTransaction = await storage.getTransaction(id);
+      if (!previousTransaction) return res.status(404).json({ message: "Withdrawal not found" });
+      if (previousTransaction.status !== "pending") {
+        return res.status(409).json({ message: `Withdrawal is already ${previousTransaction.status}` });
+      }
       const transaction = await storage.updateTransaction(id, {
         status: 'failed',
-        adminNotes: adminNotes || 'Rejected by admin',
-        processedAt: new Date()
+        failureReason: adminNotes || 'Rejected by admin',
       });
       
       if (transaction) {
@@ -9497,7 +9562,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Update withdrawal status
-  app.put("/api/admin/withdrawals/:id/status", async (req, res) => {
+  app.put("/api/admin/withdrawals/:id/status", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { status, adminNotes } = req.body;
@@ -9506,10 +9571,31 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Invalid status. Must be pending, completed, or failed." });
       }
       
-      const updatedWithdrawal = await storage.updateWithdrawalRequest(id, {
+      const existing = await storage.getTransaction(id);
+      if (!existing || existing.type !== "withdraw") {
+        return res.status(404).json({ message: "Withdrawal request not found" });
+      }
+      if (status === "completed" && existing.status === "pending") {
+        const user = await storage.getUser(existing.userId);
+        const wallet = user ? await getUserWallet(user.id, existing.currency) : undefined;
+        if (!user || !wallet) return res.status(400).json({ message: "Withdrawal wallet not found" });
+        await settleWalletWithdrawal(
+          wallet.id,
+          user.id,
+          existing.currency,
+          parseFloat(existing.amount) + parseFloat(existing.fee || "0"),
+          existing.id,
+        );
+      } else if (status === "failed" && existing.status === "pending") {
+        const wallet = await getUserWallet(existing.userId, existing.currency);
+        if (wallet) {
+          await releaseWalletWithdrawal(wallet.id, parseFloat(existing.amount) + parseFloat(existing.fee || "0"));
+        }
+      }
+      const updatedWithdrawal = await storage.updateTransaction(id, {
         status,
-        adminNotes,
-        processedAt: status !== 'pending' ? new Date() : null
+        failureReason: adminNotes || (status === "completed" ? "Approved by admin" : status === "failed" ? "Rejected by admin" : null),
+        completedAt: status !== "pending" ? new Date() : null,
       });
       
       if (!updatedWithdrawal) {
@@ -10019,6 +10105,13 @@ p{color:#6b7280;font-size:14px;}</style>
             return res.status(200).json({ message: "Payment processed but user not found" });
           }
 
+          // Webhook retries must not create a second active card.
+          const existingCard = await storage.getVirtualCardByUserId(userId);
+          if (existingCard?.status === "active") {
+            console.log(`Virtual card already exists for user ${userId}; skipping duplicate callback`);
+            return res.status(200).json({ message: "Virtual card already exists" });
+          }
+
           // Create virtual card for the user
           const cardData = {
             userId: userId,
@@ -10481,7 +10574,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // SEO - XML Sitemap for Google Search Console
   app.get('/sitemap.xml', async (req, res) => {
     try {
-      const baseUrl = 'https://greenpay.world';
+      const baseUrl = 'https://geepay.us';
       const today = new Date().toISOString().split('T')[0];
 
       // Define all public pages that should be indexed by Google
@@ -10489,8 +10582,8 @@ p{color:#6b7280;font-size:14px;}</style>
       const publicPages = [
         // Core marketing pages
         { url: '/', priority: '1.0', changefreq: 'daily', desc: 'Homepage - International Money Transfer to Kenya' },
-        { url: '/login', priority: '0.9', changefreq: 'monthly', desc: 'Login to GreenPay Account' },
-        { url: '/signup', priority: '0.9', changefreq: 'monthly', desc: 'Sign Up for GreenPay' },
+        { url: '/login', priority: '0.9', changefreq: 'monthly', desc: 'Login to Geepay Account' },
+        { url: '/signup', priority: '0.9', changefreq: 'monthly', desc: 'Sign Up for Geepay' },
         { url: '/status', priority: '0.8', changefreq: 'daily', desc: 'System Status & Service Health' },
         
         // Auth flow pages (public but lower priority)
@@ -10505,7 +10598,7 @@ p{color:#6b7280;font-size:14px;}</style>
         { url: '/features/airtime', priority: '0.7', changefreq: 'weekly', desc: 'Buy Airtime for Kenya' },
         
         // Information pages
-        { url: '/about', priority: '0.7', changefreq: 'monthly', desc: 'About GreenPay' },
+        { url: '/about', priority: '0.7', changefreq: 'monthly', desc: 'About Geepay' },
         { url: '/pricing', priority: '0.8', changefreq: 'weekly', desc: 'Pricing & Fees' },
         { url: '/security', priority: '0.7', changefreq: 'monthly', desc: 'Security & Compliance' },
         { url: '/help', priority: '0.6', changefreq: 'weekly', desc: 'Help Center & FAQ' },
@@ -10516,7 +10609,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
-  <!-- GreenPay - International Money Transfer & Digital Wallet -->
+  <!-- Geepay - International Money Transfer & Digital Wallet -->
   <!-- Target Keywords: send money to Kenya, USD to KES, international remittance, virtual cards -->
 ${publicPages.map(page => `  <url>
     <loc>${baseUrl}${page.url}</loc>
@@ -10541,7 +10634,7 @@ ${publicPages.map(page => `  <url>
 Disallow: /admin/
 Disallow: /api/
 
-Sitemap: https://greenpay.world/sitemap.xml`;
+Sitemap: https://geepay.us/sitemap.xml`;
 
     res.header('Content-Type', 'text/plain');
     res.send(robotsTxt);
@@ -12741,7 +12834,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const knownCodes = await getEnabledCurrencyCodes();
       if (!knownCodes.includes(normalizedCurrency)) return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
       const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
-      if (existing.some(w => w.currency === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
+      if (existing.some(w => normalizeCurrency(w.currency) === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
       const isDefault = existing.length === 0;
       const [newWallet] = await db.insert(wallets).values({ userId, currency: normalizedCurrency, isDefault, isActive: true }).returning();
       res.json({ wallet: newWallet });
@@ -12773,6 +12866,10 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   app.post("/api/deposit/nexuspay", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
+      const globalSetting = await storage.getSystemSetting("deposit_methods", "global_enabled");
+      if (String(globalSetting?.value || "").toLowerCase() !== "true") {
+        return res.status(403).json({ message: "Global deposits are currently disabled" });
+      }
       const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
       const normalizedCurrency = normalizeCurrency(currency);
@@ -12783,7 +12880,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
-      if (wallet_.currency !== normalizedCurrency) {
+      if (normalizeCurrency(wallet_.currency) !== normalizedCurrency) {
         return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
       }
       const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
@@ -12795,7 +12892,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
         metadata: { walletId, channel, gateway: currencyMeta?.gateway, redirectUrl: result.redirectUrl } as any,
       });
       res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
-    } catch (e: any) { console.error("NexusPay deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
+    } catch (e: any) { console.error("Global deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
   });
 
   app.get("/api/deposit/nexuspay/status/:reference", requireAuth, async (req, res) => {
@@ -12805,6 +12902,9 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const status = await nexusPayService.getStatus(reference);
       if (status.status === "completed") {
         const [txn] = await db.select().from(transactions).where(eq(transactions.reference, reference));
+        if (txn && txn.userId !== userId) {
+          return res.status(403).json({ message: "Transaction not found" });
+        }
         if (txn && txn.status !== "completed") {
           const meta = txn.metadata as any;
           const walletId = meta?.walletId;
@@ -12823,6 +12923,47 @@ Sitemap: https://greenpay.world/sitemap.xml`;
               transactionId: txn.id,
               description: txn.description || "NexusPay deposit",
             });
+
+            // Apply the highest matching configured bonus exactly once.
+            const activeBonuses = await db.select().from(depositBonuses)
+              .where(eq(depositBonuses.isActive, true));
+            const depositAmount = parseFloat(status.amount);
+            const eligible = activeBonuses
+              .filter((bonus) => (bonus.method === "nexuspay" || bonus.method === "any") &&
+                depositAmount >= parseFloat(bonus.minAmount))
+              .map((bonus) => ({
+                bonus,
+                value: bonus.bonusType === "percentage"
+                  ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
+                  : parseFloat(bonus.bonusAmount),
+              }))
+              .filter(({ value }) => value > 0)
+              .sort((a, b) => b.value - a.value);
+            if (eligible[0]) {
+              const { bonus, value } = eligible[0];
+              const applied = await applyLedgerEntry({
+                walletId: wallet.id,
+                userId,
+                currency: normalizeCurrency(wallet.currency),
+                amount: value,
+                entryType: "deposit_bonus",
+                idempotencyKey: `deposit-bonus:${txn.id}:${bonus.id}`,
+                transactionId: txn.id,
+                description: bonus.description || "Deposit bonus",
+              });
+              if (applied.applied) {
+                await db.insert(transactions).values({
+                  userId,
+                  type: "deposit",
+                  amount: value.toFixed(2),
+                  currency: normalizeCurrency(wallet.currency),
+                  status: "completed",
+                  fee: "0.00",
+                  description: `Deposit bonus: ${bonus.description || "Global deposit bonus"}`,
+                  metadata: { bonusId: bonus.id, triggerMethod: "nexuspay" } as any,
+                });
+              }
+            }
           }
           await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.reference, reference));
         }
@@ -12954,7 +13095,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const { currency } = req.body;
       if (!currency) return res.status(400).json({ message: "currency required" });
       const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
-      if (existing.some((w: any) => w.currency === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
+      if (existing.some((w: any) => normalizeCurrency(w.currency) === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
       const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault: existing.length === 0, isActive: true }).returning();
       res.json({ wallet: newWallet });
     } catch (e: any) { res.status(500).json({ message: e.message }); }

@@ -52,7 +52,7 @@ export default function DesktopSidebar() {
             <span className="text-white font-extrabold text-base">G</span>
           </div>
           <div>
-            <p className="font-bold text-base text-foreground leading-tight">GreenPay</p>
+            <p className="font-bold text-base text-foreground leading-tight">Geepay</p>
             <p className="text-[10px] text-muted-foreground leading-tight">Money Transfer</p>
           </div>
         </button>

@@ -89,12 +89,12 @@ export function AIChatWidget() {
         };
         setMessages(prev => [...prev, errorMessage]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Chat error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Connection error. Please check your internet and try again.',
+        content: error?.message || 'Unable to reach Ask AI. Please try again.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMessage]);
@@ -136,7 +136,7 @@ export function AIChatWidget() {
             <div className="bg-gradient-to-r from-emerald-500 to-green-600 text-white p-3 sm:p-4 rounded-t-2xl flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-base sm:text-lg">Ask AI</h3>
-                <p className="text-xs sm:text-sm text-emerald-100">Get help with GreenPay</p>
+                <p className="text-xs sm:text-sm text-emerald-100">Get help with Geepay</p>
                 <p className="text-xs text-emerald-50 mt-1">
                   {remainingRequests} request{remainingRequests !== 1 ? 's' : ''} remaining today
                 </p>

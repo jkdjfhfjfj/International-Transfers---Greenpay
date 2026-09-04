@@ -70,11 +70,11 @@ const DEFAULT_SETTINGS: AdminSettings = {
     admin_alerts: true
   },
   general: {
-    platform_name: 'GreenPay',
-    support_email: 'support@greenpay.com',
+    platform_name: 'Geepay',
+    support_email: 'support@geepay.us',
     default_currency: 'USD',
     session_timeout: '30',
-    terms_url: 'https://greenpay.com/terms',
+    terms_url: 'https://geepay.us/terms',
     maintenance_message: '',
     maintenance_mode: false,
     api_rate_limit: '1000',

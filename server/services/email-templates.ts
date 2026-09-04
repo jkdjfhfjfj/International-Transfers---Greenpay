@@ -1,5 +1,5 @@
 /**
- * GreenPay Email Templates
+ * Geepay Email Templates
  * Beautiful, responsive HTML email templates with branding
  */
 
@@ -9,7 +9,7 @@ const baseTemplate = (content: string) => `
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GreenPay</title>
+  <title>Geepay</title>
   <style>
     body {
       margin: 0;
@@ -205,7 +205,7 @@ const baseTemplate = (content: string) => `
   <div class="email-wrapper">
     <div class="header">
       <div class="logo">$</div>
-      <h1 class="header-title">GreenPay</h1>
+      <h1 class="header-title">Geepay</h1>
     </div>
     ${content}
     <div class="footer">
@@ -213,9 +213,9 @@ const baseTemplate = (content: string) => `
       <p class="footer-text">Send money to Africa safely, quickly, and affordably</p>
       
       <div class="footer-links">
-        <a href="https://greenpay.world/help" class="footer-link">Help Center</a>
-        <a href="https://greenpay.world/security" class="footer-link">Security</a>
-        <a href="https://greenpay.world/contact" class="footer-link">Contact Us</a>
+        <a href="https://geepay.us/help" class="footer-link">Help Center</a>
+        <a href="https://geepay.us/security" class="footer-link">Security</a>
+        <a href="https://geepay.us/contact" class="footer-link">Contact Us</a>
       </div>
       
       <div class="divider"></div>
@@ -320,7 +320,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/dashboard" class="button">Go to Dashboard</a>
+          <a href="https://geepay.us/dashboard" class="button">Go to Dashboard</a>
         </div>
         
         <p class="text">
@@ -328,8 +328,8 @@ export const emailTemplates = {
         </p>
         
         <div style="text-align: center; margin-top: 30px;">
-          <a href="https://greenpay.world/help" class="button-secondary">Visit Help Center</a>
-          <a href="https://greenpay.world/contact" class="button-secondary">Contact Support</a>
+          <a href="https://geepay.us/help" class="button-secondary">Visit Help Center</a>
+          <a href="https://geepay.us/contact" class="button-secondary">Contact Support</a>
         </div>
       </div>
     `;
@@ -376,7 +376,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/transactions" class="button">View Transaction Details</a>
+          <a href="https://geepay.us/transactions" class="button">View Transaction Details</a>
         </div>
         
         <p class="text">
@@ -442,7 +442,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/transactions" class="button">View All Transactions</a>
+          <a href="https://geepay.us/transactions" class="button">View All Transactions</a>
         </div>
       </div>
     `;
@@ -484,7 +484,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/settings/security" class="button">Secure My Account</a>
+          <a href="https://geepay.us/settings/security" class="button">Secure My Account</a>
         </div>
         
         <p class="text">
@@ -518,7 +518,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/dashboard" class="button">Explore Your Account</a>
+          <a href="https://geepay.us/dashboard" class="button">Explore Your Account</a>
         </div>
         
         <p class="text">
@@ -560,7 +560,7 @@ export const emailTemplates = {
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/cards" class="button">View Card Details</a>
+          <a href="https://geepay.us/cards" class="button">View Card Details</a>
         </div>
         
         <p class="text">

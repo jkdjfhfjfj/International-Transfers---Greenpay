@@ -34,9 +34,6 @@ export default function BottomNavigation() {
     location.startsWith('/airtime') ||
     location.startsWith('/bills') ||
     location.startsWith('/status') ||
-    location.startsWith('/loans') ||
-    location.startsWith('/api-documentation') ||
-    location.startsWith('/api-service') ||
     location.startsWith('/admin-notifications') ||
     location.startsWith('/crypto') ||
     location.startsWith('/analytics') ||

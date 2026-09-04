@@ -656,16 +656,6 @@ export default function DashboardPage() {
                 accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'settings',
               },
-              {
-                id: 'loans', label: 'Loans', path: '/loans', testId: '',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
-                icon: 'payments',
-              },
-              {
-                id: 'api', label: 'API', path: '/api-service', testId: '',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
-                icon: 'bolt',
-              },
             ].map((service, index) => (
               <motion.button
                 key={service.id}

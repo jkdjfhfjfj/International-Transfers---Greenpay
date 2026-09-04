@@ -62,7 +62,7 @@ const STEPS = [
 ];
 
 const TESTIMONIALS = [
-  { name: "Amara K.", role: "Kenyan diaspora, London", text: "I used to lose $30+ per transfer in fees. GreenPay saves me that every month. My family gets more money — that's what matters.", stars: 5, avatar: "A" },
+  { name: "Amara K.", role: "Kenyan diaspora, London", text: "I used to lose $30+ per transfer in fees. Geepay saves me that every month. My family gets more money — that's what matters.", stars: 5, avatar: "A" },
   { name: "David M.", role: "Freelancer, Nairobi", text: "The virtual card changed everything for me. I can receive USD from international clients and spend online. Best fintech app for Kenya.", stars: 5, avatar: "D" },
   { name: "Sarah N.", role: "Student, Toronto", text: "Sending money home used to stress me out. Now it's as easy as sending a text message. And the rates are amazing!", stars: 5, avatar: "S" },
 ];
@@ -102,7 +102,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow">
               <span className="text-white font-bold text-sm">G</span>
             </div>
-            <span className="font-bold text-lg text-gray-900">GreenPay</span>
+            <span className="font-bold text-lg text-gray-900">Geepay</span>
           </button>
 
           <div className="hidden md:flex items-center gap-7">

@@ -43,7 +43,7 @@ function getWorkflowId(): string | null {
 }
 
 /**
- * Map a didit session status to a GreenPay KYC status
+ * Map a didit session status to a Geepay KYC status
  */
 export function mapDiditStatusToKyc(diditStatus: string): 'pending' | 'verified' | 'rejected' {
   switch (diditStatus) {

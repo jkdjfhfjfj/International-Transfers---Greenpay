@@ -29,8 +29,8 @@ export class EmailService {
       const secure = settings.find((s: any) => s.key === 'smtp_secure')?.value === 'true';
       const username = settings.find((s: any) => s.key === 'smtp_username')?.value as string || 'smtp.zoho.com';
       const password = settings.find((s: any) => s.key === 'smtp_password')?.value as string || 'Kitondosch.6639';
-      const fromEmail = settings.find((s: any) => s.key === 'from_email')?.value as string || 'support@greenpay.world';
-      const fromName = settings.find((s: any) => s.key === 'from_name')?.value as string || 'GreenPay';
+      const fromEmail = settings.find((s: any) => s.key === 'from_email')?.value as string || 'support@geepay.us';
+      const fromName = settings.find((s: any) => s.key === 'from_name')?.value as string || 'Geepay';
 
       if (!host || !username || !password || !fromEmail) {
         console.warn('Email credentials not fully configured');
@@ -140,7 +140,7 @@ export class EmailService {
    * Send OTP verification code
    */
   async sendOTP(email: string, otpCode: string, userName?: string): Promise<boolean> {
-    const subject = 'Your GreenPay Verification Code';
+    const subject = 'Your Geepay Verification Code';
     const html = emailTemplates.otp(otpCode, userName);
     return this.sendEmail(email, subject, html);
   }
@@ -149,7 +149,7 @@ export class EmailService {
    * Send password reset code
    */
   async sendPasswordReset(email: string, resetCode: string, userName?: string): Promise<boolean> {
-    const subject = 'Reset Your GreenPay Password';
+    const subject = 'Reset Your Geepay Password';
     const html = emailTemplates.passwordReset(resetCode, userName);
     return this.sendEmail(email, subject, html);
   }
@@ -158,7 +158,7 @@ export class EmailService {
    * Send welcome email
    */
   async sendWelcome(email: string, userName: string): Promise<boolean> {
-    const subject = 'Welcome to GreenPay! 🎉';
+    const subject = 'Welcome to Geepay! 🎉';
     const html = emailTemplates.welcome(userName);
     return this.sendEmail(email, subject, html);
   }

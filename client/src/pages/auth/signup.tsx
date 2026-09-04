@@ -114,6 +114,9 @@ export default function SignupPage() {
             </motion.div>
             <h2 className="text-2xl font-bold mb-2">Join Geepay</h2>
             <p className="text-muted-foreground">Create your account to start sending money</p>
+            <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-left text-xs text-amber-800">
+              GreenPay is now Geepay. We moved from <strong>greenpay.world</strong> to <strong>geepay.us</strong>.
+            </div>
             <p className="text-xs text-muted-foreground mt-3 px-2">Account verification requires a valid phone number on WhatsApp with SMS capability, a verified email address, and identification that matches your registered name.</p>
           </div>
 

@@ -117,7 +117,7 @@ export default function DepositPage() {
   const isEnabled = (m: string) => methods[`${m}_enabled`] === "true";
 
   const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card"] as const).filter(m => isEnabled(m));
-  const nexuspayAlwaysEnabled = true;
+  const nexuspayEnabled = isEnabled("global");
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {
@@ -316,7 +316,7 @@ export default function DepositPage() {
               <div className="space-y-3">
                 {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
                   const meta = METHOD_META[method];
-                  const enabled = method === "nexuspay" ? isEnabled("global") : isEnabled(method);
+                  const enabled = method === "nexuspay" ? nexuspayEnabled : isEnabled(method);
                   const Icon = meta.icon;
                   const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
                   return (

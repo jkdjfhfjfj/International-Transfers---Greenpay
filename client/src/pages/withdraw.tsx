@@ -108,7 +108,7 @@ export default function WithdrawPage() {
       name: "Bank Transfer",
       Icon: Building2,
       description: "Direct transfer to your bank account",
-      fee: "configured fee",
+      fee: "fee",
       processingTime: "1-3 business days",
       countries: ["Nigeria", "Ghana", "Kenya", "South Africa", "Uganda"],
     },
@@ -117,7 +117,7 @@ export default function WithdrawPage() {
       name: "Mobile Money",
       Icon: Smartphone,
       description: "M-Pesa, Airtel Money, MTN Mobile Money",
-      fee: "configured fee",
+      fee: "fee",
       processingTime: "Within 30 minutes",
       countries: ["Kenya", "Uganda", "Tanzania", "Rwanda", "Cameroon"],
     },
@@ -126,7 +126,7 @@ export default function WithdrawPage() {
       name: "Local Bank Account",
       Icon: Wallet,
       description: "Direct deposit to local African banks",
-      fee: "configured fee",
+      fee: "fee",
       processingTime: "2-4 hours",
       countries: ["Nigeria", "Ghana", "Kenya", "South Africa", "Egypt"],
     },
@@ -146,10 +146,7 @@ export default function WithdrawPage() {
   ];
 
   const getWithdrawFee = () => {
-    const method = withdrawMethods.find(m => m.id === selectedMethod);
-    return method?.fee === "configured fee" || !method?.fee
-      ? `${activeSymbol} ${withdrawalFee.toFixed(2)}`
-      : method.fee;
+    return `${activeSymbol} ${withdrawalFee.toFixed(2)}`;
   };
 
   return (
@@ -342,7 +339,7 @@ export default function WithdrawPage() {
                             <div className="flex items-center justify-between mb-1">
                               <p className="font-medium">{method.name}</p>
                               <span className="text-xs text-primary bg-primary/10 px-2 py-1 rounded-full">
-                                {method.fee}
+                                {activeSymbol} {withdrawalFee.toFixed(2)} {method.fee}
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">{method.description}</p>
@@ -587,12 +584,16 @@ export default function WithdrawPage() {
                 )}
                 <hr className="border-border" />
                 <div className="flex justify-between font-bold">
-                  <span>You Receive</span>
+                  <span>Amount sent to recipient</span>
                   <span className="text-primary">
                     {activeSymbol} {form.watch("amount") ?
-                      formatNumber(Math.max(0, parseFloat(form.watch("amount")) - withdrawalFee)) :
+                      formatNumber(parseFloat(form.watch("amount"))) :
                       "0.00"}
                   </span>
+                </div>
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>Total deducted from wallet</span>
+                  <span>{activeSymbol} {form.watch("amount") ? formatNumber(parseFloat(form.watch("amount")) + withdrawalFee) : "0.00"}</span>
                 </div>
               </div>
             </motion.div>

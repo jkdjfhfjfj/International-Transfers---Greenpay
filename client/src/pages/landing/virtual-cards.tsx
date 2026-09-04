@@ -11,7 +11,7 @@ export default function VirtualCardsLanding() {
         title="Virtual Mastercard for Online Shopping | Geepay Digital Wallet"
         description="Get instant virtual Mastercard for online shopping worldwide. Use on Amazon, Netflix, any website. Secure, instant issuance. Purchase your virtual card today!"
         keywords="virtual card, virtual Mastercard, online shopping, digital card, international payments, virtual debit card"
-        canonical="https://greenpay.world/features/virtual-cards"
+        canonical="https://geepay.us/features/virtual-cards"
       />
       <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <div className="max-w-6xl mx-auto px-4 py-12">

@@ -8,10 +8,10 @@ export default function PricingLanding() {
   return (
     <>
       <SEO
-        title="Pricing & Fees | Transparent Money Transfer Costs | GreenPay"
+        title="Pricing & Fees | Transparent Money Transfer Costs | Geepay"
         description="Clear, transparent pricing for money transfers to Kenya. 2-3% transfer fees, $5 virtual cards, no hidden costs. See exactly what you'll pay before you send."
-        keywords="GreenPay pricing, money transfer fees, Kenya transfer cost, virtual card price, remittance fees"
-        canonical="https://greenpay.world/pricing"
+        keywords="Geepay pricing, money transfer fees, Kenya transfer cost, virtual card price, remittance fees"
+        canonical="https://geepay.us/pricing"
       />
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-6xl mx-auto px-4 py-12">

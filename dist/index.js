@@ -1081,6 +1081,55 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS virtual_account_applications_user_currency_idx ON virtual_account_applications(user_id, currency)`,
+    // User-owned virtual accounts and their separately held balances
+    `CREATE TABLE IF NOT EXISTS virtual_accounts (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      application_id VARCHAR NOT NULL UNIQUE REFERENCES virtual_account_applications(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      balance DECIMAL(18,4) DEFAULT 0.0000,
+      hold_amount DECIMAL(18,4) DEFAULT 0.0000,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS virtual_accounts_user_currency_idx ON virtual_accounts(user_id, currency)`,
+    // Append-only ledger for wallets, virtual accounts, and virtual cards.
+    `CREATE TABLE IF NOT EXISTS ledger_entries (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      currency TEXT NOT NULL,
+      wallet_id VARCHAR REFERENCES wallets(id) ON DELETE CASCADE,
+      virtual_account_id VARCHAR REFERENCES virtual_accounts(id) ON DELETE CASCADE,
+      card_id VARCHAR REFERENCES virtual_cards(id) ON DELETE CASCADE,
+      amount DECIMAL(18,4) NOT NULL,
+      entry_type TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL UNIQUE,
+      transaction_id VARCHAR REFERENCES transactions(id) ON DELETE SET NULL,
+      description TEXT,
+      metadata JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_wallet_idx ON ledger_entries(wallet_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_virtual_account_idx ON ledger_entries(virtual_account_id, created_at)`,
+    `CREATE INDEX IF NOT EXISTS ledger_entries_card_idx ON ledger_entries(card_id, created_at)`,
+    // Seed one immutable opening entry for each existing cached balance. This
+    // makes the migration lossless while all future changes use the ledger.
+    `INSERT INTO ledger_entries (user_id, currency, wallet_id, amount, entry_type, idempotency_key, description)
+     SELECT user_id, currency, id, COALESCE(balance, 0), 'opening_balance', 'wallet-opening:' || id, 'Opening balance migrated to ledger'
+     FROM wallets
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'wallet-opening:' || wallets.id
+     )`,
+    `INSERT INTO ledger_entries (user_id, currency, card_id, amount, entry_type, idempotency_key, description)
+     SELECT user_id, 'USD', id, COALESCE(balance, 0), 'opening_balance', 'card-opening:' || id, 'Card balance migrated to ledger'
+     FROM virtual_cards
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'card-opening:' || virtual_cards.id
+     )`,
+    `INSERT INTO system_settings (key, value, category)
+     VALUES ('virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts')
+     ON CONFLICT (key) DO NOTHING`,
     // Deposit bonuses table (admin-configured bonus offers per deposit method)
     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -3000,7 +3049,7 @@ var init_email_templates = __esm({
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GreenPay</title>
+  <title>Geepay</title>
   <style>
     body {
       margin: 0;
@@ -3196,7 +3245,7 @@ var init_email_templates = __esm({
   <div class="email-wrapper">
     <div class="header">
       <div class="logo">$</div>
-      <h1 class="header-title">GreenPay</h1>
+      <h1 class="header-title">Geepay</h1>
     </div>
     ${content}
     <div class="footer">
@@ -3204,9 +3253,9 @@ var init_email_templates = __esm({
       <p class="footer-text">Send money to Africa safely, quickly, and affordably</p>
       
       <div class="footer-links">
-        <a href="https://greenpay.world/help" class="footer-link">Help Center</a>
-        <a href="https://greenpay.world/security" class="footer-link">Security</a>
-        <a href="https://greenpay.world/contact" class="footer-link">Contact Us</a>
+        <a href="https://geepay.us/help" class="footer-link">Help Center</a>
+        <a href="https://geepay.us/security" class="footer-link">Security</a>
+        <a href="https://geepay.us/contact" class="footer-link">Contact Us</a>
       </div>
       
       <div class="divider"></div>
@@ -3308,7 +3357,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/dashboard" class="button">Go to Dashboard</a>
+          <a href="https://geepay.us/dashboard" class="button">Go to Dashboard</a>
         </div>
         
         <p class="text">
@@ -3316,8 +3365,8 @@ var init_email_templates = __esm({
         </p>
         
         <div style="text-align: center; margin-top: 30px;">
-          <a href="https://greenpay.world/help" class="button-secondary">Visit Help Center</a>
-          <a href="https://greenpay.world/contact" class="button-secondary">Contact Support</a>
+          <a href="https://geepay.us/help" class="button-secondary">Visit Help Center</a>
+          <a href="https://geepay.us/contact" class="button-secondary">Contact Support</a>
         </div>
       </div>
     `;
@@ -3363,7 +3412,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/transactions" class="button">View Transaction Details</a>
+          <a href="https://geepay.us/transactions" class="button">View Transaction Details</a>
         </div>
         
         <p class="text">
@@ -3420,7 +3469,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/transactions" class="button">View All Transactions</a>
+          <a href="https://geepay.us/transactions" class="button">View All Transactions</a>
         </div>
       </div>
     `;
@@ -3461,7 +3510,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/settings/security" class="button">Secure My Account</a>
+          <a href="https://geepay.us/settings/security" class="button">Secure My Account</a>
         </div>
         
         <p class="text">
@@ -3494,7 +3543,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/dashboard" class="button">Explore Your Account</a>
+          <a href="https://geepay.us/dashboard" class="button">Explore Your Account</a>
         </div>
         
         <p class="text">
@@ -3535,7 +3584,7 @@ var init_email_templates = __esm({
         </div>
         
         <div style="text-align: center;">
-          <a href="https://greenpay.world/cards" class="button">View Card Details</a>
+          <a href="https://geepay.us/cards" class="button">View Card Details</a>
         </div>
         
         <p class="text">
@@ -3653,8 +3702,8 @@ var init_email = __esm({
           const secure = settings.find((s) => s.key === "smtp_secure")?.value === "true";
           const username = settings.find((s) => s.key === "smtp_username")?.value || "smtp.zoho.com";
           const password = settings.find((s) => s.key === "smtp_password")?.value || "Kitondosch.6639";
-          const fromEmail = settings.find((s) => s.key === "from_email")?.value || "support@greenpay.world";
-          const fromName = settings.find((s) => s.key === "from_name")?.value || "GreenPay";
+          const fromEmail = settings.find((s) => s.key === "from_email")?.value || "support@geepay.us";
+          const fromName = settings.find((s) => s.key === "from_name")?.value || "Geepay";
           if (!host || !username || !password || !fromEmail) {
             console.warn("Email credentials not fully configured");
             return null;
@@ -3748,7 +3797,7 @@ var init_email = __esm({
        * Send OTP verification code
        */
       async sendOTP(email, otpCode, userName) {
-        const subject = "Your GreenPay Verification Code";
+        const subject = "Your Geepay Verification Code";
         const html = emailTemplates.otp(otpCode, userName);
         return this.sendEmail(email, subject, html);
       }
@@ -3756,7 +3805,7 @@ var init_email = __esm({
        * Send password reset code
        */
       async sendPasswordReset(email, resetCode, userName) {
-        const subject = "Reset Your GreenPay Password";
+        const subject = "Reset Your Geepay Password";
         const html = emailTemplates.passwordReset(resetCode, userName);
         return this.sendEmail(email, subject, html);
       }
@@ -3764,7 +3813,7 @@ var init_email = __esm({
        * Send welcome email
        */
       async sendWelcome(email, userName) {
-        const subject = "Welcome to GreenPay! \u{1F389}";
+        const subject = "Welcome to Geepay! \u{1F389}";
         const html = emailTemplates.welcome(userName);
         return this.sendEmail(email, subject, html);
       }
@@ -4650,7 +4699,7 @@ Sent on: ${dateStr} at ${timeStr}
         const createAccSuccess = await this.createTemplate("create_acc", "MARKETING", [
           {
             type: "BODY",
-            text: "Welcome to GreenPay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers."
+            text: "Welcome to Geepay, {{1}}!\n\nYour account is ready. Click below to start enjoying seamless payments, virtual cards, and money transfers."
           },
           {
             type: "BUTTONS",
@@ -4658,7 +4707,7 @@ Sent on: ${dateStr} at ${timeStr}
               {
                 type: "URL",
                 text: "Get Started",
-                url: "https://app.greenpay.world/dashboard"
+                url: "https://geepay.us/dashboard"
               }
             ]
           }
@@ -4668,7 +4717,7 @@ Sent on: ${dateStr} at ${timeStr}
         const loginSuccess = await this.createTemplate("login_alert", "UTILITY", [
           {
             type: "BODY",
-            text: "New login on your GreenPay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn't you, secure your account now."
+            text: "New login on your Geepay account\n\nLocation: {{1}}\nIP: {{2}}\n\nIf this wasn't you, secure your account now."
           },
           {
             type: "BUTTONS",
@@ -4676,7 +4725,7 @@ Sent on: ${dateStr} at ${timeStr}
               {
                 type: "URL",
                 text: "Secure Now",
-                url: "https://app.greenpay.world/security"
+                url: "https://geepay.us/security"
               }
             ]
           }
@@ -4694,7 +4743,7 @@ Sent on: ${dateStr} at ${timeStr}
               {
                 type: "URL",
                 text: "View Wallet",
-                url: "https://app.greenpay.world/wallet"
+                url: "https://geepay.us/wallet"
               }
             ]
           }
@@ -4704,7 +4753,7 @@ Sent on: ${dateStr} at ${timeStr}
         const cardSuccess = await this.createTemplate("card_activation", "UTILITY", [
           {
             type: "BODY",
-            text: "Your GreenPay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers."
+            text: "Your Geepay card {{1}} is now active!\n\nReady for online purchases, bill payments, and transfers."
           },
           {
             type: "BUTTONS",
@@ -4712,7 +4761,7 @@ Sent on: ${dateStr} at ${timeStr}
               {
                 type: "URL",
                 text: "View Card",
-                url: "https://app.greenpay.world/cards"
+                url: "https://geepay.us/cards"
               }
             ]
           }
@@ -4730,7 +4779,7 @@ Sent on: ${dateStr} at ${timeStr}
               {
                 type: "URL",
                 text: "Explore Features",
-                url: "https://app.greenpay.world/dashboard"
+                url: "https://geepay.us/dashboard"
               }
             ]
           }
@@ -4997,7 +5046,7 @@ var init_messaging = __esm({
     init_whatsapp();
     MessagingService = class {
       SMS_URL = "https://sms.paygrid.co.ke/api/sms/send";
-      MESSAGE_PREFIX = "[GEEPAY] ";
+      MESSAGE_PREFIX = "[GREENPAY] ";
       /**
        * Get messaging credentials from system settings (CommsGrid)
        */
@@ -5008,7 +5057,7 @@ var init_messaging = __esm({
           let senderId = settings.find((s) => s.key === "commsGrid_sender_id")?.value;
           let deviceId = settings.find((s) => s.key === "commsGrid_device_id")?.value;
           apiKey = apiKey || process.env.COMMSGRID_API_KEY || process.env.SMS_API_KEY || "";
-          senderId = senderId || process.env.COMMSGRID_SENDER_ID || process.env.SMS_SENDER_ID || "GEEPAY";
+          senderId = senderId || process.env.COMMSGRID_SENDER_ID || process.env.SMS_SENDER_ID || "GREENPAY";
           deviceId = deviceId || process.env.COMMSGRID_DEVICE_ID || void 0;
           if (!apiKey || !senderId) {
             console.warn("[SMS] CommsGrid credentials not fully configured");
@@ -5034,7 +5083,7 @@ var init_messaging = __esm({
         return cleaned;
       }
       /**
-       * Prepend [GEEPAY] prefix and trim if needed
+       * Prepend [GREENPAY] prefix and trim if needed
        */
       formatMessage(message) {
         return this.MESSAGE_PREFIX + message;
@@ -5156,7 +5205,7 @@ var init_messaging = __esm({
         const firstName = userName?.split(" ")[0] || "User";
         const lastName = userName?.split(" ").slice(1).join(" ") || "";
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your Geepay verification code is ${otpCode}. Valid for 10 minutes. Do not share with anyone.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Your GreenPay verification code is ${otpCode}. Valid for 10 minutes. Do not share with anyone.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendOTP(phone, otpCode) : Promise.resolve(false),
           email ? mailtrapService3.sendOTP(email, firstName, lastName, otpCode) : Promise.resolve(false)
         ]);
@@ -5172,7 +5221,7 @@ var init_messaging = __esm({
         const timestamp2 = (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "long", timeStyle: "short" });
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `New login to your Geepay account from ${location} (IP: ${ip}). Not you? Contact support immediately.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `New login to your GreenPay account from ${location} (IP: ${ip}). Not you? Contact support immediately.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendLoginAlert(phone, location, ip) : Promise.resolve(false),
           email ? emailService.sendLoginAlert(email, location, ip, timestamp2, userName) : Promise.resolve(false)
         ]);
@@ -5189,7 +5238,7 @@ var init_messaging = __esm({
         const firstName = userName?.split(" ")[0] || "User";
         const lastName = userName?.split(" ").slice(1).join(" ") || "";
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your Geepay password reset code is ${resetCode}. Valid for 10 minutes.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Your GreenPay password reset code is ${resetCode}. Valid for 10 minutes.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendPasswordReset(phone, resetCode) : Promise.resolve(false),
           email ? mailtrapService3.sendPasswordReset(email, firstName, lastName, resetCode) : Promise.resolve(false)
         ]);
@@ -5203,7 +5252,7 @@ var init_messaging = __esm({
         if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `You received ${currency} ${amount} from ${sender}. Your Geepay balance has been updated.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `You received ${currency} ${amount} from ${sender}. Your GreenPay balance has been updated.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendFundReceipt(phone, amount, currency, sender) : Promise.resolve(false),
           email ? emailService.sendFundReceipt(email, amount, currency, sender, userName) : Promise.resolve(false)
         ]);
@@ -5217,7 +5266,7 @@ var init_messaging = __esm({
         if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Deposit of ${currency} ${amount} via ${method} was successful. Your Geepay account has been credited.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Deposit of ${currency} ${amount} via ${method} was successful. Your GreenPay account has been credited.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendTextMessage(phone, this.formatMessage(`Deposit of ${currency} ${amount} via ${method} successful. Account credited.`)) : Promise.resolve(false)
         ]);
         return { sms: smsResult, whatsapp: whatsappResult, email: false };
@@ -5230,7 +5279,7 @@ var init_messaging = __esm({
         if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Withdrawal of ${currency} ${amount} to ${destination} is ${status}. Check your Geepay account for details.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Withdrawal of ${currency} ${amount} to ${destination} is ${status}. Check your GreenPay account for details.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendTextMessage(phone, this.formatMessage(`Withdrawal of ${currency} ${amount} is ${status}.`)) : Promise.resolve(false)
         ]);
         return { sms: smsResult, whatsapp: whatsappResult, email: false };
@@ -5243,7 +5292,7 @@ var init_messaging = __esm({
         if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your Geepay virtual card ending in ${cardLastFour} has been issued and is now active. Use it for online payments worldwide.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Your GreenPay virtual card ending in ${cardLastFour} has been issued and is now active. Use it for online payments worldwide.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendCardActivation(phone, cardLastFour) : Promise.resolve(false),
           email ? emailService.sendCardActivation(email, cardLastFour, userName) : Promise.resolve(false)
         ]);
@@ -5257,7 +5306,7 @@ var init_messaging = __esm({
         if (enableSetting?.value === "false") return { sms: false, whatsapp: false, email: false };
         const credentials = await this.getCredentials();
         const [smsResult, whatsappResult, emailResult] = await Promise.all([
-          credentials ? this.sendSMS(phone, `Your Geepay account is now verified! You have full access to all platform features.`, credentials) : Promise.resolve(false),
+          credentials ? this.sendSMS(phone, `Your GreenPay account is now verified! You have full access to all platform features.`, credentials) : Promise.resolve(false),
           whatsappService.isConfigured() ? whatsappService.sendKYCVerified(phone) : Promise.resolve(false),
           email && userName ? emailService.sendKYCVerified(email, userName) : Promise.resolve(false)
         ]);
@@ -5559,7 +5608,7 @@ async function generateTransactionPDF(transactions2, userData) {
       );
       doc.setFontSize(7);
       doc.text(
-        "support@greenpay.world | www.greenpay.world",
+        "support@geepay.us | www.geepay.us",
         pageWidth / 2,
         pageHeight - 20,
         { align: "center" }
@@ -7090,19 +7139,17 @@ var OpenAIService = class {
   async generateResponse(messages2) {
     try {
       const systemPrompt = `
-You are a helpful AI assistant for GreenPay, a comprehensive fintech payment application for KES users.
+You are a helpful AI assistant for Geepay, a comprehensive fintech payment application for KES users.
 
-You MUST only answer questions related to GreenPay's features and services:
+You MUST only answer questions related to Geepay's features and services:
 - Bill payments and money transfers
 - Virtual cards and airtime purchases
 - Currency exchange services
 - Document uploads and KYC verification
 - Support and account management
-- Performance-based loans
 - WhatsApp Business integration
 - Two-factor authentication and biometric login
 - Admin panel and support ticket system
-- Public API services
 
 If asked about unrelated topics, politely redirect the user.
 `;
@@ -7224,8 +7271,14 @@ async function getEnabledCurrencyCodes() {
 }
 async function getUserWallet(userId, currency) {
   const code = normalizeCurrency(currency);
-  const [wallet] = await db.select().from(wallets).where(and2(eq3(wallets.userId, userId), eq3(wallets.currency, code))).limit(1);
-  return wallet;
+  const [wallet] = await db.select().from(wallets).where(and2(eq3(wallets.userId, userId), sql3`UPPER(${wallets.currency}) = ${code}`)).limit(1);
+  if (!wallet || !pool) return wallet;
+  const balance = await pool.query(
+    `SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries
+     WHERE wallet_id = $1 AND user_id = $2`,
+    [wallet.id, userId]
+  );
+  return { ...wallet, balance: String(balance.rows[0]?.balance ?? wallet.balance ?? "0") };
 }
 async function ensureUserWallet(userId, currency) {
   const code = normalizeCurrency(currency);
@@ -7249,6 +7302,142 @@ function walletAvailableBalance(wallet) {
     0,
     parseFloat(wallet.balance || "0") - parseFloat(wallet.holdAmount || "0") - parseFloat(wallet.withdrawalHoldAmount || "0")
   );
+}
+async function applyLedgerEntry(params) {
+  if (!pool) throw new Error("Database is not configured");
+  const target = params.walletId ? { table: "wallets", column: "wallet_id", id: params.walletId, holds: "COALESCE(hold_amount, 0) + COALESCE(withdrawal_hold_amount, 0)" } : params.virtualAccountId ? { table: "virtual_accounts", column: "virtual_account_id", id: params.virtualAccountId, holds: "COALESCE(hold_amount, 0)" } : { table: "virtual_cards", column: "card_id", id: params.cardId, holds: "0" };
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query(
+      `SELECT id, user_id, currency, balance, ${target.holds} AS holds
+       FROM ${target.table} WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [target.id, params.userId]
+    );
+    if (!row.rows[0]) throw new Error("Balance account not found");
+    const account = row.rows[0];
+    if (normalizeCurrency(account.currency) !== normalizeCurrency(params.currency)) {
+      throw new Error("Currency does not match balance account");
+    }
+    const ledgerBalance = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS balance FROM ledger_entries WHERE ${target.column} = $1`,
+      [target.id]
+    );
+    const currentBalance = Number(ledgerBalance.rows[0]?.balance || 0);
+    const available = currentBalance - Number(account.holds || 0);
+    if (params.amount < 0 && available + params.amount < -1e-7) {
+      throw new Error(`Insufficient ${normalizeCurrency(params.currency)} available balance`);
+    }
+    const inserted = await client.query(
+      `INSERT INTO ledger_entries
+        (user_id, currency, ${target.column}, amount, entry_type, idempotency_key, transaction_id, description, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (idempotency_key) DO NOTHING
+       RETURNING id`,
+      [
+        params.userId,
+        normalizeCurrency(params.currency),
+        target.id,
+        params.amount,
+        params.entryType,
+        params.idempotencyKey,
+        params.transactionId || null,
+        params.description || null,
+        params.metadata ? JSON.stringify(params.metadata) : null
+      ]
+    );
+    const nextBalance = inserted.rowCount ? currentBalance + params.amount : currentBalance;
+    if (inserted.rowCount) {
+      await client.query(
+        `UPDATE ${target.table} SET balance = $1, updated_at = NOW() WHERE id = $2`,
+        [nextBalance, target.id]
+      );
+    }
+    await client.query("COMMIT");
+    return {
+      applied: Boolean(inserted.rowCount),
+      balance: nextBalance,
+      availableBalance: Math.max(0, nextBalance - Number(account.holds || 0))
+    };
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+async function getLedgerBalance(target, fallback = 0) {
+  if (!pool) return fallback;
+  const [column, id] = target.walletId ? ["wallet_id", target.walletId] : target.virtualAccountId ? ["virtual_account_id", target.virtualAccountId] : ["card_id", target.cardId];
+  const result = await pool.query(`SELECT COALESCE(SUM(amount), $2) AS balance FROM ledger_entries WHERE ${column} = $1`, [id, fallback]);
+  return Number(result.rows[0]?.balance || 0);
+}
+async function reserveWalletWithdrawal(walletId, userId, amount) {
+  const result = await pool.query(
+    `UPDATE wallets
+     SET withdrawal_hold_amount = COALESCE(withdrawal_hold_amount, 0) + $1, updated_at = NOW()
+     WHERE id = $2 AND user_id = $3 AND is_active = true AND is_suspended = false
+       AND COALESCE(balance, 0) - COALESCE(hold_amount, 0) - COALESCE(withdrawal_hold_amount, 0) >= $1
+     RETURNING balance, hold_amount, withdrawal_hold_amount`,
+    [amount, walletId, userId]
+  );
+  return result.rows[0] || null;
+}
+async function releaseWalletWithdrawal(walletId, amount) {
+  await pool.query(
+    `UPDATE wallets SET withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1), updated_at = NOW()
+     WHERE id = $2`,
+    [amount, walletId]
+  );
+}
+async function settleWalletWithdrawal(walletId, userId, currency, amount, transactionId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const walletResult = await client.query(
+      `SELECT id, currency, balance, COALESCE(withdrawal_hold_amount, 0) AS withdrawal_hold_amount
+       FROM wallets WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [walletId, userId]
+    );
+    const wallet = walletResult.rows[0];
+    if (!wallet) throw new Error("Wallet not found");
+    if (normalizeCurrency(wallet.currency) !== normalizeCurrency(currency)) throw new Error("Currency does not match wallet");
+    if (Number(wallet.withdrawal_hold_amount) < amount - 1e-7) throw new Error("Withdrawal hold not found");
+    const existing = await client.query(
+      `SELECT id FROM ledger_entries WHERE idempotency_key = $1`,
+      [`withdrawal:${transactionId}:settled`]
+    );
+    if (existing.rowCount === 0) {
+      await client.query(
+        `INSERT INTO ledger_entries
+          (user_id, currency, wallet_id, amount, entry_type, idempotency_key, transaction_id, description)
+         VALUES ($1, $2, $3, $4, 'withdrawal_settlement', $5, $6, 'Withdrawal approved')`,
+        [userId, normalizeCurrency(currency), walletId, -amount, `withdrawal:${transactionId}:settled`, transactionId]
+      );
+      await client.query(
+        `UPDATE wallets
+         SET balance = COALESCE(balance, 0) - $1,
+             withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [amount, walletId]
+      );
+    } else {
+      await client.query(
+        `UPDATE wallets
+         SET withdrawal_hold_amount = GREATEST(0, COALESCE(withdrawal_hold_amount, 0) - $1),
+             updated_at = NOW()
+         WHERE id = $2`,
+        [amount, walletId]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 var upload = multer({
   storage: multer.memoryStorage(),
@@ -7443,8 +7632,8 @@ async function registerRoutes(app2) {
   const allVirtualAccountCurrencies = getSupportedCurrencyCodes();
   async function getVirtualAccountCurrencies() {
     try {
-      const result = await pool.query(`SELECT value FROM system_settings WHERE key = '\''virtual_account_currencies'\'' LIMIT 1`);
-      const configured = String(result.rows[0]?.value || "").replace(/['\''"]/g, "");
+      const result = await pool.query(`SELECT value FROM system_settings WHERE key = 'virtual_account_currencies' LIMIT 1`);
+      const configured = String(result.rows[0]?.value || "").replace(/['"]/g, "");
       const currencies = configured.split(",").map(normalizeCurrency).filter((currency) => allVirtualAccountCurrencies.includes(currency));
       return currencies.length ? currencies : defaultVirtualAccountCurrencies;
     } catch {
@@ -7568,7 +7757,7 @@ async function registerRoutes(app2) {
       ).parse(req.body.currencies);
       if (!currencies.length) return res.status(400).json({ message: "Select at least one virtual-account currency" });
       await pool.query(
-        `INSERT INTO system_settings (key, value, category) VALUES ('\''virtual_account_currencies'\'', to_json($1::text), '\''virtual_accounts'\'')
+        `INSERT INTO system_settings (key, value, category) VALUES ('virtual_account_currencies', to_json($1::text), 'virtual_accounts')
          ON CONFLICT (key) DO UPDATE SET value = to_json($1::text), updated_at = NOW()`,
         [currencies.join(",")]
       );
@@ -7599,7 +7788,7 @@ async function registerRoutes(app2) {
         mailtrapService3.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
           currency: application.currency,
           application_id: application.id,
-          account_name: account?.accountName || "Geepay",
+          account_name: account?.accountName || "GreenPay",
           bank_name: account?.bankName || "",
           account_number: account?.accountNumber || "",
           routing_number: account?.routingNumber || "",
@@ -8479,7 +8668,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
       const { whatsappService: whatsappService2 } = await Promise.resolve().then(() => (init_whatsapp(), whatsapp_exports));
       const results = await Promise.allSettled([
-        user.phone ? messagingService3.sendMessage(user.phone, `Your Geepay password reset code is: ${otpCode}`) : Promise.resolve(false),
+        user.phone ? messagingService3.sendMessage(user.phone, `Your GreenPay password reset code is: ${otpCode}`) : Promise.resolve(false),
         user.phone ? whatsappService2.sendOTP(user.phone, otpCode) : Promise.resolve(false),
         user.email ? mailtrapService3.sendTemplate(user.email, "b54e3d3c-9a2c-4b6e-8e8e-8a9e9a9e9a9e", {
           first_name: user.firstName || "User",
@@ -8645,7 +8834,7 @@ p{color:#6b7280;font-size:14px;}</style>
           if (user && user.phone) {
             const domain = process.env.REPLIT_DOMAINS || "greenpay.app";
             const loginUrl = `https://${domain.split(",")[0]}/login`;
-            const notification = `You have a new message from Geepay support. Login to reply: ${loginUrl}`;
+            const notification = `You have a new message from GreenPay support. Login to reply: ${loginUrl}`;
             await messagingService3.sendMessage(user.phone, notification);
           }
         } catch (smsError) {
@@ -8782,6 +8971,7 @@ p{color:#6b7280;font-size:14px;}</style>
         await storage.updateKycDocument(existingKyc.id, {
           diditSessionId: session2.session_id,
           diditStatus: session2.status,
+          diditDecision: { sessionUrl: session2.url },
           status: "pending"
         });
       } else {
@@ -8790,7 +8980,8 @@ p{color:#6b7280;font-size:14px;}</style>
           documentType: "didit_verification",
           status: "pending",
           diditSessionId: session2.session_id,
-          diditStatus: session2.status
+          diditStatus: session2.status,
+          diditDecision: { sessionUrl: session2.url }
         });
       }
       await storage.updateUser(userId, { kycStatus: "pending" });
@@ -8818,7 +9009,8 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.json({
           status: kyc.diditStatus,
           kycStatus: kyc.status,
-          sessionId: kyc.diditSessionId
+          sessionId: kyc.diditSessionId,
+          sessionUrl: kyc.diditDecision?.sessionUrl || null
         });
       }
       const diditStatus = decision.status;
@@ -8849,6 +9041,7 @@ p{color:#6b7280;font-size:14px;}</style>
         status: diditStatus,
         kycStatus,
         sessionId: kyc.diditSessionId,
+        sessionUrl: kyc.diditDecision?.sessionUrl || null,
         decision: isTerminalStatus2(diditStatus) ? decision : void 0
       });
     } catch (error) {
@@ -9087,9 +9280,9 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error fetching KYC data" });
     }
   });
-  app2.post("/api/virtual-card/initialize-payment", async (req, res) => {
+  app2.post("/api/virtual-card/initialize-payment", requireAuth, async (req, res) => {
     try {
-      const { userId } = req.body;
+      const userId = req.session?.userId;
       console.log("Card payment request - userId:", userId, "type:", typeof userId);
       if (!userId) {
         return res.status(400).json({ message: "User ID is required" });
@@ -9103,8 +9296,10 @@ p{color:#6b7280;font-size:14px;}</style>
       if (existingCard && existingCard.status === "active") {
         return res.status(400).json({ message: "User already has an active virtual card" });
       }
-      if (existingCard && (existingCard.status === "blocked" || existingCard.status === "inactive")) {
-        console.log(`\u{1F504} User ${user.email} repurchasing card (current status: ${existingCard.status})`);
+      if (existingCard) {
+        return res.status(400).json({
+          message: `You already have a ${existingCard.status} virtual card. Please contact support.`
+        });
       }
       const reference = payHeroService.generateReference();
       if (!user.email || !user.email.includes("@") || !user.email.includes(".")) {
@@ -9383,6 +9578,7 @@ p{color:#6b7280;font-size:14px;}</style>
         "crypto_enabled",
         "bank_transfer_enabled",
         "card_enabled",
+        "global_enabled",
         "bank_name",
         "bank_account_name",
         "bank_account_number",
@@ -9973,6 +10169,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
   app2.post("/api/airtime/claim-bonus", requireAuth, async (req, res) => {
+    let bonusClaimReserved = false;
     try {
       const sessionUserId = req.session?.userId;
       if (!sessionUserId) {
@@ -9995,11 +10192,14 @@ p{color:#6b7280;font-size:14px;}</style>
       const requireKycSetting = await storage.getSystemSetting("general", "airtime_bonus_require_kyc");
       const requireEmailSetting = await storage.getSystemSetting("general", "airtime_bonus_require_email");
       const bonusAmount = parseFloat(String(bonusAmountSetting?.value || "10"));
-      const isEnabled = String(bonusEnabledSetting?.value) === "true";
-      const requireKyc = String(requireKycSetting?.value || "none");
-      const requireEmail = String(requireEmailSetting?.value) === "true";
+      const isEnabled = ["true", "1", "yes", "on"].includes(String(bonusEnabledSetting?.value ?? "").toLowerCase());
+      const requireKyc = String(requireKycSetting?.value || "none").toLowerCase();
+      const requireEmail = ["true", "1", "yes", "on"].includes(String(requireEmailSetting?.value ?? "").toLowerCase());
       if (!isEnabled) {
         return res.status(400).json({ message: "Bonus claiming is currently disabled" });
+      }
+      if (!Number.isFinite(bonusAmount) || bonusAmount <= 0) {
+        return res.status(400).json({ message: "A valid positive airtime bonus amount is not configured" });
       }
       if (requireKyc === "basic" && user.kycStatus !== "verified") {
         return res.status(400).json({ message: "Basic KYC verification is required to claim this bonus" });
@@ -10024,6 +10224,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (claimResult.rowCount !== 1) {
         return res.status(400).json({ message: "You have already claimed your airtime bonus" });
       }
+      bonusClaimReserved = true;
       const currentKesBalance = walletAvailableBalance(wallet);
       const bonusResult = await applyLedgerEntry({
         walletId: wallet.id,
@@ -10047,6 +10248,7 @@ p{color:#6b7280;font-size:14px;}</style>
       });
       console.log(`\u{1F4BE} Bonus transaction created: ${transaction.id}`);
       console.log(`\u2705 Airtime bonus claimed successfully`);
+      bonusClaimReserved = false;
       res.json({
         success: true,
         message: `Airtime bonus claimed successfully! KES ${bonusAmount} has been added to your balance.`,
@@ -10056,6 +10258,13 @@ p{color:#6b7280;font-size:14px;}</style>
       });
     } catch (error) {
       console.error("\u274C Claim bonus error:", error);
+      if (bonusClaimReserved) {
+        await pool.query(
+          `UPDATE users SET has_claimed_airtime_bonus = false, updated_at = NOW() WHERE id = $1`,
+          [req.session?.userId]
+        ).catch(() => {
+        });
+      }
       res.status(500).json({ message: "Error claiming airtime bonus" });
     }
   });
@@ -10162,8 +10371,12 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(403).json({ message: "Access denied" });
       }
       const cards = await storage.getVirtualCardsByUserId(requestedUserId);
-      const card = cards.find((c) => c.status === "active") || cards[0] || null;
-      res.json({ card, cards });
+      const ledgerCards = await Promise.all(cards.map(async (card2) => {
+        const balance = await getLedgerBalance({ cardId: card2.id }, Number(card2.balance || 0));
+        return { ...card2, balance: balance.toString(), availableBalance: balance.toString() };
+      }));
+      const card = ledgerCards.find((c) => c.status === "active") || ledgerCards[0] || null;
+      res.json({ card, cards: ledgerCards });
     } catch (error) {
       res.status(500).json({ message: "Error fetching virtual card" });
     }
@@ -10216,21 +10429,42 @@ p{color:#6b7280;font-size:14px;}</style>
       const wallet = await getUserWallet(sessionUserId, "USD");
       if (!wallet) return res.status(400).json({ message: "USD wallet not found" });
       const walletBalance = walletAvailableBalance(wallet);
-      const cardBalance = parseFloat(card.balance || "0");
+      const cardBalance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
       if (direction === "wallet_to_card") {
-        const debitResult = await pool.query(
-          `UPDATE wallets
-           SET balance = balance - $1, updated_at = NOW()
-           WHERE id = $2 AND user_id = $3
-             AND balance - hold_amount - withdrawal_hold_amount >= $1`,
-          [transferAmount, wallet.id, sessionUserId]
-        );
-        if (debitResult.rowCount !== 1) {
-          return res.status(400).json({ message: "Insufficient wallet balance" });
+        const walletDebit = await applyLedgerEntry({
+          walletId: wallet.id,
+          userId: sessionUserId,
+          currency: "USD",
+          amount: -transferAmount,
+          entryType: "card_funding",
+          idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-debit`,
+          description: "Transfer from wallet to virtual card"
+        });
+        let cardCredit;
+        try {
+          cardCredit = await applyLedgerEntry({
+            cardId: card.id,
+            userId: sessionUserId,
+            currency: "USD",
+            amount: transferAmount,
+            entryType: "card_funding",
+            idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-credit`,
+            description: "Transfer from wallet to virtual card"
+          });
+        } catch (error) {
+          await applyLedgerEntry({
+            walletId: wallet.id,
+            userId: sessionUserId,
+            currency: "USD",
+            amount: transferAmount,
+            entryType: "card_funding_rollback",
+            idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-rollback`,
+            description: "Rollback failed card funding"
+          });
+          throw error;
         }
-        const newWalletBalance = (walletBalance - transferAmount).toFixed(2);
-        const newCardBalance = (cardBalance + transferAmount).toFixed(2);
-        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        const newWalletBalance = walletDebit.availableBalance.toFixed(2);
+        const newCardBalance = cardCredit.balance.toFixed(2);
         await storage.createTransaction({
           userId: sessionUserId,
           type: "card_transfer",
@@ -10246,13 +10480,40 @@ p{color:#6b7280;font-size:14px;}</style>
         if (cardBalance < transferAmount) {
           return res.status(400).json({ message: "Insufficient card balance" });
         }
-        const newCardBalance = (cardBalance - transferAmount).toFixed(2);
-        const newWalletBalance = (walletBalance + transferAmount).toFixed(2);
-        await pool.query(
-          `UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`,
-          [transferAmount, wallet.id]
-        );
-        await storage.updateVirtualCard(cardId, { balance: newCardBalance });
+        const cardDebit = await applyLedgerEntry({
+          cardId: card.id,
+          userId: sessionUserId,
+          currency: "USD",
+          amount: -transferAmount,
+          entryType: "card_withdrawal",
+          idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-debit`,
+          description: "Transfer from virtual card to wallet"
+        });
+        let walletCredit;
+        try {
+          walletCredit = await applyLedgerEntry({
+            walletId: wallet.id,
+            userId: sessionUserId,
+            currency: "USD",
+            amount: transferAmount,
+            entryType: "card_withdrawal",
+            idempotencyKey: `card-transfer:${cardId}:${Date.now()}:wallet-credit`,
+            description: "Transfer from virtual card to wallet"
+          });
+        } catch (error) {
+          await applyLedgerEntry({
+            cardId: card.id,
+            userId: sessionUserId,
+            currency: "USD",
+            amount: transferAmount,
+            entryType: "card_withdrawal_rollback",
+            idempotencyKey: `card-transfer:${cardId}:${Date.now()}:card-rollback`,
+            description: "Rollback failed card withdrawal"
+          });
+          throw error;
+        }
+        const newCardBalance = cardDebit.balance.toFixed(2);
+        const newWalletBalance = walletCredit.availableBalance.toFixed(2);
         await storage.createTransaction({
           userId: sessionUserId,
           type: "card_transfer",
@@ -10833,7 +11094,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (defaultCurrency && user) {
         try {
           const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
-          const matchingWallet = userWallets.find((w) => w.currency === defaultCurrency);
+          const matchingWallet = userWallets.find((w) => normalizeCurrency(w.currency) === normalizeCurrency(defaultCurrency));
           if (matchingWallet) {
             await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
             await db.update(wallets).set({ isDefault: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, matchingWallet.id));
@@ -10889,11 +11150,13 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!sourceWallet || !targetWallet) {
         return res.status(400).json({ message: "Create wallets for both currencies before exchanging" });
       }
-      const available = walletAvailableBalance(sourceWallet);
+      const sourceLedgerBalance = await getLedgerBalance({ walletId: sourceWallet.id }, Number(sourceWallet.balance || 0));
+      const available = walletAvailableBalance({ ...sourceWallet, balance: sourceLedgerBalance.toString() });
       if (available < totalDeducted) {
         return res.status(400).json({ message: `Insufficient ${sourceCurrency} balance` });
       }
       const exchangeReference = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      let sourceDebited = false;
       try {
         await applyLedgerEntry({
           walletId: sourceWallet.id,
@@ -10904,6 +11167,7 @@ p{color:#6b7280;font-size:14px;}</style>
           idempotencyKey: `exchange:${exchangeReference}:debit`,
           description: `Exchange ${sourceCurrency} to ${targetCurrency}`
         });
+        sourceDebited = true;
         await applyLedgerEntry({
           walletId: targetWallet.id,
           userId,
@@ -10914,6 +11178,18 @@ p{color:#6b7280;font-size:14px;}</style>
           description: `Exchange from ${sourceCurrency}`
         });
       } catch (error) {
+        if (sourceDebited) {
+          await applyLedgerEntry({
+            walletId: sourceWallet.id,
+            userId,
+            currency: sourceCurrency,
+            amount: totalDeducted,
+            entryType: "exchange_rollback",
+            idempotencyKey: `exchange:${exchangeReference}:rollback`,
+            description: "Rollback failed exchange"
+          }).catch(() => {
+          });
+        }
         return res.status(400).json({ message: error?.message || `Insufficient ${sourceCurrency} balance` });
       }
       const transaction = await storage.createTransaction({
@@ -11055,7 +11331,7 @@ p{color:#6b7280;font-size:14px;}</style>
         qrValue,
         accountNumber: `GP-${sessionUserId.slice(-9)}`,
         accountName: user.fullName,
-        bankName: "Geepay Digital Bank"
+        bankName: "GreenPay Digital Bank"
       });
     } catch (error) {
       console.error("Error generating receive link:", error);
@@ -11333,8 +11609,24 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const startIndex = (Number(page) - 1) * Number(limit);
       const paginatedUsers = users2.slice(startIndex, startIndex + Number(limit));
+      const usersWithLedgerBalances = await Promise.all(paginatedUsers.map(async (user) => {
+        const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, user.id));
+        const balances = {};
+        for (const wallet of userWallets) {
+          const ledgerBalance = await getLedgerBalance({ walletId: wallet.id }, Number(wallet.balance || 0));
+          balances[normalizeCurrency(wallet.currency)] = walletAvailableBalance({
+            ...wallet,
+            balance: ledgerBalance.toString()
+          });
+        }
+        return {
+          ...user,
+          balance: (balances.USD ?? Number(user.balance || 0)).toFixed(2),
+          kesBalance: (balances.KES ?? Number(user.kesBalance || 0)).toFixed(2)
+        };
+      }));
       res.json({
-        users: paginatedUsers,
+        users: usersWithLedgerBalances,
         total: users2.length,
         page: Number(page),
         totalPages: Math.ceil(users2.length / Number(limit))
@@ -11660,8 +11952,11 @@ p{color:#6b7280;font-size:14px;}</style>
       const enriched = await Promise.all(
         allCards.map(async (card) => {
           const user = await storage.getUser(card.userId);
+          const balance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
           return {
             ...card,
+            balance: balance.toString(),
+            availableBalance: balance.toString(),
             userName: user?.fullName || "Unknown",
             userEmail: user?.email || "",
             userPhone: user?.phone || ""
@@ -13731,6 +14026,7 @@ p{color:#6b7280;font-size:14px;}</style>
         "crypto_enabled",
         "bank_transfer_enabled",
         "card_enabled",
+        "global_enabled",
         "bank_name",
         "bank_account_name",
         "bank_account_number",
@@ -14082,7 +14378,7 @@ p{color:#6b7280;font-size:14px;}</style>
         smtpUsername: smtpUsernameSetting?.value || "",
         smtpPassword: smtpPasswordSetting?.value || "",
         fromEmail: fromEmailSetting?.value || "",
-        fromName: fromNameSetting?.value || "Geepay"
+        fromName: fromNameSetting?.value || "GreenPay"
       };
       res.json(settings);
     } catch (error) {
@@ -14133,7 +14429,7 @@ p{color:#6b7280;font-size:14px;}</style>
       await storage.setSystemSetting({
         category: "email",
         key: "from_name",
-        value: (fromName || "Geepay").trim(),
+        value: (fromName || "GreenPay").trim(),
         description: "From name"
       });
       res.json({
@@ -14259,6 +14555,7 @@ p{color:#6b7280;font-size:14px;}</style>
       });
       const now = (/* @__PURE__ */ new Date()).toISOString();
       const transferId = storage.generateTransactionReference();
+      let senderDebited = false;
       const senderTransaction = await storage.createTransaction({
         userId: fromUserId,
         type: "send",
@@ -14294,6 +14591,7 @@ p{color:#6b7280;font-size:14px;}</style>
           transactionId: senderTransaction.id,
           description: description || `Transfer to ${toUser.fullName}`
         });
+        senderDebited = true;
         await applyLedgerEntry({
           walletId: recipientWallet.id,
           userId: toUserId,
@@ -14305,6 +14603,20 @@ p{color:#6b7280;font-size:14px;}</style>
           description: description || `Transfer from ${fromUser.fullName}`
         });
       } catch (error) {
+        if (senderDebited) {
+          await applyLedgerEntry({
+            walletId: senderWallet.id,
+            userId: fromUserId,
+            currency: transferCurrency,
+            amount: transferAmount,
+            entryType: "user_transfer_rollback",
+            idempotencyKey: `transfer:${transferId}:rollback`,
+            description: "Rollback failed user transfer"
+          }).catch(() => {
+          });
+        }
+        await storage.updateTransaction(senderTransaction.id, { status: "failed" });
+        await storage.updateTransaction(recipientTransaction.id, { status: "failed" });
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
       const { MailtrapService: MailtrapService2 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
@@ -14571,15 +14883,17 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error deleting notification" });
     }
   });
-  app2.get("/api/admin/withdrawals", async (req, res) => {
+  app2.get("/api/admin/withdrawals", requireAdminAuth, async (req, res) => {
     try {
-      const transactions2 = await storage.getAllTransactions();
+      const { transactions: transactions2 } = await storage.getAllTransactions();
       const withdrawals = transactions2.filter((t) => t.type === "withdraw");
       const withdrawalsWithUserInfo = await Promise.all(
         withdrawals.map(async (withdrawal) => {
           const user = await storage.getUser(withdrawal.userId);
           return {
             ...withdrawal,
+            adminNotes: withdrawal.failureReason,
+            processedAt: withdrawal.completedAt,
             userInfo: {
               fullName: user?.fullName || "Unknown",
               email: user?.email || "Unknown",
@@ -14594,48 +14908,38 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error fetching withdrawal requests" });
     }
   });
-  app2.post("/api/admin/withdrawals/:id/approve", async (req, res) => {
+  app2.post("/api/admin/withdrawals/:id/approve", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { adminNotes } = req.body;
-      const previousTransaction = await storage.getTransactionById(id);
+      const previousTransaction = await storage.getTransaction(id);
       if (!previousTransaction) return res.status(404).json({ message: "Withdrawal not found" });
       if (previousTransaction.status === "completed") {
         return res.json({ transaction: previousTransaction, message: "Withdrawal was already approved" });
       }
+      if (previousTransaction.status !== "pending") {
+        return res.status(409).json({ message: `Withdrawal is already ${previousTransaction.status}` });
+      }
+      const user = await storage.getUser(previousTransaction.userId);
+      if (!user) return res.status(404).json({ message: "Withdrawal owner not found" });
+      const totalDeduction = parseFloat(previousTransaction.amount) + parseFloat(previousTransaction.fee || "0");
+      const wallet = await getUserWallet(user.id, previousTransaction.currency);
+      if (!wallet) return res.status(400).json({ message: `${previousTransaction.currency} wallet not found` });
+      await settleWalletWithdrawal(wallet.id, user.id, previousTransaction.currency, totalDeduction, previousTransaction.id);
+      const notes = adminNotes || "Approved by admin";
       const transaction = await storage.updateTransaction(id, {
         status: "completed",
-        adminNotes: adminNotes || "Approved by admin",
-        processedAt: /* @__PURE__ */ new Date()
+        description: previousTransaction.description,
+        failureReason: notes,
+        completedAt: /* @__PURE__ */ new Date()
       });
       if (transaction) {
-        const user = await storage.getUser(transaction.userId);
-        if (user) {
-          const withdrawalAmount = parseFloat(transaction.amount);
-          const withdrawalFee = parseFloat(transaction.fee || "0");
-          const totalDeduction = withdrawalAmount + withdrawalFee;
-          const wallet = await getUserWallet(user.id, transaction.currency);
-          if (!wallet) {
-            return res.status(400).json({ message: `${transaction.currency} wallet not found` });
-          }
-          await applyLedgerEntry({
-            walletId: wallet.id,
-            userId: user.id,
-            currency: normalizeCurrency(transaction.currency),
-            amount: -totalDeduction,
-            entryType: "withdrawal_settlement",
-            idempotencyKey: `withdrawal:${transaction.id}:settled`,
-            transactionId: transaction.id,
-            description: "Withdrawal approved"
-          });
-          await releaseWalletWithdrawal(wallet.id, totalDeduction);
-          await notificationService.sendNotification({
-            title: "Withdrawal Approved",
-            body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
-            userId: user.id,
-            type: "transaction"
-          });
-        }
+        await notificationService.sendNotification({
+          title: "Withdrawal Approved",
+          body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
+          userId: user.id,
+          type: "transaction"
+        });
       }
       res.json({ transaction, message: "Withdrawal approved successfully" });
     } catch (error) {
@@ -14643,14 +14947,18 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error approving withdrawal" });
     }
   });
-  app2.post("/api/admin/withdrawals/:id/reject", async (req, res) => {
+  app2.post("/api/admin/withdrawals/:id/reject", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { adminNotes } = req.body;
+      const previousTransaction = await storage.getTransaction(id);
+      if (!previousTransaction) return res.status(404).json({ message: "Withdrawal not found" });
+      if (previousTransaction.status !== "pending") {
+        return res.status(409).json({ message: `Withdrawal is already ${previousTransaction.status}` });
+      }
       const transaction = await storage.updateTransaction(id, {
         status: "failed",
-        adminNotes: adminNotes || "Rejected by admin",
-        processedAt: /* @__PURE__ */ new Date()
+        failureReason: adminNotes || "Rejected by admin"
       });
       if (transaction) {
         const user = await storage.getUser(transaction.userId);
@@ -14732,17 +15040,38 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error fetching system logs" });
     }
   });
-  app2.put("/api/admin/withdrawals/:id/status", async (req, res) => {
+  app2.put("/api/admin/withdrawals/:id/status", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { status, adminNotes } = req.body;
       if (!status || !["pending", "completed", "failed"].includes(status)) {
         return res.status(400).json({ message: "Invalid status. Must be pending, completed, or failed." });
       }
-      const updatedWithdrawal = await storage.updateWithdrawalRequest(id, {
+      const existing = await storage.getTransaction(id);
+      if (!existing || existing.type !== "withdraw") {
+        return res.status(404).json({ message: "Withdrawal request not found" });
+      }
+      if (status === "completed" && existing.status === "pending") {
+        const user = await storage.getUser(existing.userId);
+        const wallet = user ? await getUserWallet(user.id, existing.currency) : void 0;
+        if (!user || !wallet) return res.status(400).json({ message: "Withdrawal wallet not found" });
+        await settleWalletWithdrawal(
+          wallet.id,
+          user.id,
+          existing.currency,
+          parseFloat(existing.amount) + parseFloat(existing.fee || "0"),
+          existing.id
+        );
+      } else if (status === "failed" && existing.status === "pending") {
+        const wallet = await getUserWallet(existing.userId, existing.currency);
+        if (wallet) {
+          await releaseWalletWithdrawal(wallet.id, parseFloat(existing.amount) + parseFloat(existing.fee || "0"));
+        }
+      }
+      const updatedWithdrawal = await storage.updateTransaction(id, {
         status,
-        adminNotes,
-        processedAt: status !== "pending" ? /* @__PURE__ */ new Date() : null
+        failureReason: adminNotes || (status === "completed" ? "Approved by admin" : status === "failed" ? "Rejected by admin" : null),
+        completedAt: status !== "pending" ? /* @__PURE__ */ new Date() : null
       });
       if (!updatedWithdrawal) {
         return res.status(404).json({ message: "Withdrawal request not found" });
@@ -15159,6 +15488,11 @@ p{color:#6b7280;font-size:14px;}</style>
             console.error("Could not find user for payment reference:", paymentResult.reference, "phone:", userPhone);
             return res.status(200).json({ message: "Payment processed but user not found" });
           }
+          const existingCard = await storage.getVirtualCardByUserId(userId);
+          if (existingCard?.status === "active") {
+            console.log(`Virtual card already exists for user ${userId}; skipping duplicate callback`);
+            return res.status(200).json({ message: "Virtual card already exists" });
+          }
           const cardData = {
             userId,
             cardNumber: `5399 ${Math.floor(1e3 + Math.random() * 9e3)} ${Math.floor(1e3 + Math.random() * 9e3)} ${Math.floor(1e3 + Math.random() * 9e3)}`,
@@ -15554,7 +15888,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
   app2.get("/sitemap.xml", async (req, res) => {
     try {
-      const baseUrl = "https://greenpay.world";
+      const baseUrl = "https://geepay.us";
       const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
       const publicPages = [
         // Core marketing pages
@@ -15603,7 +15937,7 @@ ${publicPages.map((page) => `  <url>
 Disallow: /admin/
 Disallow: /api/
 
-Sitemap: https://greenpay.world/sitemap.xml`;
+Sitemap: https://geepay.us/sitemap.xml`;
     res.header("Content-Type", "text/plain");
     res.send(robotsTxt);
   });
@@ -17229,7 +17563,11 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   app2.get("/api/admin/users/:id/cards", async (req, res) => {
     try {
       const cards = await storage.getVirtualCardsByUserId(req.params.id);
-      res.json({ cards });
+      const enriched = await Promise.all(cards.map(async (card) => {
+        const balance = await getLedgerBalance({ cardId: card.id }, Number(card.balance || 0));
+        return { ...card, balance: balance.toString(), availableBalance: balance.toString() };
+      }));
+      res.json({ cards: enriched });
     } catch (error) {
       console.error("Admin fetch user cards error:", error);
       res.status(500).json({ message: "Failed to fetch user cards" });
@@ -17359,10 +17697,17 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           console.error("Wallet auto-create error:", autoCreateErr);
         }
       }
-      const enriched = userWallets.map((w) => ({
-        ...w,
-        availableBalance: walletAvailableBalance(w),
-        currencyMeta: currencyMeta[w.currency] || null
+      const enriched = await Promise.all(userWallets.map(async (w) => {
+        const ledgerBalance = await getLedgerBalance({ walletId: w.id }, Number(w.balance || 0));
+        return {
+          ...w,
+          balance: ledgerBalance.toString(),
+          availableBalance: walletAvailableBalance({
+            ...w,
+            balance: ledgerBalance.toString()
+          }),
+          currencyMeta: currencyMeta[w.currency] || null
+        };
       }));
       res.json({ wallets: enriched });
     } catch (e) {
@@ -17378,7 +17723,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const knownCodes = await getEnabledCurrencyCodes();
       if (!knownCodes.includes(normalizedCurrency)) return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
       const existing = await db.select().from(wallets).where(eq3(wallets.userId, userId));
-      if (existing.some((w) => w.currency === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
+      if (existing.some((w) => normalizeCurrency(w.currency) === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
       const isDefault = existing.length === 0;
       const [newWallet] = await db.insert(wallets).values({ userId, currency: normalizedCurrency, isDefault, isActive: true }).returning();
       res.json({ wallet: newWallet });
@@ -17411,6 +17756,10 @@ Sitemap: https://greenpay.world/sitemap.xml`;
   app2.post("/api/deposit/nexuspay", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
+      const globalSetting = await storage.getSystemSetting("deposit_methods", "global_enabled");
+      if (String(globalSetting?.value || "").toLowerCase() !== "true") {
+        return res.status(403).json({ message: "Global deposits are currently disabled" });
+      }
       const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
       const normalizedCurrency = normalizeCurrency(currency);
@@ -17421,7 +17770,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const [wallet_] = await db.select().from(wallets).where(eq3(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
-      if (wallet_.currency !== normalizedCurrency) {
+      if (normalizeCurrency(wallet_.currency) !== normalizedCurrency) {
         return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
       }
       const currencyMeta = NEXUSPAY_CURRENCIES.find((c) => c.code === normalizedCurrency);
@@ -17439,7 +17788,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       });
       res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
     } catch (e) {
-      console.error("NexusPay deposit error:", e);
+      console.error("Global deposit error:", e);
       res.status(500).json({ message: e.message || "Deposit failed" });
     }
   });
@@ -17450,6 +17799,9 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const status = await nexusPayService.getStatus(reference);
       if (status.status === "completed") {
         const [txn] = await db.select().from(transactions).where(eq3(transactions.reference, reference));
+        if (txn && txn.userId !== userId) {
+          return res.status(403).json({ message: "Transaction not found" });
+        }
         if (txn && txn.status !== "completed") {
           const meta = txn.metadata;
           const walletId = meta?.walletId;
@@ -17468,6 +17820,37 @@ Sitemap: https://greenpay.world/sitemap.xml`;
               transactionId: txn.id,
               description: txn.description || "NexusPay deposit"
             });
+            const activeBonuses = await db.select().from(depositBonuses).where(eq3(depositBonuses.isActive, true));
+            const depositAmount = parseFloat(status.amount);
+            const eligible = activeBonuses.filter((bonus) => (bonus.method === "nexuspay" || bonus.method === "any") && depositAmount >= parseFloat(bonus.minAmount)).map((bonus) => ({
+              bonus,
+              value: bonus.bonusType === "percentage" ? depositAmount * parseFloat(bonus.bonusAmount) / 100 : parseFloat(bonus.bonusAmount)
+            })).filter(({ value }) => value > 0).sort((a, b) => b.value - a.value);
+            if (eligible[0]) {
+              const { bonus, value } = eligible[0];
+              const applied = await applyLedgerEntry({
+                walletId: wallet.id,
+                userId,
+                currency: normalizeCurrency(wallet.currency),
+                amount: value,
+                entryType: "deposit_bonus",
+                idempotencyKey: `deposit-bonus:${txn.id}:${bonus.id}`,
+                transactionId: txn.id,
+                description: bonus.description || "Deposit bonus"
+              });
+              if (applied.applied) {
+                await db.insert(transactions).values({
+                  userId,
+                  type: "deposit",
+                  amount: value.toFixed(2),
+                  currency: normalizeCurrency(wallet.currency),
+                  status: "completed",
+                  fee: "0.00",
+                  description: `Deposit bonus: ${bonus.description || "Global deposit bonus"}`,
+                  metadata: { bonusId: bonus.id, triggerMethod: "nexuspay" }
+                });
+              }
+            }
           }
           await db.update(transactions).set({ status: "completed", completedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.reference, reference));
         }
@@ -17491,7 +17874,8 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const toWallet = userWallets.find((w) => w.id === toWalletId);
       if (!fromWallet || !toWallet) return res.status(404).json({ message: "Wallet not found" });
       if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
-      const fromBalance = walletAvailableBalance(fromWallet);
+      const fromLedgerBalance = await getLedgerBalance({ walletId: fromWallet.id }, Number(fromWallet.balance || 0));
+      const fromBalance = walletAvailableBalance({ ...fromWallet, balance: fromLedgerBalance.toString() });
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
@@ -17499,6 +17883,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;
       const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
+      let fromDebited = false;
       try {
         await applyLedgerEntry({
           walletId: fromWallet.id,
@@ -17509,6 +17894,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           idempotencyKey: `exchange:${ref}:debit`,
           description: `Exchange ${fromWallet.currency} to ${toWallet.currency}`
         });
+        fromDebited = true;
         await applyLedgerEntry({
           walletId: toWallet.id,
           userId,
@@ -17519,6 +17905,18 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           description: `Exchange from ${fromWallet.currency}`
         });
       } catch (error) {
+        if (fromDebited) {
+          await applyLedgerEntry({
+            walletId: fromWallet.id,
+            userId,
+            currency: normalizeCurrency(fromWallet.currency),
+            amount: fromAmt,
+            entryType: "exchange_rollback",
+            idempotencyKey: `exchange:${ref}:rollback`,
+            description: "Rollback failed exchange"
+          }).catch(() => {
+          });
+        }
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
       await db.insert(transactions).values({
@@ -17552,14 +17950,22 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       `, [search]);
       const grouped = {};
       for (const row of allWallets.rows) {
+        const ledgerBalance = await getLedgerBalance({ walletId: row.id }, Number(row.balance || 0));
+        const availableBalance = walletAvailableBalance({
+          balance: ledgerBalance.toString(),
+          holdAmount: row.hold_amount,
+          withdrawalHoldAmount: row.withdrawal_hold_amount
+        });
         if (!grouped[row.user_id]) grouped[row.user_id] = [];
         grouped[row.user_id].push({
           id: row.id,
           userId: row.user_id,
           currency: row.currency,
           label: row.label,
-          balance: row.balance,
+          balance: ledgerBalance.toString(),
+          availableBalance,
           holdAmount: row.hold_amount,
+          withdrawalHoldAmount: row.withdrawal_hold_amount,
           isDefault: row.is_default,
           isActive: row.is_active,
           isSuspended: row.is_suspended,
@@ -17568,7 +17974,19 @@ Sitemap: https://greenpay.world/sitemap.xml`;
           user: { fullName: row.full_name, email: row.email, phone: row.phone }
         });
       }
-      res.json({ wallets: allWallets.rows, grouped });
+      const walletsWithLedgerBalances = await Promise.all(allWallets.rows.map(async (row) => {
+        const ledgerBalance = await getLedgerBalance({ walletId: row.id }, Number(row.balance || 0));
+        return {
+          ...row,
+          balance: ledgerBalance.toString(),
+          available_balance: walletAvailableBalance({
+            balance: ledgerBalance.toString(),
+            holdAmount: row.hold_amount,
+            withdrawalHoldAmount: row.withdrawal_hold_amount
+          })
+        };
+      }));
+      res.json({ wallets: walletsWithLedgerBalances, grouped });
     } catch (e) {
       res.status(500).json({ message: e.message });
     }
@@ -17577,7 +17995,15 @@ Sitemap: https://greenpay.world/sitemap.xml`;
     try {
       const { userId } = req.params;
       const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
-      res.json({ wallets: userWallets });
+      const enriched = await Promise.all(userWallets.map(async (wallet) => {
+        const balance = await getLedgerBalance({ walletId: wallet.id }, Number(wallet.balance || 0));
+        return {
+          ...wallet,
+          balance: balance.toString(),
+          availableBalance: walletAvailableBalance({ ...wallet, balance: balance.toString() })
+        };
+      }));
+      res.json({ wallets: enriched });
     } catch (e) {
       res.status(500).json({ message: e.message });
     }
@@ -17588,7 +18014,7 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const { currency } = req.body;
       if (!currency) return res.status(400).json({ message: "currency required" });
       const existing = await db.select().from(wallets).where(eq3(wallets.userId, userId));
-      if (existing.some((w) => w.currency === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
+      if (existing.some((w) => normalizeCurrency(w.currency) === currency)) return res.status(400).json({ message: `User already has a ${currency} wallet` });
       const [newWallet] = await db.insert(wallets).values({ userId, currency, isDefault: existing.length === 0, isActive: true }).returning();
       res.json({ wallet: newWallet });
     } catch (e) {
@@ -17630,14 +18056,25 @@ Sitemap: https://greenpay.world/sitemap.xml`;
       const { amount, type } = req.body;
       const adj = parseFloat(amount || "0");
       if (adj <= 0) return res.status(400).json({ message: "Amount must be > 0" });
-      if (type === "credit") {
-        await pool.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [adj, id]);
-      } else if (type === "debit") {
-        await pool.query(`UPDATE wallets SET balance = GREATEST(0, balance - $1), updated_at = NOW() WHERE id = $2`, [adj, id]);
-      } else {
+      if (type !== "credit" && type !== "debit") {
         return res.status(400).json({ message: "type must be 'credit' or 'debit'" });
       }
-      res.json({ success: true });
+      const [wallet] = await db.select().from(wallets).where(eq3(wallets.id, id));
+      if (!wallet) return res.status(404).json({ message: "Wallet not found" });
+      try {
+        const result = await applyLedgerEntry({
+          walletId: wallet.id,
+          userId: wallet.userId,
+          currency: normalizeCurrency(wallet.currency),
+          amount: type === "credit" ? adj : -adj,
+          entryType: `admin_wallet_${type}`,
+          idempotencyKey: `admin-wallet:${wallet.id}:${Date.now()}:${Math.random()}`,
+          description: `Admin ${type} adjustment`
+        });
+        res.json({ success: true, balance: result.balance.toFixed(2), availableBalance: result.availableBalance.toFixed(2) });
+      } catch (error) {
+        res.status(400).json({ message: error?.message || "Balance adjustment failed" });
+      }
     } catch (e) {
       res.status(500).json({ message: e.message });
     }

@@ -11,7 +11,7 @@ export default function ExchangeLanding() {
         title="USD to KES Exchange Rate - Live Rates | Geepay Currency Exchange"
         description="Convert USD to KES with live exchange rates. Current rate: 129.27 KES per USD. No hidden fees. Fast, secure currency exchange for Kenya."
         keywords="USD to KES, currency exchange, exchange rate, Kenya shilling, US dollar to Kenyan shilling, forex Kenya"
-        canonical="https://greenpay.world/features/exchange"
+        canonical="https://geepay.us/features/exchange"
       />
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white">
       <div className="max-w-4xl mx-auto px-4 py-12">

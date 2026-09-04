@@ -143,8 +143,8 @@ export default function ReceiveMoneyPage() {
   const handleShare = () => {
     if (navigator.share) {
       navigator.share({
-        title: 'GreenPay QR Code',
-        text: 'Scan this QR code to send me money via GreenPay',
+        title: 'Geepay QR Code',
+        text: 'Scan this QR code to send me money via Geepay',
       });
     } else {
       toast({

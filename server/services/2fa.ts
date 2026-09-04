@@ -4,8 +4,8 @@ import QRCode from 'qrcode';
 export class TwoFactorService {
   generateSecret(userEmail: string): { secret: string; qrCodeUrl: string; backupCodes: string[] } {
     const secret = speakeasy.generateSecret({
-      name: `GreenPay (${userEmail})`,
-      issuer: 'GreenPay'
+      name: `Geepay (${userEmail})`,
+      issuer: 'Geepay'
     });
 
     const backupCodes = this.generateBackupCodes();
@@ -21,7 +21,7 @@ export class TwoFactorService {
     const otpAuthUrl = speakeasy.otpauthURL({
       secret,
       label: userEmail,
-      issuer: 'GreenPay',
+      issuer: 'Geepay',
       encoding: 'base32'
     });
 

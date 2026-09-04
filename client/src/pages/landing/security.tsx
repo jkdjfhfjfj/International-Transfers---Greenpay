@@ -11,7 +11,7 @@ export default function SecurityLanding() {
         title="Security & Compliance | Bank-Level Protection | Geepay"
         description="Your money is protected with 256-bit encryption, two-factor authentication, KYC verification, and AML compliance. Trust Geepay for secure transfers."
         keywords="Geepay security, money transfer safety, encryption, KYC verification, AML compliance, secure remittance"
-        canonical="https://greenpay.world/security"
+        canonical="https://geepay.us/security"
       />
       <div className="min-h-screen bg-white">
       <div className="max-w-6xl mx-auto px-4 py-12">

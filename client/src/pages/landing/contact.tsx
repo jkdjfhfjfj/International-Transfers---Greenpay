@@ -8,10 +8,10 @@ export default function ContactLanding() {
   return (
     <>
       <SEO
-        title="Contact Support | Get Help with Money Transfers | GreenPay"
-        description="Contact GreenPay support via live chat, email, or phone. 24/7 customer service for money transfers, virtual cards, and account help. support@greenpay.world"
-        keywords="GreenPay contact, customer support, live chat, help desk, contact support"
-        canonical="https://greenpay.world/contact"
+        title="Contact Support | Get Help with Money Transfers | Geepay"
+        description="Contact Geepay support via live chat, email, or phone. 24/7 customer service for money transfers, virtual cards, and account help."
+        keywords="Geepay contact, customer support, live chat, help desk, contact support"
+        canonical="https://geepay.us/contact"
       />
       <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <div className="max-w-4xl mx-auto px-4 py-12">
@@ -49,9 +49,9 @@ export default function ContactLanding() {
               <p className="text-gray-700 mb-4">
                 Send us an email and we'll respond within 24 hours.
               </p>
-              <a href="mailto:support@greenpay.world">
+              <a href="mailto:support@geepay.us">
                 <Button variant="outline" className="w-full">
-                  support@greenpay.world
+                  support@geepay.us
                 </Button>
               </a>
             </CardContent>

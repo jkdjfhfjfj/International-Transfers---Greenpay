@@ -93,6 +93,7 @@ export default function KYCPage() {
     status: string | null;
     kycStatus: KycStatus;
     sessionId: string | null;
+    sessionUrl: string | null;
     docStatus: string | null;
   }>({
     queryKey: ["/api/kyc/didit/status"],
@@ -101,6 +102,12 @@ export default function KYCPage() {
   });
 
   const isReVerificationRequested = isNotStarted && diditStatusData?.docStatus === "re_verification_requested";
+
+  // Hydrate the resumable session after a page reload.
+  useEffect(() => {
+    if (diditStatusData?.sessionId) setSessionId(diditStatusData.sessionId);
+    if (diditStatusData?.sessionUrl) setSessionUrl(diditStatusData.sessionUrl);
+  }, [diditStatusData?.sessionId, diditStatusData?.sessionUrl]);
 
   // Stop polling when we reach a terminal status
   useEffect(() => {
