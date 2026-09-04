@@ -233,6 +233,38 @@ app.use((req, res, next) => {
     reusePort: true,
   }, () => {
     log(`serving on port ${port}`);
+
+    // Render Free sleeps services after a period without incoming traffic.
+    // Render provides RENDER_EXTERNAL_URL automatically, so the running
+    // service can keep its public endpoint warm without affecting local dev.
+    const renderExternalUrl = process.env.RENDER_EXTERNAL_URL || process.env.PUBLIC_APP_URL;
+    const selfPingEnabled =
+      isProduction &&
+      !!renderExternalUrl &&
+      process.env.DISABLE_SELF_PING !== "true";
+
+    if (selfPingEnabled) {
+      const healthUrl = `${renderExternalUrl!.replace(/\/+$/, "")}/health`;
+      const selfPing = async () => {
+        try {
+          const response = await fetch(healthUrl, {
+            headers: { "User-Agent": "Geepay-Render-Self-Ping/1.0" },
+          });
+
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+          }
+
+          console.log(`[self-ping] health check succeeded: ${healthUrl}`);
+        } catch (error) {
+          console.warn("[self-ping] health check failed:", error instanceof Error ? error.message : error);
+        }
+      };
+
+      // Stay below Render Free's inactivity window.
+      setInterval(() => { void selfPing(); }, 10 * 60 * 1000);
+      console.log(`[self-ping] enabled; checking ${healthUrl} every 10 minutes`);
+    }
   });
 
   // Handle server startup errors

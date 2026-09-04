@@ -62,25 +62,22 @@ npm start
 
 ## Keep a Free Render Service Awake
 
-Render Free web services sleep after a period without incoming traffic. This
-project includes a GitHub Actions workflow that requests the lightweight
-`/health` endpoint every 10 minutes.
+Render Free web services sleep after a period without incoming traffic. The
+production server now uses Render's automatically provided
+`RENDER_EXTERNAL_URL` to request the lightweight `/health` endpoint every 10
+minutes while the app is running.
 
-After pushing the project to GitHub:
+No GitHub secret or external monitor is required. After deploying the latest
+version, check the Render logs for:
 
-1. Open the repository's **Settings → Secrets and variables → Actions**
-2. Create a repository secret named `RENDER_APP_URL`
-3. Set its value to the public Render URL, for example:
-   ```
-   https://your-app.onrender.com
-   ```
-4. Run **Keep Render service awake** once from the repository's **Actions**
-   tab to verify the setup
+```text
+[self-ping] enabled; checking https://your-app.onrender.com/health every 10 minutes
+[self-ping] health check succeeded: https://your-app.onrender.com/health
+```
 
-The workflow can be started manually with `workflow_dispatch`, and it runs
-automatically every 10 minutes thereafter. GitHub scheduled workflows can
-occasionally be delayed, so a paid Render instance is the reliable option for
-latency-sensitive or production-critical traffic.
+Set `DISABLE_SELF_PING=true` in Render only if you want to turn this behavior
+off. A paid Render instance remains the reliable option for latency-sensitive
+or production-critical traffic.
 
 ---
 
