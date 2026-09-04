@@ -2822,7 +2822,7 @@ p{color:#6b7280;font-size:14px;}</style>
   app.get("/api/deposit/config", requireAuth, async (req, res) => {
     try {
       const keys = [
-        "mpesa_enabled", "crypto_enabled", "bank_transfer_enabled", "card_enabled",
+        "mpesa_enabled", "crypto_enabled", "bank_transfer_enabled", "card_enabled", "global_enabled",
         "bank_name", "bank_account_name", "bank_account_number", "bank_swift_code",
         "bank_branch", "bank_currency", "bank_routing_number", "bank_additional_info"
       ];

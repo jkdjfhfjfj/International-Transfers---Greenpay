@@ -13,7 +13,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import {
   Save, Smartphone, Bitcoin, Building2, CreditCard, Gift,
-  Plus, Trash2, Edit2, Check, X, Info, ToggleLeft, ToggleRight
+  Plus, Trash2, Edit2, Check, X, Info, ToggleLeft, ToggleRight, Globe
 } from "lucide-react";
 
 interface DepositMethods {
@@ -21,6 +21,7 @@ interface DepositMethods {
   crypto_enabled: string;
   bank_transfer_enabled: string;
   card_enabled: string;
+  global_enabled: string;
   bank_name: string;
   bank_account_name: string;
   bank_account_number: string;
@@ -46,6 +47,7 @@ const METHOD_LABELS: Record<string, string> = {
   crypto: "Cryptocurrency",
   bank_transfer: "Bank Transfer",
   card: "Card (Paystack)",
+  global: "Global (All Countries)",
   any: "Any Method",
 };
 
@@ -54,6 +56,7 @@ const DEFAULT_METHODS: DepositMethods = {
   crypto_enabled: "false",
   bank_transfer_enabled: "false",
   card_enabled: "false",
+  global_enabled: "false",
   bank_name: "",
   bank_account_name: "",
   bank_account_number: "",
@@ -235,6 +238,7 @@ export default function AdminDepositSettingsPage() {
                   { key: "crypto_enabled" as const, label: "Cryptocurrency", icon: Bitcoin, desc: "BTC, ETH, USDT, USDC — admin-configured addresses", color: "text-orange-500" },
                   { key: "bank_transfer_enabled" as const, label: "Bank Transfer (SWIFT)", icon: Building2, desc: "International wire transfer with bank details", color: "text-blue-600" },
                   { key: "card_enabled" as const, label: "Debit / Credit Card (Paystack)", icon: CreditCard, desc: "Visa & Mastercard via Paystack gateway", color: "text-blue-600" },
+                  { key: "global_enabled" as const, label: "Global (All Countries)", icon: Globe, desc: "Mobile money and card deposits across supported countries", color: "text-purple-600" },
                 ].map(({ key, label, icon: Icon, desc, color }) => (
                   <div key={key} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-muted/40">
                     <div className="flex items-center gap-3">

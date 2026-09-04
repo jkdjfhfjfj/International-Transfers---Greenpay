@@ -49,7 +49,7 @@ const METHOD_META: Record<string, { label: string; icon: any; color: string; des
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
-  nexuspay: { label: "NexusPay (Multi-Currency)", icon: Globe, color: "from-purple-500 to-violet-600", description: "Mobile money & cards — 15 currencies" },
+  nexuspay: { label: "Global (All Countries)", icon: Globe, color: "from-purple-500 to-violet-600", description: "Mobile money and card deposits across supported countries" },
 };
 
 const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
@@ -316,7 +316,7 @@ export default function DepositPage() {
               <div className="space-y-3">
                 {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
                   const meta = METHOD_META[method];
-                  const enabled = method === "nexuspay" ? true : isEnabled(method);
+                  const enabled = method === "nexuspay" ? isEnabled("global") : isEnabled(method);
                   const Icon = meta.icon;
                   const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
                   return (
@@ -638,8 +638,8 @@ export default function DepositPage() {
                       <Globe className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm">NexusPay Deposit</p>
-                      <p className="text-xs text-muted-foreground">Mobile money & cards — 15 currencies</p>
+                      <p className="font-semibold text-sm">Global Deposit (All Countries)</p>
+                      <p className="text-xs text-muted-foreground">Mobile money and cards across supported countries</p>
                     </div>
                   </div>
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -45,6 +45,11 @@ export default function WithdrawPage() {
   const realTimeBalance = activeWallet ? Number(activeWallet.availableBalance ?? 0) : 0;
   const activeSymbol = getCurrencySymbol(activeWallet?.currency || 'KES').trim();
   const usdBalance = Number(userWallets.find(w => w.currency === "USD")?.availableBalance ?? 0);
+  const { data: systemSettings } = useQuery<any>({
+    queryKey: ["/api/system-settings"],
+    queryFn: async () => (await apiRequest("GET", "/api/system-settings")).json(),
+  });
+  const withdrawalFee = Math.max(0, Number(systemSettings?.fees?.withdrawal_fee?.value ?? 0));
 
   const form = useForm<WithdrawForm>({
     resolver: zodResolver(withdrawSchema),
@@ -70,7 +75,7 @@ export default function WithdrawPage() {
         amount: data.amount,
         currency: data.currency,
         description: `Withdrawal via ${data.withdrawMethod}`,
-        fee: "2.99",
+        fee: withdrawalFee.toFixed(2),
         recipientDetails: data.accountDetails,
       });
       return response.json();
@@ -103,7 +108,7 @@ export default function WithdrawPage() {
       name: "Bank Transfer",
       Icon: Building2,
       description: "Direct transfer to your bank account",
-      fee: "KSh 300",
+      fee: "configured fee",
       processingTime: "1-3 business days",
       countries: ["Nigeria", "Ghana", "Kenya", "South Africa", "Uganda"],
     },
@@ -112,7 +117,7 @@ export default function WithdrawPage() {
       name: "Mobile Money",
       Icon: Smartphone,
       description: "M-Pesa, Airtel Money, MTN Mobile Money",
-      fee: "KSh 200",
+      fee: "configured fee",
       processingTime: "Within 30 minutes",
       countries: ["Kenya", "Uganda", "Tanzania", "Rwanda", "Cameroon"],
     },
@@ -121,7 +126,7 @@ export default function WithdrawPage() {
       name: "Local Bank Account",
       Icon: Wallet,
       description: "Direct deposit to local African banks",
-      fee: "KSh 400",
+      fee: "configured fee",
       processingTime: "2-4 hours",
       countries: ["Nigeria", "Ghana", "Kenya", "South Africa", "Egypt"],
     },
@@ -142,7 +147,9 @@ export default function WithdrawPage() {
 
   const getWithdrawFee = () => {
     const method = withdrawMethods.find(m => m.id === selectedMethod);
-    return method?.fee || "KSh 2.99";
+    return method?.fee === "configured fee" || !method?.fee
+      ? `${activeSymbol} ${withdrawalFee.toFixed(2)}`
+      : method.fee;
   };
 
   return (
@@ -567,8 +574,8 @@ export default function WithdrawPage() {
                   <span className="font-medium">{getWithdrawFee()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Exchange Rate</span>
-                  <span className="font-medium">1 USD = 129 KES</span>
+                  <span className="text-muted-foreground">Currency</span>
+                  <span className="font-medium">{activeWallet?.currency || "—"}</span>
                 </div>
                 {selectedMethod && (
                   <div className="flex justify-between">
@@ -582,8 +589,8 @@ export default function WithdrawPage() {
                 <div className="flex justify-between font-bold">
                   <span>You Receive</span>
                   <span className="text-primary">
-                    {activeSymbol} {form.watch("amount") ? 
-                      formatNumber(parseFloat(form.watch("amount")) - parseFloat(getWithdrawFee().replace(/[^0-9.]/g, ''))) : 
+                    {activeSymbol} {form.watch("amount") ?
+                      formatNumber(Math.max(0, parseFloat(form.watch("amount")) - withdrawalFee)) :
                       "0.00"}
                   </span>
                 </div>
