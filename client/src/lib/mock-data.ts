@@ -41,6 +41,19 @@ export const mockRecipients = [
 export const mockCurrencies = [
   { code: "USD", name: "US Dollar", symbol: "$" },
   { code: "KES", name: "Kenyan Shilling", symbol: "KSh" },
+  { code: "UGX", name: "Ugandan Shilling", symbol: "UGX" },
+  { code: "GHS", name: "Ghanaian Cedi", symbol: "₵" },
+  { code: "NGN", name: "Nigerian Naira", symbol: "₦" },
+  { code: "ZAR", name: "South African Rand", symbol: "R" },
+  { code: "TZS", name: "Tanzanian Shilling", symbol: "TSh" },
+  { code: "XOF", name: "West African CFA", symbol: "CFA" },
+  { code: "CDF", name: "Congolese Franc", symbol: "FC" },
+  { code: "XAF", name: "Central African CFA", symbol: "FCFA" },
+  { code: "RWF", name: "Rwandan Franc", symbol: "RF" },
+  { code: "SLE", name: "Sierra Leonean Leone", symbol: "Le" },
+  { code: "ZMW", name: "Zambian Kwacha", symbol: "ZK" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
 ];
 
 export const mockExchangeRates = {

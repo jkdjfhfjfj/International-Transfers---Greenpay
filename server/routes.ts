@@ -4974,9 +4974,25 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Payment Request routes with working payment links
-  app.post("/api/payment-requests", async (req, res) => {
+  app.post("/api/payment-requests", requireAuth, async (req, res) => {
     try {
-      const requestData = insertPaymentRequestSchema.parse(req.body);
+      const sessionUserId = (req as any).session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const requestedRecipient = req.body?.toUserId
+        ? await storage.getUser(String(req.body.toUserId))
+        : undefined;
+      const requestData = insertPaymentRequestSchema.parse({
+        ...req.body,
+        fromUserId: sessionUserId,
+        toUserId: req.body?.toUserId || undefined,
+        toEmail: req.body?.toEmail || requestedRecipient?.email || undefined,
+        toPhone: req.body?.toPhone || requestedRecipient?.phone || undefined,
+        amount: String(req.body?.amount ?? ""),
+        currency: normalizeCurrency(req.body?.currency || "KES"),
+      });
       
       // Generate unique payment link
       const paymentId = Math.random().toString(36).substring(2, 15);
@@ -4988,14 +5004,24 @@ p{color:#6b7280;font-size:14px;}</style>
       });
       
       // Send notification if recipient has account
-      if (requestData.toEmail || requestData.toPhone) {
-        await notificationService.sendNotification({
-          title: "Payment Request",
-          body: `You have received a payment request for ${requestData.currency} ${requestData.amount}`,
-          userId: requestData.fromUserId,
-          type: "general",
-          metadata: { paymentRequestId: request.id }
-        });
+      if (requestData.toUserId || requestData.toEmail || requestData.toPhone) {
+        const recipientUser = requestData.toUserId
+          ? await storage.getUser(requestData.toUserId)
+          : requestData.toEmail
+            ? await storage.getUserByEmail(requestData.toEmail)
+            : requestData.toPhone
+              ? await storage.getUserByPhone(requestData.toPhone)
+              : undefined;
+
+        if (recipientUser) {
+          await notificationService.sendNotification({
+            title: "Payment Request",
+            body: `You have received a payment request for ${requestData.currency} ${requestData.amount}`,
+            userId: recipientUser.id,
+            type: "general",
+            metadata: { paymentRequestId: request.id },
+          });
+        }
       }
       
       res.json({ request, message: "Payment request created successfully" });
@@ -5073,6 +5099,192 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  app.put("/api/payment-requests/:id/:action", requireAuth, async (req, res) => {
+    try {
+      const { id, action } = req.params;
+      const sessionUserId = (req as any).session?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const paymentRequest = await storage.getPaymentRequest(id);
+      if (!paymentRequest) {
+        return res.status(404).json({ message: "Payment request not found" });
+      }
+
+      if (action === "cancel") {
+        if (paymentRequest.fromUserId !== sessionUserId) {
+          return res.status(403).json({ message: "Not authorized to cancel this request" });
+        }
+        const updated = await storage.updatePaymentRequest(id, { status: "cancelled" });
+        return res.json({ paymentRequest: updated, message: "Payment request cancelled" });
+      }
+
+      const recipientMatches =
+        paymentRequest.toUserId === sessionUserId ||
+        (!paymentRequest.toUserId && (
+          paymentRequest.toEmail === (await storage.getUser(sessionUserId))?.email ||
+          paymentRequest.toPhone === (await storage.getUser(sessionUserId))?.phone
+        ));
+
+      if (!recipientMatches || !["accept", "decline"].includes(action)) {
+        return res.status(403).json({ message: "Not authorized to perform this action" });
+      }
+      if (paymentRequest.status !== "pending") {
+        return res.status(400).json({ message: "Payment request already processed" });
+      }
+
+      if (action === "decline") {
+        const updated = await storage.updatePaymentRequest(id, { status: "declined" });
+        return res.json({ paymentRequest: updated, message: "Payment request declined" });
+      }
+
+      const payer = await storage.getUser(sessionUserId);
+      const requester = await storage.getUser(paymentRequest.fromUserId);
+      if (!payer || !requester) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (payer.id === requester.id) {
+        return res.status(400).json({ message: "You cannot pay your own payment request" });
+      }
+
+      const amount = Number(paymentRequest.amount);
+      const currency = normalizeCurrency(paymentRequest.currency);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(400).json({ message: "Invalid payment amount" });
+      }
+
+      let sendTransaction: Awaited<ReturnType<typeof storage.createTransaction>>;
+      let receiveTransaction: Awaited<ReturnType<typeof storage.createTransaction>>;
+
+      if (db && pool) {
+        const payerWallet = await ensureUserWallet(payer.id, currency);
+        const requesterWallet = await ensureUserWallet(requester.id, currency);
+        if (!payerWallet || !requesterWallet) {
+          return res.status(400).json({ message: `${currency} wallet is not available` });
+        }
+
+        const payerAvailable = walletAvailableBalance(payerWallet);
+        if (payerAvailable < amount) {
+          return res.status(400).json({ message: `Insufficient ${currency} balance` });
+        }
+
+        sendTransaction = await storage.createTransaction({
+          userId: payer.id,
+          type: "send",
+          amount: amount.toFixed(2),
+          currency,
+          status: "completed",
+          description: `Payment request to ${requester.fullName}`,
+          recipientId: requester.id,
+          fee: "0.00",
+        });
+        receiveTransaction = await storage.createTransaction({
+          userId: requester.id,
+          type: "receive",
+          amount: amount.toFixed(2),
+          currency,
+          status: "completed",
+          description: `Payment request paid by ${payer.fullName}`,
+          recipientId: payer.id,
+          fee: "0.00",
+        });
+
+        let debitApplied = false;
+        try {
+          const debit = await applyLedgerEntry({
+            walletId: payerWallet.id,
+            userId: payer.id,
+            currency,
+            amount: -amount,
+            entryType: "payment_request",
+            idempotencyKey: `payment-request:${id}:debit`,
+            transactionId: sendTransaction.id,
+            description: `Payment request to ${requester.fullName}`,
+          });
+          debitApplied = debit.applied;
+          await applyLedgerEntry({
+            walletId: requesterWallet.id,
+            userId: requester.id,
+            currency,
+            amount,
+            entryType: "payment_request",
+            idempotencyKey: `payment-request:${id}:credit`,
+            transactionId: receiveTransaction.id,
+            description: `Payment request paid by ${payer.fullName}`,
+          });
+        } catch (ledgerError) {
+          if (debitApplied) {
+            await applyLedgerEntry({
+              walletId: payerWallet.id,
+              userId: payer.id,
+              currency,
+              amount,
+              entryType: "payment_request_refund",
+              idempotencyKey: `payment-request:${id}:debit-compensation`,
+              transactionId: sendTransaction.id,
+              description: "Compensation for incomplete payment request",
+            }).catch((compensationError) => {
+              console.error("Payment request compensation failed:", compensationError);
+            });
+          }
+          await storage.updateTransaction(sendTransaction.id, {
+            status: "failed",
+            failureReason: ledgerError instanceof Error ? ledgerError.message : "Ledger settlement failed",
+          });
+          await storage.updateTransaction(receiveTransaction.id, {
+            status: "failed",
+            failureReason: ledgerError instanceof Error ? ledgerError.message : "Ledger settlement failed",
+          });
+          throw ledgerError;
+        }
+      } else {
+        // MemStorage fallback for local/demo mode where wallets are not persisted.
+        const payerBalance = Number(payer.balance || 0);
+        if (payerBalance < amount) {
+          return res.status(400).json({ message: `Insufficient ${currency} balance` });
+        }
+        sendTransaction = await storage.createTransaction({
+          userId: payer.id,
+          type: "send",
+          amount: amount.toFixed(2),
+          currency,
+          status: "completed",
+          description: `Payment request to ${requester.fullName}`,
+          recipientId: requester.id,
+          fee: "0.00",
+        });
+        receiveTransaction = await storage.createTransaction({
+          userId: requester.id,
+          type: "receive",
+          amount: amount.toFixed(2),
+          currency,
+          status: "completed",
+          description: `Payment request paid by ${payer.fullName}`,
+          recipientId: payer.id,
+          fee: "0.00",
+        });
+        await storage.updateUser(payer.id, { balance: (payerBalance - amount).toFixed(2) });
+        await storage.updateUser(requester.id, {
+          balance: (Number(requester.balance || 0) + amount).toFixed(2),
+        });
+      }
+
+      const updated = await storage.updatePaymentRequest(id, { status: "paid" });
+      await notificationService.sendNotification({
+        title: "Payment Request Paid",
+        body: `Your request for ${currency} ${amount.toFixed(2)} has been paid.`,
+        userId: requester.id,
+        type: "transaction",
+        metadata: { paymentRequestId: id },
+      });
+      return res.json({ paymentRequest: updated, message: "Payment completed successfully" });
+    } catch (error) {
+      console.error("Payment request action error:", error);
+      return res.status(500).json({ message: "Failed to process payment request" });
+    }
+  });
+
   // Get payment requests RECEIVED by user (not sent)
   app.get("/api/payment-requests-received", requireAuth, async (req, res) => {
     try {
@@ -5087,10 +5299,10 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
       
-      // Get all payment requests where email or phone matches this user
-      const allRequests = await storage.getAllPaymentRequests();
-      const receivedRequests = allRequests.filter((req: any) => 
-        req.toEmail === user.email || req.toPhone === user.phone
+      const receivedRequests = await storage.getPaymentRequestsReceivedByUser(
+        sessionUserId,
+        user.email,
+        user.phone,
       );
       
       res.json({ requests: receivedRequests });
@@ -7911,140 +8123,6 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('Analytics error:', error);
       res.status(500).json({ message: "Failed to fetch analytics" });
-    }
-  });
-
-  // Payment Requests API
-  app.post("/api/payment-requests", async (req, res) => {
-    try {
-      const { fromUserId, toUserId, amount, currency, description, dueDate } = req.body;
-      
-      const paymentRequest = await storage.createPaymentRequest({
-        fromUserId,
-        toUserId, 
-        amount: parseFloat(amount).toFixed(2),
-        currency: currency || "USD",
-        description: description || "Payment request",
-        dueDate: dueDate ? new Date(dueDate) : null,
-        status: "pending"
-      });
-      
-      // Send notification to recipient
-      await notificationService.sendPaymentRequestNotification(toUserId, fromUserId, amount, currency);
-      
-      res.json({ paymentRequest });
-    } catch (error) {
-      console.error('Payment request creation error:', error);
-      res.status(500).json({ message: "Failed to create payment request" });
-    }
-  });
-
-  app.get("/api/payment-requests/:userId", async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const { type = "all" } = req.query;
-      
-      const allRequests = await storage.getPaymentRequestsByUserId(userId);
-      
-      let filteredRequests = allRequests;
-      if (type === "sent") {
-        filteredRequests = allRequests.filter(req => req.fromUserId === userId);
-      } else if (type === "received") {
-        filteredRequests = allRequests.filter(req => req.toUserId === userId);
-      }
-      
-      res.json({ paymentRequests: filteredRequests });
-    } catch (error) {
-      console.error('Payment requests fetch error:', error);
-      res.status(500).json({ message: "Failed to fetch payment requests" });
-    }
-  });
-
-  app.put("/api/payment-requests/:id/:action", async (req, res) => {
-    try {
-      const { id, action } = req.params;
-      const { userId } = req.body;
-      
-      const paymentRequest = await storage.getPaymentRequest(id);
-      if (!paymentRequest) {
-        return res.status(404).json({ message: "Payment request not found" });
-      }
-      
-      if (action === "accept" && paymentRequest.toUserId === userId) {
-        // Process payment from recipient to sender
-        const recipient = await storage.getUser(paymentRequest.toUserId!);
-        const sender = await storage.getUser(paymentRequest.fromUserId!);
-        
-        if (!recipient || !sender) {
-          return res.status(404).json({ message: "User not found" });
-        }
-        
-        const recipientBalance = parseFloat(recipient.balance || "0");
-        const amount = parseFloat(paymentRequest.amount);
-        
-        if (recipientBalance < amount) {
-          return res.status(400).json({ message: "Insufficient balance" });
-        }
-        
-        // Update balances
-        await storage.updateUser(recipient.id, { 
-          balance: (recipientBalance - amount).toFixed(2) 
-        });
-        await storage.updateUser(sender.id, { 
-          balance: (parseFloat(sender.balance || "0") + amount).toFixed(2) 
-        });
-        
-        // Create transaction records
-        await storage.createTransaction({
-          userId: recipient.id,
-          type: "send",
-          amount: amount.toFixed(2),
-          currency: paymentRequest.currency,
-          status: "completed",
-          description: `Payment to ${sender.fullName}`,
-          recipientId: sender.id,
-          recipientName: sender.fullName,
-          fee: "0.00",
-          exchangeRate: "1",
-          sourceAmount: amount.toFixed(2),
-          sourceCurrency: paymentRequest.currency
-        });
-        
-        await storage.createTransaction({
-          userId: sender.id,
-          type: "receive", 
-          amount: amount.toFixed(2),
-          currency: paymentRequest.currency,
-          status: "completed",
-          description: `Payment from ${recipient.fullName}`,
-          recipientId: recipient.id,
-          recipientName: recipient.fullName,
-          fee: "0.00",
-          exchangeRate: "1",
-          sourceAmount: amount.toFixed(2),
-          sourceCurrency: paymentRequest.currency
-        });
-        
-        // Update payment request status
-        await storage.updatePaymentRequest(id, { status: "completed" });
-        
-        // Send notifications
-        await notificationService.sendPaymentNotification(sender.id, "received", amount, paymentRequest.currency);
-        await notificationService.sendPaymentNotification(recipient.id, "sent", amount, paymentRequest.currency);
-        
-        res.json({ message: "Payment completed successfully" });
-      } else if (action === "decline" && paymentRequest.toUserId === userId) {
-        await storage.updatePaymentRequest(id, { status: "declined" });
-        res.json({ message: "Payment request declined" });
-      } else if (action === "cancel" && paymentRequest.fromUserId === userId) {
-        await storage.updatePaymentRequest(id, { status: "cancelled" });
-        res.json({ message: "Payment request cancelled" });
-      } else {
-        res.status(403).json({ message: "Not authorized to perform this action" });
-      }
-    } catch (error) {
-      console.error('Payment request action error:', error);
-      res.status(500).json({ message: "Failed to process payment request" });
     }
   });
 

@@ -133,6 +133,21 @@ async function alterMissingColumns() {
       expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
+    `CREATE TABLE IF NOT EXISTS payment_requests (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      from_user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      to_user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+      recipient_id VARCHAR REFERENCES recipients(id),
+      to_email TEXT,
+      to_phone TEXT,
+      amount DECIMAL(10,2) NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'KES',
+      message TEXT,
+      payment_link TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS to_user_id VARCHAR`,
     `CREATE TABLE IF NOT EXISTS withdrawal_events (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       transaction_id VARCHAR NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,

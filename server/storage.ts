@@ -134,6 +134,7 @@ export interface IStorage {
   // Payment Request operations
   createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
   getPaymentRequestsByUserId(userId: string): Promise<PaymentRequest[]>;
+  getPaymentRequestsReceivedByUser(userId: string, email?: string, phone?: string): Promise<PaymentRequest[]>;
   getPaymentRequest(id: string): Promise<PaymentRequest | undefined>;
   updatePaymentRequest(id: string, updates: Partial<PaymentRequest>): Promise<PaymentRequest | undefined>;
 
@@ -700,6 +701,7 @@ export class MemStorage implements IStorage {
       ...insertRequest,
       id,
       status: "pending",
+      toUserId: insertRequest.toUserId ?? null,
       message: insertRequest.message ?? null,
       currency: insertRequest.currency ?? "KES",
       recipientId: insertRequest.recipientId ?? null,
@@ -715,6 +717,16 @@ export class MemStorage implements IStorage {
   async getPaymentRequestsByUserId(userId: string): Promise<PaymentRequest[]> {
     return Array.from(this.paymentRequests.values())
       .filter(req => req.fromUserId === userId)
+      .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
+  }
+
+  async getPaymentRequestsReceivedByUser(userId: string, email?: string, phone?: string): Promise<PaymentRequest[]> {
+    return Array.from(this.paymentRequests.values())
+      .filter(req =>
+        req.toUserId === userId ||
+        (!!email && req.toEmail?.toLowerCase() === email.toLowerCase()) ||
+        (!!phone && req.toPhone === phone)
+      )
       .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime());
   }
 
@@ -1424,6 +1436,18 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(paymentRequests)
       .where(eq(paymentRequests.fromUserId, userId))
+      .orderBy(desc(paymentRequests.createdAt));
+  }
+
+  async getPaymentRequestsReceivedByUser(userId: string, email?: string, phone?: string): Promise<PaymentRequest[]> {
+    const conditions = [eq(paymentRequests.toUserId, userId)];
+    if (email) conditions.push(eq(paymentRequests.toEmail, email));
+    if (phone) conditions.push(eq(paymentRequests.toPhone, phone));
+
+    return await db
+      .select()
+      .from(paymentRequests)
+      .where(or(...conditions))
       .orderBy(desc(paymentRequests.createdAt));
   }
 

@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { WavyHeader } from "@/components/wavy-header";
 import BottomNavigation from "@/components/bottom-navigation";
 import { Plus, Copy, ExternalLink, Send, Inbox, Check, Clock, XCircle, ArrowRight } from "lucide-react";
+import { mockCurrencies } from "@/lib/mock-data";
 
 type TabType = "sent" | "received";
 
@@ -52,6 +53,7 @@ export default function PaymentRequestsPage() {
 
   const sentRequests = sentData?.requests || [];
   const receivedRequests = receivedData?.requests || [];
+  const currencies = mockCurrencies;
 
   const handleCreateRequest = async () => {
     try {
@@ -59,7 +61,6 @@ export default function PaymentRequestsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          fromUserId: user?.id,
           ...newRequest,
           amount: parseFloat(newRequest.amount),
         }),
@@ -90,7 +91,6 @@ export default function PaymentRequestsPage() {
       const response = await fetch(`/api/payment-requests/${id}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id }),
       });
       if (response.ok) {
         toast({ title: `Request ${action}ed`, description: `Payment request has been ${action}ed.` });
@@ -102,11 +102,6 @@ export default function PaymentRequestsPage() {
       toast({ title: "Error", description: "Action failed", variant: "destructive" });
     }
   };
-
-  const currencies = [
-    { code: "USD", name: "US Dollar" },
-    { code: "KES", name: "Kenyan Shilling" },
-  ];
 
   const isLoading = activeTab === "sent" ? sentLoading : receivedLoading;
   const requests = activeTab === "sent" ? sentRequests : receivedRequests;

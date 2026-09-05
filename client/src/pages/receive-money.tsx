@@ -343,7 +343,7 @@ export default function ReceiveMoneyPage() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {mockCurrencies.slice(0, 3).map((currency) => (
+                              {mockCurrencies.map((currency) => (
                                 <SelectItem key={currency.code} value={currency.code}>
                                   {currency.code}
                                 </SelectItem>
@@ -483,9 +483,19 @@ export default function ReceiveMoneyPage() {
                     <Button
                       size="sm"
                       className="w-full mt-2"
-                      onClick={() => {
-                        // TODO: Navigate to payment form with request details
-                        setLocation(`/send-money?requestId=${request.id}`);
+                      onClick={async () => {
+                        const response = await apiRequest("PUT", `/api/payment-requests/${request.id}/accept`);
+                        if (response.ok) {
+                          toast({ title: "Payment completed", description: "The payment request has been paid." });
+                          window.location.reload();
+                        } else {
+                          const error = await response.json().catch(() => ({}));
+                          toast({
+                            title: "Payment failed",
+                            description: error.message || "Unable to pay this request.",
+                            variant: "destructive",
+                          });
+                        }
                       }}
                     >
                       Pay Now

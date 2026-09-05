@@ -147,6 +147,7 @@ export const recipients = pgTable("recipients", {
 export const paymentRequests = pgTable("payment_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   fromUserId: varchar("from_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  toUserId: varchar("to_user_id").references(() => users.id, { onDelete: "cascade" }),
   recipientId: varchar("recipient_id").references(() => recipients.id),
   toEmail: text("to_email"),
   toPhone: text("to_phone"),
