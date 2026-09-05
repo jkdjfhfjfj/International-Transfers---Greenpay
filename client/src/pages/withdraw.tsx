@@ -16,6 +16,7 @@ import { useWallets } from "@/hooks/use-wallets";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const withdrawSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than zero"),
@@ -35,6 +36,7 @@ type WithdrawForm = z.infer<typeof withdrawSchema>;
 export default function WithdrawPage() {
   const [, setLocation] = useLocation();
   const [selectedMethod, setSelectedMethod] = useState<string>("");
+  const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawForm | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -95,6 +97,7 @@ export default function WithdrawPage() {
           : data.message || "Your withdrawal request is being reviewed and will be processed within 1-3 business days.",
       });
       form.reset();
+      setPendingWithdrawal(null);
       setLocation("/dashboard");
     },
     onError: (error: any) => {
@@ -108,7 +111,10 @@ export default function WithdrawPage() {
   });
 
   const onSubmit = (data: WithdrawForm) => {
-    withdrawMutation.mutate({ ...data, currency: activeWallet?.currency || data.currency });
+    setPendingWithdrawal({
+      ...data,
+      currency: activeWallet?.currency || data.currency,
+    });
   };
 
   const withdrawMethods = [
@@ -557,7 +563,7 @@ export default function WithdrawPage() {
                     <li>• Withdrawals cannot be cancelled once processed</li>
                     <li>• You may be contacted for verification purposes</li>
                     <li>• Exchange rates are locked at the time of withdrawal</li>
-                     <li>• Mobile money withdrawals are usually processed within 30 minutes</li>
+                    <li>• Mobile money withdrawals are usually processed within 30 minutes</li>
                   </ul>
                 </div>
               </div>
@@ -625,6 +631,89 @@ export default function WithdrawPage() {
           </form>
         </Form>
       </div>
+
+      <Dialog open={!!pendingWithdrawal} onOpenChange={(open) => {
+        if (!open && !withdrawMutation.isPending) setPendingWithdrawal(null);
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm withdrawal</DialogTitle>
+            <DialogDescription>
+              Review all details carefully. Your wallet will be placed on hold only after you confirm.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pendingWithdrawal && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-muted/50 p-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Method</span>
+                  <span className="font-medium text-right">
+                    {withdrawMethods.find(method => method.id === pendingWithdrawal.withdrawMethod)?.name || pendingWithdrawal.withdrawMethod}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Wallet</span>
+                  <span className="font-medium">{pendingWithdrawal.currency}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Amount to recipient</span>
+                  <span className="font-medium">{activeSymbol} {formatNumber(Number(pendingWithdrawal.amount))}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Processing fee</span>
+                  <span className="font-medium">{activeSymbol} {withdrawalFee.toFixed(2)}</span>
+                </div>
+                <div className="border-t border-border pt-2 flex justify-between gap-4 font-bold">
+                  <span>Total deducted</span>
+                  <span className="text-primary">
+                    {activeSymbol} {formatNumber(Number(pendingWithdrawal.amount) + withdrawalFee)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-muted-foreground">Processing estimate</span>
+                  <span className="font-medium text-right">
+                    {withdrawMethods.find(method => method.id === pendingWithdrawal.withdrawMethod)?.processingTime || "Review required"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Recipient details</p>
+                <div className="space-y-1 text-sm">
+                  {Object.entries(pendingWithdrawal.accountDetails)
+                    .filter(([, value]) => Boolean(value))
+                    .map(([key, value]) => (
+                      <div key={key} className="flex justify-between gap-4">
+                        <span className="text-muted-foreground capitalize">{key.replace(/([A-Z])/g, " $1")}</span>
+                        <span className="font-medium text-right break-all">{value}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingWithdrawal(null)}
+              disabled={withdrawMutation.isPending}
+            >
+              Go back
+            </Button>
+            <Button
+              type="button"
+              onClick={() => pendingWithdrawal && withdrawMutation.mutate(pendingWithdrawal)}
+              disabled={withdrawMutation.isPending}
+              className="bg-primary"
+            >
+              {withdrawMutation.isPending ? "Submitting..." : "Confirm withdrawal"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

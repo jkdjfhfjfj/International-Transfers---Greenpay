@@ -16,6 +16,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import { whatsappService } from "./services/whatsapp";
 import { createExchangeRateService } from "./services/exchange-rate";
 import { payHeroService } from "./services/payhero";
+import { getWithdrawalFee, getWithdrawalTotals } from "./services/money-movement";
 import { paystackService } from "./services/paystack";
 import { twoFactorService } from "./services/2fa";
 import { biometricService } from "./services/biometric";
@@ -10003,8 +10004,10 @@ p{color:#6b7280;font-size:14px;}</style>
         `withdrawal_fee_${normalizedWithdrawalCurrency}`,
       );
       const defaultFeeSetting = await storage.getSystemSetting("fees", "withdrawal_fee");
-      const configuredFee = currencyFeeSetting?.value ?? defaultFeeSetting?.value ?? "0";
-      const withdrawFee = Math.max(0, parseFloat(String(configuredFee)) || 0);
+      const withdrawFee = getWithdrawalFee(normalizedWithdrawalCurrency, {
+        [`withdrawal_fee_${normalizedWithdrawalCurrency}`]: currencyFeeSetting?.value,
+        withdrawal_fee: defaultFeeSetting?.value,
+      });
       const matchingWallet = await getUserWallet(userId, normalizedWithdrawalCurrency);
       if (!matchingWallet) {
         return res.status(400).json({ message: `Create a ${normalizedWithdrawalCurrency} wallet before withdrawing` });
@@ -10027,7 +10030,7 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       // Create withdrawal transaction with pending status
-      const totalHold = withdrawAmount + withdrawFee;
+      const { totalDeduction: totalHold } = getWithdrawalTotals(withdrawAmount, withdrawFee);
       const holdResult = await reserveWalletWithdrawal(matchingWallet.id, userId, totalHold);
       if (!holdResult) {
         return res.status(400).json({ message: "Insufficient balance" });

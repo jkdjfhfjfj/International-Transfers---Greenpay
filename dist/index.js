@@ -6475,6 +6475,29 @@ var PayHeroService = class {
 };
 var payHeroService = new PayHeroService();
 
+// server/services/money-movement.ts
+function normalizeMoneyAmount(value) {
+  const amount = typeof value === "number" ? value : Number.parseFloat(String(value ?? ""));
+  return Number.isFinite(amount) ? amount : 0;
+}
+function getWithdrawalFee(currency, fees, fallback = 0) {
+  const normalizedCurrency = String(currency || "").toUpperCase();
+  const currencyKey = `withdrawal_fee_${normalizedCurrency}`;
+  const currencyValue = fees[currencyKey];
+  const configured = currencyValue !== void 0 && currencyValue !== null && String(currencyValue).trim() !== "" ? currencyValue : fees.withdrawal_fee;
+  const configuredValue = configured !== void 0 && configured !== null && String(configured).trim() !== "" ? configured : fallback;
+  return Math.max(0, normalizeMoneyAmount(configuredValue));
+}
+function getWithdrawalTotals(amount, fee) {
+  const withdrawalAmount = Math.max(0, normalizeMoneyAmount(amount));
+  const processingFee = Math.max(0, normalizeMoneyAmount(fee));
+  return {
+    amount: withdrawalAmount,
+    fee: processingFee,
+    totalDeduction: withdrawalAmount + processingFee
+  };
+}
+
 // server/services/paystack.ts
 import fetch5 from "node-fetch";
 var PaystackService = class {
@@ -15405,8 +15428,10 @@ p{color:#6b7280;font-size:14px;}</style>
         `withdrawal_fee_${normalizedWithdrawalCurrency}`
       );
       const defaultFeeSetting = await storage.getSystemSetting("fees", "withdrawal_fee");
-      const configuredFee = currencyFeeSetting?.value ?? defaultFeeSetting?.value ?? "0";
-      const withdrawFee = Math.max(0, parseFloat(String(configuredFee)) || 0);
+      const withdrawFee = getWithdrawalFee(normalizedWithdrawalCurrency, {
+        [`withdrawal_fee_${normalizedWithdrawalCurrency}`]: currencyFeeSetting?.value,
+        withdrawal_fee: defaultFeeSetting?.value
+      });
       const matchingWallet = await getUserWallet(userId, normalizedWithdrawalCurrency);
       if (!matchingWallet) {
         return res.status(400).json({ message: `Create a ${normalizedWithdrawalCurrency} wallet before withdrawing` });
@@ -15425,7 +15450,7 @@ p{color:#6b7280;font-size:14px;}</style>
           required: (withdrawAmount + withdrawFee).toFixed(2)
         });
       }
-      const totalHold = withdrawAmount + withdrawFee;
+      const { totalDeduction: totalHold } = getWithdrawalTotals(withdrawAmount, withdrawFee);
       const holdResult = await reserveWalletWithdrawal(matchingWallet.id, userId, totalHold);
       if (!holdResult) {
         return res.status(400).json({ message: "Insufficient balance" });
