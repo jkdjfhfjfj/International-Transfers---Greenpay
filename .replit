@@ -1,4 +1,4 @@
-modules = ["nodejs-20", "web", "java-graalvm22.3"]
+modules = ["nodejs-20", "web", "java-graalvm22.3", "postgresql-16"]
 [nix]
 packages = ["unzipNLS", "zulu23", "nano"]
 channel = "stable-25_05"

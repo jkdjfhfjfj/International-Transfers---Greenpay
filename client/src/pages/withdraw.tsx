@@ -15,7 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useWallets } from "@/hooks/use-wallets";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
-import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight } from "lucide-react";
+import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight, Bookmark, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const withdrawSchema = z.object({
@@ -37,8 +37,35 @@ export default function WithdrawPage() {
   const [, setLocation] = useLocation();
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawForm | null>(null);
+  const [saveBeneficiary, setSaveBeneficiary] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { data: recipientData, refetch: refetchRecipients } = useQuery({
+    queryKey: ["/api/recipients", user?.id],
+    enabled: !!user?.id,
+  });
+  const beneficiaries = (recipientData as any)?.recipients || [];
+  const saveBeneficiaryMutation = useMutation({
+    mutationFn: async () => {
+      const values = form.getValues();
+      const response = await apiRequest("POST", "/api/recipients", {
+        name: values.accountDetails.accountName,
+        phone: values.accountDetails.phoneNumber,
+        email: user?.email,
+        accountNumber: values.accountDetails.accountNumber,
+        bankName: values.accountDetails.bankName,
+        country: values.accountDetails.country || user?.country || "Kenya",
+        currency: values.currency,
+        recipientType: values.withdrawMethod === "mobile-money" ? "mobile_wallet" : "bank",
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      refetchRecipients();
+      toast({ title: "Beneficiary saved", description: "You can reuse these details next time." });
+    },
+    onError: (error: any) => toast({ title: "Could not save beneficiary", description: error?.message || "Please check the details.", variant: "destructive" }),
+  });
 
   const { wallets: userWallets } = useWallets();
   const defaultWallet = userWallets.find(w => w.isDefault) || userWallets[0] || null;
@@ -76,6 +103,9 @@ export default function WithdrawPage() {
 
   const withdrawMutation = useMutation({
     mutationFn: async (data: WithdrawForm) => {
+      if (saveBeneficiary && data.accountDetails.accountName) {
+        await saveBeneficiaryMutation.mutateAsync();
+      }
       const response = await apiRequest("POST", "/api/transactions", {
         userId: user?.id,
         type: "withdraw",
@@ -97,6 +127,7 @@ export default function WithdrawPage() {
           : data.message || "Your withdrawal request is being reviewed and will be processed within 1-3 business days.",
       });
       form.reset();
+      setSaveBeneficiary(true);
       setPendingWithdrawal(null);
       setLocation("/dashboard");
     },
@@ -415,6 +446,27 @@ export default function WithdrawPage() {
                 </h3>
                 
                 <div className="space-y-4">
+                  {beneficiaries.length > 0 && (
+                    <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                      <label className="text-sm font-medium">Use a saved beneficiary</label>
+                      <Select onValueChange={(value) => {
+                        const beneficiary = beneficiaries.find((item: any) => item.id === value);
+                        if (!beneficiary) return;
+                        form.setValue("accountDetails.accountName", beneficiary.name || "");
+                        form.setValue("accountDetails.phoneNumber", beneficiary.phone || "");
+                        form.setValue("accountDetails.accountNumber", beneficiary.accountNumber || "");
+                        form.setValue("accountDetails.bankName", beneficiary.bankName || "");
+                        form.setValue("accountDetails.country", beneficiary.country || "");
+                      }}>
+                        <SelectTrigger className="mt-2"><SelectValue placeholder="Choose beneficiary" /></SelectTrigger>
+                        <SelectContent>
+                          {beneficiaries.map((beneficiary: any) => (
+                            <SelectItem key={beneficiary.id} value={beneficiary.id}>{beneficiary.name} · {beneficiary.country}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
                   <FormField
                     control={form.control}
                     name="accountDetails.country"
@@ -543,6 +595,11 @@ export default function WithdrawPage() {
                       )}
                     />
                   )}
+                  <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <input type="checkbox" checked={saveBeneficiary} onChange={(event) => setSaveBeneficiary(event.target.checked)} />
+                    <Bookmark className="w-4 h-4" />
+                    Save this beneficiary for future withdrawals
+                  </label>
                 </div>
               </motion.div>
             )}

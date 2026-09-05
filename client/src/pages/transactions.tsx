@@ -45,6 +45,11 @@ export default function TransactionsPage() {
   });
 
   const transactions = (transactionData as any)?.transactions || [];
+  const { data: withdrawalTimelineResponse } = useQuery({
+    queryKey: [`/api/withdrawals/${selectedTransaction?.id}/timeline`],
+    enabled: selectedTransaction?.type === "withdraw",
+  });
+  const withdrawalTimeline = (withdrawalTimelineResponse as any)?.timeline || [];
 
   const handleRefresh = () => {
     toast({
@@ -359,7 +364,7 @@ export default function TransactionsPage() {
                 className="px-2 py-2 text-xs md:text-sm border rounded-md bg-background"
               >
                 <option value="">Currency</option>
-                {[...new Set(transactions.map((txn: any) => txn.currency?.toUpperCase() || 'USD'))].sort().map((cur: string) => (
+                {Array.from(new Set<string>(transactions.map((txn: any) => String(txn.currency?.toUpperCase() || 'USD')))).sort().map((cur: string) => (
                   <option key={cur} value={cur}>{cur}</option>
                 ))}
               </select>
@@ -474,7 +479,7 @@ export default function TransactionsPage() {
             <p className="text-sm text-muted-foreground mb-3">This Month</p>
             {/* Per-currency totals */}
             {(() => {
-              const currencies = [...new Set(transactions.map((txn: any) => txn.currency?.toUpperCase() || 'USD'))] as string[];
+              const currencies = Array.from(new Set<string>(transactions.map((txn: any) => String(txn.currency?.toUpperCase() || 'USD'))));
               return currencies.map((cur) => {
                 const curTxns = transactions.filter((txn: any) => (txn.currency?.toUpperCase() || 'USD') === cur);
                 const total = curTxns.filter((txn: any) => txn.status === 'completed').reduce((sum: number, txn: any) => sum + parseFloat(txn.amount), 0);
@@ -792,6 +797,38 @@ export default function TransactionsPage() {
                     {getCurrencySymbol(selectedTransaction.currency)}
                     {formatNumber(Number(selectedTransaction.amount || 0) + Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0))}
                   </p>
+                </div>
+              )}
+
+              {selectedTransaction.type === "withdraw" && (
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase">Withdrawal timeline</label>
+                    {selectedTransaction.metadata?.providerReference && (
+                      <span className="text-[11px] font-mono text-muted-foreground">Ref: {selectedTransaction.metadata.providerReference}</span>
+                    )}
+                  </div>
+                  {withdrawalTimeline.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Timeline is being prepared.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {withdrawalTimeline.map((event: any, index: number) => (
+                        <div key={event.id} className="relative pl-5">
+                          {index < withdrawalTimeline.length - 1 && <span className="absolute left-[5px] top-3 h-full w-px bg-border" />}
+                          <span className="absolute left-0 top-1.5 h-2.5 w-2.5 rounded-full bg-primary" />
+                          <p className="text-sm font-medium capitalize">{event.title}</p>
+                          <p className="text-xs text-muted-foreground">{event.description || event.status} · {new Date(event.createdAt).toLocaleString()}</p>
+                          {(event.providerReference || event.retryCount > 0 || event.refundStatus !== "not_applicable") && (
+                            <p className="text-[11px] text-muted-foreground mt-1">
+                              {event.providerReference ? `Provider ref: ${event.providerReference} · ` : ""}
+                              {event.retryCount > 0 ? `Retries: ${event.retryCount} · ` : ""}
+                              {event.refundStatus !== "not_applicable" ? `Refund: ${event.refundStatus}` : ""}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

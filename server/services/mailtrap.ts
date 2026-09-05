@@ -19,6 +19,29 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
   transaction_completed: '',
   virtual_account_approved: '',
+  beneficiary_added: '',
+  beneficiary_updated: '',
+  beneficiary_deleted: '',
+  withdrawal_pending: '',
+  withdrawal_processing: '',
+  withdrawal_completed: '',
+  withdrawal_failed: '',
+  withdrawal_refunded: '',
+};
+
+const TEMPLATE_PARAMETERS: Record<string, string[]> = {
+  otp: ['first_name', 'last_name', 'otp'],
+  password_reset: ['first_name', 'last_name', 'reset_code'],
+  welcome: ['first_name', 'last_name'],
+  login_alert: ['first_name', 'last_name', 'location', 'ip_address', 'device'],
+  beneficiary_added: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
+  beneficiary_updated: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
+  beneficiary_deleted: ['first_name', 'beneficiary_name', 'beneficiary_reference'],
+  withdrawal_pending: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_processing: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_completed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_failed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'reason'],
+  withdrawal_refunded: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'refund_status'],
 };
 
 export class MailtrapService {
@@ -37,9 +60,9 @@ export class MailtrapService {
     try {
       const setting = await storage.getSystemSetting('email', 'mailtrap_api_key');
       if (setting?.value) {
-        this.apiKey = setting.value;
+        this.apiKey = String(setting.value);
         // Keep env in sync for current process/session
-        process.env.MAILTRAP_API_KEY = setting.value;
+        process.env.MAILTRAP_API_KEY = String(setting.value);
       } else {
         // If DB setting missing, rely on environment only (no hard-coded fallback)
         this.apiKey = process.env.MAILTRAP_API_KEY || null;
@@ -59,7 +82,7 @@ export class MailtrapService {
   private async getTemplateUuid(templateName: string): Promise<string | null> {
     try {
       const setting = await storage.getSystemSetting('email_templates', templateName);
-      if (setting?.value && setting.value.trim()) return setting.value.trim();
+        if (setting?.value && String(setting.value).trim()) return String(setting.value).trim();
     } catch { /* ignore */ }
     return DEFAULT_TEMPLATE_UUIDs[templateName] || null;
   }
@@ -233,6 +256,12 @@ export class MailtrapService {
     return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
   }
 
+  async sendAccountAction(toEmail: string, templateName: string, variables: Record<string, string>): Promise<boolean> {
+    const uuid = await this.getTemplateUuid(templateName);
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, variables);
+  }
+
   async sendTransactionExport(
     toEmail: string, firstName: string, lastName: string,
     attachments: Array<{ filename: string; content: string; disposition: string }>
@@ -242,19 +271,19 @@ export class MailtrapService {
     return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
   }
 
-  /** Return all template names and their current UUIDs (DB overrides + defaults) */
-  async getAllTemplateUuids(): Promise<Record<string, { uuid: string; isCustom: boolean }>> {
-    const result: Record<string, { uuid: string; isCustom: boolean }> = {};
+  /** Return all template names, UUIDs, and the variables each template must receive. */
+  async getAllTemplateUuids(): Promise<Record<string, { uuid: string; isCustom: boolean; requiredParameters: string[] }>> {
+    const result: Record<string, { uuid: string; isCustom: boolean; requiredParameters: string[] }> = {};
     for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
       try {
         const setting = await storage.getSystemSetting('email_templates', name);
-        if (setting?.value?.trim()) {
-          result[name] = { uuid: setting.value.trim(), isCustom: true };
+        if (setting?.value && String(setting.value).trim()) {
+          result[name] = { uuid: String(setting.value).trim(), isCustom: true, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
         } else {
-          result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+          result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
         }
       } catch {
-        result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+        result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
       }
     }
     return result;

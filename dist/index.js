@@ -66,6 +66,7 @@ __export(schema_exports, {
   insertWhatsappConfigSchema: () => insertWhatsappConfigSchema,
   insertWhatsappConversationSchema: () => insertWhatsappConversationSchema,
   insertWhatsappMessageSchema: () => insertWhatsappMessageSchema,
+  insertWithdrawalEventSchema: () => insertWithdrawalEventSchema,
   kycDocuments: () => kycDocuments,
   ledgerEntries: () => ledgerEntries,
   loans: () => loans,
@@ -94,12 +95,13 @@ __export(schema_exports, {
   wallets: () => wallets,
   whatsappConfig: () => whatsappConfig,
   whatsappConversations: () => whatsappConversations,
-  whatsappMessages: () => whatsappMessages
+  whatsappMessages: () => whatsappMessages,
+  withdrawalEvents: () => withdrawalEvents
 });
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
-var users, kycDocuments, virtualCards, transactions, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, announcements, insertAnnouncementSchema, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, transactionDisputes, cryptoWallets, cryptoTransactions, aiUsage, insertAiUsageSchema, insertTransactionDisputeSchema, insertCryptoWalletSchema, insertCryptoTransactionSchema, cryptoDepositAddresses, insertCryptoDepositAddressSchema, depositBonuses, insertDepositBonusSchema, advancedKycDocuments, insertAdvancedKycSchema, wallets, insertWalletSchema, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, insertVirtualAccountSchema, insertLedgerEntrySchema, insertVirtualAccountSettingSchema, insertVirtualAccountApplicationSchema;
+var users, kycDocuments, virtualCards, transactions, withdrawalEvents, recipients, paymentRequests, chatMessages, notifications, supportTickets, ticketReplies, conversations, messages, insertUserSchema, insertKycDocumentSchema, insertVirtualCardSchema, insertTransactionSchema, insertWithdrawalEventSchema, insertRecipientSchema, insertPaymentRequestSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertChatMessageSchema, insertNotificationSchema, admins, adminLogs, systemLogs, systemSettings, apiConfigurations, insertAdminSchema, insertAdminLogSchema, insertSystemSettingSchema, insertSystemLogSchema, insertApiConfigurationSchema, savingsGoals, qrPayments, scheduledPayments, budgets, userPreferences, loginHistory, announcements, insertAnnouncementSchema, userSessions, whatsappConversations, whatsappMessages, whatsappConfig, userActivityLog, billPayments, loans, insertBillPaymentSchema, insertSavingsGoalSchema, insertQRPaymentSchema, insertScheduledPaymentSchema, insertBudgetSchema, insertUserPreferencesSchema, insertLoginHistorySchema, insertWhatsappConversationSchema, insertWhatsappMessageSchema, insertWhatsappConfigSchema, insertUserActivityLogSchema, insertTicketReplySchema, transactionDisputes, cryptoWallets, cryptoTransactions, aiUsage, insertAiUsageSchema, insertTransactionDisputeSchema, insertCryptoWalletSchema, insertCryptoTransactionSchema, cryptoDepositAddresses, insertCryptoDepositAddressSchema, depositBonuses, insertDepositBonusSchema, advancedKycDocuments, insertAdvancedKycSchema, wallets, insertWalletSchema, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, insertVirtualAccountSchema, insertLedgerEntrySchema, insertVirtualAccountSettingSchema, insertVirtualAccountApplicationSchema;
 var init_schema = __esm({
   "shared/schema.ts"() {
     "use strict";
@@ -223,6 +225,22 @@ var init_schema = __esm({
       completedAt: timestamp("completed_at"),
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
+    });
+    withdrawalEvents = pgTable("withdrawal_events", {
+      id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+      transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+      userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      status: text("status").notNull(),
+      // pending, processing, retrying, completed, failed, refunded
+      title: text("title").notNull(),
+      description: text("description"),
+      provider: text("provider"),
+      providerReference: text("provider_reference"),
+      retryCount: integer("retry_count").default(0),
+      refundStatus: text("refund_status").default("not_applicable"),
+      // not_applicable, pending, completed, failed
+      metadata: jsonb("metadata"),
+      createdAt: timestamp("created_at").defaultNow()
     });
     recipients = pgTable("recipients", {
       id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -358,6 +376,10 @@ var init_schema = __esm({
       purchaseDate: true
     });
     insertTransactionSchema = createInsertSchema(transactions).omit({
+      id: true,
+      createdAt: true
+    });
+    insertWithdrawalEventSchema = createInsertSchema(withdrawalEvents).omit({
       id: true,
       createdAt: true
     });
@@ -1586,6 +1608,13 @@ var init_storage = __esm({
       }
       async updateWithdrawalRequest(id, updates) {
         return this.updateTransaction(id, updates);
+      }
+      async createWithdrawalEvent(event) {
+        const [created] = await db.insert(withdrawalEvents).values(event).returning();
+        return created;
+      }
+      async getWithdrawalEvents(transactionId) {
+        return db.select().from(withdrawalEvents).where(eq(withdrawalEvents.transactionId, transactionId)).orderBy(asc(withdrawalEvents.createdAt));
       }
       // Payment Request operations
       async createPaymentRequest(insertRequest) {
@@ -2816,14 +2845,173 @@ var init_exchange_rate = __esm({
   }
 });
 
+// server/services/fcm.ts
+import fetch6 from "node-fetch";
+var FCM_API_URL, FCMService, fcmService;
+var init_fcm = __esm({
+  "server/services/fcm.ts"() {
+    "use strict";
+    FCM_API_URL = "https://fcm.googleapis.com/v1/projects";
+    FCMService = class {
+      accessToken = null;
+      tokenExpiry = 0;
+      projectId;
+      constructor() {
+        this.projectId = process.env.FIREBASE_PROJECT_ID || "greenpay-mobile";
+      }
+      async getAccessToken() {
+        try {
+          if (this.accessToken && Date.now() < this.tokenExpiry) {
+            return this.accessToken;
+          }
+          const serviceAccount = JSON.parse(
+            process.env.FIREBASE_SERVICE_ACCOUNT || "{}"
+          );
+          const response = await fetch6("https://oauth2.googleapis.com/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              client_id: serviceAccount.client_id,
+              client_secret: serviceAccount.client_secret,
+              refresh_token: serviceAccount.refresh_token,
+              grant_type: "refresh_token"
+            })
+          });
+          const data = await response.json();
+          this.accessToken = data.access_token;
+          this.tokenExpiry = Date.now() + data.expires_in * 1e3;
+          return this.accessToken;
+        } catch (error) {
+          console.error("FCM token error:", error);
+          throw new Error("Failed to get FCM access token");
+        }
+      }
+      async sendToToken(token, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          const message = {
+            token,
+            notification: { title, body },
+            data,
+            android: {
+              priority: "high",
+              notification: {
+                sound: "default",
+                click_action: "FLUTTER_NOTIFICATION_CLICK"
+              }
+            }
+          };
+          const response = await fetch6(
+            `${FCM_API_URL}/${this.projectId}/messages:send`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ message })
+            }
+          );
+          const result = await response.json();
+          console.log("FCM sent successfully:", result.name);
+          return true;
+        } catch (error) {
+          console.error("FCM send error:", error);
+          return false;
+        }
+      }
+      async sendToTopic(topic, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          const message = {
+            topic,
+            notification: { title, body },
+            data,
+            android: {
+              priority: "high",
+              notification: {
+                sound: "default",
+                click_action: "FLUTTER_NOTIFICATION_CLICK"
+              }
+            }
+          };
+          const response = await fetch6(
+            `${FCM_API_URL}/${this.projectId}/messages:send`,
+            {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({ message })
+            }
+          );
+          const result = await response.json();
+          console.log("FCM topic sent successfully:", result.name);
+          return true;
+        } catch (error) {
+          console.error("FCM topic send error:", error);
+          return false;
+        }
+      }
+      async sendMulticast(tokens, title, body, data) {
+        try {
+          const accessToken = await this.getAccessToken();
+          let successCount = 0;
+          let failureCount = 0;
+          for (let i = 0; i < tokens.length; i += 500) {
+            const batch = tokens.slice(i, i + 500);
+            for (const token of batch) {
+              try {
+                const message = {
+                  token,
+                  notification: { title, body },
+                  data,
+                  android: {
+                    priority: "high",
+                    notification: {
+                      sound: "default",
+                      click_action: "FLUTTER_NOTIFICATION_CLICK"
+                    }
+                  }
+                };
+                await fetch6(
+                  `${FCM_API_URL}/${this.projectId}/messages:send`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${accessToken}`,
+                      "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ message })
+                  }
+                );
+                successCount++;
+              } catch {
+                failureCount++;
+              }
+            }
+          }
+          console.log(`FCM multicast: ${successCount} success, ${failureCount} failures`);
+          return { success: successCount, failure: failureCount };
+        } catch (error) {
+          console.error("FCM multicast error:", error);
+          return { success: 0, failure: tokens.length };
+        }
+      }
+    };
+    fcmService = new FCMService();
+  }
+});
+
 // server/services/mailtrap.ts
 var mailtrap_exports = {};
 __export(mailtrap_exports, {
   MailtrapService: () => MailtrapService,
   mailtrapService: () => mailtrapService2
 });
-import fetch7 from "node-fetch";
-var DEFAULT_TEMPLATE_UUIDs, MailtrapService, mailtrapService2;
+import fetch8 from "node-fetch";
+var DEFAULT_TEMPLATE_UUIDs, TEMPLATE_PARAMETERS, MailtrapService, mailtrapService2;
 var init_mailtrap = __esm({
   "server/services/mailtrap.ts"() {
     "use strict";
@@ -2839,7 +3027,29 @@ var init_mailtrap = __esm({
       card_activation: "a1b2c3d4-e5f6-4789-0123-456789abcdef",
       transaction_export: "307e5609-66bb-4235-8653-27f0d5d74a39",
       transaction_completed: "",
-      virtual_account_approved: ""
+      virtual_account_approved: "",
+      beneficiary_added: "",
+      beneficiary_updated: "",
+      beneficiary_deleted: "",
+      withdrawal_pending: "",
+      withdrawal_processing: "",
+      withdrawal_completed: "",
+      withdrawal_failed: "",
+      withdrawal_refunded: ""
+    };
+    TEMPLATE_PARAMETERS = {
+      otp: ["first_name", "last_name", "otp"],
+      password_reset: ["first_name", "last_name", "reset_code"],
+      welcome: ["first_name", "last_name"],
+      login_alert: ["first_name", "last_name", "location", "ip_address", "device"],
+      beneficiary_added: ["first_name", "beneficiary_name", "beneficiary_type", "beneficiary_reference"],
+      beneficiary_updated: ["first_name", "beneficiary_name", "beneficiary_type", "beneficiary_reference"],
+      beneficiary_deleted: ["first_name", "beneficiary_name", "beneficiary_reference"],
+      withdrawal_pending: ["first_name", "amount", "currency", "transaction_id", "reference", "status"],
+      withdrawal_processing: ["first_name", "amount", "currency", "transaction_id", "reference", "status"],
+      withdrawal_completed: ["first_name", "amount", "currency", "transaction_id", "reference", "status"],
+      withdrawal_failed: ["first_name", "amount", "currency", "transaction_id", "reference", "status", "reason"],
+      withdrawal_refunded: ["first_name", "amount", "currency", "transaction_id", "reference", "status", "refund_status"]
     };
     MailtrapService = class {
       apiKey = null;
@@ -2854,8 +3064,8 @@ var init_mailtrap = __esm({
         try {
           const setting = await storage.getSystemSetting("email", "mailtrap_api_key");
           if (setting?.value) {
-            this.apiKey = setting.value;
-            process.env.MAILTRAP_API_KEY = setting.value;
+            this.apiKey = String(setting.value);
+            process.env.MAILTRAP_API_KEY = String(setting.value);
           } else {
             this.apiKey = process.env.MAILTRAP_API_KEY || null;
           }
@@ -2872,7 +3082,7 @@ var init_mailtrap = __esm({
       async getTemplateUuid(templateName) {
         try {
           const setting = await storage.getSystemSetting("email_templates", templateName);
-          if (setting?.value && setting.value.trim()) return setting.value.trim();
+          if (setting?.value && String(setting.value).trim()) return String(setting.value).trim();
         } catch {
         }
         return DEFAULT_TEMPLATE_UUIDs[templateName] || null;
@@ -2897,7 +3107,7 @@ var init_mailtrap = __esm({
             to: [{ email: toEmail }]
           };
           if (attachments?.length) payload.attachments = attachments;
-          const response = await fetch7(this.apiUrl, {
+          const response = await fetch8(this.apiUrl, {
             method: "POST",
             headers: {
               "Api-Token": this.apiKey,
@@ -3007,24 +3217,29 @@ var init_mailtrap = __esm({
         }
         return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
       }
+      async sendAccountAction(toEmail, templateName, variables) {
+        const uuid = await this.getTemplateUuid(templateName);
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, variables);
+      }
       async sendTransactionExport(toEmail, firstName, lastName, attachments) {
         const uuid = await this.getTemplateUuid("transaction_export");
         if (!uuid) return false;
         return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
       }
-      /** Return all template names and their current UUIDs (DB overrides + defaults) */
+      /** Return all template names, UUIDs, and the variables each template must receive. */
       async getAllTemplateUuids() {
         const result = {};
         for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
           try {
             const setting = await storage.getSystemSetting("email_templates", name);
-            if (setting?.value?.trim()) {
-              result[name] = { uuid: setting.value.trim(), isCustom: true };
+            if (setting?.value && String(setting.value).trim()) {
+              result[name] = { uuid: String(setting.value).trim(), isCustom: true, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
             } else {
-              result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+              result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
             }
           } catch {
-            result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false };
+            result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
           }
         }
         return result;
@@ -3883,7 +4098,7 @@ __export(whatsapp_exports, {
   WhatsAppService: () => WhatsAppService,
   whatsappService: () => whatsappService
 });
-import fetch8 from "node-fetch";
+import fetch9 from "node-fetch";
 var WhatsAppService, whatsappService;
 var init_whatsapp = __esm({
   "server/services/whatsapp.ts"() {
@@ -4016,7 +4231,7 @@ Sent on: ${dateStr} at ${timeStr}
             }
           };
           console.log("[WhatsApp] Sending text message to", formattedPhone, ":", message);
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4106,7 +4321,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4178,7 +4393,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4257,7 +4472,7 @@ Sent on: ${dateStr} at ${timeStr}
             location,
             ipAddress
           });
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4346,7 +4561,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4406,7 +4621,7 @@ Sent on: ${dateStr} at ${timeStr}
               language: { code: "en_US" }
             }
           };
-          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 KYC verified sent to ${phoneNumber}`);
@@ -4439,7 +4654,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: cardLastFour }] }]
             }
           };
-          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Card activation sent to ${phoneNumber}`);
@@ -4472,7 +4687,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: currency }, { type: "text", text: amount }, { type: "text", text: sender }] }]
             }
           };
-          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Fund receipt sent to ${phoneNumber}`);
@@ -4505,7 +4720,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: userName }] }]
             }
           };
-          const response = await fetch8(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Account creation notification sent to ${phoneNumber}`);
@@ -4561,7 +4776,7 @@ Sent on: ${dateStr} at ${timeStr}
             components: content
           };
           console.log(`[WhatsApp] Creating template "${templateName}"...`);
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4655,7 +4870,7 @@ Sent on: ${dateStr} at ${timeStr}
             requiredParams: validation.required,
             parameters: paramArray
           });
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4947,7 +5162,7 @@ Sent on: ${dateStr} at ${timeStr}
           const wabaId = await this.getWabaId();
           if (!wabaId) return null;
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,status,language,category,components`;
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4987,7 +5202,7 @@ Sent on: ${dateStr} at ${timeStr}
           }
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?fields=name,status,language,category,components`;
           console.log(`[WhatsApp] Fetching templates from Meta...`);
-          const response = await fetch8(url, {
+          const response = await fetch9(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -5036,7 +5251,7 @@ __export(messaging_exports, {
   MessagingService: () => MessagingService,
   messagingService: () => messagingService2
 });
-import fetch9 from "node-fetch";
+import fetch10 from "node-fetch";
 var MessagingService, messagingService2;
 var init_messaging = __esm({
   "server/services/messaging.ts"() {
@@ -5103,7 +5318,7 @@ var init_messaging = __esm({
           if (credentials.deviceId) {
             body.device_id = credentials.deviceId;
           }
-          const response = await fetch9(this.SMS_URL, {
+          const response = await fetch10(this.SMS_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -5347,7 +5562,7 @@ __export(didit_exports, {
   mapDiditStatusToKyc: () => mapDiditStatusToKyc,
   verifyWebhookSignature: () => verifyWebhookSignature
 });
-import fetch10 from "node-fetch";
+import fetch11 from "node-fetch";
 import crypto from "crypto";
 function getApiKey() {
   return process.env.DIDIT_API_KEY || null;
@@ -5385,7 +5600,7 @@ async function createDiditSession(userId, callbackUrl) {
     return null;
   }
   try {
-    const response = await fetch10(`${DIDIT_BASE_URL}/v3/session/`, {
+    const response = await fetch11(`${DIDIT_BASE_URL}/v3/session/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -5418,7 +5633,7 @@ async function getSessionDecision(sessionId) {
     return null;
   }
   try {
-    const response = await fetch10(`${DIDIT_BASE_URL}/v3/session/${sessionId}/decision/`, {
+    const response = await fetch11(`${DIDIT_BASE_URL}/v3/session/${sessionId}/decision/`, {
       method: "GET",
       headers: {
         "x-api-key": apiKey
@@ -5724,165 +5939,6 @@ var init_api_key = __esm({
       }
     };
     apiKeyService = new ApiKeyService();
-  }
-});
-
-// server/services/fcm.ts
-import fetch11 from "node-fetch";
-var FCM_API_URL, FCMService, fcmService;
-var init_fcm = __esm({
-  "server/services/fcm.ts"() {
-    "use strict";
-    FCM_API_URL = "https://fcm.googleapis.com/v1/projects";
-    FCMService = class {
-      accessToken = null;
-      tokenExpiry = 0;
-      projectId;
-      constructor() {
-        this.projectId = process.env.FIREBASE_PROJECT_ID || "greenpay-mobile";
-      }
-      async getAccessToken() {
-        try {
-          if (this.accessToken && Date.now() < this.tokenExpiry) {
-            return this.accessToken;
-          }
-          const serviceAccount = JSON.parse(
-            process.env.FIREBASE_SERVICE_ACCOUNT || "{}"
-          );
-          const response = await fetch11("https://oauth2.googleapis.com/token", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              client_id: serviceAccount.client_id,
-              client_secret: serviceAccount.client_secret,
-              refresh_token: serviceAccount.refresh_token,
-              grant_type: "refresh_token"
-            })
-          });
-          const data = await response.json();
-          this.accessToken = data.access_token;
-          this.tokenExpiry = Date.now() + data.expires_in * 1e3;
-          return this.accessToken;
-        } catch (error) {
-          console.error("FCM token error:", error);
-          throw new Error("Failed to get FCM access token");
-        }
-      }
-      async sendToToken(token, title, body, data) {
-        try {
-          const accessToken = await this.getAccessToken();
-          const message = {
-            token,
-            notification: { title, body },
-            data,
-            android: {
-              priority: "high",
-              notification: {
-                sound: "default",
-                click_action: "FLUTTER_NOTIFICATION_CLICK"
-              }
-            }
-          };
-          const response = await fetch11(
-            `${FCM_API_URL}/${this.projectId}/messages:send`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ message })
-            }
-          );
-          const result = await response.json();
-          console.log("FCM sent successfully:", result.name);
-          return true;
-        } catch (error) {
-          console.error("FCM send error:", error);
-          return false;
-        }
-      }
-      async sendToTopic(topic, title, body, data) {
-        try {
-          const accessToken = await this.getAccessToken();
-          const message = {
-            topic,
-            notification: { title, body },
-            data,
-            android: {
-              priority: "high",
-              notification: {
-                sound: "default",
-                click_action: "FLUTTER_NOTIFICATION_CLICK"
-              }
-            }
-          };
-          const response = await fetch11(
-            `${FCM_API_URL}/${this.projectId}/messages:send`,
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${accessToken}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({ message })
-            }
-          );
-          const result = await response.json();
-          console.log("FCM topic sent successfully:", result.name);
-          return true;
-        } catch (error) {
-          console.error("FCM topic send error:", error);
-          return false;
-        }
-      }
-      async sendMulticast(tokens, title, body, data) {
-        try {
-          const accessToken = await this.getAccessToken();
-          let successCount = 0;
-          let failureCount = 0;
-          for (let i = 0; i < tokens.length; i += 500) {
-            const batch = tokens.slice(i, i + 500);
-            for (const token of batch) {
-              try {
-                const message = {
-                  token,
-                  notification: { title, body },
-                  data,
-                  android: {
-                    priority: "high",
-                    notification: {
-                      sound: "default",
-                      click_action: "FLUTTER_NOTIFICATION_CLICK"
-                    }
-                  }
-                };
-                await fetch11(
-                  `${FCM_API_URL}/${this.projectId}/messages:send`,
-                  {
-                    method: "POST",
-                    headers: {
-                      Authorization: `Bearer ${accessToken}`,
-                      "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify({ message })
-                  }
-                );
-                successCount++;
-              } catch {
-                failureCount++;
-              }
-            }
-          }
-          console.log(`FCM multicast: ${successCount} success, ${failureCount} failures`);
-          return { success: successCount, failure: failureCount };
-        } catch (error) {
-          console.error("FCM multicast error:", error);
-          return { success: 0, failure: tokens.length };
-        }
-      }
-    };
-    fcmService = new FCMService();
   }
 });
 
@@ -6683,19 +6739,33 @@ var TwoFactorService = class {
 var twoFactorService = new TwoFactorService();
 
 // server/services/notifications.ts
+init_storage();
+init_fcm();
 var NotificationService = class {
-  subscriptions = /* @__PURE__ */ new Map();
   async sendNotification(payload) {
     try {
-      console.log(`Sending notification to user ${payload.userId}:`, payload);
-      const success = Math.random() > 0.1;
-      if (success) {
-        console.log(`Notification sent successfully to ${payload.userId}`);
-        return true;
-      } else {
-        console.log(`Failed to send notification to ${payload.userId}`);
-        return false;
+      const notification = await storage.createNotification({
+        userId: payload.userId,
+        title: payload.title,
+        message: payload.body,
+        type: payload.type === "security" ? "warning" : payload.type === "transaction" ? "success" : "info",
+        isGlobal: false,
+        actionUrl: payload.metadata?.actionUrl,
+        metadata: payload.metadata
+      });
+      const user = await storage.getUser(payload.userId);
+      let delivered = true;
+      if (user?.fcmToken && user.pushNotificationsEnabled !== false) {
+        delivered = await fcmService.sendToToken(
+          user.fcmToken,
+          payload.title,
+          payload.body,
+          { type: payload.type, notificationId: notification.id, ...Object.fromEntries(
+            Object.entries(payload.metadata || {}).map(([key, value]) => [key, String(value)])
+          ) }
+        );
       }
+      return delivered;
     } catch (error) {
       console.error("Notification sending error:", error);
       return false;
@@ -6703,7 +6773,7 @@ var NotificationService = class {
   }
   async registerPushToken(userId, token) {
     try {
-      this.subscriptions.set(userId, token);
+      await storage.updateUser(userId, { fcmToken: token, pushNotificationsEnabled: true });
       console.log(`Push token registered for user ${userId}`);
       return true;
     } catch (error) {
@@ -7033,7 +7103,7 @@ var CloudinaryStorageService = class {
 var cloudinaryStorage = new CloudinaryStorageService();
 
 // server/statumService.ts
-import fetch6 from "node-fetch";
+import fetch7 from "node-fetch";
 var StatumService = class {
   consumerKey;
   consumerSecret;
@@ -7083,7 +7153,7 @@ var StatumService = class {
         amount
       };
       console.log(`\u{1F4E4} Request body:`, JSON.stringify(requestBody, null, 2));
-      const response = await fetch6(this.apiUrl, {
+      const response = await fetch7(this.apiUrl, {
         method: "POST",
         headers: {
           "Authorization": this.getAuthHeader(),
@@ -7296,6 +7366,32 @@ var aiRateLimiter = new AIRateLimiter();
 // server/routes.ts
 var cloudinaryStorage2 = new CloudinaryStorageService();
 var normalizeCurrency = (currency) => String(currency || "").trim().toUpperCase();
+async function addWithdrawalEvent(transaction, event) {
+  return storage.createWithdrawalEvent({
+    transactionId: transaction.id,
+    userId: transaction.userId,
+    status: event.status,
+    title: event.title,
+    description: event.description,
+    provider: event.provider || null,
+    providerReference: event.providerReference || null,
+    retryCount: event.retryCount || 0,
+    refundStatus: event.refundStatus || "not_applicable",
+    metadata: event.metadata
+  });
+}
+async function sendAccountEmail(user, templateName, variables) {
+  if (!user?.email) return;
+  try {
+    const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+    await mailtrapService3.sendAccountAction(user.email, templateName, {
+      first_name: user.fullName?.split(" ")[0] || "User",
+      ...variables
+    });
+  } catch (error) {
+    console.error(`[Email] ${templateName} alert failed:`, error);
+  }
+}
 function getSupportedCurrencyCodes() {
   return NEXUSPAY_CURRENCIES.map((currency) => currency.code);
 }
@@ -10751,9 +10847,22 @@ p{color:#6b7280;font-size:14px;}</style>
       if (transaction.userId !== sessionUserId) {
         return res.status(403).json({ message: "Access denied" });
       }
-      res.json({ transaction });
+      const timeline = transaction.type === "withdraw" ? await storage.getWithdrawalEvents(transaction.id) : [];
+      res.json({ transaction, timeline });
     } catch (error) {
       res.status(500).json({ message: "Error fetching transaction status" });
+    }
+  });
+  app2.get("/api/withdrawals/:id/timeline", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session?.userId;
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction || transaction.type !== "withdraw") return res.status(404).json({ message: "Withdrawal not found" });
+      if (transaction.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      res.json({ transaction, timeline: await storage.getWithdrawalEvents(transaction.id) });
+    } catch (error) {
+      console.error("Withdrawal timeline error:", error);
+      res.status(500).json({ message: "Failed to load withdrawal timeline" });
     }
   });
   app2.post("/api/transactions/export-email", requireAuth, async (req, res) => {
@@ -11062,6 +11171,18 @@ p{color:#6b7280;font-size:14px;}</style>
         userId: sessionUserId
       });
       const recipient = await storage.createRecipient(recipientData);
+      await notificationService.sendNotification({
+        title: "Beneficiary saved",
+        body: `${recipient.name} was added to your beneficiaries.`,
+        userId: sessionUserId,
+        type: "general",
+        metadata: { actionUrl: "/withdraw", action: "beneficiary_added", beneficiaryId: recipient.id }
+      });
+      await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_added", {
+        beneficiary_name: recipient.name,
+        beneficiary_type: recipient.recipientType || "beneficiary",
+        beneficiary_reference: recipient.id
+      });
       res.json({ recipient, message: "Recipient added successfully" });
     } catch (error) {
       console.error("Create recipient error:", error);
@@ -11093,6 +11214,18 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const recipient = await storage.updateRecipient(req.params.id, req.body);
       if (recipient) {
+        await notificationService.sendNotification({
+          title: "Beneficiary updated",
+          body: `${recipient.name} was updated successfully.`,
+          userId: sessionUserId,
+          type: "general",
+          metadata: { actionUrl: "/withdraw", action: "beneficiary_updated", beneficiaryId: recipient.id }
+        });
+        await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_updated", {
+          beneficiary_name: recipient.name,
+          beneficiary_type: recipient.recipientType || "beneficiary",
+          beneficiary_reference: recipient.id
+        });
         res.json({ recipient, message: "Recipient updated successfully" });
       } else {
         res.status(404).json({ message: "Recipient not found" });
@@ -11113,6 +11246,17 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(403).json({ message: "Access denied" });
       }
       await storage.deleteRecipient(req.params.id);
+      await notificationService.sendNotification({
+        title: "Beneficiary removed",
+        body: `${recipientData.name} was removed from your beneficiaries.`,
+        userId: sessionUserId,
+        type: "general",
+        metadata: { actionUrl: "/withdraw", action: "beneficiary_deleted", beneficiaryId: req.params.id }
+      });
+      await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_deleted", {
+        beneficiary_name: recipientData.name,
+        beneficiary_reference: recipientData.id
+      });
       res.json({ message: "Recipient deleted successfully" });
     } catch (error) {
       console.error("Delete recipient error:", error);
@@ -14935,6 +15079,10 @@ p{color:#6b7280;font-size:14px;}</style>
             ...withdrawal,
             adminNotes: withdrawal.failureReason,
             processedAt: withdrawal.completedAt,
+            provider: withdrawal.metadata?.provider || null,
+            providerReference: withdrawal.metadata?.providerReference || null,
+            retryCount: withdrawal.metadata?.retryCount || 0,
+            refundStatus: withdrawal.metadata?.refundStatus || (withdrawal.status === "failed" ? "completed" : "not_applicable"),
             userInfo: {
               fullName: user?.fullName || "Unknown",
               email: user?.email || "Unknown",
@@ -14975,6 +15123,21 @@ p{color:#6b7280;font-size:14px;}</style>
         completedAt: /* @__PURE__ */ new Date()
       });
       if (transaction) {
+        await addWithdrawalEvent(transaction, {
+          status: "completed",
+          title: "Withdrawal completed",
+          description: notes,
+          provider: req.body.provider || null,
+          providerReference: req.body.providerReference || null,
+          refundStatus: "not_applicable"
+        });
+        await sendAccountEmail(user, "withdrawal_completed", {
+          amount: String(transaction.amount),
+          currency: transaction.currency,
+          transaction_id: transaction.id,
+          reference: transaction.reference || transaction.id,
+          status: "Completed"
+        });
         await notificationService.sendNotification({
           title: "Withdrawal Approved",
           body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
@@ -15009,6 +15172,21 @@ p{color:#6b7280;font-size:14px;}</style>
           if (wallet) {
             await releaseWalletWithdrawal(wallet.id, refundAmount);
           }
+          await addWithdrawalEvent(transaction, {
+            status: "refunded",
+            title: "Withdrawal rejected and refunded",
+            description: adminNotes || "Rejected by admin",
+            refundStatus: "completed",
+            providerReference: req.body.providerReference || null
+          });
+          await sendAccountEmail(user, "withdrawal_refunded", {
+            amount: String(refundAmount),
+            currency: transaction.currency,
+            transaction_id: transaction.id,
+            reference: transaction.reference || transaction.id,
+            status: "Refunded",
+            refund_status: "Completed"
+          });
           console.log(`\u2705 Released ${transaction.currency} ${refundAmount} withdrawal hold for ${user.email}`);
           await notificationService.sendNotification({
             title: "Withdrawal Rejected & Refunded",
@@ -15084,9 +15262,9 @@ p{color:#6b7280;font-size:14px;}</style>
   app2.put("/api/admin/withdrawals/:id/status", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { status, adminNotes } = req.body;
-      if (!status || !["pending", "completed", "failed"].includes(status)) {
-        return res.status(400).json({ message: "Invalid status. Must be pending, completed, or failed." });
+      const { status, adminNotes, provider, providerReference, retryCount, refundStatus } = req.body;
+      if (!status || !["pending", "processing", "retrying", "completed", "failed", "refunded"].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be pending, processing, retrying, completed, failed, or refunded." });
       }
       const existing = await storage.getTransaction(id);
       if (!existing || existing.type !== "withdraw") {
@@ -15112,10 +15290,47 @@ p{color:#6b7280;font-size:14px;}</style>
       const updatedWithdrawal = await storage.updateTransaction(id, {
         status,
         failureReason: adminNotes || (status === "completed" ? "Approved by admin" : status === "failed" ? "Rejected by admin" : null),
-        completedAt: status !== "pending" ? /* @__PURE__ */ new Date() : null
+        completedAt: status !== "pending" ? /* @__PURE__ */ new Date() : null,
+        metadata: {
+          ...existing.metadata || {},
+          ...provider ? { provider } : {},
+          ...providerReference ? { providerReference } : {},
+          ...retryCount !== void 0 ? { retryCount: Number(retryCount) || 0 } : {},
+          ...refundStatus ? { refundStatus } : {}
+        }
       });
       if (!updatedWithdrawal) {
         return res.status(404).json({ message: "Withdrawal request not found" });
+      }
+      if (updatedWithdrawal) {
+        const eventStatus = status === "failed" && (refundStatus === "completed" || existing.status === "pending") ? "refunded" : status;
+        await addWithdrawalEvent(updatedWithdrawal, {
+          status: eventStatus,
+          title: eventStatus === "refunded" ? "Withdrawal refunded" : `Withdrawal ${status}`,
+          description: adminNotes || void 0,
+          provider,
+          providerReference,
+          retryCount: Number(retryCount) || 0,
+          refundStatus: refundStatus || (eventStatus === "refunded" ? "completed" : "not_applicable")
+        });
+        const user = await storage.getUser(updatedWithdrawal.userId);
+        const template = eventStatus === "refunded" ? "withdrawal_refunded" : status === "completed" ? "withdrawal_completed" : status === "failed" ? "withdrawal_failed" : status === "processing" ? "withdrawal_processing" : "withdrawal_pending";
+        await notificationService.sendNotification({
+          title: `Withdrawal ${eventStatus}`,
+          body: adminNotes || `Your withdrawal is now ${eventStatus}.`,
+          userId: updatedWithdrawal.userId,
+          type: "transaction",
+          metadata: { actionUrl: `/transactions`, transactionId: updatedWithdrawal.id, withdrawalStatus: eventStatus }
+        });
+        await sendAccountEmail(user, template, {
+          amount: String(updatedWithdrawal.amount),
+          currency: updatedWithdrawal.currency,
+          transaction_id: updatedWithdrawal.id,
+          reference: updatedWithdrawal.reference || updatedWithdrawal.id,
+          status: eventStatus,
+          reason: adminNotes || "",
+          refund_status: refundStatus || ""
+        });
       }
       res.json({
         withdrawal: updatedWithdrawal,
@@ -15124,6 +15339,16 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error("Error updating withdrawal status:", error);
       res.status(500).json({ message: "Error updating withdrawal status" });
+    }
+  });
+  app2.get("/api/admin/withdrawals/:id/timeline", requireAdminAuth, async (req, res) => {
+    try {
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction || transaction.type !== "withdraw") return res.status(404).json({ message: "Withdrawal not found" });
+      res.json({ transaction, timeline: await storage.getWithdrawalEvents(transaction.id) });
+    } catch (error) {
+      console.error("Admin withdrawal timeline error:", error);
+      res.status(500).json({ message: "Failed to load withdrawal timeline" });
     }
   });
   app2.get("/api/system-settings/card-price", async (req, res) => {
@@ -15480,6 +15705,19 @@ p{color:#6b7280;font-size:14px;}</style>
         fee: withdrawFee.toFixed(2),
         recipientDetails,
         reference: storage.generateTransactionReference()
+      });
+      await addWithdrawalEvent(transaction, {
+        status: "pending",
+        title: "Withdrawal request submitted",
+        description: "Your withdrawal is waiting for review.",
+        metadata: { method: req.body.withdrawMethod || null }
+      });
+      await sendAccountEmail(user, "withdrawal_pending", {
+        amount: String(amount),
+        currency: normalizedWithdrawalCurrency,
+        transaction_id: transaction.id,
+        reference: transaction.reference || transaction.id,
+        status: "Pending"
       });
       await notificationService.sendNotification({
         title: "Withdrawal Request",
@@ -17218,6 +17456,25 @@ Sitemap: https://geepay.us/sitemap.xml`;
     } catch (error) {
       console.error("Email templates save error:", error);
       res.status(500).json({ message: "Failed to save email templates" });
+    }
+  });
+  app2.put("/api/admin/email-templates/:name", requireAdminAuth, async (req, res) => {
+    try {
+      const name = String(req.params.name);
+      if (!/^[a-z0-9_]+$/.test(name)) {
+        return res.status(400).json({ message: "Invalid template name" });
+      }
+      const uuid = String(req.body?.uuid || "").trim();
+      await storage.setSystemSetting({
+        category: "email_templates",
+        key: name,
+        value: uuid,
+        description: `Email template UUID for ${name}`
+      });
+      res.json({ success: true, name, uuid });
+    } catch (error) {
+      console.error("Email template save error:", error);
+      res.status(500).json({ message: "Failed to save email template" });
     }
   });
   app2.post("/api/disputes", requireAuth, async (req, res) => {

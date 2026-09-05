@@ -1,4 +1,8 @@
-// Push notification service
+import { storage } from "../storage";
+import { fcmService } from "./fcm";
+
+// Account notifications are persisted first so the web client can display
+// them even when the user is offline. Native clients additionally receive FCM.
 export interface NotificationPayload {
   title: string;
   body: string;
@@ -8,27 +12,31 @@ export interface NotificationPayload {
 }
 
 export class NotificationService {
-  private subscriptions: Map<string, any> = new Map();
-
   async sendNotification(payload: NotificationPayload): Promise<boolean> {
     try {
-      console.log(`Sending notification to user ${payload.userId}:`, payload);
-      
-      // In a real implementation, this would:
-      // 1. Look up user's push notification tokens
-      // 2. Send notifications via Firebase Cloud Messaging or similar
-      // 3. Handle delivery receipts and failures
-      
-      // For demo purposes, we'll simulate sending
-      const success = Math.random() > 0.1; // 90% success rate simulation
-      
-      if (success) {
-        console.log(`Notification sent successfully to ${payload.userId}`);
-        return true;
-      } else {
-        console.log(`Failed to send notification to ${payload.userId}`);
-        return false;
+      const notification = await storage.createNotification({
+        userId: payload.userId,
+        title: payload.title,
+        message: payload.body,
+        type: payload.type === "security" ? "warning" : payload.type === "transaction" ? "success" : "info",
+        isGlobal: false,
+        actionUrl: payload.metadata?.actionUrl,
+        metadata: payload.metadata,
+      });
+
+      const user = await storage.getUser(payload.userId);
+      let delivered = true;
+      if (user?.fcmToken && user.pushNotificationsEnabled !== false) {
+        delivered = await fcmService.sendToToken(
+          user.fcmToken,
+          payload.title,
+          payload.body,
+          { type: payload.type, notificationId: notification.id, ...Object.fromEntries(
+            Object.entries(payload.metadata || {}).map(([key, value]) => [key, String(value)]),
+          ) },
+        );
       }
+      return delivered;
     } catch (error) {
       console.error('Notification sending error:', error);
       return false;
@@ -37,8 +45,7 @@ export class NotificationService {
 
   async registerPushToken(userId: string, token: string): Promise<boolean> {
     try {
-      // Store the push token for the user
-      this.subscriptions.set(userId, token);
+      await storage.updateUser(userId, { fcmToken: token, pushNotificationsEnabled: true });
       console.log(`Push token registered for user ${userId}`);
       return true;
     } catch (error) {

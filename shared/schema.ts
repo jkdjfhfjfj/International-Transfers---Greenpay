@@ -111,6 +111,23 @@ export const transactions = pgTable("transactions", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Append-only lifecycle events for withdrawals. The transaction row keeps the
+// current state; this table preserves every provider/admin/user transition.
+export const withdrawalEvents = pgTable("withdrawal_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  status: text("status").notNull(), // pending, processing, retrying, completed, failed, refunded
+  title: text("title").notNull(),
+  description: text("description"),
+  provider: text("provider"),
+  providerReference: text("provider_reference"),
+  retryCount: integer("retry_count").default(0),
+  refundStatus: text("refund_status").default("not_applicable"), // not_applicable, pending, completed, failed
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const recipients = pgTable("recipients", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
@@ -247,6 +264,11 @@ export const insertTransactionSchema = createInsertSchema(transactions).omit({
   createdAt: true,
 });
 
+export const insertWithdrawalEventSchema = createInsertSchema(withdrawalEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertRecipientSchema = createInsertSchema(recipients).omit({
   id: true,
   createdAt: true,
@@ -303,6 +325,8 @@ export type VirtualCard = typeof virtualCards.$inferSelect;
 export type InsertVirtualCard = z.infer<typeof insertVirtualCardSchema>;
 export type Transaction = typeof transactions.$inferSelect;
 export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type WithdrawalEvent = typeof withdrawalEvents.$inferSelect;
+export type InsertWithdrawalEvent = z.infer<typeof insertWithdrawalEventSchema>;
 export type Recipient = typeof recipients.$inferSelect;
 export type InsertRecipient = z.infer<typeof insertRecipientSchema>;
 export type PaymentRequest = typeof paymentRequests.$inferSelect;

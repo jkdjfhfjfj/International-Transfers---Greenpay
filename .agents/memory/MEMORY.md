@@ -1,1 +1,2 @@
 - [Multi-leg ledger movements](multi-leg-ledger-movements.md) — paired debits and credits need compensating ledger entries when the second leg fails.
+- [Safe schema changes](safe-schema-changes.md) — never approve an unrelated destructive Drizzle diff; isolate additive changes and leave production migration to publish.

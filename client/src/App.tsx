@@ -1,7 +1,7 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
@@ -96,7 +96,7 @@ import { useSystemSettings } from "@/hooks/use-system-settings";
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const [, setLocation] = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   
   // Show loading screen while checking authentication
   if (isLoading) {
@@ -226,11 +226,50 @@ function Router() {
 
 function AppContent() {
   const [location] = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const { getMaintenanceMode } = useSystemSettings();
   
   // Initialize FCM push notifications
   useFCM();
+
+  // Web notifications are delivered from the same persisted notification feed
+  // used by the bell menu, so account actions remain visible after refresh.
+  const lastNotificationIds = useRef<Set<string> | null>(null);
+  const { data: browserNotificationResponse } = useQuery({
+    queryKey: [`/api/notifications/${user?.id}`],
+    enabled: !!user?.id,
+    refetchInterval: 15000,
+    staleTime: 0,
+  });
+  useEffect(() => {
+    if (!user?.id) {
+      lastNotificationIds.current = null;
+      return;
+    }
+    const items = (browserNotificationResponse as any)?.notifications || [];
+    const ids = new Set<string>(items.map((item: any) => String(item.id)));
+    if (!lastNotificationIds.current) {
+      lastNotificationIds.current = ids;
+      return;
+    }
+    if ("Notification" in window && Notification.permission === "granted") {
+      items
+        .filter((item: any) => !lastNotificationIds.current?.has(item.id) && !item.isRead)
+        .slice(0, 3)
+        .forEach((item: any) => {
+          const browserNotification = new Notification(item.title, {
+            body: item.message,
+            tag: item.id,
+            icon: "/favicon.png",
+          });
+          if (item.actionUrl) browserNotification.onclick = () => {
+            window.focus();
+            window.location.href = item.actionUrl;
+          };
+        });
+    }
+    lastNotificationIds.current = ids;
+  }, [browserNotificationResponse, user?.id]);
   
   // Landing/public pages and admin pages that should not show user widgets
   const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];

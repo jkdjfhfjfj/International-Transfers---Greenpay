@@ -44,6 +44,14 @@ const EMAIL_TEMPLATE_KEYS = [
   { key: "welcome",                  label: "Welcome Email"            },
   { key: "fund_receipt",             label: "Fund Receipt"             },
   { key: "transaction_export",       label: "Transaction Export"       },
+  { key: "beneficiary_added",        label: "Beneficiary Added"        },
+  { key: "beneficiary_updated",      label: "Beneficiary Updated"      },
+  { key: "beneficiary_deleted",      label: "Beneficiary Deleted"      },
+  { key: "withdrawal_pending",       label: "Withdrawal Pending"       },
+  { key: "withdrawal_processing",    label: "Withdrawal Processing"    },
+  { key: "withdrawal_completed",     label: "Withdrawal Completed"     },
+  { key: "withdrawal_failed",        label: "Withdrawal Failed"        },
+  { key: "withdrawal_refunded",      label: "Withdrawal Refunded"      },
 ];
 
 function EmailTemplateConfig() {
@@ -84,6 +92,9 @@ function EmailTemplateConfig() {
                 {label}
                 {isCustom && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Custom</span>}
               </Label>
+              <p className="text-[10px] text-slate-500">
+                Required: {(uuids?.templates?.[key]?.requiredParameters || []).join(", ") || "none"}
+              </p>
               <div className="flex gap-1.5">
                 <Input
                   value={value}

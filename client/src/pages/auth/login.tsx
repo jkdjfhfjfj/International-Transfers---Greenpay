@@ -29,6 +29,9 @@ export default function LoginPage() {
   const [pinCode, setPinCode] = useState("");
   const [tempLoginData, setTempLoginData] = useState<any>(null);
   const [authMethod, setAuthMethod] = useState<'pin' | 'otp' | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported",
+  );
   const { toast } = useToast();
   const { login } = useAuth();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
@@ -203,6 +206,10 @@ export default function LoginPage() {
   });
 
   const onSubmit = (data: LoginForm) => {
+    // Request from the login gesture so browsers do not silently block it.
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission().then(setNotificationPermission).catch(() => {});
+    }
     loginMutation.mutate(data);
   };
 
@@ -403,6 +410,11 @@ export default function LoginPage() {
                   Forgot password?
                 </button>
               </div>
+              {notificationPermission !== "granted" && notificationPermission !== "unsupported" && (
+                <p className="text-xs text-muted-foreground">
+                  We’ll ask for permission to show account activity alerts in your browser when you sign in.
+                </p>
+              )}
 
             </form>
           </Form>

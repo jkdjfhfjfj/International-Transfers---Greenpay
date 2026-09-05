@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -31,6 +31,50 @@ import { aiRateLimiter } from "./services/ai-rate-limiter";
 const cloudinaryStorage = new CloudinaryStorageService();
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
+
+async function addWithdrawalEvent(
+  transaction: { id: string; userId: string },
+  event: {
+    status: string;
+    title: string;
+    description?: string;
+    provider?: string | null;
+    providerReference?: string | null;
+    retryCount?: number;
+    refundStatus?: string;
+    metadata?: Record<string, unknown>;
+  },
+) {
+  return storage.createWithdrawalEvent({
+    transactionId: transaction.id,
+    userId: transaction.userId,
+    status: event.status,
+    title: event.title,
+    description: event.description,
+    provider: event.provider || null,
+    providerReference: event.providerReference || null,
+    retryCount: event.retryCount || 0,
+    refundStatus: event.refundStatus || "not_applicable",
+    metadata: event.metadata,
+  });
+}
+
+async function sendAccountEmail(
+  user: any,
+  templateName: string,
+  variables: Record<string, string>,
+) {
+  if (!user?.email) return;
+  try {
+    const { mailtrapService } = await import("./services/mailtrap");
+    await mailtrapService.sendAccountAction(user.email, templateName, {
+      first_name: user.fullName?.split(" ")[0] || "User",
+      ...variables,
+    });
+  } catch (error) {
+    console.error(`[Email] ${templateName} alert failed:`, error);
+  }
+}
 
 function getSupportedCurrencyCodes() {
   return NEXUSPAY_CURRENCIES.map((currency) => currency.code);
@@ -4260,9 +4304,25 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(403).json({ message: "Access denied" });
       }
       
-      res.json({ transaction });
+      const timeline = transaction.type === "withdraw"
+        ? await storage.getWithdrawalEvents(transaction.id)
+        : [];
+      res.json({ transaction, timeline });
     } catch (error) {
       res.status(500).json({ message: "Error fetching transaction status" });
+    }
+  });
+
+  app.get("/api/withdrawals/:id/timeline", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction || transaction.type !== "withdraw") return res.status(404).json({ message: "Withdrawal not found" });
+      if (transaction.userId !== userId) return res.status(403).json({ message: "Access denied" });
+      res.json({ transaction, timeline: await storage.getWithdrawalEvents(transaction.id) });
+    } catch (error) {
+      console.error("Withdrawal timeline error:", error);
+      res.status(500).json({ message: "Failed to load withdrawal timeline" });
     }
   });
 
@@ -4655,6 +4715,18 @@ p{color:#6b7280;font-size:14px;}</style>
         userId: sessionUserId
       });
       const recipient = await storage.createRecipient(recipientData);
+      await notificationService.sendNotification({
+        title: "Beneficiary saved",
+        body: `${recipient.name} was added to your beneficiaries.`,
+        userId: sessionUserId,
+        type: "general",
+        metadata: { actionUrl: "/withdraw", action: "beneficiary_added", beneficiaryId: recipient.id },
+      });
+      await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_added", {
+        beneficiary_name: recipient.name,
+        beneficiary_type: recipient.recipientType || "beneficiary",
+        beneficiary_reference: recipient.id,
+      });
       res.json({ recipient, message: "Recipient added successfully" });
     } catch (error) {
       console.error('Create recipient error:', error);
@@ -4695,6 +4767,18 @@ p{color:#6b7280;font-size:14px;}</style>
       
       const recipient = await storage.updateRecipient(req.params.id, req.body);
       if (recipient) {
+        await notificationService.sendNotification({
+          title: "Beneficiary updated",
+          body: `${recipient.name} was updated successfully.`,
+          userId: sessionUserId,
+          type: "general",
+          metadata: { actionUrl: "/withdraw", action: "beneficiary_updated", beneficiaryId: recipient.id },
+        });
+        await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_updated", {
+          beneficiary_name: recipient.name,
+          beneficiary_type: recipient.recipientType || "beneficiary",
+          beneficiary_reference: recipient.id,
+        });
         res.json({ recipient, message: "Recipient updated successfully" });
       } else {
         res.status(404).json({ message: "Recipient not found" });
@@ -4720,6 +4804,17 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       await storage.deleteRecipient(req.params.id);
+      await notificationService.sendNotification({
+        title: "Beneficiary removed",
+        body: `${recipientData.name} was removed from your beneficiaries.`,
+        userId: sessionUserId,
+        type: "general",
+        metadata: { actionUrl: "/withdraw", action: "beneficiary_deleted", beneficiaryId: req.params.id },
+      });
+      await sendAccountEmail(await storage.getUser(sessionUserId), "beneficiary_deleted", {
+        beneficiary_name: recipientData.name,
+        beneficiary_reference: recipientData.id,
+      });
       res.json({ message: "Recipient deleted successfully" });
     } catch (error) {
       console.error('Delete recipient error:', error);
@@ -9389,6 +9484,10 @@ p{color:#6b7280;font-size:14px;}</style>
             ...withdrawal,
             adminNotes: withdrawal.failureReason,
             processedAt: withdrawal.completedAt,
+            provider: (withdrawal.metadata as any)?.provider || null,
+            providerReference: (withdrawal.metadata as any)?.providerReference || null,
+            retryCount: (withdrawal.metadata as any)?.retryCount || 0,
+            refundStatus: (withdrawal.metadata as any)?.refundStatus || (withdrawal.status === "failed" ? "completed" : "not_applicable"),
             userInfo: {
               fullName: user?.fullName || 'Unknown',
               email: user?.email || 'Unknown',
@@ -9437,6 +9536,21 @@ p{color:#6b7280;font-size:14px;}</style>
       });
 
       if (transaction) {
+        await addWithdrawalEvent(transaction, {
+          status: "completed",
+          title: "Withdrawal completed",
+          description: notes,
+          provider: req.body.provider || null,
+          providerReference: req.body.providerReference || null,
+          refundStatus: "not_applicable",
+        });
+        await sendAccountEmail(user, "withdrawal_completed", {
+          amount: String(transaction.amount),
+          currency: transaction.currency,
+          transaction_id: transaction.id,
+          reference: transaction.reference || transaction.id,
+          status: "Completed",
+        });
         await notificationService.sendNotification({
           title: "Withdrawal Approved",
           body: `Your withdrawal of ${transaction.currency} ${transaction.amount} has been approved and processed.`,
@@ -9476,6 +9590,21 @@ p{color:#6b7280;font-size:14px;}</style>
           if (wallet) {
             await releaseWalletWithdrawal(wallet.id, refundAmount);
           }
+          await addWithdrawalEvent(transaction, {
+            status: "refunded",
+            title: "Withdrawal rejected and refunded",
+            description: adminNotes || "Rejected by admin",
+            refundStatus: "completed",
+            providerReference: req.body.providerReference || null,
+          });
+          await sendAccountEmail(user, "withdrawal_refunded", {
+            amount: String(refundAmount),
+            currency: transaction.currency,
+            transaction_id: transaction.id,
+            reference: transaction.reference || transaction.id,
+            status: "Refunded",
+            refund_status: "Completed",
+          });
           console.log(`✅ Released ${transaction.currency} ${refundAmount} withdrawal hold for ${user.email}`);
           
           // Notify user
@@ -9569,10 +9698,10 @@ p{color:#6b7280;font-size:14px;}</style>
   app.put("/api/admin/withdrawals/:id/status", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      const { status, adminNotes } = req.body;
+      const { status, adminNotes, provider, providerReference, retryCount, refundStatus } = req.body;
       
-      if (!status || !['pending', 'completed', 'failed'].includes(status)) {
-        return res.status(400).json({ message: "Invalid status. Must be pending, completed, or failed." });
+      if (!status || !['pending', 'processing', 'retrying', 'completed', 'failed', 'refunded'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status. Must be pending, processing, retrying, completed, failed, or refunded." });
       }
       
       const existing = await storage.getTransaction(id);
@@ -9600,12 +9729,49 @@ p{color:#6b7280;font-size:14px;}</style>
         status,
         failureReason: adminNotes || (status === "completed" ? "Approved by admin" : status === "failed" ? "Rejected by admin" : null),
         completedAt: status !== "pending" ? new Date() : null,
+        metadata: {
+          ...((existing.metadata as Record<string, unknown>) || {}),
+          ...(provider ? { provider } : {}),
+          ...(providerReference ? { providerReference } : {}),
+          ...(retryCount !== undefined ? { retryCount: Number(retryCount) || 0 } : {}),
+          ...(refundStatus ? { refundStatus } : {}),
+        },
       });
       
       if (!updatedWithdrawal) {
         return res.status(404).json({ message: "Withdrawal request not found" });
       }
       
+      if (updatedWithdrawal) {
+        const eventStatus = status === "failed" && (refundStatus === "completed" || existing.status === "pending") ? "refunded" : status;
+        await addWithdrawalEvent(updatedWithdrawal, {
+          status: eventStatus,
+          title: eventStatus === "refunded" ? "Withdrawal refunded" : `Withdrawal ${status}`,
+          description: adminNotes || undefined,
+          provider,
+          providerReference,
+          retryCount: Number(retryCount) || 0,
+          refundStatus: refundStatus || (eventStatus === "refunded" ? "completed" : "not_applicable"),
+        });
+        const user = await storage.getUser(updatedWithdrawal.userId);
+        const template = eventStatus === "refunded" ? "withdrawal_refunded" : status === "completed" ? "withdrawal_completed" : status === "failed" ? "withdrawal_failed" : status === "processing" ? "withdrawal_processing" : "withdrawal_pending";
+        await notificationService.sendNotification({
+          title: `Withdrawal ${eventStatus}`,
+          body: adminNotes || `Your withdrawal is now ${eventStatus}.`,
+          userId: updatedWithdrawal.userId,
+          type: "transaction",
+          metadata: { actionUrl: `/transactions`, transactionId: updatedWithdrawal.id, withdrawalStatus: eventStatus },
+        });
+        await sendAccountEmail(user, template, {
+          amount: String(updatedWithdrawal.amount),
+          currency: updatedWithdrawal.currency,
+          transaction_id: updatedWithdrawal.id,
+          reference: updatedWithdrawal.reference || updatedWithdrawal.id,
+          status: eventStatus,
+          reason: adminNotes || "",
+          refund_status: refundStatus || "",
+        });
+      }
       res.json({ 
         withdrawal: updatedWithdrawal,
         message: `Withdrawal status updated to ${status}` 
@@ -9613,6 +9779,17 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('Error updating withdrawal status:', error);
       res.status(500).json({ message: "Error updating withdrawal status" });
+    }
+  });
+
+  app.get("/api/admin/withdrawals/:id/timeline", requireAdminAuth, async (req, res) => {
+    try {
+      const transaction = await storage.getTransaction(req.params.id);
+      if (!transaction || transaction.type !== "withdraw") return res.status(404).json({ message: "Withdrawal not found" });
+      res.json({ transaction, timeline: await storage.getWithdrawalEvents(transaction.id) });
+    } catch (error) {
+      console.error("Admin withdrawal timeline error:", error);
+      res.status(500).json({ message: "Failed to load withdrawal timeline" });
     }
   });
 
@@ -10046,6 +10223,20 @@ p{color:#6b7280;font-size:14px;}</style>
         fee: withdrawFee.toFixed(2),
         recipientDetails,
         reference: storage.generateTransactionReference()
+      });
+
+      await addWithdrawalEvent(transaction, {
+        status: "pending",
+        title: "Withdrawal request submitted",
+        description: "Your withdrawal is waiting for review.",
+        metadata: { method: req.body.withdrawMethod || null },
+      });
+      await sendAccountEmail(user, "withdrawal_pending", {
+        amount: String(amount),
+        currency: normalizedWithdrawalCurrency,
+        transaction_id: transaction.id,
+        reference: transaction.reference || transaction.id,
+        status: "Pending",
       });
       
       // Send notification to admins about new withdrawal request
@@ -12163,6 +12354,26 @@ Sitemap: https://geepay.us/sitemap.xml`;
     } catch (error) {
       console.error('Email templates save error:', error);
       res.status(500).json({ message: "Failed to save email templates" });
+    }
+  });
+
+  app.put("/api/admin/email-templates/:name", requireAdminAuth, async (req, res) => {
+    try {
+      const name = String(req.params.name);
+      if (!/^[a-z0-9_]+$/.test(name)) {
+        return res.status(400).json({ message: "Invalid template name" });
+      }
+      const uuid = String(req.body?.uuid || "").trim();
+      await storage.setSystemSetting({
+        category: "email_templates",
+        key: name,
+        value: uuid,
+        description: `Email template UUID for ${name}`,
+      });
+      res.json({ success: true, name, uuid });
+    } catch (error) {
+      console.error("Email template save error:", error);
+      res.status(500).json({ message: "Failed to save email template" });
     }
   });
 

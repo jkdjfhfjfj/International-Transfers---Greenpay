@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Clock, CheckCircle, XCircle, DollarSign, User, Calendar, AlertCircle, Edit } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,7 +19,7 @@ interface WithdrawalRequest {
   userId: string;
   amount: string;
   currency: string;
-  status: 'pending' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'retrying' | 'completed' | 'failed' | 'refunded';
   description: string;
   fee: string;
   recipientDetails: any;
@@ -31,6 +32,10 @@ interface WithdrawalRequest {
     email: string;
     phone: string;
   };
+  provider?: string | null;
+  providerReference?: string | null;
+  retryCount?: number;
+  refundStatus?: string;
 }
 
 export default function WithdrawalManagement() {
@@ -39,16 +44,25 @@ export default function WithdrawalManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<'approve' | 'reject' | 'edit'>('approve');
   const [selectedStatus, setSelectedStatus] = useState<string>('pending');
+  const [provider, setProvider] = useState("");
+  const [providerReference, setProviderReference] = useState("");
+  const [retryCount, setRetryCount] = useState("0");
+  const [refundStatus, setRefundStatus] = useState("not_applicable");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: withdrawalData, isLoading, isError, error } = useQuery({
+  const { data: withdrawalData, isLoading, isError, error } = useQuery<any>({
     queryKey: ["/api/admin/withdrawals"],
   });
 
   const withdrawals = Array.isArray(withdrawalData?.withdrawals)
     ? withdrawalData.withdrawals
     : [];
+  const { data: timelineResponse } = useQuery<any>({
+    queryKey: [`/api/admin/withdrawals/${selectedWithdrawal?.id}/timeline`],
+    enabled: dialogOpen && !!selectedWithdrawal?.id,
+  });
+  const selectedTimeline = timelineResponse?.timeline || [];
 
   const processWithdrawalMutation = useMutation({
     mutationFn: async ({ id, action, notes }: { id: string; action: 'approve' | 'reject'; notes: string }) => {
@@ -80,7 +94,11 @@ export default function WithdrawalManagement() {
     mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
       const response = await apiRequest('PUT', `/api/admin/withdrawals/${id}/status`, {
         status,
-        adminNotes: notes
+        adminNotes: notes,
+        provider,
+        providerReference,
+        retryCount: Number(retryCount) || 0,
+        refundStatus,
       });
       return response.json();
     },
@@ -107,6 +125,10 @@ export default function WithdrawalManagement() {
     setActionType(action);
     if (action === 'edit') {
       setSelectedStatus(withdrawal.status);
+      setProvider(withdrawal.provider || "");
+      setProviderReference(withdrawal.providerReference || "");
+      setRetryCount(String(withdrawal.retryCount || 0));
+      setRefundStatus(withdrawal.refundStatus || "not_applicable");
     }
     setDialogOpen(true);
   };
@@ -412,11 +434,46 @@ export default function WithdrawalManagement() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pending">Pending</SelectItem>
+                       <SelectItem value="pending">Pending</SelectItem>
+                       <SelectItem value="processing">Processing</SelectItem>
+                       <SelectItem value="retrying">Retrying</SelectItem>
                       <SelectItem value="completed">Completed</SelectItem>
                       <SelectItem value="failed">Failed</SelectItem>
+                       <SelectItem value="refunded">Refunded</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {selectedTimeline.length > 0 && (
+                <div className="rounded-lg border p-3 space-y-2">
+                  <Label>Event timeline</Label>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {selectedTimeline.map((event: any) => (
+                      <div key={event.id} className="border-l-2 border-blue-200 pl-2">
+                        <p className="text-sm font-medium capitalize">{event.title}</p>
+                        <p className="text-xs text-gray-500">
+                          {event.description || event.status} · {new Date(event.createdAt).toLocaleString()}
+                        </p>
+                        {(event.providerReference || event.retryCount > 0 || event.refundStatus !== "not_applicable") && (
+                          <p className="text-[11px] text-gray-500">
+                            {event.providerReference ? `Provider ref: ${event.providerReference} · ` : ""}
+                            {event.retryCount > 0 ? `Retries: ${event.retryCount} · ` : ""}
+                            {event.refundStatus !== "not_applicable" ? `Refund: ${event.refundStatus}` : ""}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {actionType === 'edit' && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Provider</Label><Input value={provider} onChange={e => setProvider(e.target.value)} placeholder="PayHero, bank..." /></div>
+                  <div><Label>Provider reference</Label><Input value={providerReference} onChange={e => setProviderReference(e.target.value)} placeholder="Provider transaction ID" /></div>
+                  <div><Label>Retry count</Label><Input type="number" min="0" value={retryCount} onChange={e => setRetryCount(e.target.value)} /></div>
+                  <div><Label>Refund status</Label><Select value={refundStatus} onValueChange={setRefundStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="not_applicable">Not applicable</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="failed">Failed</SelectItem></SelectContent></Select></div>
                 </div>
               )}
 

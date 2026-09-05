@@ -7,6 +7,8 @@ import {
   type InsertVirtualCard,
   type Transaction,
   type InsertTransaction,
+  type WithdrawalEvent,
+  type InsertWithdrawalEvent,
   type PaymentRequest,
   type InsertPaymentRequest,
   type Recipient,
@@ -51,6 +53,7 @@ import {
   kycDocuments,
   virtualCards,
   transactions,
+  withdrawalEvents,
   paymentRequests,
   recipients,
   notifications,
@@ -112,6 +115,8 @@ export interface IStorage {
   getTransaction(id: string): Promise<Transaction | undefined>;
   updateTransaction(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined>;
   updateWithdrawalRequest(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined>;
+  createWithdrawalEvent(event: InsertWithdrawalEvent): Promise<WithdrawalEvent>;
+  getWithdrawalEvents(transactionId: string): Promise<WithdrawalEvent[]>;
 
   // Recipient operations
   createRecipient(recipient: InsertRecipient): Promise<Recipient>;
@@ -675,6 +680,17 @@ export class MemStorage implements IStorage {
   async updateWithdrawalRequest(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined> {
     // Withdrawal requests are stored as transactions with type "withdraw"
     return this.updateTransaction(id, updates);
+  }
+
+  async createWithdrawalEvent(event: InsertWithdrawalEvent): Promise<WithdrawalEvent> {
+    const [created] = await db.insert(withdrawalEvents).values(event).returning();
+    return created;
+  }
+
+  async getWithdrawalEvents(transactionId: string): Promise<WithdrawalEvent[]> {
+    return db.select().from(withdrawalEvents)
+      .where(eq(withdrawalEvents.transactionId, transactionId))
+      .orderBy(asc(withdrawalEvents.createdAt));
   }
 
   // Payment Request operations
