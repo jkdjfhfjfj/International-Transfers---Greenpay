@@ -998,7 +998,9 @@ __export(db_exports, {
 });
 import { Pool, neonConfig } from "@neondatabase/serverless";
 import { drizzle } from "drizzle-orm/neon-serverless";
+import { migrate } from "drizzle-orm/neon-serverless/migrator";
 import ws from "ws";
+import path from "node:path";
 function resolveConnectionString() {
   if (process.env.DATABASE_URL) {
     return process.env.DATABASE_URL.replace(/^"(.*)"$/, "$1").trim();
@@ -1012,6 +1014,159 @@ function resolveConnectionString() {
 }
 async function alterMissingColumns() {
   const migrations = [
+    `CREATE TABLE IF NOT EXISTS admins (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      two_factor_secret TEXT,
+      two_factor_enabled BOOLEAN DEFAULT false,
+      last_login_at TIMESTAMP,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS system_settings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      category TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value JSON NOT NULL,
+      description TEXT,
+      updated_by VARCHAR REFERENCES admins(id),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS api_configurations (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider TEXT,
+      display_name TEXT,
+      api_key TEXT,
+      api_secret TEXT,
+      base_url TEXT,
+      webhook_secret TEXT,
+      is_enabled BOOLEAN DEFAULT true,
+      configuration JSONB,
+      last_tested TIMESTAMP,
+      test_status TEXT,
+      test_message TEXT,
+      updated_by VARCHAR REFERENCES admins(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS display_name TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_key TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_secret TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS base_url TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS webhook_secret TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS configuration JSONB`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS last_tested TIMESTAMP`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS test_status TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS test_message TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS updated_by VARCHAR`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    // These are the tables used by account and withdrawal flows. They are
+    // additive guards for databases created before the current schema.
+    `CREATE TABLE IF NOT EXISTS transactions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      currency TEXT NOT NULL,
+      recipient_id VARCHAR REFERENCES users(id),
+      recipient_details JSONB,
+      status TEXT DEFAULT 'pending',
+      failure_reason TEXT,
+      fee DECIMAL(10,2) DEFAULT 0.00,
+      exchange_rate DECIMAL(10,4),
+      description TEXT,
+      reference TEXT,
+      paystack_reference TEXT,
+      metadata JSONB,
+      completed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS recipients (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT,
+      email TEXT,
+      account_number TEXT,
+      bank_name TEXT,
+      bank_code TEXT,
+      country TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'KES',
+      recipient_type TEXT DEFAULT 'mobile_wallet',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      is_global BOOLEAN DEFAULT false,
+      user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+      is_read BOOLEAN DEFAULT false,
+      action_url TEXT,
+      metadata JSONB,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS withdrawal_events (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      transaction_id VARCHAR NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      provider TEXT,
+      provider_reference TEXT,
+      retry_count INTEGER DEFAULT 0,
+      refund_status TEXT DEFAULT 'not_applicable',
+      metadata JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recipient_details JSONB`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS failure_reason TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fee DECIMAL(10,2) DEFAULT 0.00`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS exchange_rate DECIMAL(10,4)`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS description TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reference TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paystack_reference TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS email TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS account_number TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS bank_name TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS bank_code TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS country TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'KES'`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS recipient_type TEXT DEFAULT 'mobile_wallet'`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'info'`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT false`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id VARCHAR`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS action_url TEXT`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS provider_reference TEXT`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS refund_status TEXT DEFAULT 'not_applicable'`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS push_notifications_enabled BOOLEAN DEFAULT true`,
     // Multi-currency wallets table
     `CREATE TABLE IF NOT EXISTS wallets (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1040,8 +1195,6 @@ async function alterMissingColumns() {
      SELECT id, 'KES', COALESCE(kes_balance, 0), false, true FROM users
      WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'KES')
      ON CONFLICT DO NOTHING`,
-    // NexusPay API key in api_configurations table (safe fallback)
-    `INSERT INTO api_configurations (service_name, config_key, config_value, is_active) VALUES ('nexuspay', 'api_key', '""', true) ON CONFLICT (service_name, config_key) DO NOTHING`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
@@ -1150,8 +1303,10 @@ async function alterMissingColumns() {
        SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'card-opening:' || virtual_cards.id
      )`,
     `INSERT INTO system_settings (key, value, category)
-     VALUES ('virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts')
-     ON CONFLICT (key) DO NOTHING`,
+      SELECT 'virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM system_settings WHERE key = 'virtual_account_currencies'
+      )`,
     // Deposit bonuses table (admin-configured bonus offers per deposit method)
     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -1202,11 +1357,16 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_expiry_date TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_issuing_country TEXT`
   ];
-  for (const sql4 of migrations) {
+  for (let index = 0; index < migrations.length; index++) {
+    const sql4 = migrations[index];
     try {
       await pool.query(sql4);
     } catch (err) {
-      console.warn(`\u26A0\uFE0F Migration skipped (${sql4.slice(0, 50)}...): ${err.message}`);
+      const migrationName = `additive-${String(index + 1).padStart(3, "0")}`;
+      throw new Error(
+        `Database migration ${migrationName} failed. Startup was stopped to prevent runtime schema errors: ${err.message}`,
+        { cause: err }
+      );
     }
   }
 }
@@ -1224,10 +1384,12 @@ async function ensureSchema() {
   if (!pool) return;
   const exists = await tablesExist();
   if (!exists) {
-    console.warn('\u26A0\uFE0F  Database tables not found. If this is a fresh database, run "npm run db:push" manually to create the schema.');
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+    await migrate(db, { migrationsFolder: path.resolve(process.cwd(), "migrations") });
+    console.log("\u2705 Fresh database initialized from checked-in migrations");
   } else {
     await alterMissingColumns();
-    console.log("\u2705 Schema up to date (existing database \u2014 no destructive changes)");
+    console.log("\u2705 Schema up to date (existing database \u2014 additive migrations complete)");
   }
 }
 var connectionString, pool, db;
@@ -7658,7 +7820,7 @@ async function registerRoutes(app2) {
         "/api/system-settings",
         "/health"
       ];
-      const isAllowedPath = allowedPaths.some((path3) => req.path.startsWith(path3));
+      const isAllowedPath = allowedPaths.some((path4) => req.path.startsWith(path4));
       if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
         const messageSetting = await storage.getSystemSetting("general", "maintenance_message") || await storage.getSystemSetting("platform", "maintenance_message");
         return res.status(503).json({
@@ -18440,13 +18602,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
 // server/vite.ts
 import express from "express";
 import fs from "fs";
-import path2 from "path";
+import path3 from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 
 // vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import path from "path";
+import path2 from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 var vite_config_default = defineConfig({
   plugins: [
@@ -18460,14 +18622,14 @@ var vite_config_default = defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets")
+      "@": path2.resolve(import.meta.dirname, "client", "src"),
+      "@shared": path2.resolve(import.meta.dirname, "shared"),
+      "@assets": path2.resolve(import.meta.dirname, "attached_assets")
     }
   },
-  root: path.resolve(import.meta.dirname, "client"),
+  root: path2.resolve(import.meta.dirname, "client"),
   build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
+    outDir: path2.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true
   },
   optimizeDeps: {
@@ -18527,7 +18689,7 @@ async function setupVite(app2, server) {
   app2.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     try {
-      const clientTemplate = path2.resolve(
+      const clientTemplate = path3.resolve(
         import.meta.dirname,
         "..",
         "client",
@@ -18547,7 +18709,7 @@ async function setupVite(app2, server) {
   });
 }
 function serveStatic(app2) {
-  const distPath = path2.resolve(import.meta.dirname, "public");
+  const distPath = path3.resolve(import.meta.dirname, "public");
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`
@@ -18555,7 +18717,7 @@ function serveStatic(app2) {
   }
   app2.use(express.static(distPath));
   app2.use("*", (_req, res) => {
-    res.sendFile(path2.resolve(distPath, "index.html"));
+    res.sendFile(path3.resolve(distPath, "index.html"));
   });
 }
 
@@ -18720,7 +18882,7 @@ app.use((req, res, next) => {
 });
 app.use((req, res, next) => {
   const start = Date.now();
-  const path3 = req.path;
+  const path4 = req.path;
   let capturedJsonResponse = void 0;
   const originalResJson = res.json;
   res.json = function(bodyJson, ...args) {
@@ -18729,8 +18891,8 @@ app.use((req, res, next) => {
   };
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path3.startsWith("/api")) {
-      let logLine = `${req.method} ${path3} ${res.statusCode} in ${duration}ms`;
+    if (path4.startsWith("/api")) {
+      let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
@@ -18739,14 +18901,14 @@ app.use((req, res, next) => {
       }
       log(logLine);
       const LogStreamService = global.LogStreamService;
-      if (LogStreamService && !path3.includes("/ws")) {
+      if (LogStreamService && !path4.includes("/ws")) {
         LogStreamService.broadcast(LogStreamService.createLogEntry(
           res.statusCode >= 400 ? "error" : "api",
-          `${req.method} ${path3} ${res.statusCode} in ${duration}ms`,
+          `${req.method} ${path4} ${res.statusCode} in ${duration}ms`,
           "api",
           {
             method: req.method,
-            path: path3,
+            path: path4,
             statusCode: res.statusCode,
             duration,
             response: capturedJsonResponse

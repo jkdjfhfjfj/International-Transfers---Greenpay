@@ -1,6 +1,8 @@
 import { Pool, neonConfig } from '@neondatabase/serverless';
 import { drizzle } from 'drizzle-orm/neon-serverless';
+import { migrate } from 'drizzle-orm/neon-serverless/migrator';
 import ws from "ws";
+import path from "node:path";
 import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
@@ -28,6 +30,159 @@ export const db = connectionString ? drizzle({ client: pool, schema }) : null as
 // Safely add new columns to existing tables — never drops or recreates anything
 async function alterMissingColumns() {
   const migrations = [
+    `CREATE TABLE IF NOT EXISTS admins (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      email TEXT NOT NULL UNIQUE,
+      password TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'admin',
+      two_factor_secret TEXT,
+      two_factor_enabled BOOLEAN DEFAULT false,
+      last_login_at TIMESTAMP,
+      is_active BOOLEAN DEFAULT true,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS system_settings (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      category TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value JSON NOT NULL,
+      description TEXT,
+      updated_by VARCHAR REFERENCES admins(id),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS api_configurations (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      provider TEXT,
+      display_name TEXT,
+      api_key TEXT,
+      api_secret TEXT,
+      base_url TEXT,
+      webhook_secret TEXT,
+      is_enabled BOOLEAN DEFAULT true,
+      configuration JSONB,
+      last_tested TIMESTAMP,
+      test_status TEXT,
+      test_message TEXT,
+      updated_by VARCHAR REFERENCES admins(id),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS display_name TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_key TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_secret TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS base_url TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS webhook_secret TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS configuration JSONB`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS last_tested TIMESTAMP`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS test_status TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS test_message TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS updated_by VARCHAR`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    // These are the tables used by account and withdrawal flows. They are
+    // additive guards for databases created before the current schema.
+    `CREATE TABLE IF NOT EXISTS transactions (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      type TEXT NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      currency TEXT NOT NULL,
+      recipient_id VARCHAR REFERENCES users(id),
+      recipient_details JSONB,
+      status TEXT DEFAULT 'pending',
+      failure_reason TEXT,
+      fee DECIMAL(10,2) DEFAULT 0.00,
+      exchange_rate DECIMAL(10,4),
+      description TEXT,
+      reference TEXT,
+      paystack_reference TEXT,
+      metadata JSONB,
+      completed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS recipients (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      phone TEXT,
+      email TEXT,
+      account_number TEXT,
+      bank_name TEXT,
+      bank_code TEXT,
+      country TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'KES',
+      recipient_type TEXT DEFAULT 'mobile_wallet',
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS notifications (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      message TEXT NOT NULL,
+      type TEXT DEFAULT 'info',
+      is_global BOOLEAN DEFAULT false,
+      user_id VARCHAR REFERENCES users(id) ON DELETE CASCADE,
+      is_read BOOLEAN DEFAULT false,
+      action_url TEXT,
+      metadata JSONB,
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `CREATE TABLE IF NOT EXISTS withdrawal_events (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      transaction_id VARCHAR NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      provider TEXT,
+      provider_reference TEXT,
+      retry_count INTEGER DEFAULT 0,
+      refund_status TEXT DEFAULT 'not_applicable',
+      metadata JSONB,
+      created_at TIMESTAMP DEFAULT NOW()
+    )`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS recipient_details JSONB`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS failure_reason TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS fee DECIMAL(10,2) DEFAULT 0.00`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS exchange_rate DECIMAL(10,4)`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS description TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS reference TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS paystack_reference TEXT`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS email TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS account_number TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS bank_name TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS bank_code TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS country TEXT`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'KES'`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS recipient_type TEXT DEFAULT 'mobile_wallet'`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'info'`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_global BOOLEAN DEFAULT false`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS user_id VARCHAR`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS action_url TEXT`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP`,
+    `ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS provider_reference TEXT`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS refund_status TEXT DEFAULT 'not_applicable'`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS metadata JSONB`,
+    `ALTER TABLE withdrawal_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS push_notifications_enabled BOOLEAN DEFAULT true`,
     // Multi-currency wallets table
     `CREATE TABLE IF NOT EXISTS wallets (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -56,8 +211,6 @@ async function alterMissingColumns() {
      SELECT id, 'KES', COALESCE(kes_balance, 0), false, true FROM users
      WHERE NOT EXISTS (SELECT 1 FROM wallets w WHERE w.user_id = users.id AND w.currency = 'KES')
      ON CONFLICT DO NOTHING`,
-    // NexusPay API key in api_configurations table (safe fallback)
-    `INSERT INTO api_configurations (service_name, config_key, config_value, is_active) VALUES ('nexuspay', 'api_key', '""', true) ON CONFLICT (service_name, config_key) DO NOTHING`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS suspension_reason TEXT`,
@@ -167,8 +320,10 @@ async function alterMissingColumns() {
        SELECT 1 FROM ledger_entries le WHERE le.idempotency_key = 'card-opening:' || virtual_cards.id
      )`,
     `INSERT INTO system_settings (key, value, category)
-     VALUES ('virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts')
-     ON CONFLICT (key) DO NOTHING`,
+      SELECT 'virtual_account_currencies', to_json('USD,GBP,EUR'::text), 'virtual_accounts'
+      WHERE NOT EXISTS (
+        SELECT 1 FROM system_settings WHERE key = 'virtual_account_currencies'
+      )`,
     // Deposit bonuses table (admin-configured bonus offers per deposit method)
     `CREATE TABLE IF NOT EXISTS deposit_bonuses (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -220,11 +375,16 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_issuing_country TEXT`,
   ];
 
-  for (const sql of migrations) {
+  for (let index = 0; index < migrations.length; index++) {
+    const sql = migrations[index];
     try {
       await pool.query(sql);
     } catch (err: any) {
-      console.warn(`⚠️ Migration skipped (${sql.slice(0, 50)}...): ${err.message}`);
+      const migrationName = `additive-${String(index + 1).padStart(3, "0")}`;
+      throw new Error(
+        `Database migration ${migrationName} failed. Startup was stopped to prevent runtime schema errors: ${err.message}`,
+        { cause: err },
+      );
     }
   }
 }
@@ -246,13 +406,15 @@ export async function ensureSchema() {
   const exists = await tablesExist();
 
   if (!exists) {
-    // Tables do not exist — log a warning but do NOT auto-run drizzle-kit push.
-    // Running drizzle-kit push automatically can drop and recreate tables, destroying all data.
-    // To initialize a fresh database, run: npm run db:push  (manually, once, as a developer)
-    console.warn('⚠️  Database tables not found. If this is a fresh database, run "npm run db:push" manually to create the schema.');
+    // A fresh database is safe to initialize because there are no existing
+    // tables or data to destroy. The checked-in SQL is generated from the
+    // Drizzle schema and is applied transactionally by the migrator.
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+    await migrate(db, { migrationsFolder: path.resolve(process.cwd(), "migrations") });
+    console.log('✅ Fresh database initialized from checked-in migrations');
   } else {
     // Existing database — only add missing columns, never drop or recreate anything
     await alterMissingColumns();
-    console.log('✅ Schema up to date (existing database — no destructive changes)');
+    console.log('✅ Schema up to date (existing database — additive migrations complete)');
   }
 }
