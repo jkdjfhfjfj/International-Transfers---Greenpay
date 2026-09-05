@@ -3200,7 +3200,7 @@ __export(mailtrap_exports, {
   MailtrapService: () => MailtrapService,
   mailtrapService: () => mailtrapService2
 });
-import fetch8 from "node-fetch";
+import fetch9 from "node-fetch";
 var DEFAULT_TEMPLATE_UUIDs, TEMPLATE_PARAMETERS, MailtrapService, mailtrapService2;
 var init_mailtrap = __esm({
   "server/services/mailtrap.ts"() {
@@ -3297,7 +3297,7 @@ var init_mailtrap = __esm({
             to: [{ email: toEmail }]
           };
           if (attachments?.length) payload.attachments = attachments;
-          const response = await fetch8(this.apiUrl, {
+          const response = await fetch9(this.apiUrl, {
             method: "POST",
             headers: {
               "Api-Token": this.apiKey,
@@ -4288,7 +4288,7 @@ __export(whatsapp_exports, {
   WhatsAppService: () => WhatsAppService,
   whatsappService: () => whatsappService
 });
-import fetch9 from "node-fetch";
+import fetch10 from "node-fetch";
 var WhatsAppService, whatsappService;
 var init_whatsapp = __esm({
   "server/services/whatsapp.ts"() {
@@ -4421,7 +4421,7 @@ Sent on: ${dateStr} at ${timeStr}
             }
           };
           console.log("[WhatsApp] Sending text message to", formattedPhone, ":", message);
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4511,7 +4511,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4583,7 +4583,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4662,7 +4662,7 @@ Sent on: ${dateStr} at ${timeStr}
             location,
             ipAddress
           });
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4751,7 +4751,7 @@ Sent on: ${dateStr} at ${timeStr}
               ]
             }
           };
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -4811,7 +4811,7 @@ Sent on: ${dateStr} at ${timeStr}
               language: { code: "en_US" }
             }
           };
-          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch10(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 KYC verified sent to ${phoneNumber}`);
@@ -4844,7 +4844,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: cardLastFour }] }]
             }
           };
-          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch10(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Card activation sent to ${phoneNumber}`);
@@ -4877,7 +4877,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: currency }, { type: "text", text: amount }, { type: "text", text: sender }] }]
             }
           };
-          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch10(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Fund receipt sent to ${phoneNumber}`);
@@ -4910,7 +4910,7 @@ Sent on: ${dateStr} at ${timeStr}
               components: [{ type: "body", parameters: [{ type: "text", text: userName }] }]
             }
           };
-          const response = await fetch9(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          const response = await fetch10(url, { method: "POST", headers: { "Authorization": `Bearer ${this.accessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           const responseData = await response.json();
           if (response.ok && responseData.messages) {
             console.log(`[WhatsApp] \u2713 Account creation notification sent to ${phoneNumber}`);
@@ -4966,7 +4966,7 @@ Sent on: ${dateStr} at ${timeStr}
             components: content
           };
           console.log(`[WhatsApp] Creating template "${templateName}"...`);
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -5060,7 +5060,7 @@ Sent on: ${dateStr} at ${timeStr}
             requiredParams: validation.required,
             parameters: paramArray
           });
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "POST",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -5352,7 +5352,7 @@ Sent on: ${dateStr} at ${timeStr}
           const wabaId = await this.getWabaId();
           if (!wabaId) return null;
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}&fields=name,status,language,category,components`;
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -5392,7 +5392,7 @@ Sent on: ${dateStr} at ${timeStr}
           }
           const url = `${this.graphApiUrl}/${this.apiVersion}/${wabaId}/message_templates?fields=name,status,language,category,components`;
           console.log(`[WhatsApp] Fetching templates from Meta...`);
-          const response = await fetch9(url, {
+          const response = await fetch10(url, {
             method: "GET",
             headers: {
               "Authorization": `Bearer ${this.accessToken}`,
@@ -5441,7 +5441,7 @@ __export(messaging_exports, {
   MessagingService: () => MessagingService,
   messagingService: () => messagingService2
 });
-import fetch10 from "node-fetch";
+import fetch11 from "node-fetch";
 var MessagingService, messagingService2;
 var init_messaging = __esm({
   "server/services/messaging.ts"() {
@@ -5508,7 +5508,7 @@ var init_messaging = __esm({
           if (credentials.deviceId) {
             body.device_id = credentials.deviceId;
           }
-          const response = await fetch10(this.SMS_URL, {
+          const response = await fetch11(this.SMS_URL, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -5752,7 +5752,7 @@ __export(didit_exports, {
   mapDiditStatusToKyc: () => mapDiditStatusToKyc,
   verifyWebhookSignature: () => verifyWebhookSignature
 });
-import fetch11 from "node-fetch";
+import fetch12 from "node-fetch";
 import crypto from "crypto";
 function getApiKey() {
   return process.env.DIDIT_API_KEY || null;
@@ -5790,7 +5790,7 @@ async function createDiditSession(userId, callbackUrl) {
     return null;
   }
   try {
-    const response = await fetch11(`${DIDIT_BASE_URL}/v3/session/`, {
+    const response = await fetch12(`${DIDIT_BASE_URL}/v3/session/`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -5823,7 +5823,7 @@ async function getSessionDecision(sessionId) {
     return null;
   }
   try {
-    const response = await fetch11(`${DIDIT_BASE_URL}/v3/session/${sessionId}/decision/`, {
+    const response = await fetch12(`${DIDIT_BASE_URL}/v3/session/${sessionId}/decision/`, {
       method: "GET",
       headers: {
         "x-api-key": apiKey
@@ -7552,6 +7552,86 @@ var AIRateLimiter = class {
   }
 };
 var aiRateLimiter = new AIRateLimiter();
+
+// server/services/crypto-prices.ts
+import fetch8 from "node-fetch";
+var SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"];
+var COINGECKO_IDS = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  USDT: "tether",
+  USDC: "usd-coin"
+};
+var FALLBACK_PRICES = {
+  BTC: 65e3,
+  ETH: 3200,
+  USDT: 1,
+  USDC: 1
+};
+var cachedSnapshot = null;
+var requestInFlight = null;
+var CACHE_TTL_MS = 6e4;
+async function fetchLivePrices() {
+  const ids = SUPPORTED_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
+  const response = await fetch8(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+    { timeout: 8e3 }
+  );
+  if (!response.ok) {
+    throw new Error(`CoinGecko returned HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  const prices = { ...FALLBACK_PRICES };
+  const changes24h = {};
+  for (const coin of SUPPORTED_CRYPTO_COINS) {
+    const quote = payload[COINGECKO_IDS[coin]];
+    if (!quote || typeof quote.usd !== "number" || !Number.isFinite(quote.usd)) {
+      throw new Error(`CoinGecko did not return a valid ${coin} price`);
+    }
+    prices[coin] = quote.usd;
+    if (typeof quote.usd_24h_change === "number" && Number.isFinite(quote.usd_24h_change)) {
+      changes24h[coin] = quote.usd_24h_change;
+    }
+  }
+  return {
+    prices,
+    changes24h,
+    fetchedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    source: "coingecko",
+    stale: false
+  };
+}
+async function getCryptoPrices() {
+  if (cachedSnapshot && Date.now() - Date.parse(cachedSnapshot.fetchedAt) < CACHE_TTL_MS) {
+    return cachedSnapshot;
+  }
+  if (requestInFlight) return requestInFlight;
+  requestInFlight = fetchLivePrices().then((snapshot) => {
+    cachedSnapshot = snapshot;
+    return snapshot;
+  }).catch((error) => {
+    console.warn(`[Crypto prices] Live price request failed: ${error instanceof Error ? error.message : error}`);
+    if (cachedSnapshot) {
+      return { ...cachedSnapshot, source: "cache", stale: true };
+    }
+    return {
+      prices: { ...FALLBACK_PRICES },
+      changes24h: {},
+      fetchedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      source: "fallback",
+      stale: true
+    };
+  }).finally(() => {
+    requestInFlight = null;
+  });
+  return requestInFlight;
+}
+async function getCryptoPrice(coin) {
+  const normalizedCoin = coin.trim().toUpperCase();
+  if (!SUPPORTED_CRYPTO_COINS.includes(normalizedCoin)) return void 0;
+  const snapshot = await getCryptoPrices();
+  return snapshot.prices[normalizedCoin];
+}
 
 // server/routes.ts
 var cloudinaryStorage2 = new CloudinaryStorageService();
@@ -17808,12 +17888,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
       res.status(500).json({ message: "Failed to update dispute" });
     }
   });
-  const CRYPTO_RATES = {
-    BTC: 65e3,
-    ETH: 3200,
-    USDT: 1,
-    USDC: 1
-  };
   const CRYPTO_NETWORKS = {
     BTC: "bitcoin",
     ETH: "ethereum",
@@ -17828,10 +17902,50 @@ Sitemap: https://geepay.us/sitemap.xml`;
     if (coin === "USDT") return "T" + Array.from({ length: 33 }, rand).join("");
     return Array.from({ length: 34 }, rand).join("");
   }
+  async function getOrCreateCryptoWallet(userId, coin) {
+    const normalizedCoin = normalizeCurrency(coin);
+    if (!SUPPORTED_CRYPTO_COINS.includes(normalizedCoin)) {
+      throw new Error(`Unsupported coin: ${normalizedCoin}`);
+    }
+    const [existing] = await db.select().from(cryptoWallets).where(and2(eq3(cryptoWallets.userId, userId), eq3(cryptoWallets.coin, normalizedCoin))).limit(1);
+    if (existing) return existing;
+    const [created] = await db.insert(cryptoWallets).values({
+      userId,
+      coin: normalizedCoin,
+      network: CRYPTO_NETWORKS[normalizedCoin] || "unknown",
+      address: ""
+    }).returning();
+    return created;
+  }
+  async function adjustCryptoWalletBalance(userId, coin, amount) {
+    const wallet = await getOrCreateCryptoWallet(userId, coin);
+    const [updated] = await db.update(cryptoWallets).set({
+      balance: sql3`COALESCE(${cryptoWallets.balance}, 0) + ${amount}`,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(and2(
+      eq3(cryptoWallets.id, wallet.id),
+      eq3(cryptoWallets.userId, userId),
+      eq3(cryptoWallets.isActive, true),
+      sql3`COALESCE(${cryptoWallets.balance}, 0) + ${amount} >= 0`
+    )).returning();
+    if (!updated) {
+      throw new Error(amount < 0 ? `Insufficient ${normalizeCurrency(coin)} balance` : `${normalizeCurrency(coin)} wallet is unavailable`);
+    }
+    return updated;
+  }
+  app2.get("/api/crypto/prices", requireAuth, async (_req, res) => {
+    try {
+      res.json(await getCryptoPrices());
+    } catch (error) {
+      console.error("Crypto prices error:", error);
+      res.status(503).json({ message: "Crypto prices are temporarily unavailable" });
+    }
+  });
   app2.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
     try {
+      const priceSnapshot = await getCryptoPrices();
       const addrs = await db.select().from(cryptoDepositAddresses).where(eq3(cryptoDepositAddresses.isActive, true)).orderBy(cryptoDepositAddresses.coin);
-      res.json({ addresses: addrs, rates: CRYPTO_RATES });
+      res.json({ addresses: addrs, ...priceSnapshot });
     } catch (error) {
       console.error("Deposit addresses fetch error:", error);
       res.status(500).json({ message: "Failed to fetch deposit addresses" });
@@ -17841,7 +17955,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const userId = req.session.userId;
       const wallets2 = await db.select().from(cryptoWallets).where(eq3(cryptoWallets.userId, userId));
-      const supported = ["BTC", "ETH", "USDT", "USDC"];
+      const supported = [...SUPPORTED_CRYPTO_COINS];
+      const priceSnapshot = await getCryptoPrices();
       const existing = wallets2.map((w) => w.coin);
       const toCreate = supported.filter((c) => !existing.includes(c));
       const newWallets = [];
@@ -17857,13 +17972,206 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       const allWallets = [...wallets2, ...newWallets].map((w) => ({
         ...w,
-        usdRate: CRYPTO_RATES[w.coin] || 1,
-        usdBalance: (parseFloat(w.balance || "0") * (CRYPTO_RATES[w.coin] || 1)).toFixed(2)
+        usdRate: priceSnapshot.prices[w.coin] || 1,
+        usdBalance: (parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin] || 1)).toFixed(2)
       }));
-      res.json({ wallets: allWallets, rates: CRYPTO_RATES });
+      res.json({ wallets: allWallets, ...priceSnapshot });
     } catch (error) {
       console.error("Crypto wallets error:", error);
       res.status(500).json({ message: "Failed to fetch crypto wallets" });
+    }
+  });
+  app2.post("/api/crypto/transfer", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const {
+        sourceType,
+        sourceId,
+        sourceCoin,
+        destinationType,
+        destinationId,
+        destinationCoin,
+        amount
+      } = req.body;
+      const sourceKinds = ["wallet", "card", "crypto"];
+      const destinationKinds = ["wallet", "card", "crypto"];
+      if (!sourceKinds.includes(sourceType) || !destinationKinds.includes(destinationType)) {
+        return res.status(400).json({ message: "Invalid source or destination" });
+      }
+      if (sourceType === destinationType && sourceId && sourceId === destinationId && sourceCoin === destinationCoin) {
+        return res.status(400).json({ message: "Source and destination must be different" });
+      }
+      const sourceAmount = Number(amount);
+      if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
+        return res.status(400).json({ message: "Enter a valid amount" });
+      }
+      const sourceCoinCode = sourceType === "crypto" ? normalizeCurrency(sourceCoin) : void 0;
+      const destinationCoinCode = destinationType === "crypto" ? normalizeCurrency(destinationCoin) : void 0;
+      if (sourceType === "crypto" && !SUPPORTED_CRYPTO_COINS.includes(sourceCoinCode)) {
+        return res.status(400).json({ message: "Unsupported source coin" });
+      }
+      if (destinationType === "crypto" && !SUPPORTED_CRYPTO_COINS.includes(destinationCoinCode)) {
+        return res.status(400).json({ message: "Unsupported destination coin" });
+      }
+      let sourceWallet;
+      let sourceCard;
+      let destinationWallet;
+      let destinationCard;
+      if (sourceType === "wallet") {
+        [sourceWallet] = await db.select().from(wallets).where(and2(eq3(wallets.id, String(sourceId)), eq3(wallets.userId, userId))).limit(1);
+        if (!sourceWallet) return res.status(404).json({ message: "Source wallet not found" });
+        if (sourceWallet.isSuspended || !sourceWallet.isActive) return res.status(400).json({ message: "Source wallet is not active" });
+      }
+      if (sourceType === "card") {
+        sourceCard = await storage.getVirtualCardById(String(sourceId));
+        if (!sourceCard || sourceCard.userId !== userId) return res.status(404).json({ message: "Source card not found" });
+        if (sourceCard.status !== "active") return res.status(400).json({ message: "Source card is not active" });
+      }
+      if (destinationType === "wallet") {
+        [destinationWallet] = await db.select().from(wallets).where(and2(eq3(wallets.id, String(destinationId)), eq3(wallets.userId, userId))).limit(1);
+        if (!destinationWallet) return res.status(404).json({ message: "Destination wallet not found" });
+        if (destinationWallet.isSuspended || !destinationWallet.isActive) return res.status(400).json({ message: "Destination wallet is not active" });
+      }
+      if (destinationType === "card") {
+        destinationCard = await storage.getVirtualCardById(String(destinationId));
+        if (!destinationCard || destinationCard.userId !== userId) return res.status(404).json({ message: "Destination card not found" });
+        if (destinationCard.status !== "active") return res.status(400).json({ message: "Destination card is not active" });
+      }
+      const exchangeRateService3 = createExchangeRateService(storage);
+      const sourceRate = sourceType === "crypto" ? await getCryptoPrice(sourceCoinCode) : sourceType === "card" ? 1 : await exchangeRateService3.getExchangeRate(sourceWallet.currency, "USD");
+      if (!sourceRate || !Number.isFinite(sourceRate)) return res.status(503).json({ message: "Source conversion rate unavailable" });
+      const usdValue = sourceType === "crypto" ? sourceAmount * sourceRate : sourceAmount * sourceRate;
+      const destinationRate = destinationType === "crypto" ? await getCryptoPrice(destinationCoinCode) : destinationType === "card" ? 1 : await exchangeRateService3.getExchangeRate("USD", destinationWallet.currency);
+      if (!destinationRate || !Number.isFinite(destinationRate)) return res.status(503).json({ message: "Destination conversion rate unavailable" });
+      const destinationAmount = destinationType === "crypto" ? usdValue / destinationRate : destinationType === "card" ? usdValue : usdValue * destinationRate;
+      const reference = `CRYPTO-TRANSFER-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      let sourceDebited = false;
+      try {
+        if (sourceType === "crypto") {
+          await adjustCryptoWalletBalance(userId, sourceCoinCode, -sourceAmount);
+        } else if (sourceType === "wallet") {
+          await applyLedgerEntry({
+            walletId: sourceWallet.id,
+            userId,
+            currency: normalizeCurrency(sourceWallet.currency),
+            amount: -sourceAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:source`,
+            description: `Transfer from ${sourceWallet.currency} wallet`
+          });
+        } else {
+          await applyLedgerEntry({
+            cardId: sourceCard.id,
+            userId,
+            currency: "USD",
+            amount: -sourceAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:source`,
+            description: "Transfer from virtual card"
+          });
+        }
+        sourceDebited = true;
+        if (destinationType === "crypto") {
+          await adjustCryptoWalletBalance(userId, destinationCoinCode, destinationAmount);
+        } else if (destinationType === "wallet") {
+          await applyLedgerEntry({
+            walletId: destinationWallet.id,
+            userId,
+            currency: normalizeCurrency(destinationWallet.currency),
+            amount: destinationAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:destination`,
+            description: `Transfer into ${destinationWallet.currency} wallet`
+          });
+        } else {
+          await applyLedgerEntry({
+            cardId: destinationCard.id,
+            userId,
+            currency: "USD",
+            amount: destinationAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:destination`,
+            description: "Transfer into virtual card"
+          });
+        }
+      } catch (error) {
+        if (sourceDebited) {
+          try {
+            if (sourceType === "crypto") {
+              await adjustCryptoWalletBalance(userId, sourceCoinCode, sourceAmount);
+            } else if (sourceType === "wallet") {
+              await applyLedgerEntry({
+                walletId: sourceWallet.id,
+                userId,
+                currency: normalizeCurrency(sourceWallet.currency),
+                amount: sourceAmount,
+                entryType: "internal_transfer_rollback",
+                idempotencyKey: `${reference}:rollback`,
+                description: "Rollback failed internal transfer"
+              });
+            } else {
+              await applyLedgerEntry({
+                cardId: sourceCard.id,
+                userId,
+                currency: "USD",
+                amount: sourceAmount,
+                entryType: "internal_transfer_rollback",
+                idempotencyKey: `${reference}:rollback`,
+                description: "Rollback failed internal transfer"
+              });
+            }
+          } catch (rollbackError) {
+            console.error("Internal transfer rollback failed:", rollbackError);
+          }
+        }
+        throw error;
+      }
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "transfer",
+        amount: sourceAmount.toFixed(8),
+        currency: sourceType === "crypto" ? sourceCoinCode : sourceType === "card" ? "USD" : normalizeCurrency(sourceWallet.currency),
+        status: "completed",
+        description: `Transfer ${sourceType} \u2192 ${destinationType}`,
+        reference,
+        completedAt: /* @__PURE__ */ new Date(),
+        metadata: {
+          sourceType,
+          sourceId,
+          sourceCoin: sourceCoinCode,
+          destinationType,
+          destinationId,
+          destinationCoin: destinationCoinCode,
+          destinationAmount: destinationAmount.toFixed(8),
+          usdValue: usdValue.toFixed(2)
+        }
+      });
+      if (sourceType === "crypto" || destinationType === "crypto") {
+        await db.insert(cryptoTransactions).values({
+          userId,
+          type: "internal_transfer",
+          coin: sourceCoinCode || destinationCoinCode,
+          network: CRYPTO_NETWORKS[sourceCoinCode || destinationCoinCode] || "internal",
+          amount: (sourceType === "crypto" ? sourceAmount : destinationAmount).toFixed(8),
+          usdValue: usdValue.toFixed(2),
+          status: "completed",
+          completedAt: /* @__PURE__ */ new Date(),
+          adminNotes: `${sourceType} \u2192 ${destinationType}`
+        });
+      }
+      res.json({
+        success: true,
+        reference,
+        transaction,
+        sourceAmount,
+        sourceCoin: sourceCoinCode,
+        destinationAmount,
+        destinationCoin: destinationCoinCode,
+        usdValue
+      });
+    } catch (error) {
+      console.error("Crypto/internal transfer error:", error);
+      res.status(400).json({ message: error?.message || "Transfer failed" });
     }
   });
   app2.post("/api/crypto/deposit", requireAuth, async (req, res) => {
@@ -17871,7 +18179,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = req.session.userId;
       const { coin, amount, network } = req.body;
       if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
       const cryptoAmount = parseFloat(amount);
       const usdValue = cryptoAmount * rate;
@@ -17910,7 +18218,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = req.session.userId;
       const { coin, amount, toAddress } = req.body;
       if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
       const cryptoAmount = parseFloat(amount);
       const usdValue = cryptoAmount * rate;
@@ -17919,17 +18227,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (userRow.isSuspended) {
         return res.status(403).json({ message: userRow.suspensionReason || "Your account is suspended. Crypto withdrawals are disabled. Please contact support." });
       }
-      const [usdWallet] = await db.select().from(wallets).where(and2(eq3(wallets.userId, userId), eq3(wallets.currency, "USD"))).limit(1);
-      if (usdWallet?.isSuspended) {
-        return res.status(403).json({ message: usdWallet.suspendReason || "Your USD wallet is suspended. Crypto withdrawals are disabled." });
+      const cryptoWallet = await getOrCreateCryptoWallet(userId, coin);
+      if (!cryptoWallet.isActive) {
+        return res.status(403).json({ message: `${coin} wallet is inactive` });
       }
-      const availableUsd = parseFloat(userRow.balance || "0") - parseFloat(usdWallet?.holdAmount || "0");
-      if (availableUsd < usdValue) {
-        return res.status(400).json({ message: "Insufficient available wallet balance", available: availableUsd.toFixed(2), held: parseFloat(usdWallet?.holdAmount || "0").toFixed(2) });
-      }
-      await db.update(users).set({
-        balance: (parseFloat(userRow.balance || "0") - usdValue).toFixed(2)
-      }).where(eq3(users.id, userId));
+      await adjustCryptoWalletBalance(userId, coin, -cryptoAmount);
       const [cryptoTx] = await db.insert(cryptoTransactions).values({
         userId,
         type: "withdrawal",
@@ -17946,7 +18248,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         userId,
         type: "withdraw",
         amount: usdValue.toFixed(2),
-        currency: "USD",
+        currency: coin,
         status: "pending",
         description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
         reference: cryptoTx.id
@@ -17962,7 +18264,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = req.session.userId;
       const { coin } = req.body;
       if (!coin) return res.status(400).json({ message: "coin required" });
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
       const cardPriceSetting = await storage.getSystemSetting("general", "card_price");
       const cardPriceUSD = parseFloat(cardPriceSetting?.value || "60.00");
@@ -18034,42 +18336,40 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (txHash) updateData.txHash = txHash;
       if (adminNotes !== void 0) updateData.adminNotes = adminNotes;
       if (confirmations !== void 0) updateData.confirmations = confirmations;
-      if (status === "completed") {
+      const [cryptoTx] = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.id, req.params.id));
+      if (!cryptoTx) return res.status(404).json({ message: "Crypto transaction not found" });
+      if (status === "completed" && cryptoTx.status !== "completed") {
         updateData.completedAt = /* @__PURE__ */ new Date();
-        const [cryptoTx] = await db.select().from(cryptoTransactions).where(eq3(cryptoTransactions.id, req.params.id));
-        if (cryptoTx && cryptoTx.type === "deposit") {
-          const [userRow] = await db.select().from(users).where(eq3(users.id, cryptoTx.userId));
-          if (userRow) {
-            await db.update(users).set({
-              balance: (parseFloat(userRow.balance || "0") + parseFloat(cryptoTx.usdValue)).toFixed(2)
-            }).where(eq3(users.id, cryptoTx.userId));
-            await db.insert(transactions).values({
-              userId: cryptoTx.userId,
-              type: "deposit",
-              amount: cryptoTx.usdValue,
-              currency: "USD",
-              status: "completed",
-              description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
-              reference: cryptoTx.id,
-              completedAt: /* @__PURE__ */ new Date()
-            });
-          }
+        if (cryptoTx.type === "deposit") {
+          await adjustCryptoWalletBalance(cryptoTx.userId, cryptoTx.coin, parseFloat(cryptoTx.amount));
+          await db.insert(transactions).values({
+            userId: cryptoTx.userId,
+            type: "deposit",
+            amount: cryptoTx.amount,
+            currency: cryptoTx.coin,
+            status: "completed",
+            description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
+            reference: cryptoTx.id,
+            completedAt: /* @__PURE__ */ new Date()
+          });
         }
-        if (cryptoTx && cryptoTx.type === "card_purchase") {
-          const [userRow] = await db.select().from(users).where(eq3(users.id, cryptoTx.userId));
-          if (userRow) {
-            await db.insert(transactions).values({
-              userId: cryptoTx.userId,
-              type: "card_purchase",
-              amount: cryptoTx.usdValue,
-              currency: "USD",
-              status: "completed",
-              description: `Virtual card purchase via ${cryptoTx.coin}`,
-              reference: cryptoTx.id,
-              completedAt: /* @__PURE__ */ new Date()
-            });
-          }
+        if (cryptoTx.type === "card_purchase") {
+          await db.insert(transactions).values({
+            userId: cryptoTx.userId,
+            type: "card_purchase",
+            amount: cryptoTx.amount,
+            currency: cryptoTx.coin,
+            status: "completed",
+            description: `Virtual card purchase via ${cryptoTx.coin}`,
+            reference: cryptoTx.id,
+            completedAt: /* @__PURE__ */ new Date()
+          });
         }
+      } else if (status === "failed" && cryptoTx.status !== "failed") {
+        if (cryptoTx.type === "withdrawal") {
+          await adjustCryptoWalletBalance(cryptoTx.userId, cryptoTx.coin, parseFloat(cryptoTx.amount));
+        }
+        await db.update(transactions).set({ status: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.reference, cryptoTx.id));
       }
       const [updated] = await db.update(cryptoTransactions).set(updateData).where(eq3(cryptoTransactions.id, req.params.id)).returning();
       res.json({ transaction: updated });

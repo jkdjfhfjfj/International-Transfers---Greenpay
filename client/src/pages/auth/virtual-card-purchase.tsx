@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,7 +16,8 @@ export default function VirtualCardPurchasePage() {
   const { user, login } = useAuth();
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual' | 'crypto'>('auto');
+  const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
 
@@ -53,6 +54,33 @@ export default function VirtualCardPurchasePage() {
     },
   });
 
+  const { data: cryptoPricesData } = useQuery({
+    queryKey: ["/api/crypto/prices"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/crypto/prices");
+      return response.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  const cryptoCardPurchase = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/crypto/buy-card", { coin: cryptoCoin });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to start crypto card purchase");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Crypto card purchase started",
+        description: data.message,
+      });
+    },
+    onError: (error: any) => {
+      toast({ title: "Crypto payment failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const hasDiscount = parseFloat(currentCardPrice) < parseFloat(originalPrice);
@@ -61,6 +89,9 @@ export default function VirtualCardPurchasePage() {
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;
   const showDiscount = discountEnabled && hasDiscount;
+  const cryptoPrices = (cryptoPricesData as any)?.prices || {};
+  const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
+  const cryptoCardAmount = cryptoRate > 0 ? parseFloat(currentCardPrice) / cryptoRate : 0;
 
   // Listen for payment completion (in real app, use webhooks)
   useState(() => {
@@ -319,6 +350,35 @@ export default function VirtualCardPurchasePage() {
                   </div>
                 </div>
               </motion.div>
+
+              {/* Crypto Payment Option */}
+              <motion.div
+                whileTap={{ scale: 0.98 }}
+                onClick={() => setPaymentMethod('crypto')}
+                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                  paymentMethod === 'crypto'
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border bg-card hover:border-primary/50'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                    paymentMethod === 'crypto' ? 'border-primary bg-primary' : 'border-border'
+                  }`}>
+                    {paymentMethod === 'crypto' && <span className="material-icons text-white text-xs">check</span>}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Pay with Crypto</h4>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Use a live CoinGecko price to calculate the exact amount.
+                    </p>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="material-icons text-primary text-xs">currency_bitcoin</span>
+                      <span className="text-muted-foreground">BTC, ETH, USDT, or USDC</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
             </div>
 
             {/* Auto Payment Details & Button */}
@@ -381,6 +441,37 @@ export default function VirtualCardPurchasePage() {
                   <span className="material-icons text-sm mr-2">support_agent</span>
                   Contact Support
                 </Button>
+              </motion.div>
+            )}
+
+            {paymentMethod === 'crypto' && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-muted/50 p-4 rounded-xl border border-border text-left space-y-3"
+              >
+                <label className="text-sm font-medium">Crypto to use</label>
+                <select value={cryptoCoin} onChange={(event) => setCryptoCoin(event.target.value)} className="w-full border border-border rounded-xl px-3 py-2 bg-background">
+                  {["BTC", "ETH", "USDT", "USDC"].map((coin) => <option key={coin} value={coin}>{coin}</option>)}
+                </select>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Live price</span>
+                  <span className="font-semibold">{cryptoRate > 0 ? `$${cryptoRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Loading..."}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Amount required</span>
+                  <span className="font-bold text-primary">{cryptoCardAmount > 0 ? `${cryptoCardAmount.toFixed(8)} ${cryptoCoin}` : "—"}</span>
+                </div>
+                <Button
+                  onClick={() => cryptoCardPurchase.mutate()}
+                  className="w-full"
+                  disabled={!cryptoRate || cryptoCardPurchase.isPending}
+                >
+                  {cryptoCardPurchase.isPending ? "Preparing..." : `Start ${cryptoCoin} payment`}
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  After sending the requested amount, support will confirm the blockchain payment and activate the card.
+                </p>
               </motion.div>
             )}
           </motion.div>

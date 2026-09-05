@@ -27,6 +27,7 @@ import { ActivityLogger } from "./services/activity-logger";
 import { validateApiKey, optionalApiKey } from "./middleware/api-key";
 import { openaiService } from "./services/ai";
 import { aiRateLimiter } from "./services/ai-rate-limiter";
+import { getCryptoPrice, getCryptoPrices, SUPPORTED_CRYPTO_COINS } from "./services/crypto-prices";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
@@ -12549,14 +12550,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
   // CRYPTO INFRASTRUCTURE
   // ============================================================
 
-  // Simulated crypto rates (USD per 1 unit)
-  const CRYPTO_RATES: Record<string, number> = {
-    BTC: 65000,
-    ETH: 3200,
-    USDT: 1.00,
-    USDC: 1.00,
-  };
-
   const CRYPTO_NETWORKS: Record<string, string> = {
     BTC: "bitcoin",
     ETH: "ethereum",
@@ -12573,13 +12566,61 @@ Sitemap: https://geepay.us/sitemap.xml`;
     return Array.from({ length: 34 }, rand).join("");
   }
 
+  async function getOrCreateCryptoWallet(userId: string, coin: string) {
+    const normalizedCoin = normalizeCurrency(coin);
+    if (!SUPPORTED_CRYPTO_COINS.includes(normalizedCoin as any)) {
+      throw new Error(`Unsupported coin: ${normalizedCoin}`);
+    }
+    const [existing] = await db.select().from(cryptoWallets)
+      .where(and(eq(cryptoWallets.userId, userId), eq(cryptoWallets.coin, normalizedCoin)))
+      .limit(1);
+    if (existing) return existing;
+    const [created] = await db.insert(cryptoWallets).values({
+      userId,
+      coin: normalizedCoin,
+      network: CRYPTO_NETWORKS[normalizedCoin] || "unknown",
+      address: "",
+    }).returning();
+    return created;
+  }
+
+  async function adjustCryptoWalletBalance(userId: string, coin: string, amount: number) {
+    const wallet = await getOrCreateCryptoWallet(userId, coin);
+    const [updated] = await db.update(cryptoWallets)
+      .set({
+        balance: sql`COALESCE(${cryptoWallets.balance}, 0) + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(and(
+        eq(cryptoWallets.id, wallet.id),
+        eq(cryptoWallets.userId, userId),
+        eq(cryptoWallets.isActive, true),
+        sql`COALESCE(${cryptoWallets.balance}, 0) + ${amount} >= 0`,
+      ))
+      .returning();
+    if (!updated) {
+      throw new Error(amount < 0 ? `Insufficient ${normalizeCurrency(coin)} balance` : `${normalizeCurrency(coin)} wallet is unavailable`);
+    }
+    return updated;
+  }
+
+  app.get("/api/crypto/prices", requireAuth, async (_req, res) => {
+    try {
+      res.json(await getCryptoPrices());
+    } catch (error) {
+      console.error("Crypto prices error:", error);
+      res.status(503).json({ message: "Crypto prices are temporarily unavailable" });
+    }
+  });
+
   // GET available admin-configured deposit addresses (public to authed users)
   app.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
     try {
+      const priceSnapshot = await getCryptoPrices();
       const addrs = await db.select().from(cryptoDepositAddresses)
         .where(eq(cryptoDepositAddresses.isActive, true))
         .orderBy(cryptoDepositAddresses.coin);
-      res.json({ addresses: addrs, rates: CRYPTO_RATES });
+      res.json({ addresses: addrs, ...priceSnapshot });
     } catch (error) {
       console.error("Deposit addresses fetch error:", error);
       res.status(500).json({ message: "Failed to fetch deposit addresses" });
@@ -12593,7 +12634,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const wallets = await db.select().from(cryptoWallets)
         .where(eq(cryptoWallets.userId, userId));
 
-      const supported = ["BTC", "ETH", "USDT", "USDC"];
+      const supported = [...SUPPORTED_CRYPTO_COINS];
+      const priceSnapshot = await getCryptoPrices();
       const existing = wallets.map((w: any) => w.coin);
       const toCreate = supported.filter(c => !existing.includes(c));
 
@@ -12610,14 +12652,233 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
       const allWallets = [...wallets, ...newWallets].map((w: any) => ({
         ...w,
-        usdRate: CRYPTO_RATES[w.coin] || 1,
-        usdBalance: (parseFloat(w.balance || "0") * (CRYPTO_RATES[w.coin] || 1)).toFixed(2),
+        usdRate: priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1,
+        usdBalance: (parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1)).toFixed(2),
       }));
 
-      res.json({ wallets: allWallets, rates: CRYPTO_RATES });
+      res.json({ wallets: allWallets, ...priceSnapshot });
     } catch (error) {
       console.error("Crypto wallets error:", error);
       res.status(500).json({ message: "Failed to fetch crypto wallets" });
+    }
+  });
+
+  // Move value between a user's fiat wallets, virtual cards, and crypto wallets.
+  // Crypto legs are valued using the same live CoinGecko snapshot shown in the UI.
+  app.post("/api/crypto/transfer", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const {
+        sourceType,
+        sourceId,
+        sourceCoin,
+        destinationType,
+        destinationId,
+        destinationCoin,
+        amount,
+      } = req.body;
+      const sourceKinds = ["wallet", "card", "crypto"];
+      const destinationKinds = ["wallet", "card", "crypto"];
+      if (!sourceKinds.includes(sourceType) || !destinationKinds.includes(destinationType)) {
+        return res.status(400).json({ message: "Invalid source or destination" });
+      }
+      if (sourceType === destinationType && sourceId && sourceId === destinationId && sourceCoin === destinationCoin) {
+        return res.status(400).json({ message: "Source and destination must be different" });
+      }
+      const sourceAmount = Number(amount);
+      if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
+        return res.status(400).json({ message: "Enter a valid amount" });
+      }
+
+      const sourceCoinCode = sourceType === "crypto" ? normalizeCurrency(sourceCoin) : undefined;
+      const destinationCoinCode = destinationType === "crypto" ? normalizeCurrency(destinationCoin) : undefined;
+      if (sourceType === "crypto" && !SUPPORTED_CRYPTO_COINS.includes(sourceCoinCode as any)) {
+        return res.status(400).json({ message: "Unsupported source coin" });
+      }
+      if (destinationType === "crypto" && !SUPPORTED_CRYPTO_COINS.includes(destinationCoinCode as any)) {
+        return res.status(400).json({ message: "Unsupported destination coin" });
+      }
+
+      let sourceWallet: any;
+      let sourceCard: any;
+      let destinationWallet: any;
+      let destinationCard: any;
+      if (sourceType === "wallet") {
+        [sourceWallet] = await db.select().from(wallets)
+          .where(and(eq(wallets.id, String(sourceId)), eq(wallets.userId, userId))).limit(1);
+        if (!sourceWallet) return res.status(404).json({ message: "Source wallet not found" });
+        if (sourceWallet.isSuspended || !sourceWallet.isActive) return res.status(400).json({ message: "Source wallet is not active" });
+      }
+      if (sourceType === "card") {
+        sourceCard = await storage.getVirtualCardById(String(sourceId));
+        if (!sourceCard || sourceCard.userId !== userId) return res.status(404).json({ message: "Source card not found" });
+        if (sourceCard.status !== "active") return res.status(400).json({ message: "Source card is not active" });
+      }
+      if (destinationType === "wallet") {
+        [destinationWallet] = await db.select().from(wallets)
+          .where(and(eq(wallets.id, String(destinationId)), eq(wallets.userId, userId))).limit(1);
+        if (!destinationWallet) return res.status(404).json({ message: "Destination wallet not found" });
+        if (destinationWallet.isSuspended || !destinationWallet.isActive) return res.status(400).json({ message: "Destination wallet is not active" });
+      }
+      if (destinationType === "card") {
+        destinationCard = await storage.getVirtualCardById(String(destinationId));
+        if (!destinationCard || destinationCard.userId !== userId) return res.status(404).json({ message: "Destination card not found" });
+        if (destinationCard.status !== "active") return res.status(400).json({ message: "Destination card is not active" });
+      }
+
+      const exchangeRateService = createExchangeRateService(storage);
+      const sourceRate = sourceType === "crypto"
+        ? await getCryptoPrice(sourceCoinCode!)
+        : sourceType === "card"
+          ? 1
+          : await exchangeRateService.getExchangeRate(sourceWallet.currency, "USD");
+      if (!sourceRate || !Number.isFinite(sourceRate)) return res.status(503).json({ message: "Source conversion rate unavailable" });
+      const usdValue = sourceType === "crypto" ? sourceAmount * sourceRate : sourceAmount * sourceRate;
+
+      const destinationRate = destinationType === "crypto"
+        ? await getCryptoPrice(destinationCoinCode!)
+        : destinationType === "card"
+          ? 1
+          : await exchangeRateService.getExchangeRate("USD", destinationWallet.currency);
+      if (!destinationRate || !Number.isFinite(destinationRate)) return res.status(503).json({ message: "Destination conversion rate unavailable" });
+      const destinationAmount = destinationType === "crypto"
+        ? usdValue / destinationRate
+        : destinationType === "card"
+          ? usdValue
+          : usdValue * destinationRate;
+
+      const reference = `CRYPTO-TRANSFER-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+      let sourceDebited = false;
+      try {
+        if (sourceType === "crypto") {
+          await adjustCryptoWalletBalance(userId, sourceCoinCode!, -sourceAmount);
+        } else if (sourceType === "wallet") {
+          await applyLedgerEntry({
+            walletId: sourceWallet.id,
+            userId,
+            currency: normalizeCurrency(sourceWallet.currency),
+            amount: -sourceAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:source`,
+            description: `Transfer from ${sourceWallet.currency} wallet`,
+          });
+        } else {
+          await applyLedgerEntry({
+            cardId: sourceCard.id,
+            userId,
+            currency: "USD",
+            amount: -sourceAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:source`,
+            description: "Transfer from virtual card",
+          });
+        }
+        sourceDebited = true;
+
+        if (destinationType === "crypto") {
+          await adjustCryptoWalletBalance(userId, destinationCoinCode!, destinationAmount);
+        } else if (destinationType === "wallet") {
+          await applyLedgerEntry({
+            walletId: destinationWallet.id,
+            userId,
+            currency: normalizeCurrency(destinationWallet.currency),
+            amount: destinationAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:destination`,
+            description: `Transfer into ${destinationWallet.currency} wallet`,
+          });
+        } else {
+          await applyLedgerEntry({
+            cardId: destinationCard.id,
+            userId,
+            currency: "USD",
+            amount: destinationAmount,
+            entryType: "internal_transfer",
+            idempotencyKey: `${reference}:destination`,
+            description: "Transfer into virtual card",
+          });
+        }
+      } catch (error) {
+        if (sourceDebited) {
+          try {
+            if (sourceType === "crypto") {
+              await adjustCryptoWalletBalance(userId, sourceCoinCode!, sourceAmount);
+            } else if (sourceType === "wallet") {
+              await applyLedgerEntry({
+                walletId: sourceWallet.id,
+                userId,
+                currency: normalizeCurrency(sourceWallet.currency),
+                amount: sourceAmount,
+                entryType: "internal_transfer_rollback",
+                idempotencyKey: `${reference}:rollback`,
+                description: "Rollback failed internal transfer",
+              });
+            } else {
+              await applyLedgerEntry({
+                cardId: sourceCard.id,
+                userId,
+                currency: "USD",
+                amount: sourceAmount,
+                entryType: "internal_transfer_rollback",
+                idempotencyKey: `${reference}:rollback`,
+                description: "Rollback failed internal transfer",
+              });
+            }
+          } catch (rollbackError) {
+            console.error("Internal transfer rollback failed:", rollbackError);
+          }
+        }
+        throw error;
+      }
+
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "transfer",
+        amount: sourceAmount.toFixed(8),
+        currency: sourceType === "crypto" ? sourceCoinCode! : sourceType === "card" ? "USD" : normalizeCurrency(sourceWallet.currency),
+        status: "completed",
+        description: `Transfer ${sourceType} → ${destinationType}`,
+        reference,
+        completedAt: new Date(),
+        metadata: {
+          sourceType,
+          sourceId,
+          sourceCoin: sourceCoinCode,
+          destinationType,
+          destinationId,
+          destinationCoin: destinationCoinCode,
+          destinationAmount: destinationAmount.toFixed(8),
+          usdValue: usdValue.toFixed(2),
+        } as any,
+      });
+
+      if (sourceType === "crypto" || destinationType === "crypto") {
+        await db.insert(cryptoTransactions).values({
+          userId,
+          type: "internal_transfer",
+          coin: sourceCoinCode || destinationCoinCode!,
+          network: CRYPTO_NETWORKS[sourceCoinCode || destinationCoinCode!] || "internal",
+          amount: (sourceType === "crypto" ? sourceAmount : destinationAmount).toFixed(8),
+          usdValue: usdValue.toFixed(2),
+          status: "completed",
+          completedAt: new Date(),
+          adminNotes: `${sourceType} → ${destinationType}`,
+        });
+      }
+
+      res.json({
+        success: true,
+        reference,
+        transaction,
+        sourceAmount,
+        sourceCoin: sourceCoinCode,
+        destinationAmount,
+        destinationCoin: destinationCoinCode,
+        usdValue,
+      });
+    } catch (error: any) {
+      console.error("Crypto/internal transfer error:", error);
+      res.status(400).json({ message: error?.message || "Transfer failed" });
     }
   });
 
@@ -12628,7 +12889,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const { coin, amount, network } = req.body;
       if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
 
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
 
       const cryptoAmount = parseFloat(amount);
@@ -12677,31 +12938,22 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const { coin, amount, toAddress } = req.body;
       if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
 
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
 
       const cryptoAmount = parseFloat(amount);
       const usdValue = cryptoAmount * rate;
 
-      // Check user USD balance
       const [userRow] = await db.select().from(users).where(eq(users.id, userId));
       if (!userRow) return res.status(404).json({ message: "User not found" });
       if (userRow.isSuspended) {
         return res.status(403).json({ message: userRow.suspensionReason || "Your account is suspended. Crypto withdrawals are disabled. Please contact support." });
       }
-      const [usdWallet] = await db.select().from(wallets).where(and(eq(wallets.userId, userId), eq(wallets.currency, "USD"))).limit(1);
-      if (usdWallet?.isSuspended) {
-        return res.status(403).json({ message: usdWallet.suspendReason || "Your USD wallet is suspended. Crypto withdrawals are disabled." });
+      const cryptoWallet = await getOrCreateCryptoWallet(userId, coin);
+      if (!cryptoWallet.isActive) {
+        return res.status(403).json({ message: `${coin} wallet is inactive` });
       }
-      const availableUsd = parseFloat(userRow.balance || "0") - parseFloat(usdWallet?.holdAmount || "0");
-      if (availableUsd < usdValue) {
-        return res.status(400).json({ message: "Insufficient available wallet balance", available: availableUsd.toFixed(2), held: parseFloat(usdWallet?.holdAmount || "0").toFixed(2) });
-      }
-
-      // Deduct from balance
-      await db.update(users).set({
-        balance: (parseFloat(userRow.balance || "0") - usdValue).toFixed(2)
-      }).where(eq(users.id, userId));
+      await adjustCryptoWalletBalance(userId, coin, -cryptoAmount);
 
       const [cryptoTx] = await db.insert(cryptoTransactions).values({
         userId,
@@ -12721,7 +12973,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         userId,
         type: "withdraw",
         amount: usdValue.toFixed(2),
-        currency: "USD",
+        currency: coin,
         status: "pending",
         description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
         reference: cryptoTx.id,
@@ -12741,7 +12993,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const { coin } = req.body;
       if (!coin) return res.status(400).json({ message: "coin required" });
 
-      const rate = CRYPTO_RATES[coin];
+      const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
 
       // Get card price
@@ -12828,46 +13080,46 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (adminNotes !== undefined) updateData.adminNotes = adminNotes;
       if (confirmations !== undefined) updateData.confirmations = confirmations;
 
-      if (status === "completed") {
-        updateData.completedAt = new Date();
-        // If it's a deposit, credit user wallet
-        const [cryptoTx] = await db.select().from(cryptoTransactions)
-          .where(eq(cryptoTransactions.id, req.params.id));
-        if (cryptoTx && cryptoTx.type === "deposit") {
-          const [userRow] = await db.select().from(users).where(eq(users.id, cryptoTx.userId));
-          if (userRow) {
-            await db.update(users).set({
-              balance: (parseFloat(userRow.balance || "0") + parseFloat(cryptoTx.usdValue)).toFixed(2)
-            }).where(eq(users.id, cryptoTx.userId));
+      const [cryptoTx] = await db.select().from(cryptoTransactions)
+        .where(eq(cryptoTransactions.id, req.params.id));
+      if (!cryptoTx) return res.status(404).json({ message: "Crypto transaction not found" });
 
-            await db.insert(transactions).values({
-              userId: cryptoTx.userId,
-              type: "deposit",
-              amount: cryptoTx.usdValue,
-              currency: "USD",
-              status: "completed",
-              description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
-              reference: cryptoTx.id,
-              completedAt: new Date(),
-            });
-          }
+      // Only settle a crypto transaction once. This prevents repeated admin clicks
+      // from crediting a deposit wallet more than once.
+      if (status === "completed" && cryptoTx.status !== "completed") {
+        updateData.completedAt = new Date();
+        if (cryptoTx.type === "deposit") {
+          await adjustCryptoWalletBalance(cryptoTx.userId, cryptoTx.coin, parseFloat(cryptoTx.amount));
+          await db.insert(transactions).values({
+            userId: cryptoTx.userId,
+            type: "deposit",
+            amount: cryptoTx.amount,
+            currency: cryptoTx.coin,
+            status: "completed",
+            description: `Crypto deposit: ${cryptoTx.amount} ${cryptoTx.coin}`,
+            reference: cryptoTx.id,
+            completedAt: new Date(),
+          });
         }
-        // If card_purchase, trigger card creation
-        if (cryptoTx && cryptoTx.type === "card_purchase") {
-          const [userRow] = await db.select().from(users).where(eq(users.id, cryptoTx.userId));
-          if (userRow) {
-            await db.insert(transactions).values({
-              userId: cryptoTx.userId,
-              type: "card_purchase",
-              amount: cryptoTx.usdValue,
-              currency: "USD",
-              status: "completed",
-              description: `Virtual card purchase via ${cryptoTx.coin}`,
-              reference: cryptoTx.id,
-              completedAt: new Date(),
-            });
-          }
+        if (cryptoTx.type === "card_purchase") {
+          await db.insert(transactions).values({
+            userId: cryptoTx.userId,
+            type: "card_purchase",
+            amount: cryptoTx.amount,
+            currency: cryptoTx.coin,
+            status: "completed",
+            description: `Virtual card purchase via ${cryptoTx.coin}`,
+            reference: cryptoTx.id,
+            completedAt: new Date(),
+          });
         }
+      } else if (status === "failed" && cryptoTx.status !== "failed") {
+        if (cryptoTx.type === "withdrawal") {
+          await adjustCryptoWalletBalance(cryptoTx.userId, cryptoTx.coin, parseFloat(cryptoTx.amount));
+        }
+        await db.update(transactions)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(eq(transactions.reference, cryptoTx.id));
       }
 
       const [updated] = await db.update(cryptoTransactions)

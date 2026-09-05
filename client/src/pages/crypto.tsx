@@ -6,7 +6,7 @@ import { useWallets } from "@/hooks/use-wallets";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
-import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, ArrowRightLeft } from "lucide-react";
 
 const COIN_COLORS: Record<string, { accent: string; tint: string }> = {
   BTC: { accent: '#f97316', tint: 'rgba(249,115,22,0.10)' },
@@ -36,7 +36,7 @@ const COIN_NETWORKS: Record<string, string> = {
   USDC: "Ethereum (ERC-20)",
 };
 
-type Tab = "wallets" | "deposit" | "withdraw" | "history";
+type Tab = "wallets" | "deposit" | "withdraw" | "transfer" | "history";
 
 export default function CryptoPage() {
   const [activeTab, setActiveTab] = useState<Tab>("wallets");
@@ -44,6 +44,9 @@ export default function CryptoPage() {
   const [depositAmount, setDepositAmount] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawAddress, setWithdrawAddress] = useState("");
+  const [transferSource, setTransferSource] = useState("");
+  const [transferDestination, setTransferDestination] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
   const { user } = useAuth();
   const { wallets: userWallets } = useWallets();
@@ -55,6 +58,15 @@ export default function CryptoPage() {
     enabled: !!user?.id,
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/crypto/wallets");
+      return res.json();
+    },
+  });
+
+  const { data: cardsData } = useQuery({
+    queryKey: ["/api/virtual-card", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/virtual-card/${user?.id}`);
       return res.json();
     },
   });
@@ -108,11 +120,64 @@ export default function CryptoPage() {
     },
   });
 
+  const transferMutation = useMutation({
+    mutationFn: async () => {
+      const sourceReference = transferSource || sourceOptions[0]?.value || "";
+      const destinationReference = transferDestination || destinationOptions.find((option) => option.value !== sourceReference)?.value || "";
+      const [sourceType, sourceIdOrCoin] = sourceReference.split(":");
+      const [destinationType, destinationIdOrCoin] = destinationReference.split(":");
+      const sourceIsCrypto = sourceType === "crypto";
+      const destinationIsCrypto = destinationType === "crypto";
+      const res = await apiRequest("POST", "/api/crypto/transfer", {
+        sourceType,
+        sourceId: sourceIsCrypto ? undefined : sourceIdOrCoin,
+        sourceCoin: sourceIsCrypto ? sourceIdOrCoin : undefined,
+        destinationType,
+        destinationId: destinationIsCrypto ? undefined : destinationIdOrCoin,
+        destinationCoin: destinationIsCrypto ? destinationIdOrCoin : undefined,
+        amount: parseFloat(transferAmount),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Transfer failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Transfer completed",
+        description: `${Number(data.sourceAmount).toFixed(8)} ${data.sourceCoin || "fiat"} moved successfully.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/virtual-card", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions"] });
+      setTransferAmount("");
+    },
+    onError: (error: any) => {
+      toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
+    },
+  });
+
   const wallets: any[] = (walletsData as any)?.wallets || [];
   const rates: Record<string, number> = (walletsData as any)?.rates || {};
+  const changes24h: Record<string, number> = (walletsData as any)?.changes24h || {};
+  const priceSource = (walletsData as any)?.source || "coingecko";
   const availableUsdBalance = Number(userWallets.find(wallet => wallet.currency === "USD")?.availableBalance ?? 0);
   const history: any[] = (historyData as any)?.transactions || [];
   const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
+  const cards: any[] = (cardsData as any)?.cards || [];
+  const sourceOptions = [
+    ...wallets.map((wallet) => ({ value: `crypto:${wallet.coin}`, label: `${wallet.coin} wallet` })),
+    ...userWallets.filter((wallet) => wallet.isActive && !wallet.isSuspended).map((wallet) => ({ value: `wallet:${wallet.id}`, label: `${wallet.currency} wallet` })),
+    ...cards.filter((card) => card.status === "active").map((card) => ({ value: `card:${card.id}`, label: `Virtual card •••• ${String(card.cardNumber || "").slice(-4)}` })),
+  ];
+  const destinationOptions = [
+    ...userWallets.filter((wallet) => wallet.isActive && !wallet.isSuspended).map((wallet) => ({ value: `wallet:${wallet.id}`, label: `${wallet.currency} wallet` })),
+    ...wallets.map((wallet) => ({ value: `crypto:${wallet.coin}`, label: `${wallet.coin} wallet` })),
+    ...cards.filter((card) => card.status === "active").map((card) => ({ value: `card:${card.id}`, label: `Virtual card •••• ${String(card.cardNumber || "").slice(-4)}` })),
+  ];
+  const selectedSource = transferSource || sourceOptions[0]?.value || "";
+  const selectedDestination = transferDestination || destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
 
   const addressesByCoin: Record<string, any[]> = allDepositAddresses.reduce((acc, addr) => {
     const c = (addr.coin || "").toUpperCase();
@@ -143,6 +208,7 @@ export default function CryptoPage() {
     { id: "wallets", label: "Wallets", icon: "account_balance_wallet" },
     { id: "deposit", label: "Deposit", icon: "arrow_downward" },
     { id: "withdraw", label: "Withdraw", icon: "arrow_upward" },
+    { id: "transfer", label: "Transfer", icon: "swap_horiz" },
     { id: "history", label: "History", icon: "history" },
   ];
 
@@ -160,7 +226,7 @@ export default function CryptoPage() {
         >
           <p className="text-sm text-white/80 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>
-          <p className="text-xs text-white/60 mt-1">{wallets.length} wallets · {Object.keys(rates).length} supported coins</p>
+          <p className="text-xs text-white/60 mt-1">{wallets.length} wallets · {Object.keys(rates).length} supported coins · {priceSource === "coingecko" ? "Live prices" : "Cached prices"}</p>
         </motion.div>
 
         {/* Tab Bar */}
@@ -206,7 +272,12 @@ export default function CryptoPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-bold text-foreground">{parseFloat(wallet.balance || "0").toFixed(6)}</p>
-                      <p className="text-xs text-muted-foreground">≈ ${wallet.usdBalance}</p>
+                       <p className="text-xs text-muted-foreground">≈ ${wallet.usdBalance}</p>
+                       {typeof changes24h[wallet.coin] === "number" && (
+                         <p className={`text-[10px] ${changes24h[wallet.coin] >= 0 ? "text-green-600" : "text-red-500"}`}>
+                           {changes24h[wallet.coin] >= 0 ? "+" : ""}{changes24h[wallet.coin].toFixed(2)}% today
+                         </p>
+                       )}
                     </div>
                   </div>
 
@@ -222,7 +293,7 @@ export default function CryptoPage() {
                     <ArrowDownToLine className="w-4 h-4" style={{ color: coinMeta.accent }} />
                   </button>
 
-                  <p className="text-xs text-muted-foreground mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString()}</p>
+                   <p className="text-xs text-muted-foreground mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
                 </motion.div>
                 );
               })}
@@ -409,6 +480,44 @@ export default function CryptoPage() {
                 >
                   <ArrowUpFromLine className="w-4 h-4" />
                   {withdrawMutation.isPending ? "Processing..." : "Withdraw"}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* TRANSFER TAB */}
+          {activeTab === "transfer" && (
+            <motion.div key="transfer" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+              <div className="bg-card border border-border rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2">
+                  <ArrowRightLeft className="w-4 h-4 text-primary" />
+                  <div>
+                    <h3 className="font-semibold">Move funds across accounts</h3>
+                    <p className="text-xs text-muted-foreground">Convert at the current live crypto price when needed.</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">From</label>
+                  <select value={selectedSource} onChange={(event) => setTransferSource(event.target.value)} className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background">
+                    {sourceOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">To</label>
+                  <select value={selectedDestination} onChange={(event) => setTransferDestination(event.target.value)} className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background">
+                    {destinationOptions.filter((option) => option.value !== selectedSource).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-muted-foreground">Amount in source account</label>
+                  <input type="number" min="0.00000001" step="any" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
+                </div>
+                <button
+                  onClick={() => transferMutation.mutate()}
+                  disabled={!selectedSource || !selectedDestination || !transferAmount || Number(transferAmount) <= 0 || transferMutation.isPending}
+                  className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50"
+                >
+                  {transferMutation.isPending ? "Transferring..." : "Transfer funds"}
                 </button>
               </div>
             </motion.div>
