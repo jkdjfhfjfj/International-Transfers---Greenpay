@@ -90,7 +90,7 @@ export default function AdminPayHeroSettingsPage() {
               <Input
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
-                placeholder="e.g., 3407"
+                placeholder="e.g., 133"
                 className="rounded-xl"
               />
               <p className="text-xs text-gray-500">Your PayHero channel ID from the dashboard</p>

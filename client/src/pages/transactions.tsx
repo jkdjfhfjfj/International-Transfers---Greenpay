@@ -611,6 +611,11 @@ export default function TransactionsPage() {
                           {transaction.status}
                         </span>
                       </div>
+                      {transaction.type === "withdraw" && Number(transaction.fee ?? transaction.metadata?.fee ?? 0) > 0 && (
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          Fee: {getCurrencySymbol(transaction.currency)}{formatNumber(transaction.fee ?? transaction.metadata?.fee)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -764,15 +769,28 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* Fee if exists */}
-              {selectedTransaction.metadata?.fee && (
+              {/* Withdrawal fee */}
+              {Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0) > 0 && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
                     <DollarSign className="h-4 w-4" />
                     Fee
                   </label>
                   <p className="text-base font-medium pl-6 text-red-600">
-                    {getCurrencySymbol(selectedTransaction.currency)}{formatNumber(selectedTransaction.metadata.fee)}
+                    {getCurrencySymbol(selectedTransaction.currency)}{formatNumber(selectedTransaction.fee ?? selectedTransaction.metadata?.fee)}
+                  </p>
+                </div>
+              )}
+
+              {selectedTransaction.type === "withdraw" && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                    <DollarSign className="h-4 w-4" />
+                    Total Deducted
+                  </label>
+                  <p className="text-base font-semibold pl-6">
+                    {getCurrencySymbol(selectedTransaction.currency)}
+                    {formatNumber(Number(selectedTransaction.amount || 0) + Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0))}
                   </p>
                 </div>
               )}

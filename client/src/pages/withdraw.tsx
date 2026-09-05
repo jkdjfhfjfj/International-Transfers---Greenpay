@@ -133,7 +133,7 @@ export default function WithdrawPage() {
       Icon: Smartphone,
       description: "M-Pesa, Airtel Money, MTN Mobile Money",
       fee: "fee",
-      processingTime: "Within 30 minutes",
+      processingTime: "Usually under 30 minutes",
       countries: ["Kenya", "Uganda", "Tanzania", "Rwanda", "Cameroon"],
     },
     {
@@ -358,7 +358,7 @@ export default function WithdrawPage() {
                               </span>
                             </div>
                             <p className="text-sm text-muted-foreground">{method.description}</p>
-                            <p className="text-xs text-accent font-medium mt-1">{method.processingTime}</p>
+                            <p className="text-xs text-foreground font-semibold mt-1">{method.processingTime}</p>
                           </div>
                           {field.value === method.id && (
                             <CheckCircle className="w-5 h-5 text-primary ml-2 shrink-0" />

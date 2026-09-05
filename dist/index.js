@@ -6176,6 +6176,26 @@ import { fileTypeFromBuffer } from "file-type";
 // server/services/payhero.ts
 init_storage();
 import fetch4 from "node-fetch";
+
+// server/services/payhero-format.ts
+function formatPayHeroPhone(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  let phone = digits;
+  if (phone.startsWith("254")) {
+    phone = `0${phone.slice(3)}`;
+  } else if (phone.startsWith("7") || phone.startsWith("1")) {
+    phone = `0${phone}`;
+  }
+  return /^0[17]\d{8}$/.test(phone) ? phone : null;
+}
+function formatPayHeroAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const integerAmount = Math.round(amount);
+  return integerAmount > 0 ? integerAmount : null;
+}
+
+// server/services/payhero.ts
 var PayHeroService = class {
   username;
   password;
@@ -6187,7 +6207,7 @@ var PayHeroService = class {
     const channelId = process.env.PAYHERO_CHANNEL_ID;
     this.username = username;
     this.password = password;
-    this.channelId = channelId ? parseInt(channelId) : 3407;
+    this.channelId = channelId ? parseInt(channelId, 10) : void 0;
     this.loadCredentialsFromDatabase();
   }
   /**
@@ -6279,25 +6299,10 @@ var PayHeroService = class {
         };
       }
       const url = `${this.baseUrl}/payments`;
-      let cleanPhone = phoneNumber.replace(/\+/g, "").replace(/\s/g, "").replace(/-/g, "");
-      if (cleanPhone.startsWith("254")) {
-        cleanPhone = "0" + cleanPhone.substring(3);
-      } else if (cleanPhone.startsWith("7") || cleanPhone.startsWith("1")) {
-        cleanPhone = "0" + cleanPhone;
-      } else if (!cleanPhone.startsWith("0")) {
-        console.error("Invalid phone number format for PayHero:", phoneNumber);
-        return {
-          success: false,
-          status: "INVALID_PHONE_FORMAT",
-          reference: "",
-          CheckoutRequestID: ""
-        };
-      }
-      if (cleanPhone.length !== 10 || !cleanPhone.match(/^0[17]\d{8}$/)) {
+      const cleanPhone = formatPayHeroPhone(phoneNumber);
+      if (!cleanPhone) {
         console.error("PayHero phone validation failed:", {
           original: phoneNumber,
-          formatted: cleanPhone,
-          length: cleanPhone.length,
           expected: "10 digits starting with 07 or 01"
         });
         return {
@@ -6307,15 +6312,24 @@ var PayHeroService = class {
           CheckoutRequestID: ""
         };
       }
+      const integerAmount = formatPayHeroAmount(amount);
+      if (integerAmount === null) {
+        return {
+          success: false,
+          status: "INVALID_AMOUNT",
+          reference: "",
+          CheckoutRequestID: "",
+          message: "PayHero requires a positive whole-number amount."
+        };
+      }
       const payload = {
-        amount: Math.round(amount),
-        // PayHero expects integer amounts
+        amount: integerAmount,
         phone_number: cleanPhone,
-        channel_id: this.channelId,
+        channel_id: Number(this.channelId),
         provider: "m-pesa",
         external_reference: externalReference,
-        customer_name: customerName,
-        callback_url: callbackUrl
+        ...customerName ? { customer_name: customerName } : {},
+        ...callbackUrl ? { callback_url: callbackUrl } : {}
       };
       const credentials = Buffer.from(`${this.username}:${this.password}`).toString("base64");
       const authHeader = `Basic ${credentials}`;

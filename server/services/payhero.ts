@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { storage } from '../storage';
+import { formatPayHeroAmount, formatPayHeroPhone } from './payhero-format';
 
 export interface PayHeroResponse {
   success: boolean;
@@ -39,7 +40,9 @@ export class PayHeroService {
     
     this.username = username;
     this.password = password;
-    this.channelId = channelId ? parseInt(channelId) : 3407; // Default to 3407 if not set
+    // PayHero requires the merchant's registered channel ID. Do not guess a
+    // fallback channel because that produces an opaque provider HTTP 400.
+    this.channelId = channelId ? parseInt(channelId, 10) : undefined;
     
     // Load credentials from database on initialization
     this.loadCredentialsFromDatabase();
@@ -162,34 +165,13 @@ export class PayHeroService {
 
       const url = `${this.baseUrl}/payments`;
       
-      // Format phone number to 07xxx format as required by PayHero (must be exactly 10 digits)
-      let cleanPhone = phoneNumber.replace(/\+/g, '').replace(/\s/g, '').replace(/-/g, '');
-      
-      // Handle different formats
-      if (cleanPhone.startsWith('254')) {
-        // International format: +254712345678 → 0712345678
-        cleanPhone = '0' + cleanPhone.substring(3);
-      } else if (cleanPhone.startsWith('7') || cleanPhone.startsWith('1')) {
-        // Missing 0 prefix: 712345678 → 0712345678
-        cleanPhone = '0' + cleanPhone;
-      } else if (!cleanPhone.startsWith('0')) {
-        // Invalid format - log error
-        console.error('Invalid phone number format for PayHero:', phoneNumber);
-        return {
-          success: false,
-          status: 'INVALID_PHONE_FORMAT',
-          reference: '',
-          CheckoutRequestID: ''
-        };
-      }
-      
-      // Validate: Must be exactly 10 digits starting with 07 or 01
-      if (cleanPhone.length !== 10 || !cleanPhone.match(/^0[17]\d{8}$/)) {
+      // PayHero requires a Kenyan local phone number in the 10-digit
+      // 07xxxxxxxx/01xxxxxxxx format, even when the user entered +254...
+      const cleanPhone = formatPayHeroPhone(phoneNumber);
+      if (!cleanPhone) {
         console.error('PayHero phone validation failed:', {
           original: phoneNumber,
-          formatted: cleanPhone,
-          length: cleanPhone.length,
-          expected: '10 digits starting with 07 or 01'
+          expected: '10 digits starting with 07 or 01',
         });
         return {
           success: false,
@@ -199,14 +181,25 @@ export class PayHeroService {
         };
       }
 
+      const integerAmount = formatPayHeroAmount(amount);
+      if (integerAmount === null) {
+        return {
+          success: false,
+          status: 'INVALID_AMOUNT',
+          reference: '',
+          CheckoutRequestID: '',
+          message: 'PayHero requires a positive whole-number amount.',
+        };
+      }
+
       const payload = {
-        amount: Math.round(amount), // PayHero expects integer amounts
+        amount: integerAmount,
         phone_number: cleanPhone,
-        channel_id: this.channelId,
+        channel_id: Number(this.channelId),
         provider: 'm-pesa',
         external_reference: externalReference,
-        customer_name: customerName,
-        callback_url: callbackUrl
+        ...(customerName ? { customer_name: customerName } : {}),
+        ...(callbackUrl ? { callback_url: callbackUrl } : {}),
       };
 
       // Create proper Basic Auth header

@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, ArrowLeftRight, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
@@ -388,13 +388,7 @@ export default function DashboardPage() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation("/transactions")}
-              style={{
-                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
-                fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'opacity 0.15s',
-                background: 'rgba(255,255,255,0.18)',
-                color: 'white',
-              }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/20"
               title="View transaction history"
             >
               <Receipt className="w-3 h-3" /> History
@@ -402,14 +396,9 @@ export default function DashboardPage() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation('/exchange')}
-              style={{
-                flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
-                fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center',
-                justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'opacity 0.15s',
-                background: 'white', color: '#059669',
-              }}
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-primary-foreground/20 bg-primary-foreground/90 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary-foreground"
             >
-              <span className="material-icons" style={{ fontSize: 14 }}>currency_exchange</span>
+              <ArrowLeftRight className="w-3 h-3" />
               Exchange
             </motion.button>
           </div>

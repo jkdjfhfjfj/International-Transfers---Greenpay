@@ -12,6 +12,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download, Gift } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
+const WITHDRAWAL_FEE_CURRENCIES = [
+  "USD", "KES", "UGX", "GHS", "NGN", "ZAR", "TZS", "XOF",
+  "CDF", "XAF", "RWF", "SLE", "ZMW", "EUR", "GBP",
+];
+
 interface SystemSettings {
   fees?: {
     transfer_fee: string;
@@ -69,13 +74,9 @@ export default function AdminSystemSettingsPage() {
   const [exchangeMargin, setExchangeMargin] = useState("");
   const [cardFee, setCardFee] = useState("");
   const [withdrawalFee, setWithdrawalFee] = useState("");
-  const withdrawalFeeCurrencies = ["KES", "USD", "GBP", "EUR"];
-  const [withdrawalFees, setWithdrawalFees] = useState<Record<string, string>>({
-    KES: "",
-    USD: "",
-    GBP: "",
-    EUR: "",
-  });
+  const [withdrawalFees, setWithdrawalFees] = useState<Record<string, string>>(
+    Object.fromEntries(WITHDRAWAL_FEE_CURRENCIES.map(code => [code, ""])),
+  );
 
   // Security state
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
@@ -150,8 +151,8 @@ export default function AdminSystemSettingsPage() {
       setCardFee(settingsData.fees?.virtual_card_fee || "");
       setWithdrawalFee(settingsData.fees?.withdrawal_fee || "");
        const defaultWithdrawalFee = settingsData.fees?.withdrawal_fee || "";
-       setWithdrawalFees(Object.fromEntries(
-         withdrawalFeeCurrencies.map(currency => [
+        setWithdrawalFees(Object.fromEntries(
+          WITHDRAWAL_FEE_CURRENCIES.map(currency => [
            currency,
            settingsData.fees?.[`withdrawal_fee_${currency}`] ?? defaultWithdrawalFee,
          ]),
@@ -209,7 +210,7 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/exchange_rate_margin", { value: exchangeMargin, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/virtual_card_fee", { value: cardFee, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/withdrawal_fee", { value: withdrawalFee, category: "fees" }),
-        ...withdrawalFeeCurrencies.map(currency =>
+        ...WITHDRAWAL_FEE_CURRENCIES.map(currency =>
           apiRequest("PUT", `/api/admin/settings/withdrawal_fee_${currency}`, {
             value: withdrawalFees[currency] || "0",
             category: "fees",
@@ -408,8 +409,8 @@ export default function AdminSystemSettingsPage() {
                        This fee is deducted from the selected wallet in that currency. The default fee is used for other currencies.
                      </p>
                    </div>
-                   <div className="grid grid-cols-2 gap-4">
-                     {withdrawalFeeCurrencies.map(currency => (
+                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-1">
+                     {WITHDRAWAL_FEE_CURRENCIES.map(currency => (
                        <div key={currency} className="space-y-2">
                          <Label className="text-sm">{currency} Fee</Label>
                          <Input

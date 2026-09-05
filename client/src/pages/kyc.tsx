@@ -89,7 +89,7 @@ export default function KYCPage() {
   const isNotStarted = kycStatus === "not_submitted";
 
   // Query current didit session status
-  const { data: diditStatusData, refetch: refetchStatus } = useQuery<{
+  const { data: diditStatusData, refetch: refetchStatus, isFetching: isStatusFetching } = useQuery<{
     status: string | null;
     kycStatus: KycStatus;
     sessionId: string | null;
@@ -162,6 +162,25 @@ export default function KYCPage() {
     setShowIframe(false);
     // Keep polling in background to catch webhook-updated status
     refetchStatus();
+  };
+
+  const handleCheckStatus = async () => {
+    const result = await refetchStatus();
+    const nextStatus = result.data?.kycStatus;
+    const statusCheckFailed = Boolean(result.error);
+    if (nextStatus && user && nextStatus !== user.kycStatus) {
+      login({ ...user, kycStatus: nextStatus } as any);
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    }
+    toast({
+      title: statusCheckFailed ? "Status check failed" : "Status refreshed",
+      description: statusCheckFailed
+        ? "We could not reach the verification provider. Please try again."
+        : nextStatus === "verified"
+        ? "Your identity verification is complete."
+        : "Your latest verification status has been checked.",
+      variant: statusCheckFailed ? "destructive" : "default",
+    });
   };
 
   const handleOpenExternal = () => {
@@ -377,12 +396,15 @@ export default function KYCPage() {
                     </span>
                   </Button>
                   <Button
-                    onClick={() => refetchStatus()}
+                    onClick={handleCheckStatus}
                     variant="ghost"
                     size="sm"
                     className="w-full"
+                    disabled={isStatusFetching}
+                    data-testid="button-check-kyc-status"
                   >
-                    <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Check Status
+                    <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isStatusFetching ? "animate-spin" : ""}`} />
+                    {isStatusFetching ? "Checking..." : "Check Status"}
                   </Button>
                 </div>
               ) : (
