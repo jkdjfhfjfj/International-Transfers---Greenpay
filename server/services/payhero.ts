@@ -6,6 +6,7 @@ export interface PayHeroResponse {
   status: string;
   reference: string;
   CheckoutRequestID: string;
+  message?: string;
 }
 
 export interface PayHeroCallbackResponse {
@@ -261,12 +262,17 @@ export class PayHeroService {
       
       // Check for HTTP errors first
       if (!response.ok) {
-        console.error('PayHero HTTP error:', response.status, data);
+        const providerMessage = [data.message, data.error, data.detail, data.details]
+          .filter(Boolean)
+          .map((value: unknown) => typeof value === "string" ? value : JSON.stringify(value))
+          .join("; ") || `PayHero rejected the request with HTTP ${response.status}`;
+        console.error('PayHero HTTP error:', response.status, providerMessage);
         return {
           success: false,
           status: `HTTP_${response.status}`,
           reference: '',
-          CheckoutRequestID: ''
+          CheckoutRequestID: '',
+          message: providerMessage,
         };
       }
       
@@ -274,7 +280,8 @@ export class PayHeroService {
         success: data.success || false,
         status: data.status || 'FAILED',
         reference: data.reference || '',
-        CheckoutRequestID: data.CheckoutRequestID || ''
+        CheckoutRequestID: data.CheckoutRequestID || '',
+        message: data.message,
       };
     } catch (error: any) {
       const isTimeout = error?.name === 'AbortError' || error?.code === 'ECONNRESET' || error?.code === 'ETIMEDOUT';
@@ -283,7 +290,8 @@ export class PayHeroService {
         success: false,
         status: isTimeout ? 'TIMEOUT' : 'ERROR',
         reference: '',
-        CheckoutRequestID: ''
+        CheckoutRequestID: '',
+        message: isTimeout ? 'PayHero request timed out' : (error?.message || 'PayHero request failed'),
       };
     }
   }

@@ -18,6 +18,7 @@ interface SystemSettings {
     exchange_rate_margin: string;
     virtual_card_fee: string;
     withdrawal_fee: string;
+    [key: string]: string | undefined;
   };
   security?: {
     two_factor_required: boolean;
@@ -68,6 +69,13 @@ export default function AdminSystemSettingsPage() {
   const [exchangeMargin, setExchangeMargin] = useState("");
   const [cardFee, setCardFee] = useState("");
   const [withdrawalFee, setWithdrawalFee] = useState("");
+  const withdrawalFeeCurrencies = ["KES", "USD", "GBP", "EUR"];
+  const [withdrawalFees, setWithdrawalFees] = useState<Record<string, string>>({
+    KES: "",
+    USD: "",
+    GBP: "",
+    EUR: "",
+  });
 
   // Security state
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
@@ -141,6 +149,13 @@ export default function AdminSystemSettingsPage() {
       setExchangeMargin(settingsData.fees?.exchange_rate_margin || "");
       setCardFee(settingsData.fees?.virtual_card_fee || "");
       setWithdrawalFee(settingsData.fees?.withdrawal_fee || "");
+       const defaultWithdrawalFee = settingsData.fees?.withdrawal_fee || "";
+       setWithdrawalFees(Object.fromEntries(
+         withdrawalFeeCurrencies.map(currency => [
+           currency,
+           settingsData.fees?.[`withdrawal_fee_${currency}`] ?? defaultWithdrawalFee,
+         ]),
+       ));
 
       setTwoFactorRequired(settingsData.security?.two_factor_required || false);
       setKycAutoApproval(settingsData.security?.kyc_auto_approval || true);
@@ -194,6 +209,12 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/exchange_rate_margin", { value: exchangeMargin, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/virtual_card_fee", { value: cardFee, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/withdrawal_fee", { value: withdrawalFee, category: "fees" }),
+        ...withdrawalFeeCurrencies.map(currency =>
+          apiRequest("PUT", `/api/admin/settings/withdrawal_fee_${currency}`, {
+            value: withdrawalFees[currency] || "0",
+            category: "fees",
+          }),
+        ),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -375,11 +396,35 @@ export default function AdminSystemSettingsPage() {
                     <Label className="text-sm">Card Fee (KES)</Label>
                     <Input value={cardFee} onChange={(e) => setCardFee(e.target.value)} placeholder="1.00" className="rounded-xl" />
                   </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm">Withdrawal Fee (KES)</Label>
-                    <Input value={withdrawalFee} onChange={(e) => setWithdrawalFee(e.target.value)} placeholder="0.50" className="rounded-xl" />
-                  </div>
+                   <div className="space-y-2">
+                     <Label className="text-sm">Default Withdrawal Fee</Label>
+                     <Input value={withdrawalFee} onChange={(e) => setWithdrawalFee(e.target.value)} placeholder="0.50" className="rounded-xl" />
+                   </div>
                 </div>
+                 <div className="space-y-3 rounded-xl border border-border p-4">
+                   <div>
+                     <Label className="text-sm font-medium">Withdrawal Fee by Currency</Label>
+                     <p className="text-xs text-muted-foreground mt-1">
+                       This fee is deducted from the selected wallet in that currency. The default fee is used for other currencies.
+                     </p>
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                     {withdrawalFeeCurrencies.map(currency => (
+                       <div key={currency} className="space-y-2">
+                         <Label className="text-sm">{currency} Fee</Label>
+                         <Input
+                           type="number"
+                           min="0"
+                           step="0.01"
+                           value={withdrawalFees[currency] || ""}
+                           onChange={e => setWithdrawalFees(prev => ({ ...prev, [currency]: e.target.value }))}
+                           placeholder="0.00"
+                           className="rounded-xl"
+                         />
+                       </div>
+                     ))}
+                   </div>
+                 </div>
                 <Button onClick={() => feesMutation.mutate()} disabled={feesMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
                   <Save className="w-4 h-4 mr-2" />
                   {feesMutation.isPending ? "Saving..." : "Save Fees"}

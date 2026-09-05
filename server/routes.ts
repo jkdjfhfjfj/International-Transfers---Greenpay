@@ -2609,7 +2609,7 @@ p{color:#6b7280;font-size:14px;}</style>
           });
         }
         return res.status(400).json({ 
-          message: 'Payment initiation failed. Please try again or contact support.', 
+          message: paymentData.message || 'Payment initiation failed. Please try again or contact support.',
           status: paymentData.status 
         });
       }
@@ -2830,7 +2830,7 @@ p{color:#6b7280;font-size:14px;}</style>
         if (paymentData.status === 'TIMEOUT') {
           return res.status(504).json({ message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.", status: 'TIMEOUT' });
         }
-        return res.status(400).json({ message: "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
+        return res.status(400).json({ message: paymentData.message || "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
       }
 
       await storage.createTransaction({
@@ -3739,7 +3739,8 @@ p{color:#6b7280;font-size:14px;}</style>
           [(req as any).session?.userId],
         ).catch(() => {});
       }
-      res.status(500).json({ message: "Error claiming airtime bonus" });
+      const message = error instanceof Error ? error.message : "Error claiming airtime bonus";
+      res.status(500).json({ message });
     }
   });
 
@@ -8320,6 +8321,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const keys = [
         "mpesa_enabled","crypto_enabled","bank_transfer_enabled","card_enabled",
+        "global_enabled",
         "bank_name","bank_account_name","bank_account_number","bank_swift_code",
         "bank_branch","bank_currency","bank_routing_number","bank_additional_info"
       ];
@@ -9370,7 +9372,12 @@ p{color:#6b7280;font-size:14px;}</style>
   // Admin withdrawal management endpoints
   app.get("/api/admin/withdrawals", requireAdminAuth, async (req, res) => {
     try {
-      const { transactions } = await storage.getAllTransactions();
+      const transactionResult = await storage.getAllTransactions();
+      // DatabaseStorage returns an array while the legacy MemStorage
+      // implementation returns a paginated object.
+      const transactions = Array.isArray(transactionResult)
+        ? transactionResult
+        : transactionResult.transactions;
       const withdrawals = transactions.filter(t => t.type === 'withdraw');
       
       // Get user info for each withdrawal
@@ -9956,7 +9963,7 @@ p{color:#6b7280;font-size:14px;}</style>
   app.post("/api/transactions", requireAuth, async (req, res) => {
     try {
       const sessionUserId = (req as any).session?.userId;
-      const { type, amount, currency, description, fee, recipientDetails } = req.body;
+      const { type, amount, currency, description, recipientDetails } = req.body;
       
       if (!sessionUserId) {
         return res.status(401).json({ message: "Authentication required" });
@@ -9967,7 +9974,6 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       const withdrawAmount = parseFloat(amount);
-      const withdrawFee = parseFloat(fee || '0');
       
       if (withdrawAmount <= 0) {
         return res.status(400).json({ message: "Invalid withdrawal amount" });
@@ -9989,6 +9995,16 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!(await getEnabledCurrencyCodes()).includes(normalizedWithdrawalCurrency)) {
         return res.status(400).json({ message: `${normalizedWithdrawalCurrency} is not an enabled currency` });
       }
+
+      // Fees are configured per currency by the admin. Never trust the fee
+      // sent by the browser because it can be modified by a client.
+      const currencyFeeSetting = await storage.getSystemSetting(
+        "fees",
+        `withdrawal_fee_${normalizedWithdrawalCurrency}`,
+      );
+      const defaultFeeSetting = await storage.getSystemSetting("fees", "withdrawal_fee");
+      const configuredFee = currencyFeeSetting?.value ?? defaultFeeSetting?.value ?? "0";
+      const withdrawFee = Math.max(0, parseFloat(String(configuredFee)) || 0);
       const matchingWallet = await getUserWallet(userId, normalizedWithdrawalCurrency);
       if (!matchingWallet) {
         return res.status(400).json({ message: `Create a ${normalizedWithdrawalCurrency} wallet before withdrawing` });
@@ -10024,7 +10040,7 @@ p{color:#6b7280;font-size:14px;}</style>
         currency: normalizedWithdrawalCurrency,
         status: 'pending' as const, // Withdrawals start as pending for admin approval
         description,
-        fee: fee || '0.00',
+        fee: withdrawFee.toFixed(2),
         recipientDetails,
         reference: storage.generateTransactionReference()
       });

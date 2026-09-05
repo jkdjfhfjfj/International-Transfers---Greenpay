@@ -49,7 +49,12 @@ export default function WithdrawPage() {
     queryKey: ["/api/system-settings"],
     queryFn: async () => (await apiRequest("GET", "/api/system-settings")).json(),
   });
-  const withdrawalFee = Math.max(0, Number(systemSettings?.fees?.withdrawal_fee?.value ?? 0));
+  const selectedCurrency = String(activeWallet?.currency || "USD").toUpperCase();
+  const currencyFeeSetting = systemSettings?.fees?.[`withdrawal_fee_${selectedCurrency}`];
+  const withdrawalFee = Math.max(
+    0,
+    Number(currencyFeeSetting?.value ?? currencyFeeSetting ?? systemSettings?.fees?.withdrawal_fee?.value ?? systemSettings?.fees?.withdrawal_fee ?? 0),
+  );
 
   const form = useForm<WithdrawForm>({
     resolver: zodResolver(withdrawSchema),
@@ -75,6 +80,8 @@ export default function WithdrawPage() {
         amount: data.amount,
         currency: data.currency,
         description: `Withdrawal via ${data.withdrawMethod}`,
+        // The server recalculates this from the admin setting. This value is
+        // only included for older deployments that still read the payload.
         fee: withdrawalFee.toFixed(2),
         recipientDetails: data.accountDetails,
       });
@@ -83,7 +90,9 @@ export default function WithdrawPage() {
     onSuccess: (data) => {
       toast({
         title: "Withdrawal Request Submitted!",
-        description: data.message || "Your withdrawal request is being reviewed and will be processed within 1-3 business days.",
+        description: selectedMethod === "mobile-money"
+          ? "Your mobile money withdrawal is being reviewed and is usually processed within 30 minutes."
+          : data.message || "Your withdrawal request is being reviewed and will be processed within 1-3 business days.",
       });
       form.reset();
       setLocation("/dashboard");
@@ -548,6 +557,7 @@ export default function WithdrawPage() {
                     <li>• Withdrawals cannot be cancelled once processed</li>
                     <li>• You may be contacted for verification purposes</li>
                     <li>• Exchange rates are locked at the time of withdrawal</li>
+                     <li>• Mobile money withdrawals are usually processed within 30 minutes</li>
                   </ul>
                 </div>
               </div>

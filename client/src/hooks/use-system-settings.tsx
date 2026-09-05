@@ -76,6 +76,7 @@ export function useSystemSettings() {
   return {
     settings,
     isLoading,
+    isLoaded: !isLoading,
     getMaintenanceMode,
     getMaintenanceMessage,
     getPinRequired,

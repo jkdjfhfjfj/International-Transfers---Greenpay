@@ -42,11 +42,13 @@ export default function WithdrawalManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: withdrawalData, isLoading } = useQuery({
+  const { data: withdrawalData, isLoading, isError, error } = useQuery({
     queryKey: ["/api/admin/withdrawals"],
   });
 
-  const withdrawals = withdrawalData?.withdrawals || [];
+  const withdrawals = Array.isArray(withdrawalData?.withdrawals)
+    ? withdrawalData.withdrawals
+    : [];
 
   const processWithdrawalMutation = useMutation({
     mutationFn: async ({ id, action, notes }: { id: string; action: 'approve' | 'reject'; notes: string }) => {
@@ -156,6 +158,20 @@ export default function WithdrawalManagement() {
           <p className="text-gray-600">Loading withdrawals...</p>
         </div>
       </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="p-8 text-center">
+          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Unable to load withdrawals</h3>
+          <p className="text-gray-600">
+            {(error as Error)?.message || "The withdrawal list could not be loaded. Please try again."}
+          </p>
+        </CardContent>
+      </Card>
     );
   }
 

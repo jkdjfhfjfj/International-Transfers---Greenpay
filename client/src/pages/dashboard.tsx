@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Copy, Check, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
@@ -35,7 +35,6 @@ export default function DashboardPage() {
   const [showDiscountModal] = useState(false);
   const [activeWallet, setActiveWallet] = useState<'USD' | 'KES'>('USD');
   const [maintenanceAlertShown, setMaintenanceAlertShown] = useState(false);
-  const [copiedAccountNumber, setCopiedAccountNumber] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
   const [addWalletOpen, setAddWalletOpen] = useState(false);
@@ -226,20 +225,6 @@ export default function DashboardPage() {
     setLocation(action.path);
   };
 
-  const handleCopyAccountNumber = async () => {
-    const accNum = (user as any)?.accountNumber;
-    if (accNum) {
-      await navigator.clipboard.writeText(String(accNum));
-      setCopiedAccountNumber(true);
-      toast({
-        title: "Copied!",
-        description: "Account number copied to clipboard",
-        variant: "default",
-      });
-      setTimeout(() => setCopiedAccountNumber(false), 2000);
-    }
-  };
-
   const { data: announcementsData } = useQuery({
     queryKey: ["/api/announcements"],
   });
@@ -398,21 +383,21 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* Copy / Exchange quick actions */}
+          {/* History / Exchange quick actions */}
           <div className="flex gap-2 mt-3">
             <motion.button
               whileTap={{ scale: 0.95 }}
-              onClick={handleCopyAccountNumber}
+              onClick={() => setLocation("/transactions")}
               style={{
                 flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
                 fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center',
                 justifyContent: 'center', gap: 5, cursor: 'pointer', transition: 'opacity 0.15s',
-                background: copiedAccountNumber ? 'rgba(74,222,128,0.20)' : 'rgba(255,255,255,0.18)',
+                background: 'rgba(255,255,255,0.18)',
                 color: 'white',
               }}
-              title="Copy Account Number"
+              title="View transaction history"
             >
-              {copiedAccountNumber ? <><Check className="w-3 h-3" /> Copied</> : <><Copy className="w-3 h-3" /> Copy Acc No</>}
+              <Receipt className="w-3 h-3" /> History
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.95 }}
