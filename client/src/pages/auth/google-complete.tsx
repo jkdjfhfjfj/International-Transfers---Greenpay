@@ -10,7 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
 import { mockCountries } from "@/lib/mock-data";
-import { CheckCircle2, Phone, MapPin, User, ArrowRight, ArrowLeft, Loader2, AlertCircle } from "lucide-react";
+import { CheckCircle2, Phone, MapPin, User, Loader2, AlertCircle } from "lucide-react";
 
 const COUNTRY_CODES = [
   { code: "+254", label: "🇰🇪 Kenya (+254)" },
@@ -332,7 +332,7 @@ export default function GoogleCompletePage() {
           <div className="max-w-sm mx-auto p-4 flex gap-3">
             {step > 1 && (
               <Button variant="outline" className="rounded-xl" onClick={() => setStep(step - 1)}>
-                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+                Back
               </Button>
             )}
             <Button
@@ -344,8 +344,8 @@ export default function GoogleCompletePage() {
               {step === 3
                 ? completeMutation.isPending
                   ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Creating...</>
-                  : <>Create Account <ArrowRight className="w-4 h-4 ml-2" /></>
-                : <>Continue <ArrowRight className="w-4 h-4 ml-2" /></>}
+                  : <>Create Account</>
+                : <>Continue</>}
             </Button>
           </div>
         </div>

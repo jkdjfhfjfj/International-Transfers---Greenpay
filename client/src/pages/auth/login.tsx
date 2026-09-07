@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import { apiRequest } from "@/lib/queryClient";
+import { verifyBiometric } from "@/lib/webauthn";
 import { WavyHeader } from "@/components/wavy-header";
 
 const loginSchema = z.object({
@@ -145,28 +146,7 @@ export default function LoginPage() {
       }
 
       try {
-        console.log("[Biometric] Starting authentication flow...");
-        
-        // We'll first check if the user has a credential stored in their browser for our RP ID
-        // The browser will show the passkey picker
-        const assertion = await navigator.credentials.get({
-          publicKey: {
-            challenge: crypto.getRandomValues(new Uint8Array(32)),
-            timeout: 60000,
-            userVerification: "preferred",
-            rpId: window.location.hostname,
-          }
-        }) as PublicKeyCredential | null;
-
-        if (!assertion) {
-          throw new Error("Biometric authentication cancelled");
-        }
-
-        console.log("[Biometric] Assertion received, credentialId:", assertion.id);
-
-        const response = await apiRequest("POST", "/api/auth/biometric/login", {
-          credentialId: assertion.id,
-        });
+        const response = await apiRequest("POST", "/api/auth/biometric/login", await verifyBiometric());
         
         if (!response.ok) {
           const errorData = await response.json();

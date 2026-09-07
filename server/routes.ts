@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
+import crypto from "crypto";
 import { storage } from "./storage";
 import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals } from "@shared/schema";
@@ -3939,6 +3940,7 @@ p{color:#6b7280;font-size:14px;}</style>
       });
 
       console.log(`💾 Transaction created: ${transaction.id}`);
+      await notificationService.sendTransactionNotification(userId, transaction);
 
       const newKesBalance = kesBalance - purchaseAmount;
       console.log(`✅ Updated user balance: ${kesBalance} -> ${newKesBalance}`);
@@ -4142,7 +4144,7 @@ p{color:#6b7280;font-size:14px;}</style>
       console.log(`💾 Bill payment created (PENDING): ${billPayment.id}`);
 
       // Create transaction record as PENDING
-      await storage.createTransaction({
+      const billTransaction = await storage.createTransaction({
         userId,
         type: "bill_payment",
         amount: amount.toString(),
@@ -4153,6 +4155,7 @@ p{color:#6b7280;font-size:14px;}</style>
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
+      await notificationService.sendTransactionNotification(userId, billTransaction);
 
       try {
         await applyLedgerEntry({
@@ -4807,12 +4810,41 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  // Biometric authentication routes
-  app.post("/api/auth/biometric/setup", async (req, res) => {
+  // Biometric authentication routes. Challenges are generated server-side and
+  // every assertion is verified cryptographically before a session is created.
+  app.get("/api/auth/biometric/options", requireAuth, async (req, res) => {
     try {
-      const { userId, credentialId } = req.body;
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const scope = `setup:${userId}:${crypto.randomUUID()}`;
+      const challenge = biometricService.issueChallenge(scope);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      res.json({ challenge, scope, rpId: new URL(origin).hostname, origin });
+    } catch (error) {
+      console.error("Biometric options error:", error);
+      res.status(500).json({ message: "Unable to start biometric setup" });
+    }
+  });
+
+  app.get("/api/auth/biometric/login-options", async (req, res) => {
+    try {
+      const scope = `login:${crypto.randomUUID()}`;
+      const challenge = biometricService.issueChallenge(scope);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      res.json({ challenge, scope, rpId: new URL(origin).hostname, origin });
+    } catch (error) {
+      console.error("Biometric login options error:", error);
+      res.status(500).json({ message: "Unable to start biometric login" });
+    }
+  });
+
+  app.post("/api/auth/biometric/setup", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { scope, challenge, credentialId, clientDataJSON, publicKey, rpId, origin } = req.body;
       
-      if (!credentialId) {
+      if (!scope || !challenge || !credentialId || !clientDataJSON || !publicKey || !rpId || !origin) {
         return res.status(400).json({ message: "Invalid credential" });
       }
 
@@ -4821,10 +4853,22 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Store biometric credential as JSON string
+      const credential = biometricService.verifyRegistration({
+        scope,
+        challenge,
+        credentialId,
+        clientDataJSON,
+        publicKey,
+        rpId,
+        origin,
+      });
+      if (!credential) {
+        return res.status(400).json({ message: "Biometric registration could not be verified" });
+      }
+
       await storage.updateUser(userId, { 
         biometricEnabled: true,
-        biometricCredentialId: JSON.stringify({ credentialId })
+        biometricCredentialId: JSON.stringify(credential),
       });
       
       const updatedUser = await storage.getUser(userId);
@@ -4836,31 +4880,18 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/auth/biometric/verify", async (req, res) => {
-    try {
-      const { userId, credentialId } = req.body;
-      
-      const user = await storage.getUser(userId);
-      if (!user || !user.biometricEnabled) {
-        return res.status(400).json({ message: "Biometric not enabled" });
-      }
-
-      // Verify the credential matches
-      const storedCred = user.biometricCredentialId ? JSON.parse(user.biometricCredentialId) : null;
-      if (storedCred && storedCred.credentialId === credentialId) {
-        res.json({ success: true, verified: true });
-      } else {
-        res.status(401).json({ success: false, verified: false });
-      }
-    } catch (error) {
-      console.error('Biometric verification error:', error);
-      res.status(500).json({ message: "Error verifying biometric" });
-    }
+  app.post("/api/auth/biometric/verify", async (_req, res) => {
+    // This legacy endpoint used to accept a credential ID without an
+    // assertion. Keep it fail-closed so older clients cannot bypass WebAuthn.
+    res.status(410).json({ message: "Use the WebAuthn assertion login flow" });
   });
 
-  app.post("/api/users/:userId/disable-biometric", async (req, res) => {
+  app.post("/api/users/:userId/disable-biometric", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
+      if ((req.session as any).userId !== userId) {
+        return res.status(403).json({ message: "You can only change your own biometric settings" });
+      }
       
       const user = await storage.getUser(userId);
       if (!user) {
@@ -4883,9 +4914,9 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.post("/api/auth/biometric/login", async (req, res) => {
     try {
-      const { credentialId } = req.body;
+      const { scope, challenge, credentialId, clientDataJSON, authenticatorData, signature } = req.body;
       
-      if (!credentialId) {
+      if (!scope || !challenge || !credentialId || !clientDataJSON || !authenticatorData || !signature) {
         return res.status(400).json({ message: "Invalid credential" });
       }
 
@@ -4896,30 +4927,44 @@ p{color:#6b7280;font-size:14px;}</style>
       const allUsers = await storage.getAllUsers();
       const users = Array.isArray(allUsers) ? allUsers : [];
       
-      const user = users.find((u: any) => {
+      const match = users.find((u: any) => {
         if (!u.biometricEnabled || !u.biometricCredentialId) return false;
         try {
-          const stored = typeof u.biometricCredentialId === 'string'
+          const stored = typeof u.biometricCredentialId === "string"
             ? JSON.parse(u.biometricCredentialId)
             : u.biometricCredentialId;
-          
-          // Match the credential ID
-          return stored && (stored.credentialId === credentialId || u.biometricCredentialId.includes(credentialId));
+          return stored?.credentialId === credentialId && stored.publicKey;
         } catch (e) {
-          console.error(`[Biometric Login] Error parsing credential for user ${u.id}:`, e);
-          // Fallback to simple string check if JSON parse fails
-          return typeof u.biometricCredentialId === 'string' && u.biometricCredentialId.includes(credentialId);
+          return false;
         }
       });
       
-      if (!user) {
+      if (!match) {
         console.warn(`[Biometric Login] No user found for credentialId: ${credentialId}`);
         return res.status(401).json({ 
-          message: "No passkey found for this device in our records. Please ensure you have enabled biometric login in Settings while logged in." 
+          message: "No verified passkey found for this device. Enable biometric login again in Settings."
         });
       }
 
-      console.log(`[Biometric Login] Success for user: ${user.email}`);
+      const storedCredential = typeof match.biometricCredentialId === "string"
+        ? JSON.parse(match.biometricCredentialId)
+        : match.biometricCredentialId;
+      const verified = biometricService.verifyAssertion({
+        scope,
+        challenge,
+        credential: storedCredential,
+        clientDataJSON,
+        authenticatorData,
+        signature,
+      });
+      if (!verified) {
+        return res.status(401).json({ message: "Biometric assertion could not be verified" });
+      }
+      await storage.updateUser(match.id, {
+        biometricCredentialId: JSON.stringify(storedCredential),
+      });
+
+      console.log(`[Biometric Login] Success for user: ${match.email}`);
 
       // Establish session
       req.session.regenerate((err) => {
@@ -4928,11 +4973,11 @@ p{color:#6b7280;font-size:14px;}</style>
           return res.status(500).json({ message: "Session error" });
         }
 
-        (req.session as any).userId = user.id;
-        (req.session as any).user = { id: user.id, email: user.email };
+        (req.session as any).userId = match.id;
+        (req.session as any).user = { id: match.id, email: match.email };
 
         storage.createLoginHistory({
-          userId: user.id,
+          userId: match.id,
           ipAddress: req.ip || (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || 'Unknown',
           userAgent: req.headers['user-agent'] || 'Unknown',
           deviceType: req.headers['user-agent']?.includes('Mobile') ? 'mobile' : 'desktop',
@@ -4941,7 +4986,7 @@ p{color:#6b7280;font-size:14px;}</style>
           status: 'success',
         }).catch(err => console.error('Login history error:', err));
 
-        const { password: _, ...userResponse } = user;
+        const { password: _, ...userResponse } = match;
         
         req.session.save((saveErr) => {
           if (saveErr) {
@@ -13505,7 +13550,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }).returning();
 
       // Record as a transaction
-      await db.insert(transactions).values({
+      const [exchangeTransaction] = await db.insert(transactions).values({
         userId,
         type: "withdraw",
         amount: usdValue.toFixed(2),
@@ -13513,7 +13558,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
         status: "pending",
         description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
         reference: cryptoTx.id,
-      });
+      }).returning();
+      await notificationService.sendTransactionNotification(userId, exchangeTransaction);
 
       res.json({ cryptoTransaction: cryptoTx, message: "Withdrawal initiated. Processing may take 30–60 minutes." });
     } catch (error) {

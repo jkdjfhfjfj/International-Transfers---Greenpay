@@ -405,7 +405,7 @@ export default function DashboardPage() {
         </motion.div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-6">
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 space-y-4">
         {/* KYC Status Alert - Different messages based on status */}
         {!isKYCVerified && user?.kycStatus === 'pending' && (
           <motion.div
@@ -568,7 +568,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-6">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-1">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (
@@ -697,7 +697,7 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Recent Transactions + Login History — side by side on desktop */}
-        <div className="md:grid md:grid-cols-2 md:gap-6 space-y-6 md:space-y-0">
+        <div className="md:grid md:grid-cols-2 md:gap-6 space-y-4 md:space-y-0">
         {/* Recent Transactions */}
         {transactions.length > 0 && (
           <motion.div

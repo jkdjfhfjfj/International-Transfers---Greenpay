@@ -70,6 +70,7 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS service_name TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS display_name TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_key TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_secret TEXT`,
@@ -222,7 +223,19 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+    // Older Render databases may already have wallets without the newer
+    // columns. Repair the table before running any backfill statements.
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
+    `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
+    `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
+    `UPDATE wallets SET is_suspended = false WHERE is_suspended IS NULL`,
     `UPDATE wallets SET withdrawal_hold_amount = 0.0000 WHERE withdrawal_hold_amount IS NULL`,
     // Migrate existing USD balances to wallets
     `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)

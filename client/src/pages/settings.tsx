@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useCurrencies } from "@/hooks/use-wallets";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { enrollBiometric } from "@/lib/webauthn";
 import { ObjectUploader } from "@/components/ObjectUploader";
 import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock, ShieldCheck, User, Calendar, Hash, MapPin, CreditCard, AlertCircle } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
@@ -410,38 +411,11 @@ export default function SettingsPage() {
         throw new Error("Your device doesn't support biometric authentication");
       }
 
-      // Request biometric from device
-      const challenge = crypto.getRandomValues(new Uint8Array(32));
-      const publicKeyCreationOptions = {
-        challenge,
-        rp: { name: "Geepay", id: window.location.hostname },
-        user: {
-          id: crypto.getRandomValues(new Uint8Array(16)),
-          name: user?.email || "user",
-          displayName: user?.fullName || "User",
-        },
-        pubKeyCredParams: [
-          { alg: -7, type: "public-key" as const },
-          { alg: -257, type: "public-key" as const },
-        ],
-        timeout: 60000,
-        userVerification: "preferred",
-      } as PublicKeyCredentialCreationOptions;
-
-      const credential = await navigator.credentials.create({
-        publicKey: publicKeyCreationOptions,
-      }) as PublicKeyCredential | null;
-
-      if (!credential) {
-        throw new Error("Biometric enrollment was cancelled or failed");
-      }
-
-      // Send to server for storage - store credential ID as is
-      const response = await apiRequest("POST", `/api/auth/biometric/setup`, {
-        userId: user?.id,
-        credentialId: credential.id,
-      });
-      return response.json();
+      const enrollment = await enrollBiometric(user?.fullName || "User", user?.email || "user");
+      const response = await apiRequest("POST", "/api/auth/biometric/setup", enrollment);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to save biometric credential");
+      return data;
     },
     onSuccess: (data) => {
       // Update user context with biometric setting enabled

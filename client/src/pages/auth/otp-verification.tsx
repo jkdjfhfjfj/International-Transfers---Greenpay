@@ -83,9 +83,22 @@ export default function OtpVerificationPage() {
   });
 
   const handleChange = (element: HTMLInputElement, index: number) => {
-    if (isNaN(Number(element.value))) return;
+    const digits = element.value.replace(/\D/g, "");
+    if (!digits) {
+      setOtp([...otp.map((d, idx) => (idx === index ? "" : d))]);
+      return;
+    }
+    if (digits.length > 1) {
+      const next = [...otp];
+      digits.slice(0, 6 - index).split("").forEach((digit, offset) => {
+        next[index + offset] = digit;
+      });
+      setOtp(next);
+      inputRefs.current[Math.min(index + digits.length, 6) - 1]?.focus();
+      return;
+    }
 
-    setOtp([...otp.map((d, idx) => (idx === index ? element.value : d))]);
+    setOtp([...otp.map((d, idx) => (idx === index ? digits : d))]);
 
     if (element.nextSibling && element.value !== "") {
       (element.nextSibling as HTMLInputElement).focus();
@@ -191,12 +204,14 @@ export default function OtpVerificationPage() {
                 <input
                   key={index}
                   type="text"
+                  inputMode="numeric"
+                  autoComplete={index === 0 ? "one-time-code" : "off"}
                   maxLength={1}
                   value={data}
                   onChange={(e) => handleChange(e.target, index)}
                   onKeyDown={(e) => handleKeyDown(e, index)}
                   onFocus={(e) => e.target.select()}
-                   onPaste={index === 0 ? handlePaste : undefined}
+                  onPaste={handlePaste}
                   ref={(ref) => (inputRefs.current[index] = ref)}
                   className="w-12 h-12 text-center text-xl font-bold border border-border rounded-xl bg-input focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                 />

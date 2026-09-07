@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,6 +55,7 @@ export default function PaymentRequestsPage() {
   });
   const { user } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: sentData, isLoading: sentLoading } = usePaymentRequests();
   const { data: receivedData, isLoading: receivedLoading } = useIncomingPaymentRequests();
 
@@ -75,7 +77,10 @@ export default function PaymentRequestsPage() {
         toast({ title: "Payment Request Created", description: "Your payment request has been sent successfully" });
         setShowCreateDialog(false);
         setNewRequest({ toEmail: "", toPhone: "", amount: "", currency: "KES", message: "" });
-        window.location.reload();
+         await Promise.all([
+           queryClient.invalidateQueries({ queryKey: ["payment-requests", user?.id] }),
+           queryClient.invalidateQueries({ queryKey: ["payment-requests-received", user?.id] }),
+         ]);
       } else {
         const err = await response.json();
         toast({ title: "Error", description: err.message || "Failed to create payment request", variant: "destructive" });
@@ -101,7 +106,14 @@ export default function PaymentRequestsPage() {
       });
       if (response.ok) {
         toast({ title: `Request ${action}ed`, description: `Payment request has been ${action}ed.` });
-        window.location.reload();
+         setConfirmation(null);
+         setPendingPayment(null);
+         await Promise.all([
+           queryClient.invalidateQueries({ queryKey: ["payment-requests", user?.id] }),
+           queryClient.invalidateQueries({ queryKey: ["payment-requests-received", user?.id] }),
+           queryClient.invalidateQueries({ queryKey: ["/api/wallets"] }),
+           queryClient.invalidateQueries({ queryKey: ["/api/transactions"] }),
+         ]);
       } else {
         const error = await response.json().catch(() => ({}));
         if (error.requiresSetup) {

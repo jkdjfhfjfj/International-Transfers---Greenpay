@@ -198,7 +198,7 @@ export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {
       cachedSnapshot = snapshot;
       return snapshot;
     })
-    .catch((error) => {
+    .catch(async (error) => {
       console.warn(`[Crypto prices] Live price request failed: ${error instanceof Error ? error.message : error}`);
       if (cachedSnapshot) {
         return { ...cachedSnapshot, source: "cache" as const, stale: true };

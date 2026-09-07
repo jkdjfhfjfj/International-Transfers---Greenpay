@@ -741,6 +741,17 @@ export default function TransactionsPage() {
                 </div>
               </div>
 
+              {/* Provider/reference information */}
+              {selectedTransaction.reference && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                    <Tag className="h-4 w-4" />
+                    Reference
+                  </label>
+                  <p className="text-xs font-mono text-primary break-all pl-6">{selectedTransaction.reference}</p>
+                </div>
+              )}
+
               {/* Type */}
               <div className="space-y-1">
                 <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
@@ -762,15 +773,25 @@ export default function TransactionsPage() {
               )}
 
               {/* Converted Amount if exists */}
-              {selectedTransaction.metadata?.convertedAmount && selectedTransaction.metadata?.targetCurrency && (
+              {(selectedTransaction.metadata?.convertedAmount ?? selectedTransaction.metadata?.toAmount) != null && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
                     <DollarSign className="h-4 w-4" />
                     Converted Amount
                   </label>
                   <p className="text-base font-medium pl-6">
-                    {selectedTransaction.metadata.targetCurrency} {formatNumber(selectedTransaction.metadata.convertedAmount)}
+                    {selectedTransaction.metadata.targetCurrency || selectedTransaction.metadata.toCurrency} {formatNumber(selectedTransaction.metadata.convertedAmount ?? selectedTransaction.metadata.toAmount)}
                   </p>
+                </div>
+              )}
+
+              {(selectedTransaction.exchangeRate || selectedTransaction.metadata?.exchangeRate) && (
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                    <RefreshCw className="h-4 w-4" />
+                    Exchange Rate
+                  </label>
+                  <p className="text-base font-medium pl-6">{selectedTransaction.exchangeRate || selectedTransaction.metadata.exchangeRate}</p>
                 </div>
               )}
 
