@@ -66,7 +66,8 @@ export default function WalletCards({
   const [activeIndex, setActiveIndex] = useState(0);
   const [, setLocation] = useLocation();
 
-  // Sort: default wallet first, then rest
+  // The dashboard passes the Settings-selected wallet as isDefault.
+  // Keep the server default as the fallback for other screens.
   const activeWallets = wallets
     .filter(w => w.isActive)
     .sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));

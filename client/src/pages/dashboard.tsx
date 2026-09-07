@@ -33,7 +33,6 @@ export default function DashboardPage() {
   const [, setLocation] = useLocation();
   const [showBalance, setShowBalance] = useState(true);
   const [showDiscountModal] = useState(false);
-  const [activeWallet, setActiveWallet] = useState<'USD' | 'KES'>('USD');
   const [maintenanceAlertShown, setMaintenanceAlertShown] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<WalletType | null>(null);
@@ -111,12 +110,17 @@ export default function DashboardPage() {
   const transactions = (transactionData as any)?.transactions || [];
   const loginHistory = (loginHistoryData as any)?.loginHistory || [];
   
-  // Dual wallet balances
-  const usdBalance = userWallets.find((wallet) => wallet.currency === "USD")?.availableBalance || 0;
-  const kesBalance = userWallets.find((wallet) => wallet.currency === "KES")?.availableBalance || 0;
-  
-  // Get the active wallet balance based on selection
-  const activeBalance = activeWallet === 'USD' ? usdBalance : kesBalance;
+  // Settings stores the preferred currency on the user. Use the matching wallet
+  // as the dashboard default instead of assuming USD.
+  const preferredWalletId = (
+    userWallets.find(wallet => wallet.currency.toUpperCase() === user?.defaultCurrency?.toUpperCase()) ||
+    userWallets.find(wallet => wallet.isDefault) ||
+    userWallets[0]
+  )?.id;
+  const dashboardWallets = userWallets.map(wallet => ({
+    ...wallet,
+    isDefault: wallet.id === preferredWalletId,
+  }));
   
   // Get exchange rates for display
   const rates = (exchangeRates as any)?.rates || {};
@@ -364,7 +368,7 @@ export default function DashboardPage() {
             </div>
           ) : userWallets.length > 0 ? (
             <WalletCards
-              wallets={userWallets}
+              wallets={dashboardWallets}
               showBalance={showBalance}
               onToggleBalance={() => setShowBalance(!showBalance)}
               onWalletSelect={setSelectedWallet}
