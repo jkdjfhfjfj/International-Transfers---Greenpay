@@ -113,6 +113,7 @@ var init_schema = __esm({
       phone: text("phone").notNull().unique(),
       country: text("country").notNull(),
       password: text("password").notNull(),
+      passwordSet: boolean("password_set").default(true),
       profilePhotoUrl: text("profile_photo_url"),
       isEmailVerified: boolean("is_email_verified").default(false),
       isPhoneVerified: boolean("is_phone_verified").default(false),
@@ -191,6 +192,7 @@ var init_schema = __esm({
     virtualCards = pgTable("virtual_cards", {
       id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
       userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+      currency: text("currency").notNull().default("USD"),
       cardNumber: text("card_number").notNull(),
       expiryDate: text("expiry_date").notNull(),
       cvv: text("cvv").notNull(),
@@ -1063,6 +1065,7 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS provider TEXT`,
+    `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS service_name TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS display_name TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_key TEXT`,
     `ALTER TABLE api_configurations ADD COLUMN IF NOT EXISTS api_secret TEXT`,
@@ -1172,6 +1175,8 @@ async function alterMissingColumns() {
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT TRUE`,
+    `UPDATE users SET password_set = FALSE WHERE google_id IS NOT NULL AND password_set IS DISTINCT FROM FALSE`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS email TEXT`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS account_number TEXT`,
@@ -1213,7 +1218,19 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE UNIQUE INDEX IF NOT EXISTS wallets_user_currency_idx ON wallets(user_id, currency)`,
+    // Older Render databases may already have wallets without the newer
+    // columns. Repair the table before running any backfill statements.
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_default BOOLEAN DEFAULT false`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS is_suspended BOOLEAN DEFAULT false`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
+    `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
+    `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
+    `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
+    `UPDATE wallets SET is_suspended = false WHERE is_suspended IS NULL`,
     `UPDATE wallets SET withdrawal_hold_amount = 0.0000 WHERE withdrawal_hold_amount IS NULL`,
     // Migrate existing USD balances to wallets
     `INSERT INTO wallets (user_id, currency, balance, is_default, is_active)
@@ -1249,6 +1266,10 @@ async function alterMissingColumns() {
     )`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
+    // Card balances are ledger-backed and need an explicit currency for
+    // card-to-wallet and wallet-to-card transfers on older Render databases.
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'USD'`,
+    `UPDATE virtual_cards SET currency = 'USD' WHERE currency IS NULL`,
     // Admin-configured virtual account details shared by approved users
     `CREATE TABLE IF NOT EXISTS virtual_account_settings (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -2427,23 +2448,19 @@ var init_storage = __esm({
         return this.updateTransaction(id, updates);
       }
       async createWithdrawalEvent(event) {
-        const id = randomUUID();
-        const created = {
+        const [created] = await db.insert(withdrawalEvents).values({
           ...event,
-          id,
           description: event.description ?? null,
           provider: event.provider ?? null,
           providerReference: event.providerReference ?? null,
           retryCount: event.retryCount ?? 0,
           refundStatus: event.refundStatus ?? "not_applicable",
-          metadata: event.metadata ?? null,
-          createdAt: /* @__PURE__ */ new Date()
-        };
-        this.withdrawalEvents.set(id, created);
+          metadata: event.metadata ?? null
+        }).returning();
         return created;
       }
       async getWithdrawalEvents(transactionId) {
-        return Array.from(this.withdrawalEvents.values()).filter((event) => event.transactionId === transactionId).sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+        return await db.select().from(withdrawalEvents).where(eq(withdrawalEvents.transactionId, transactionId)).orderBy(asc(withdrawalEvents.createdAt));
       }
       // Payment Request operations
       async createPaymentRequest(insertRequest) {
@@ -5790,7 +5807,7 @@ __export(didit_exports, {
   verifyWebhookSignature: () => verifyWebhookSignature
 });
 import fetch12 from "node-fetch";
-import crypto from "crypto";
+import crypto2 from "crypto";
 function getApiKey() {
   return process.env.DIDIT_API_KEY || null;
 }
@@ -5880,8 +5897,8 @@ async function getSessionDecision(sessionId) {
 }
 function verifyWebhookSignature(payload, signature, secret) {
   try {
-    const expectedSig = crypto.createHmac("sha256", secret).update(payload).digest("hex");
-    return crypto.timingSafeEqual(
+    const expectedSig = crypto2.createHmac("sha256", secret).update(payload).digest("hex");
+    return crypto2.timingSafeEqual(
       Buffer.from(signature),
       Buffer.from(expectedSig)
     );
@@ -6331,6 +6348,7 @@ init_db();
 init_schema();
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import crypto3 from "crypto";
 
 // server/services/nexuspay.ts
 import fetch2 from "node-fetch";
@@ -6371,7 +6389,10 @@ var NexusPayService = class {
           `SELECT value FROM system_settings WHERE key = $1 AND category = $2 LIMIT 1`,
           ["nexuspay_api_key", "payment"]
         );
-        if (result.rows.length > 0 && result.rows[0].value) return result.rows[0].value;
+        if (result.rows.length > 0 && result.rows[0].value) {
+          const raw = result.rows[0].value;
+          return typeof raw === "object" ? String(raw.value || "") : String(raw).replace(/^"|"$/g, "");
+        }
       }
     } catch {
     }
@@ -6386,33 +6407,27 @@ var NexusPayService = class {
   async checkout(params) {
     const apiKey = await this.getApiKey();
     if (!apiKey) throw new Error("NexusPay API key not configured. Set NEXUSPAY_API_KEY or configure it in admin settings.");
-    const body = {
-      amount: params.amount,
-      currency: params.currency,
-      channel: params.channel,
-      description: params.description || "Geepay wallet deposit"
-    };
-    if (params.phone) body.phone = params.phone;
-    if (params.email) body.email = params.email;
-    if (params.correspondent) body.correspondent = params.correspondent;
+    if (!params.phone) {
+      throw new Error("NexusPay STK Push requires a customer phone number");
+    }
+    const accountReference = `GEEPAY-${Date.now()}`;
     const response = await fetch2(`${this.baseUrl}/payments/stkpush`, {
       method: "POST",
       headers: this.headers(apiKey),
       body: JSON.stringify({
         phoneNumber: params.phone,
         amount: params.amount,
-        currency: params.currency,
-        email: params.email,
-        description: body.description,
-        correspondent: params.correspondent
+        accountReference,
+        transactionDesc: params.description || "Geepay wallet deposit"
       })
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || data.message || `NexusPay checkout failed: ${response.status}`);
+    const payload = data.data || data;
     return {
-      reference: data.reference || data.transactionId || data.id,
-      status: data.status || "pending",
-      redirectUrl: data.redirectUrl || data.checkoutUrl || null
+      reference: payload.reference || payload.transactionId || payload.checkoutRequestId || payload.id || accountReference,
+      status: payload.status || "pending",
+      redirectUrl: payload.redirectUrl || payload.checkoutUrl || null
     };
   }
   async getStatus(reference) {
@@ -6423,12 +6438,13 @@ var NexusPayService = class {
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || data.message || `Status check failed: ${response.status}`);
+    const payload = data.data || data;
     return {
-      ...data,
-      reference: data.reference || reference,
-      status: data.status === "success" ? "completed" : data.status,
-      amount: String(data.amount || data.amountPaid || 0),
-      currency: data.currency || "KES"
+      ...payload,
+      reference: payload.reference || reference,
+      status: payload.status === "success" || payload.status === "completed" ? "completed" : payload.status === "failed" || payload.status === "cancelled" ? "failed" : "pending",
+      amount: String(payload.amount || payload.amountPaid || 0),
+      currency: payload.currency || "KES"
     };
   }
   async getCountries() {
@@ -6465,7 +6481,7 @@ var nexusPayService = new NexusPayService();
 
 // server/routes.ts
 init_exchange_rate();
-import { and as and2, desc as desc2, eq as eq3, sql as sql3 } from "drizzle-orm";
+import { and as and2, desc as desc2, eq as eq3, or as or2, sql as sql3 } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt2 from "bcrypt";
 import multer from "multer";
@@ -6981,6 +6997,100 @@ var TwoFactorService = class {
   }
 };
 var twoFactorService = new TwoFactorService();
+
+// server/services/biometric.ts
+import crypto from "crypto";
+function decodeBase64Url(value) {
+  return Buffer.from(value.replace(/-/g, "+").replace(/_/g, "/"), "base64");
+}
+var BiometricService = class {
+  challenges = /* @__PURE__ */ new Map();
+  challengeTimeout = 5 * 60 * 1e3;
+  issueChallenge(scope) {
+    const challenge = crypto.randomBytes(32).toString("base64url");
+    this.challenges.set(scope, { challenge, timestamp: Date.now() });
+    return challenge;
+  }
+  consumeChallenge(scope, challenge) {
+    const pending = this.challenges.get(scope);
+    this.challenges.delete(scope);
+    return Boolean(
+      pending && pending.challenge === challenge && Date.now() - pending.timestamp <= this.challengeTimeout
+    );
+  }
+  // Kept for older callers, but now uses the same one-time challenge store.
+  generateChallenge(userId) {
+    return this.issueChallenge(userId);
+  }
+  verifyChallenge(userId, challenge) {
+    return this.consumeChallenge(userId, challenge);
+  }
+  verifyRegistration(params) {
+    if (!this.consumeChallenge(params.scope, params.challenge)) return null;
+    try {
+      const clientData = JSON.parse(decodeBase64Url(params.clientDataJSON).toString("utf8"));
+      if (clientData.type !== "webauthn.create" || clientData.challenge !== params.challenge || clientData.origin !== params.origin) return null;
+      const key = crypto.createPublicKey({
+        key: decodeBase64Url(params.publicKey),
+        format: "der",
+        type: "spki"
+      });
+      if (!key) return null;
+      return {
+        credentialId: params.credentialId,
+        publicKey: params.publicKey,
+        counter: 0,
+        rpId: params.rpId,
+        origin: params.origin
+      };
+    } catch {
+      return null;
+    }
+  }
+  verifyAssertion(params) {
+    if (!this.consumeChallenge(params.scope, params.challenge)) return false;
+    try {
+      const clientDataBytes = decodeBase64Url(params.clientDataJSON);
+      const clientData = JSON.parse(clientDataBytes.toString("utf8"));
+      if (clientData.type !== "webauthn.get" || clientData.challenge !== params.challenge || clientData.origin !== params.credential.origin) return false;
+      const authenticatorData = decodeBase64Url(params.authenticatorData);
+      if (authenticatorData.length < 37) return false;
+      const expectedRpHash = crypto.createHash("sha256").update(params.credential.rpId).digest();
+      if (!authenticatorData.subarray(0, 32).equals(expectedRpHash)) return false;
+      if ((authenticatorData[32] & 1) === 0) return false;
+      const clientDataHash = crypto.createHash("sha256").update(clientDataBytes).digest();
+      const signedData = Buffer.concat([authenticatorData, clientDataHash]);
+      const publicKey = crypto.createPublicKey({
+        key: decodeBase64Url(params.credential.publicKey),
+        format: "der",
+        type: "spki"
+      });
+      const valid = crypto.verify(
+        "sha256",
+        signedData,
+        publicKey,
+        decodeBase64Url(params.signature)
+      );
+      if (!valid) return false;
+      const counter = authenticatorData.readUInt32BE(33);
+      if (params.credential.counter > 0 && counter > 0 && counter <= params.credential.counter) {
+        return false;
+      }
+      params.credential.counter = counter;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  // Compatibility shim: no credential ID alone is ever accepted anymore.
+  verifyBiometric() {
+    return false;
+  }
+  async registerBiometric(_userId, credential) {
+    return Boolean(credential?.credentialId && credential?.publicKey);
+  }
+};
+var biometricService = new BiometricService();
 
 // server/services/notifications.ts
 init_storage();
@@ -7627,6 +7737,24 @@ var FALLBACK_PRICES = {
 var cachedSnapshot = null;
 var requestInFlight = null;
 var CACHE_TTL_MS = 6e4;
+async function getFallbackPrices() {
+  const prices = { ...FALLBACK_PRICES };
+  if (!pool) return prices;
+  try {
+    const result = await pool.query(
+      `SELECT key, value FROM system_settings WHERE category = 'crypto_price_fallback'`
+    );
+    for (const row of result.rows) {
+      const coin = String(row.key || "").toUpperCase();
+      if (!SUPPORTED_CRYPTO_COINS.includes(coin)) continue;
+      const raw = row.value;
+      const value = Number(typeof raw === "object" && raw !== null ? raw.value : String(raw ?? "").replace(/^"|"$/g, ""));
+      if (Number.isFinite(value) && value > 0) prices[coin] = value;
+    }
+  } catch {
+  }
+  return prices;
+}
 async function getConfiguredApiKey(providers) {
   if (!db) return void 0;
   try {
@@ -7638,6 +7766,20 @@ async function getConfiguredApiKey(providers) {
   } catch {
     return void 0;
   }
+}
+async function getEnabledProviders() {
+  const enabled = /* @__PURE__ */ new Set(["coingecko", "binance", "coincap", "cryptocompare"]);
+  if (!db) return enabled;
+  try {
+    const configurations = await db.select().from(apiConfigurations);
+    for (const configuration of configurations) {
+      if (configuration?.provider && configuration.isEnabled === false) {
+        enabled.delete(String(configuration.provider).toLowerCase());
+      }
+    }
+  } catch {
+  }
+  return enabled;
 }
 function makeSnapshot(prices, changes24h, source) {
   return {
@@ -7693,20 +7835,25 @@ async function fetchCoinCap() {
 async function fetchBinance() {
   const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
   const response = await fetch8(
-    `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
+    `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
     {}
   );
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
   const payload = await response.json();
-  const rows = new Map(payload.map((row) => [row.symbol, Number(row.price)]));
+  const rows = new Map(payload.map((row) => [row.symbol, row]));
   const prices = {
-    BTC: rows.get("BTCUSDT"),
-    ETH: rows.get("ETHUSDT"),
-    USDT: rows.get("USDTUSDT") || 1,
-    USDC: rows.get("USDCUSDT") || 1
+    BTC: Number(rows.get("BTCUSDT")?.lastPrice),
+    ETH: Number(rows.get("ETHUSDT")?.lastPrice),
+    USDT: Number(rows.get("USDTUSDT")?.lastPrice) || 1,
+    USDC: Number(rows.get("USDCUSDT")?.lastPrice) || 1
   };
   if (!Number.isFinite(prices.BTC) || !Number.isFinite(prices.ETH)) throw new Error("Binance did not return all required prices");
-  return makeSnapshot(prices, {}, "binance");
+  const changes24h = {};
+  for (const coin of SUPPORTED_CRYPTO_COINS) {
+    const change = Number(rows.get(`${coin}USDT`)?.priceChangePercent);
+    if (Number.isFinite(change)) changes24h[coin] = change;
+  }
+  return makeSnapshot(prices, changes24h, "binance");
 }
 async function fetchCryptoCompare(apiKey) {
   const response = await fetch8(
@@ -7726,24 +7873,25 @@ async function fetchCryptoCompare(apiKey) {
   return makeSnapshot(prices, changes24h, "cryptocompare");
 }
 async function fetchLivePrices() {
+  const fallbackPrices = await getFallbackPrices();
   const coinGeckoKey = await getConfiguredApiKey(["coingecko", "crypto_prices"]);
   const cryptoCompareKey = await getConfiguredApiKey(["cryptocompare"]);
-  const providers = [
-    () => fetchCoinGecko(coinGeckoKey),
-    () => fetchBinance(),
-    () => fetchCoinCap(),
-    () => fetchCryptoCompare(cryptoCompareKey)
+  const enabled = await getEnabledProviders();
+  const allProviders = [
+    ["coingecko", () => fetchCoinGecko(coinGeckoKey)],
+    ["binance", () => fetchBinance()],
+    ["coincap", () => fetchCoinCap()],
+    ["cryptocompare", () => fetchCryptoCompare(cryptoCompareKey)]
   ];
-  let lastError;
-  for (const provider of providers) {
+  const providers = allProviders.filter(([provider]) => enabled.has(provider));
+  for (const [, provider] of providers) {
     try {
       return await provider();
     } catch (error) {
-      lastError = error;
       console.warn(`[Crypto prices] Provider failed: ${error instanceof Error ? error.message : error}`);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("No crypto price provider available");
+  return makeSnapshot(fallbackPrices, {}, "fallback");
 }
 async function getCryptoPrices() {
   if (cachedSnapshot && Date.now() - Date.parse(cachedSnapshot.fetchedAt) < CACHE_TTL_MS) {
@@ -7753,13 +7901,13 @@ async function getCryptoPrices() {
   requestInFlight = fetchLivePrices().then((snapshot) => {
     cachedSnapshot = snapshot;
     return snapshot;
-  }).catch((error) => {
+  }).catch(async (error) => {
     console.warn(`[Crypto prices] Live price request failed: ${error instanceof Error ? error.message : error}`);
     if (cachedSnapshot) {
       return { ...cachedSnapshot, source: "cache", stale: true };
     }
     return {
-      prices: { ...FALLBACK_PRICES },
+      prices: await getFallbackPrices(),
       changes24h: {},
       fetchedAt: (/* @__PURE__ */ new Date()).toISOString(),
       source: "fallback",
@@ -7780,6 +7928,22 @@ async function getCryptoPrice(coin) {
 // server/routes.ts
 var cloudinaryStorage2 = new CloudinaryStorageService();
 var normalizeCurrency = (currency) => String(currency || "").trim().toUpperCase();
+function settingText(value, fallback = "") {
+  const raw = value?.value ?? value;
+  if (raw && typeof raw === "object") {
+    return String(raw.value ?? raw.key ?? fallback).trim();
+  }
+  return String(raw ?? fallback).replace(/^"|"$/g, "").trim();
+}
+async function getUsdToKesRate() {
+  try {
+    const rate = await createExchangeRateService(storage).getExchangeRate("USD", "KES");
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  } catch (error) {
+    console.warn("[USD/KES] Exchange rate lookup failed; using fallback", error);
+  }
+  return 129;
+}
 async function addWithdrawalEvent(transaction, event) {
   return storage.createWithdrawalEvent({
     transactionId: transaction.id,
@@ -7847,23 +8011,20 @@ async function verifyTransactionSecurity(userId, credentials) {
   const authenticatorEnabled = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
   const pinRequired = settingValue("pin_required");
   const authenticatorRequired = settingValue("two_factor_required");
+  const securityRequired = pinRequired || authenticatorRequired || pinEnabled || authenticatorEnabled;
   const methods = {
-    pin: pinEnabled || pinRequired,
-    authenticator: authenticatorEnabled || authenticatorRequired
+    pin: pinEnabled,
+    authenticator: authenticatorEnabled
   };
-  if (!methods.pin && !methods.authenticator) {
+  if (!securityRequired || !methods.pin && !methods.authenticator) {
     return {
       ok: false,
       status: 400,
       requiresSetup: true,
+      requiresPin: pinRequired && !pinEnabled,
+      requiresAuthenticator: authenticatorRequired && !authenticatorEnabled,
       message: "Set up a transaction PIN or authenticator before making transactions"
     };
-  }
-  if (methods.pin && !pinEnabled && pinRequired) {
-    return { ok: false, status: 400, requiresSetup: true, requiresPin: true, message: "Set up your PIN before making transactions" };
-  }
-  if (methods.authenticator && !authenticatorEnabled && authenticatorRequired) {
-    return { ok: false, status: 400, requiresSetup: true, requiresAuthenticator: true, message: "Set up your authenticator before making transactions" };
   }
   const hasPin = Boolean(credentials.pin);
   const hasAuthenticator = Boolean(credentials.authenticatorCode);
@@ -8823,9 +8984,10 @@ p{color:#6b7280;font-size:14px;}</style>
         email: pending.email,
         phone: formattedPhone,
         country,
-        password: randomPassword
+        password: randomPassword,
+        passwordSet: false
       });
-      await storage.updateUser(user.id, {
+      const completedUser = await storage.updateUser(user.id, {
         isEmailVerified: true,
         isPhoneVerified: true,
         googleId: pending.googleId,
@@ -8858,7 +9020,7 @@ p{color:#6b7280;font-size:14px;}</style>
       });
       mailtrapService3.sendWelcome(pending.email, fullName.split(" ")[0] || "User", fullName.split(" ")[1] || "").catch(() => {
       });
-      const { password: _, ...userResponse } = user;
+      const { password: _, ...userResponse } = completedUser || user;
       await new Promise((r) => req.session.save(() => r()));
       res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true } });
     } catch (err) {
@@ -8899,6 +9061,8 @@ p{color:#6b7280;font-size:14px;}</style>
       const whatsappEnabled = otpWhatsappSetting?.value !== "false";
       const pinRequiredSetting = await storage.getSystemSetting("security", "pin_required");
       const pinRequired = pinRequiredSetting?.value === "true";
+      const hasPin = Boolean(user.pinEnabled && user.pinCode);
+      const hasAuthenticator = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
       const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
       const appIdSetting = await storage.getSystemSetting("messaging", "sms_app_id");
       const senderIdSetting = await storage.getSystemSetting("messaging", "sms_sender_id");
@@ -8930,10 +9094,17 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       if (!otpRequired) {
         console.log("OTP disabled by admin");
-        if ((pinRequired || user.pinEnabled) && user.pinCode) {
+        if ((pinRequired || hasPin) && hasPin) {
           return res.status(200).json({
             message: "PIN verification required",
             requiresPin: true,
+            userId: user.id
+          });
+        }
+        if (hasAuthenticator) {
+          return res.status(200).json({
+            message: "Authenticator verification required",
+            requiresAuthenticator: true,
             userId: user.id
           });
         }
@@ -8969,6 +9140,16 @@ p{color:#6b7280;font-size:14px;}</style>
         return;
       }
       if (messagesConfigured) {
+        if (hasPin || hasAuthenticator) {
+          return res.json({
+            requiresPin: hasPin,
+            requiresAuthenticator: hasAuthenticator,
+            requiresOtp: true,
+            userId: user.id,
+            phone: user.phone,
+            email: user.email
+          });
+        }
         const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
         const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
         const otpCode = messagingService3.generateOTP();
@@ -9925,45 +10106,88 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const usdAmount = parseFloat(cardPriceSetting?.value || "60.00");
-      const kesAmount = await payHeroService.convertUSDtoKES(usdAmount);
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
       console.log(`Converting $${usdAmount} USD to ${kesAmount} KES for card purchase`);
-      const callbackUrl = `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}&type=virtual-card`;
-      const paymentData = await payHeroService.initiateMpesaPayment(
-        kesAmount,
-        // Amount in KES
-        user.phone,
-        // Phone number for M-Pesa STK Push
-        reference,
-        // External reference
-        user.fullName,
-        // Customer name
-        callbackUrl
-        // Callback URL for tracking
-      );
-      if (!paymentData.success) {
-        if (paymentData.status === "INVALID_PHONE_NUMBER" || paymentData.status === "INVALID_PHONE_FORMAT") {
-          return res.status(400).json({
-            message: "Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).",
-            status: paymentData.status
-          });
-        }
-        if (paymentData.status === "TIMEOUT") {
-          return res.status(504).json({
-            message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.",
-            status: "TIMEOUT"
-          });
-        }
-        return res.status(400).json({
-          message: paymentData.message || "Payment initiation failed. Please try again or contact support.",
-          status: paymentData.status
+      const configuredGateway = settingText(
+        (await storage.getSystemSetting("payment", "default_gateway"))?.value,
+        "payhero"
+      ).toLowerCase();
+      const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway) ? "nexuspay" : configuredGateway;
+      const callbackUrl = `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`;
+      let paymentReference = reference;
+      let checkoutRequestId = "";
+      let paymentStatus = "pending";
+      let redirectUrl = null;
+      let paymentMessage = "STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment.";
+      if (gateway === "nexuspay") {
+        const payment = await nexusPayService.checkout({
+          amount: kesAmount,
+          currency: "KES",
+          channel: "mobile_money",
+          phone: user.phone,
+          email: user.email,
+          description: "Virtual card purchase via Makamesco NexusPay"
         });
+        paymentReference = payment.reference || reference;
+        paymentStatus = payment.status || "pending";
+        redirectUrl = payment.redirectUrl;
+        paymentMessage = redirectUrl ? "Redirecting you to complete the M-Pesa payment." : "Check your phone for the payment prompt.";
+      } else if (gateway === "paystack") {
+        const payment = await paystackService.initializePayment(
+          user.email,
+          kesAmount,
+          reference,
+          "KES",
+          user.phone,
+          `${req.protocol}://${req.get("host")}/api/payment-callback?type=virtual-card`,
+          { type: "virtual_card", usd_amount: usdAmount.toFixed(2), exchange_rate: exchangeRate.toString() }
+        );
+        if (!payment.status) {
+          return res.status(400).json({ message: payment.message || "Payment initialization failed.", status: "FAILED" });
+        }
+        paymentReference = payment.data?.reference || reference;
+        paymentStatus = payment.data?.status || "pending";
+        redirectUrl = payment.data?.authorization_url || null;
+        paymentMessage = redirectUrl ? "Redirecting you to complete the payment." : "Payment initialized successfully.";
+      } else {
+        const payment = await payHeroService.initiateMpesaPayment(
+          kesAmount,
+          user.phone,
+          reference,
+          user.fullName,
+          callbackUrl
+        );
+        if (!payment.success) {
+          if (payment.status === "INVALID_PHONE_NUMBER" || payment.status === "INVALID_PHONE_FORMAT") {
+            return res.status(400).json({
+              message: "Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).",
+              status: payment.status
+            });
+          }
+          if (payment.status === "TIMEOUT") {
+            return res.status(504).json({
+              message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.",
+              status: "TIMEOUT"
+            });
+          }
+          return res.status(400).json({
+            message: payment.message || "Payment initiation failed. Please try again or contact support.",
+            status: payment.status
+          });
+        }
+        paymentReference = payment.reference || reference;
+        checkoutRequestId = payment.CheckoutRequestID || "";
+        paymentStatus = payment.status || "pending";
       }
       res.json({
         success: true,
-        reference: paymentData.reference,
-        checkoutRequestId: paymentData.CheckoutRequestID,
-        status: paymentData.status,
-        message: "STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment."
+        reference: paymentReference,
+        checkoutRequestId,
+        status: paymentStatus,
+        gateway,
+        redirectUrl,
+        message: paymentMessage
       });
       await storage.createTransaction({
         userId,
@@ -9971,10 +10195,15 @@ p{color:#6b7280;font-size:14px;}</style>
         amount: usdAmount.toString(),
         currency: "USD",
         status: "pending",
-        paystackReference: paymentData.reference || paymentData.CheckoutRequestID,
+        reference: paymentReference,
+        paystackReference: paymentReference,
         description: "Virtual Card Purchase",
+        exchangeRate: exchangeRate.toString(),
         metadata: {
           phoneNumber: user.phone,
+          gateway,
+          gatewayAmount: kesAmount.toString(),
+          redirectUrl,
           status_reason: "Awaiting M-Pesa payment confirmation"
         }
       });
@@ -10126,11 +10355,18 @@ p{color:#6b7280;font-size:14px;}</style>
       const phoneToUse = phone || user.phone;
       if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
       const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
-      if (String(gatewaySetting?.value || "payhero").toLowerCase() === "nexuspay") {
+      const configuredGateway = settingText(gatewaySetting?.value, "payhero").toLowerCase();
+      const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway) ? "nexuspay" : configuredGateway;
+      const usdAmount = parseFloat(amount);
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
+      if (gateway === "nexuspay") {
         const reference2 = `DEP-NEXUS-${Date.now()}-${userId.slice(-6)}`;
         const result = await nexusPayService.checkout({
-          amount: parseFloat(amount),
-          currency: "USD",
+          // The M-Pesa rail is KES. The amount entered by the user remains
+          // USD for wallet crediting and is converted only at checkout.
+          amount: kesAmount,
+          currency: "KES",
           channel: "mobile_money",
           phone: phoneToUse,
           email: user.email,
@@ -10139,34 +10375,38 @@ p{color:#6b7280;font-size:14px;}</style>
         await db.insert(transactions).values({
           userId,
           type: "deposit",
-          amount: parseFloat(amount).toFixed(2),
+          amount: usdAmount.toFixed(2),
           currency: "USD",
           status: "pending",
           description: "M-Pesa deposit via Makamesco Nexus Pay",
           fee: "0.00",
           reference: result.reference || reference2,
-          metadata: { paymentMethod: "mpesa", gateway: "nexuspay", redirectUrl: result.redirectUrl }
+          exchangeRate: exchangeRate.toString(),
+          paystackReference: result.reference || reference2,
+          metadata: {
+            paymentMethod: "mpesa",
+            gateway: "nexuspay",
+            gatewayAmount: kesAmount.toFixed(2),
+            exchangeRate,
+            redirectUrl: result.redirectUrl
+          }
         });
         return res.json({
           success: true,
           gateway: "nexuspay",
           reference: result.reference || reference2,
           redirectUrl: result.redirectUrl,
+          amount: usdAmount.toFixed(2),
+          gatewayAmount: kesAmount.toFixed(2),
+          gatewayCurrency: "KES",
+          exchangeRate,
           message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt."
         });
       }
-      let exchangeRate = 129;
-      try {
-        const rateService = await createExchangeRateService();
-        exchangeRate = await rateService.getRate("USD", "KES");
-      } catch (e) {
-        console.warn("[Deposit/Mpesa] Using fallback rate");
-      }
-      const kesAmount = parseFloat(amount) * exchangeRate;
       const reference = `DEP-${Date.now()}-${userId.slice(-6)}`;
       const callbackUrl = `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`;
       const paymentData = await payHeroService.initiateMpesaPayment(
-        Math.round(kesAmount),
+        kesAmount,
         phoneToUse,
         reference,
         user.fullName,
@@ -10184,14 +10424,15 @@ p{color:#6b7280;font-size:14px;}</style>
       await storage.createTransaction({
         userId,
         type: "deposit",
-        amount: parseFloat(amount).toFixed(2),
+        amount: usdAmount.toFixed(2),
         currency: "USD",
         status: "pending",
+        reference: paymentData.reference || reference,
         description: `M-Pesa deposit via PayHero`,
         fee: "0.00",
         exchangeRate: exchangeRate.toString(),
         paystackReference: paymentData.reference || reference,
-        metadata: { paymentMethod: "mpesa", phoneNumber: phoneToUse, kesAmount: kesAmount.toFixed(2), exchangeRate }
+        metadata: { paymentMethod: "mpesa", phoneNumber: phoneToUse, gateway: "payhero", gatewayAmount: kesAmount.toFixed(2), exchangeRate }
       });
       res.json({
         success: true,
@@ -10206,12 +10447,38 @@ p{color:#6b7280;font-size:14px;}</style>
   });
   app2.get("/api/deposit/mpesa/status/:reference", requireAuth, async (req, res) => {
     try {
+      const userId = req.session.userId;
       const { reference } = req.params;
       const transaction = await db.query.transactions.findFirst({
-        where: eq3(transactions.paystackReference, reference)
+        where: (table, { or: or3, eq: eq4 }) => or3(eq4(table.paystackReference, reference), eq4(table.reference, reference))
       });
       if (!transaction) return res.status(404).json({ message: "Transaction not found" });
-      res.json({ status: transaction.status, amount: transaction.amount, description: transaction.description });
+      if (transaction.userId !== userId) return res.status(403).json({ message: "Transaction not found" });
+      const metadata = transaction.metadata || {};
+      let currentStatus = transaction.status;
+      if (metadata.gateway === "nexuspay" && transaction.status !== "completed" && transaction.status !== "failed") {
+        const providerStatus = await nexusPayService.getStatus(reference);
+        if (providerStatus.status === "completed") {
+          const wallet = await ensureUserWallet(userId, "USD");
+          if (!wallet) return res.status(400).json({ message: "USD wallet is not enabled" });
+          await applyLedgerEntry({
+            walletId: wallet.id,
+            userId,
+            currency: "USD",
+            amount: parseFloat(transaction.amount),
+            entryType: "deposit",
+            idempotencyKey: `deposit:${transaction.id}`,
+            transactionId: transaction.id,
+            description: transaction.description || "M-Pesa deposit"
+          });
+          await db.update(transactions).set({ status: "completed", completedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.id, transaction.id));
+          currentStatus = "completed";
+        } else if (providerStatus.status === "failed") {
+          await db.update(transactions).set({ status: "failed", updatedAt: /* @__PURE__ */ new Date() }).where(eq3(transactions.id, transaction.id));
+          currentStatus = "failed";
+        }
+      }
+      res.json({ status: currentStatus, amount: transaction.amount, currency: transaction.currency, description: transaction.description });
     } catch (error) {
       res.status(500).json({ message: "Error checking status" });
     }
@@ -10239,7 +10506,15 @@ p{color:#6b7280;font-size:14px;}</style>
         if (s) settingsMap[key] = String(s.value);
       }
       const activeBonuses = await db.select().from(depositBonuses).where(eq3(depositBonuses.isActive, true));
-      res.json({ methods: settingsMap, bonuses: activeBonuses });
+      const defaultGateway = settingText(
+        (await storage.getSystemSetting("payment", "default_gateway"))?.value,
+        "payhero"
+      ).toLowerCase();
+      res.json({
+        methods: { ...settingsMap, default_gateway: defaultGateway },
+        bonuses: activeBonuses,
+        usdToKesRate: await getUsdToKesRate()
+      });
     } catch (error) {
       console.error("[Deposit Config Error]:", error);
       res.status(500).json({ message: "Error loading deposit config" });
@@ -10356,8 +10631,8 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const { id } = req.params;
       const { currentPassword, newPassword } = req.body;
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: "Current and new password are required" });
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
       }
       if (newPassword.length < 8) {
         return res.status(400).json({ message: "New password must be at least 8 characters long" });
@@ -10366,12 +10641,20 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      const isPasswordValid = await bcrypt2.compare(currentPassword, user.password);
-      if (!isPasswordValid) {
-        return res.status(401).json({ message: "Current password is incorrect" });
+      if (req.session.userId !== id) {
+        return res.status(403).json({ message: "You can only change your own password" });
+      }
+      if (user.passwordSet !== false) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: "Current password is required" });
+        }
+        const isPasswordValid = await bcrypt2.compare(currentPassword, user.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Current password is incorrect" });
+        }
       }
       const hashedPassword = await bcrypt2.hash(newPassword, 10);
-      await storage.updateUser(id, { password: hashedPassword });
+      await storage.updateUser(id, { password: hashedPassword, passwordSet: true });
       res.json({ message: "Password changed successfully" });
     } catch (error) {
       console.error("Password change error:", error);
@@ -10466,6 +10749,23 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const paymentData = verificationResult.data;
       if (paymentData.status === "success") {
+        const transaction = await db.query.transactions.findFirst({
+          where: or2(
+            eq3(transactions.reference, String(actualReference)),
+            eq3(transactions.paystackReference, String(actualReference))
+          )
+        });
+        if (transaction && transaction.status !== "completed") {
+          await storage.updateTransactionStatus(transaction.id, "completed");
+          if (transaction.type === "card_purchase") {
+            const { virtualCardService } = await import("./services/virtual-card");
+            const cards = await storage.getVirtualCardsByUserId(transaction.userId);
+            if (cards.length === 0) {
+              await virtualCardService.generateCard(transaction.userId);
+              await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+            }
+          }
+        }
         if (type === "virtual-card") {
           return res.redirect(`/payment-success?reference=${actualReference}&type=virtual-card`);
         } else {
@@ -10800,6 +11100,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       });
       console.log(`\u{1F4BE} Transaction created: ${transaction.id}`);
+      await notificationService.sendTransactionNotification(userId, transaction);
       const newKesBalance = kesBalance - purchaseAmount;
       console.log(`\u2705 Updated user balance: ${kesBalance} -> ${newKesBalance}`);
       console.log(`\u{1F389} Airtime purchase completed successfully`);
@@ -10962,7 +11263,7 @@ p{color:#6b7280;font-size:14px;}</style>
         metadata: { meterNumber, accountNumber, provider }
       });
       console.log(`\u{1F4BE} Bill payment created (PENDING): ${billPayment.id}`);
-      await storage.createTransaction({
+      const billTransaction = await storage.createTransaction({
         userId,
         type: "bill_payment",
         amount: amount.toString(),
@@ -10973,6 +11274,7 @@ p{color:#6b7280;font-size:14px;}</style>
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
+      await notificationService.sendTransactionNotification(userId, billTransaction);
       try {
         await applyLedgerEntry({
           walletId: kesWallet.id,
@@ -11220,11 +11522,13 @@ p{color:#6b7280;font-size:14px;}</style>
   app2.post("/api/transactions/send", requireAuth, async (req, res) => {
     try {
       const sessionUserId = req.session?.userId;
-      const { amount, currency, recipientDetails, targetCurrency } = req.body;
+      const { amount, currency, recipientDetails, targetCurrency, pin, authenticatorCode } = req.body;
       if (!sessionUserId) {
         return res.status(401).json({ message: "Authentication required" });
       }
       const userId = sessionUserId;
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -11530,19 +11834,57 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error disabling 2FA" });
     }
   });
-  app2.post("/api/auth/biometric/setup", async (req, res) => {
+  app2.get("/api/auth/biometric/options", requireAuth, async (req, res) => {
     try {
-      const { userId, credentialId } = req.body;
-      if (!credentialId) {
+      const userId = req.session.userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      const scope = `setup:${userId}:${crypto3.randomUUID()}`;
+      const challenge = biometricService.issueChallenge(scope);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      res.json({ challenge, scope, rpId: new URL(origin).hostname, origin });
+    } catch (error) {
+      console.error("Biometric options error:", error);
+      res.status(500).json({ message: "Unable to start biometric setup" });
+    }
+  });
+  app2.get("/api/auth/biometric/login-options", async (req, res) => {
+    try {
+      const scope = `login:${crypto3.randomUUID()}`;
+      const challenge = biometricService.issueChallenge(scope);
+      const origin = `${req.protocol}://${req.get("host")}`;
+      res.json({ challenge, scope, rpId: new URL(origin).hostname, origin });
+    } catch (error) {
+      console.error("Biometric login options error:", error);
+      res.status(500).json({ message: "Unable to start biometric login" });
+    }
+  });
+  app2.post("/api/auth/biometric/setup", requireAuth, async (req, res) => {
+    try {
+      const userId = req.session.userId;
+      const { scope, challenge, credentialId, clientDataJSON, publicKey, rpId, origin } = req.body;
+      if (!scope || !challenge || !credentialId || !clientDataJSON || !publicKey || !rpId || !origin) {
         return res.status(400).json({ message: "Invalid credential" });
       }
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      const credential = biometricService.verifyRegistration({
+        scope,
+        challenge,
+        credentialId,
+        clientDataJSON,
+        publicKey,
+        rpId,
+        origin
+      });
+      if (!credential) {
+        return res.status(400).json({ message: "Biometric registration could not be verified" });
+      }
       await storage.updateUser(userId, {
         biometricEnabled: true,
-        biometricCredentialId: JSON.stringify({ credentialId })
+        biometricCredentialId: JSON.stringify(credential)
       });
       const updatedUser = await storage.getUser(userId);
       const { password: _, ...userResponse } = updatedUser || {};
@@ -11552,27 +11894,15 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Error setting up biometric authentication" });
     }
   });
-  app2.post("/api/auth/biometric/verify", async (req, res) => {
-    try {
-      const { userId, credentialId } = req.body;
-      const user = await storage.getUser(userId);
-      if (!user || !user.biometricEnabled) {
-        return res.status(400).json({ message: "Biometric not enabled" });
-      }
-      const storedCred = user.biometricCredentialId ? JSON.parse(user.biometricCredentialId) : null;
-      if (storedCred && storedCred.credentialId === credentialId) {
-        res.json({ success: true, verified: true });
-      } else {
-        res.status(401).json({ success: false, verified: false });
-      }
-    } catch (error) {
-      console.error("Biometric verification error:", error);
-      res.status(500).json({ message: "Error verifying biometric" });
-    }
+  app2.post("/api/auth/biometric/verify", async (_req, res) => {
+    res.status(410).json({ message: "Use the WebAuthn assertion login flow" });
   });
-  app2.post("/api/users/:userId/disable-biometric", async (req, res) => {
+  app2.post("/api/users/:userId/disable-biometric", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
+      if (req.session.userId !== userId) {
+        return res.status(403).json({ message: "You can only change your own biometric settings" });
+      }
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
@@ -11591,39 +11921,53 @@ p{color:#6b7280;font-size:14px;}</style>
   });
   app2.post("/api/auth/biometric/login", async (req, res) => {
     try {
-      const { credentialId } = req.body;
-      if (!credentialId) {
+      const { scope, challenge, credentialId, clientDataJSON, authenticatorData, signature } = req.body;
+      if (!scope || !challenge || !credentialId || !clientDataJSON || !authenticatorData || !signature) {
         return res.status(400).json({ message: "Invalid credential" });
       }
       console.log(`[Biometric Login] Attempting login with credentialId: ${credentialId}`);
       const allUsers = await storage.getAllUsers();
-      const users2 = Array.isArray(allUsers) ? allUsers : [];
-      const user = users2.find((u) => {
+      const users2 = Array.isArray(allUsers) ? allUsers : allUsers?.users || [];
+      const match = users2.find((u) => {
         if (!u.biometricEnabled || !u.biometricCredentialId) return false;
         try {
           const stored = typeof u.biometricCredentialId === "string" ? JSON.parse(u.biometricCredentialId) : u.biometricCredentialId;
-          return stored && (stored.credentialId === credentialId || u.biometricCredentialId.includes(credentialId));
+          return stored?.credentialId === credentialId && stored.publicKey;
         } catch (e) {
-          console.error(`[Biometric Login] Error parsing credential for user ${u.id}:`, e);
-          return typeof u.biometricCredentialId === "string" && u.biometricCredentialId.includes(credentialId);
+          return false;
         }
       });
-      if (!user) {
+      if (!match) {
         console.warn(`[Biometric Login] No user found for credentialId: ${credentialId}`);
         return res.status(401).json({
-          message: "No passkey found for this device in our records. Please ensure you have enabled biometric login in Settings while logged in."
+          message: "No verified passkey found for this device. Enable biometric login again in Settings."
         });
       }
-      console.log(`[Biometric Login] Success for user: ${user.email}`);
+      const storedCredential = typeof match.biometricCredentialId === "string" ? JSON.parse(match.biometricCredentialId) : match.biometricCredentialId;
+      const verified = biometricService.verifyAssertion({
+        scope,
+        challenge,
+        credential: storedCredential,
+        clientDataJSON,
+        authenticatorData,
+        signature
+      });
+      if (!verified) {
+        return res.status(401).json({ message: "Biometric assertion could not be verified" });
+      }
+      await storage.updateUser(match.id, {
+        biometricCredentialId: JSON.stringify(storedCredential)
+      });
+      console.log(`[Biometric Login] Success for user: ${match.email}`);
       req.session.regenerate((err) => {
         if (err) {
           console.error("Session regeneration error:", err);
           return res.status(500).json({ message: "Session error" });
         }
-        req.session.userId = user.id;
-        req.session.user = { id: user.id, email: user.email };
+        req.session.userId = match.id;
+        req.session.user = { id: match.id, email: match.email };
         storage.createLoginHistory({
-          userId: user.id,
+          userId: match.id,
           ipAddress: req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress || "Unknown",
           userAgent: req.headers["user-agent"] || "Unknown",
           deviceType: req.headers["user-agent"]?.includes("Mobile") ? "mobile" : "desktop",
@@ -11631,7 +11975,7 @@ p{color:#6b7280;font-size:14px;}</style>
           location: req.headers["cf-ipcountry"] || "Unknown",
           status: "success"
         }).catch((err2) => console.error("Login history error:", err2));
-        const { password: _, ...userResponse } = user;
+        const { password: _, ...userResponse } = match;
         req.session.save((saveErr) => {
           if (saveErr) {
             console.error("Session save error:", saveErr);
@@ -15596,6 +15940,40 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "PIN verification failed" });
     }
   });
+  app2.post("/api/auth/verify-authenticator", async (req, res) => {
+    try {
+      const { userId, code } = req.body;
+      const user = userId ? await storage.getUser(userId) : null;
+      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+        return res.status(400).json({ message: "Authenticator is not enabled" });
+      }
+      if (!/^\d{6}$/.test(String(code || "")) || !twoFactorService.verifyToken(user.twoFactorSecret, String(code))) {
+        return res.status(401).json({ message: "Invalid authenticator code" });
+      }
+      req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ message: "Session error" });
+        req.session.userId = user.id;
+        req.session.user = { id: user.id, email: user.email };
+        storage.createLoginHistory({
+          userId: user.id,
+          ipAddress: req.ip || req.headers["x-forwarded-for"] || "Unknown",
+          userAgent: req.headers["user-agent"] || "Unknown",
+          deviceType: req.headers["user-agent"]?.includes("Mobile") ? "mobile" : "desktop",
+          browser: req.headers["user-agent"]?.split("/")[0] || "Unknown",
+          status: "success"
+        }).catch(() => {
+        });
+        const { password: _, ...userResponse } = user;
+        req.session.save((saveErr) => {
+          if (saveErr) return res.status(500).json({ message: "Session save error" });
+          res.json({ user: userResponse });
+        });
+      });
+    } catch (error) {
+      console.error("Authenticator login verification error:", error);
+      res.status(500).json({ message: "Authenticator verification failed" });
+    }
+  });
   app2.post("/api/users/:id/pin/disable", requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
@@ -16044,11 +16422,12 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!usdAmount || isNaN(parseFloat(usdAmount)) || parseFloat(usdAmount) <= 0) {
         return res.status(400).json({ message: "Valid USD amount is required" });
       }
-      const kesAmount = await payHeroService.convertUSDtoKES(parseFloat(usdAmount));
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.round(parseFloat(usdAmount) * exchangeRate);
       res.json({
         usdAmount: parseFloat(usdAmount),
         kesAmount,
-        exchangeRate: 129
+        exchangeRate
       });
     } catch (error) {
       console.error("Error converting USD to KES:", error);
@@ -16251,10 +16630,56 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Transaction reference is required" });
       }
       console.log("Checking transaction status for reference:", reference);
-      const statusResult = await payHeroService.checkTransactionStatus(reference);
+      const transaction = await db.query.transactions.findFirst({
+        where: or2(eq3(transactions.reference, reference), eq3(transactions.paystackReference, reference))
+      });
+      const metadata = transaction?.metadata || {};
+      const gateway = String(metadata.gateway || "payhero").toLowerCase();
+      if (transaction?.status === "completed") {
+        return res.json({ success: true, status: "completed", data: { reference } });
+      }
+      let statusResult;
+      if (gateway === "nexuspay" || gateway === "makamesco" || gateway === "makamescopay") {
+        const providerStatus = await nexusPayService.getStatus(reference);
+        statusResult = {
+          success: true,
+          status: providerStatus.status,
+          data: providerStatus
+        };
+      } else if (gateway === "paystack") {
+        const providerStatus = await paystackService.verifyPayment(reference);
+        statusResult = {
+          success: providerStatus.status,
+          status: providerStatus.data?.status || "unknown",
+          data: providerStatus.data,
+          message: providerStatus.message
+        };
+      } else {
+        statusResult = await payHeroService.checkTransactionStatus(reference);
+      }
+      const normalizedStatus = String(statusResult.status || "").toLowerCase();
+      const completed = ["success", "completed", "paid"].includes(normalizedStatus);
+      const failed = ["failed", "cancelled", "rejected"].includes(normalizedStatus);
+      if (transaction && completed && transaction.status !== "completed") {
+        await storage.updateTransactionStatus(transaction.id, "completed");
+        await storage.updateTransactionMetadata(transaction.id, {
+          ...metadata,
+          status_reason: "Payment provider confirmed successful payment"
+        });
+        if (transaction.type === "card_purchase") {
+          const { virtualCardService } = await import("./services/virtual-card");
+          const cards = await storage.getVirtualCardsByUserId(transaction.userId);
+          if (cards.length === 0) {
+            await virtualCardService.generateCard(transaction.userId);
+            await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+          }
+        }
+      } else if (transaction && failed) {
+        await storage.updateTransactionStatus(transaction.id, "failed");
+      }
       res.json({
         success: statusResult.success,
-        status: statusResult.status,
+        status: completed ? "completed" : failed ? "failed" : statusResult.status,
         data: statusResult.data,
         message: statusResult.message
       });
@@ -16576,6 +17001,32 @@ p{color:#6b7280;font-size:14px;}</style>
         };
         console.warn("\u26A0\uFE0F Notifications: Degraded", error);
       }
+      try {
+        const cryptoPrices = await getCryptoPrices();
+        statusChecks.features.cryptoWallet = {
+          status: cryptoPrices.stale ? "degraded" : "healthy",
+          message: cryptoPrices.stale ? `Crypto wallet is using ${cryptoPrices.source === "fallback" ? "fallback rates" : "cached prices"}` : `Crypto wallet prices are live via ${cryptoPrices.source}`,
+          icon: "\u20BF"
+        };
+        if (cryptoPrices.stale) statusChecks.overall = "degraded";
+      } catch (error) {
+        statusChecks.features.cryptoWallet = {
+          status: "degraded",
+          message: "Crypto wallet rates are unavailable",
+          icon: "\u20BF"
+        };
+        statusChecks.overall = "degraded";
+      }
+      statusChecks.features.passkeys = {
+        status: "healthy",
+        message: "Passkey registration and assertion verification are available on supported HTTPS browsers",
+        icon: "\u{1F510}"
+      };
+      statusChecks.features.billsAndAirtime = {
+        status: statumConfigured ? "healthy" : "degraded",
+        message: statumConfigured ? "Bill payments and airtime services are available" : "Airtime provider credentials are not configured",
+        icon: "\u{1F9FE}"
+      };
       console.log(`\u{1F3C1} System status check completed - Overall: ${statusChecks.overall}`);
       res.json(statusChecks);
     } catch (error) {
@@ -18237,6 +18688,94 @@ Sitemap: https://geepay.us/sitemap.xml`;
       res.status(503).json({ message: "Crypto prices are temporarily unavailable" });
     }
   });
+  app2.get("/api/admin/crypto/settings", requireAdminAuth, async (_req, res) => {
+    try {
+      const supportedProviders = ["coingecko", "binance", "coincap", "cryptocompare"];
+      const displayNames = {
+        coingecko: "CoinGecko",
+        binance: "Binance",
+        coincap: "CoinCap",
+        cryptocompare: "CryptoCompare"
+      };
+      const configurations = await storage.getAllApiConfigurations();
+      const providers = supportedProviders.map((provider) => {
+        const configuration = configurations.find((item) => item.provider === provider);
+        return {
+          provider,
+          displayName: configuration?.displayName || displayNames[provider],
+          isEnabled: configuration?.isEnabled !== false,
+          apiKeyConfigured: Boolean(configuration?.apiKey)
+        };
+      });
+      const result = await pool.query(
+        `SELECT key, value FROM system_settings WHERE category = 'crypto_price_fallback'`
+      );
+      const fallbackRates = {};
+      for (const row of result.rows) {
+        const raw = row.value;
+        fallbackRates[row.key] = String(typeof raw === "object" && raw !== null ? raw.value ?? "" : raw ?? "").replace(/^"|"$/g, "");
+      }
+      res.json({
+        providers,
+        fallbackRates: {
+          BTC: fallbackRates.BTC || "65000",
+          ETH: fallbackRates.ETH || "3200",
+          USDT: fallbackRates.USDT || "1",
+          USDC: fallbackRates.USDC || "1"
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ message: error?.message || "Failed to load crypto settings" });
+    }
+  });
+  app2.put("/api/admin/crypto/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const providers = Array.isArray(req.body?.providers) ? req.body.providers : [];
+      const allowedProviders = /* @__PURE__ */ new Set(["coingecko", "binance", "coincap", "cryptocompare"]);
+      const displayNames = {
+        coingecko: "CoinGecko",
+        binance: "Binance",
+        coincap: "CoinCap",
+        cryptocompare: "CryptoCompare"
+      };
+      for (const providerData of providers) {
+        const provider = String(providerData?.provider || "").toLowerCase();
+        if (!allowedProviders.has(provider)) continue;
+        const updates = {
+          provider,
+          displayName: displayNames[provider],
+          isEnabled: providerData?.isEnabled !== false
+        };
+        if (typeof providerData?.apiKey === "string" && providerData.apiKey.trim()) {
+          updates.apiKey = providerData.apiKey.trim();
+        }
+        const existing = await storage.getApiConfiguration(provider);
+        if (existing) {
+          await storage.updateApiConfiguration(provider, updates);
+        } else {
+          await storage.createApiConfiguration(updates);
+        }
+      }
+      const fallbackRates = req.body?.fallbackRates;
+      if (fallbackRates && typeof fallbackRates === "object") {
+        for (const coin of SUPPORTED_CRYPTO_COINS) {
+          const value = Number(fallbackRates[coin]);
+          if (!Number.isFinite(value) || value <= 0) {
+            return res.status(400).json({ message: `Invalid fallback rate for ${coin}` });
+          }
+          await pool.query(
+            `INSERT INTO system_settings (key, value, category)
+             VALUES ($1, to_json($2::text), 'crypto_price_fallback')
+             ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = 'crypto_price_fallback', updated_at = NOW()`,
+            [coin, String(value)]
+          );
+        }
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ message: error?.message || "Failed to save crypto settings" });
+    }
+  });
   app2.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
     try {
       const priceSnapshot = await getCryptoPrices();
@@ -18558,7 +19097,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         confirmations: 0,
         requiredConfirmations: 1
       }).returning();
-      await db.insert(transactions).values({
+      const [exchangeTransaction] = await db.insert(transactions).values({
         userId,
         type: "withdraw",
         amount: usdValue.toFixed(2),
@@ -18566,7 +19105,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
         status: "pending",
         description: `Crypto withdrawal: ${cryptoAmount} ${coin}`,
         reference: cryptoTx.id
-      });
+      }).returning();
+      await notificationService.sendTransactionNotification(userId, exchangeTransaction);
       res.json({ cryptoTransaction: cryptoTx, message: "Withdrawal initiated. Processing may take 30\u201360 minutes." });
     } catch (error) {
       console.error("Crypto withdrawal error:", error);
@@ -18874,16 +19414,28 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = req.session.userId;
       const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map((c) => [c.code, c]));
       let userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
-      if (userWallets.length === 0) {
-        try {
-          const userRecord = await db.select().from(users).where(eq3(users.id, userId)).limit(1);
-          const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
-          const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, "") || userRecord[0]?.defaultCurrency || "USD";
-          const [newWallet] = await db.insert(wallets).values({ userId, currency: defCurrency, isDefault: true, isActive: true }).returning();
-          userWallets = [newWallet];
-        } catch (autoCreateErr) {
-          console.error("Wallet auto-create error:", autoCreateErr);
+      try {
+        const userRecord = await db.select().from(users).where(eq3(users.id, userId)).limit(1);
+        const defCurrencyResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const rawDefault = defCurrencyResult.rows[0]?.value;
+        const configuredDefault = String(typeof rawDefault === "object" ? rawDefault?.value || "" : rawDefault || "").replace(/['"]/g, "").trim().toUpperCase();
+        const desiredCurrencies = Array.from(/* @__PURE__ */ new Set([
+          configuredDefault || userRecord[0]?.defaultCurrency || "USD",
+          "KES"
+        ]));
+        const enabled = await getEnabledCurrencyCodes();
+        for (const currency of desiredCurrencies) {
+          if (!enabled.includes(currency) || userWallets.some((wallet) => normalizeCurrency(wallet.currency) === currency)) continue;
+          const [newWallet] = await db.insert(wallets).values({
+            userId,
+            currency,
+            isDefault: userWallets.length === 0,
+            isActive: true
+          }).returning();
+          userWallets.push(newWallet);
         }
+      } catch (autoCreateErr) {
+        console.error("Wallet auto-create error:", autoCreateErr);
       }
       const enriched = await Promise.all(userWallets.map(async (w) => {
         const ledgerBalance = await getLedgerBalance({ walletId: w.id }, Number(w.balance || 0));
@@ -18897,6 +19449,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           currencyMeta: currencyMeta[w.currency] || null
         };
       }));
+      enriched.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || String(a.currency).localeCompare(String(b.currency)));
       res.json({ wallets: enriched });
     } catch (e) {
       res.status(500).json({ message: e.message });
@@ -18954,7 +19507,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
         return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
       }
-      if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
+      const inputAmount = parseFloat(amount);
+      if (!Number.isFinite(inputAmount) || inputAmount <= 0) {
+        return res.status(400).json({ message: "Amount must be greater than 0" });
+      }
       const [wallet_] = await db.select().from(wallets).where(eq3(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
@@ -18963,20 +19519,30 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       const currencyMeta = NEXUSPAY_CURRENCIES.find((c) => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
-      const configuredGateway = String((await storage.getSystemSetting("payment", "default_gateway"))?.value || "nexuspay").replace(/"/g, "").toLowerCase();
-      const gatewayOrder = Array.from(/* @__PURE__ */ new Set([
-        configuredGateway,
-        normalizedCurrency === "KES" ? "payhero" : "paystack",
-        "nexuspay"
-      ]));
+      const rawGateway = (await storage.getSystemSetting("payment", "default_gateway"))?.value;
+      const configuredGateway = settingText(rawGateway, "nexuspay").toLowerCase();
+      const makamescoKesInput = normalizedCurrency === "KES" && ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
+      const exchangeRate = makamescoKesInput ? await getUsdToKesRate() : 1;
+      const paymentAmount = makamescoKesInput ? Math.max(1, Math.round(inputAmount * exchangeRate)) : inputAmount;
+      const canonicalGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway) ? "nexuspay" : configuredGateway;
+      const configuredApiKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value;
+      const hasNexusPayKey = Boolean(String(configuredApiKey?.value ?? configuredApiKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim());
+      const compatibleGateways = /* @__PURE__ */ new Set(["nexuspay", "payhero", "paystack"]);
+      const gatewayOrder = Array.from(new Set([
+        compatibleGateways.has(canonicalGateway) ? canonicalGateway : "",
+        normalizedCurrency === "KES" && phone ? "payhero" : "",
+        email ? "paystack" : "",
+        hasNexusPayKey ? "nexuspay" : ""
+      ].filter(Boolean)));
       let result = null;
       let selectedGateway = "";
       const gatewayErrors = [];
       for (const gateway of gatewayOrder) {
         try {
           if (gateway === "nexuspay") {
+            if (!hasNexusPayKey) throw new Error("NexusPay is selected but no API key is configured");
             const checkout = await nexusPayService.checkout({
-              amount: parseFloat(amount),
+              amount: paymentAmount,
               currency: normalizedCurrency,
               channel,
               phone,
@@ -18987,12 +19553,12 @@ Sitemap: https://geepay.us/sitemap.xml`;
             result = checkout;
           } else if (gateway === "payhero" && normalizedCurrency === "KES" && phone) {
             const reference = payHeroService.generateReference();
-            const payment = await payHeroService.initiateMpesaPayment(parseFloat(amount), phone, reference, void 0, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
+            const payment = await payHeroService.initiateMpesaPayment(paymentAmount, phone, reference, void 0, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
             if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
             result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
           } else if (gateway === "paystack" && email) {
             const reference = paystackService.generateReference();
-            const payment = await paystackService.initializePayment(email, parseFloat(amount), reference, normalizedCurrency, phone);
+            const payment = await paystackService.initializePayment(email, paymentAmount, reference, normalizedCurrency, phone);
             if (!payment.status) throw new Error(payment.message || "Paystack initialization failed");
             result = { reference, status: "pending", redirectUrl: payment.data?.authorization_url || null };
           }
@@ -19010,14 +19576,32 @@ Sitemap: https://geepay.us/sitemap.xml`;
       await db.insert(transactions).values({
         userId,
         type: "deposit",
-        amount: String(amount),
+        amount: paymentAmount.toFixed(2),
         currency: normalizedCurrency,
         status: "pending",
         reference: result.reference,
         description: `NexusPay ${currency} deposit`,
-        metadata: { walletId, channel, gateway: selectedGateway, redirectUrl: result.redirectUrl }
+        metadata: {
+          walletId,
+          channel,
+          gateway: selectedGateway,
+          redirectUrl: result.redirectUrl,
+          ...makamescoKesInput ? {
+            inputCurrency: "USD",
+            inputAmount: inputAmount.toFixed(2),
+            exchangeRate
+          } : {}
+        }
       });
-      res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
+      res.json({
+        success: true,
+        reference: result.reference,
+        status: result.status,
+        redirectUrl: result.redirectUrl,
+        amount: paymentAmount.toFixed(2),
+        ...makamescoKesInput ? { inputAmount: inputAmount.toFixed(2), inputCurrency: "USD", exchangeRate } : {},
+        message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt."
+      });
     } catch (e) {
       console.error("Global deposit error:", e);
       res.status(500).json({ message: e.message || "Deposit failed" });
@@ -19350,13 +19934,16 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key', 'default_gateway')`);
       const map = {};
-      for (const row of result.rows) map[row.key] = row.value;
+      for (const row of result.rows) {
+        const value = row.value;
+        map[row.key] = typeof value === "object" && value !== null ? String(value.value ?? "") : String(value ?? "").replace(/^"|"$/g, "");
+      }
       const fallbackResult = await pool.query(`SELECT key, value FROM system_settings WHERE category = 'exchange_rate_fallback'`);
       const fallbackRates = {};
       for (const row of fallbackResult.rows) fallbackRates[row.key] = row.value;
       res.json({
         defaultCurrency: map.default_currency || "USD",
-        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(","),
+        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(",").map((code) => code.trim()).filter(Boolean),
         nexusApiKey: map.nexuspay_api_key || "",
         defaultGateway: map.default_gateway || "nexuspay",
         fallbackRates
@@ -19369,7 +19956,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const { defaultCurrency, enabledCurrencies, nexusApiKey, defaultGateway, fallbackRates } = req.body;
       const upsert = async (key, value, category) => {
-        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), updated_at = NOW()`, [key, value, category]);
+        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = EXCLUDED.category, updated_at = NOW()`, [key, value, category]);
       };
       if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
       if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
@@ -19377,7 +19964,20 @@ Sitemap: https://geepay.us/sitemap.xml`;
         await upsert("nexuspay_api_key", nexusApiKey, "payment");
         if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey;
       }
-      if (defaultGateway) await upsert("default_gateway", String(defaultGateway), "payment");
+      if (defaultGateway) {
+        const gateway = String(defaultGateway).trim().toLowerCase();
+        if (!["nexuspay", "payhero", "paystack"].includes(gateway)) {
+          return res.status(400).json({ message: "Unsupported payment gateway" });
+        }
+        if (gateway === "nexuspay") {
+          const key = String(nexusApiKey ?? "").trim();
+          const existingKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value;
+          if (!key && !String(existingKey?.value ?? existingKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim()) {
+            return res.status(400).json({ message: "Configure a NexusPay secret key before selecting NexusPay as the default gateway" });
+          }
+        }
+        await upsert("default_gateway", gateway, "payment");
+      }
       if (fallbackRates && typeof fallbackRates === "object") {
         for (const [code, rate] of Object.entries(fallbackRates)) {
           if (rate) await upsert(code, String(rate), "exchange_rate_fallback");

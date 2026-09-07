@@ -56,8 +56,8 @@ export default function PaymentRequestsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: sentData, isLoading: sentLoading } = usePaymentRequests();
-  const { data: receivedData, isLoading: receivedLoading } = useIncomingPaymentRequests();
+  const { data: sentData, isLoading: sentLoading, isError: sentError } = usePaymentRequests();
+  const { data: receivedData, isLoading: receivedLoading, isError: receivedError } = useIncomingPaymentRequests();
 
   const sentRequests = sentData?.requests || [];
   const receivedRequests = receivedData?.requests || [];
@@ -134,6 +134,7 @@ export default function PaymentRequestsPage() {
   };
 
   const isLoading = activeTab === "sent" ? sentLoading : receivedLoading;
+  const hasLoadError = activeTab === "sent" ? sentError : receivedError;
   const requests = activeTab === "sent" ? sentRequests : receivedRequests;
 
   return (
@@ -289,6 +290,12 @@ export default function PaymentRequestsPage() {
               <div className="flex justify-center py-12">
                 <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
+            ) : hasLoadError ? (
+              <div className="bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900 rounded-2xl p-5 text-center">
+                <XCircle className="w-9 h-9 text-red-500 mx-auto mb-2" />
+                <p className="font-semibold text-red-700 dark:text-red-300">Could not load payment requests</p>
+                <p className="text-sm text-red-600/80 dark:text-red-300/80 mt-1">Please try again in a moment.</p>
+              </div>
             ) : requests.length === 0 ? (
               <div className="bg-card rounded-2xl border border-border p-8 text-center">
                 {activeTab === "sent" ? (
@@ -302,7 +309,7 @@ export default function PaymentRequestsPage() {
                 <p className="text-sm text-muted-foreground mb-4">
                   {activeTab === "sent"
                     ? "Create a payment request to collect money from others"
-                    : "Payment requests sent to you will appear here"}
+                   : "Payment requests sent to you will appear here"}
                 </p>
                 {activeTab === "sent" && (
                   <Button size="sm" onClick={() => setShowCreateDialog(true)}>
@@ -389,7 +396,7 @@ export default function PaymentRequestsPage() {
                         className="flex-1 bg-primary hover:bg-primary/90"
                         onClick={() => setConfirmation({ kind: "accept", id: req.id })}
                       >
-                        Pay Now <ArrowRight className="w-3 h-3 ml-1" />
+                         Pay Now <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
                     </div>
                   )}
@@ -415,12 +422,12 @@ export default function PaymentRequestsPage() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
             <h3 className="text-lg font-semibold">
-              {confirmation.kind === "create" ? "Confirm payment request" : "Confirm payment"}
+              {confirmation.kind === "create" ? "Confirm payment request" : "Pay this request?"}
             </h3>
             <p className="mt-2 text-sm text-muted-foreground">
               {confirmation.kind === "create"
                 ? `Send a request for ${newRequest.amount || "0"} ${newRequest.currency}?`
-                : "This will debit your selected wallet and pay the request."}
+                : "Confirming will debit your selected wallet and mark this request as paid."}
             </p>
             <div className="mt-5 flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setConfirmation(null)}>Cancel</Button>

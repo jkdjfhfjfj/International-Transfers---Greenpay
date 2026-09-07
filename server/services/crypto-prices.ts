@@ -188,6 +188,10 @@ async function fetchCryptoCompare(apiKey?: string): Promise<CryptoPriceSnapshot>
 }
 
 async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
+  // Always load the configured fallback before trying providers. If every
+  // provider is unavailable, the same response still contains usable rates
+  // rather than making the wallet endpoint fail.
+  const fallbackPrices = await getFallbackPrices();
   const coinGeckoKey = await getConfiguredApiKey(["coingecko", "crypto_prices"]);
   const cryptoCompareKey = await getConfiguredApiKey(["cryptocompare"]);
   const enabled = await getEnabledProviders();
@@ -198,16 +202,14 @@ async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
     ["cryptocompare", () => fetchCryptoCompare(cryptoCompareKey)],
   ];
   const providers = allProviders.filter(([provider]) => enabled.has(provider));
-  let lastError: unknown;
   for (const [, provider] of providers) {
     try {
       return await provider();
     } catch (error) {
-      lastError = error;
       console.warn(`[Crypto prices] Provider failed: ${error instanceof Error ? error.message : error}`);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("No enabled crypto price provider available");
+  return makeSnapshot(fallbackPrices, {}, "fallback");
 }
 
 export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {

@@ -42,12 +42,17 @@ export function useWallets() {
   const queryClient = useQueryClient();
 
   const { data, isLoading, refetch } = useQuery<{ wallets: Wallet[] }>({
-    queryKey: ["/api/wallets"],
+    // Scope the cache to the authenticated user. Without the user id, a query
+    // that mounted while auth was resolving could keep an empty/stale wallet
+    // list until the next login.
+    queryKey: ["/api/wallets", user?.id],
     queryFn: async () => {
       const r = await apiRequest("GET", "/api/wallets");
       return r.json();
     },
     enabled: !!user?.id,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
   });
 
   const wallets = data?.wallets || [];

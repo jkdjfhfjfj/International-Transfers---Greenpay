@@ -22,6 +22,7 @@ import SendMoneyPage from "@/pages/send-money";
 import SendAmountPage from "@/pages/send-amount";
 import SendConfirmPage from "@/pages/send-confirm";
 import ReceiveMoneyPage from "@/pages/receive-money";
+import PaymentRequestsPage from "@/pages/payment-requests";
 import TransactionsPage from "@/pages/transactions";
 import VirtualCardPage from "@/pages/virtual-card";
 import VirtualAccountsPage from "@/pages/virtual-accounts";
@@ -84,6 +85,7 @@ import TermsAndConditionsPage from "@/pages/terms-and-conditions";
 import PrivacyPolicyPage from "@/pages/privacy-policy";
 import UserSupportTickets from "@/pages/user-support-tickets";
 import CryptoPage from "@/pages/crypto";
+import TransferPage from "@/pages/transfer";
 import AnalyticsPage from "@/pages/analytics";
 import AdminDisputesPage from "@/pages/admin-disputes";
 import AdminCryptoPage from "@/pages/admin-crypto";
@@ -132,6 +134,9 @@ function Router() {
       <Route path="/send-amount" component={SendAmountPage} />
       <Route path="/send-confirm" component={SendConfirmPage} />
       <Route path="/receive-money" component={ReceiveMoneyPage} />
+      <Route path="/payment-requests">
+        <ProtectedRoute component={PaymentRequestsPage} />
+      </Route>
       <Route path="/pay-to/:userId" component={ReceiveMoneyPage} />
       <Route path="/transactions" component={TransactionsPage} />
       <Route path="/virtual-card">
@@ -182,6 +187,9 @@ function Router() {
       <Route path="/privacy" component={PrivacyPolicyPage} />
       <Route path="/crypto">
         <ProtectedRoute component={CryptoPage} />
+      </Route>
+      <Route path="/transfer">
+        <ProtectedRoute component={TransferPage} />
       </Route>
       <Route path="/analytics">
         <ProtectedRoute component={AnalyticsPage} />

@@ -10,6 +10,7 @@ export function usePaymentRequests() {
       if (!user?.id) return { requests: [] };
       const response = await fetch(`/api/payment-requests/${user.id}`);
       const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to load payment requests');
       const list = data.requests || data.paymentRequests || [];
       return { requests: list };
     },
@@ -25,8 +26,8 @@ export function useIncomingPaymentRequests() {
     queryFn: async () => {
       if (!user?.id) return { requests: [] };
       const response = await fetch('/api/payment-requests-received');
-      if (!response.ok) return { requests: [] };
       const data = await response.json();
+      if (!response.ok) throw new Error(data.message || 'Failed to load incoming payment requests');
       const list = data.requests || data.paymentRequests || [];
       return { requests: list };
     },

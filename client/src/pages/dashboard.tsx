@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import Notifications from "@/components/notifications";
-import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, ArrowLeftRight, Bitcoin, BarChart3, Plus, Wallet } from "lucide-react";
+import { Sparkles, TrendingUp, Smartphone, Send, Download, CreditCard, Zap, DollarSign, MapPin, Receipt, ArrowLeftRight, BarChart3, Plus, Wallet } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
@@ -191,10 +191,10 @@ export default function DashboardPage() {
       requiresCard: false
     },
     {
-      id: "crypto",
-      icon: Bitcoin,
-      label: "Crypto",
-      path: "/crypto",
+      id: "transfer",
+      icon: ArrowLeftRight,
+      label: "Transfer",
+      path: "/transfer",
       accent: '#16a34a',
       tint: 'rgba(22,163,74,0.08)',
       disabled: false,
@@ -396,7 +396,7 @@ export default function DashboardPage() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation('/exchange')}
-              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-primary-foreground/20 bg-primary-foreground/90 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary-foreground"
+               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-primary-foreground/20 bg-primary-foreground/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-foreground"
             >
               <ArrowLeftRight className="w-3 h-3" />
               Exchange
@@ -620,11 +620,6 @@ export default function DashboardPage() {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
                 accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'currency_exchange',
-              },
-              {
-                id: 'transfer', label: 'Transfer', path: '/crypto?tab=transfer', testId: 'button-transfer',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
-                icon: 'swap_horiz',
               },
               {
                 id: 'crypto', label: 'Crypto', path: '/crypto', testId: 'button-crypto',

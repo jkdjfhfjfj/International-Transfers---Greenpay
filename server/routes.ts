@@ -11054,8 +11054,8 @@ p{color:#6b7280;font-size:14px;}</style>
         const cryptoPrices = await getCryptoPrices();
         statusChecks.features.cryptoWallet = {
           status: cryptoPrices.stale ? "degraded" : "healthy",
-          message: cryptoPrices.stale
-            ? `Crypto wallet is using ${cryptoPrices.source === "fallback" ? "admin fallback rates" : "cached prices"}`
+           message: cryptoPrices.stale
+             ? `Crypto wallet is using ${cryptoPrices.source === "fallback" ? "fallback rates" : "cached prices"}`
             : `Crypto wallet prices are live via ${cryptoPrices.source}`,
           icon: "₿",
         };

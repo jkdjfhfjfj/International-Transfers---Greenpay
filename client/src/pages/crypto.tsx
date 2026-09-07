@@ -264,7 +264,7 @@ export default function CryptoPage() {
           <p className="text-sm text-white/80 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>
           <div className="flex items-center justify-between gap-3 text-xs text-white/70 mt-1">
-            <span>{wallets.length} wallets · {Object.keys(rates).length} supported coins · {priceSource === "fallback" ? "Admin fallback rates" : priceSource === "cache" ? "Cached live prices" : `Live prices · ${priceSource}`}</span>
+             <span>{wallets.length} wallets · {Object.keys(rates).length} supported coins · {priceSource === "fallback" ? "Fallback rates" : priceSource === "cache" ? "Cached live prices" : `Live prices · ${priceSource}`}</span>
             <button onClick={() => refetchWallets()} className="inline-flex items-center gap-1 shrink-0 hover:text-white" aria-label="Refresh crypto prices">
               <RefreshCw className={`w-3 h-3 ${walletsFetching ? "animate-spin" : ""}`} /> Refresh
             </button>
@@ -370,7 +370,7 @@ export default function CryptoPage() {
                     <p className="text-xs text-muted-foreground">Live USD rates refreshed every minute</p>
                   </div>
                   <span className="text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                     {priceSource === "fallback" ? "Admin fallback" : priceSource === "cache" ? "Cached live" : `Live · ${priceSource}`}
+                     {priceSource === "fallback" ? "Fallback rates" : priceSource === "cache" ? "Cached live" : `Live · ${priceSource}`}
                   </span>
                 </div>
                 <div className="space-y-2">
