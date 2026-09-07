@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, MessageCircle, Bot, Mail, Headphones } from 'lucide-react';
+import { X, MessageCircle, Bot, Mail, Headphones, Move } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 
@@ -274,11 +274,17 @@ export function TalkToUs() {
             setMenuOpen(prev => !prev);
           }
         }}
-         title="Support"
+          title="Drag to move or tap to open support"
          aria-label="Open support"
          className="fixed bottom-[6.75rem] right-4 z-50 flex items-center justify-center w-12 h-12 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing md:bottom-6"
       >
-        <MessageCircle className="w-4 h-4" />
+         <MessageCircle className="w-4 h-4" />
+         <span
+           aria-hidden="true"
+           className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white text-emerald-600 shadow-sm flex items-center justify-center"
+         >
+           <Move className="w-2.5 h-2.5" />
+         </span>
       </motion.button>
     </>
   );

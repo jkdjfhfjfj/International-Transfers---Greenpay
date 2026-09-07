@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, TrendingUp, Briefcase, PiggyBank, Shield, BarChart2, Users, ShoppingBag, Wallet, Grid, RefreshCw, GripHorizontal } from 'lucide-react';
+import { X, TrendingUp, Briefcase, PiggyBank, Shield, BarChart2, Users, ShoppingBag, Wallet, Grid, RefreshCw } from 'lucide-react';
 import { useMultipleExchangeRates } from '@/hooks/use-exchange-rates';
 
 const CURRENCY_META: Record<string, { flag: string; name: string; symbol: string }> = {
@@ -111,22 +111,12 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
-            drag="y"
-            dragConstraints={{ top: 0, bottom: 420 }}
-            dragElastic={{ top: 0.05, bottom: 0.35 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 100 || info.velocity.y > 700) onClose();
-            }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
             className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl flex flex-col"
             style={{ maxHeight: '82vh' }}
           >
-            <div
-              className="flex flex-col items-center pt-2 pb-1 flex-shrink-0 cursor-grab active:cursor-grabbing touch-none"
-              aria-label="Drag down to close menu"
-            >
-              <GripHorizontal className="w-5 h-5 text-gray-400 dark:text-gray-500" />
-              <span className="text-[10px] text-gray-400 dark:text-gray-500">Swipe down to close</span>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />
             </div>
             <div className="flex items-center justify-between px-5 py-3 flex-shrink-0">
               <div>
