@@ -152,8 +152,8 @@ export default function LoginPage() {
           const errorData = await response.json();
           console.error("[Biometric] Server login failed:", errorData);
           // Provide more helpful guidance
-          if (response.status === 401 && (errorData.message || "").includes("No passkey found")) {
-             throw new Error(errorData.message);
+           if (response.status === 401 && /No verified passkey|No passkey found/i.test(errorData.message || "")) {
+              throw new Error("This device does not have a discoverable passkey for your account. Sign in with your password, disable the old biometric in Settings, and enroll it again.");
           }
           throw new Error(errorData.message || "Login failed");
         }

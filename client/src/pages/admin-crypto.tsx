@@ -265,7 +265,7 @@ function AddressManagement() {
   const upsertMutation = useMutation({
     mutationFn: async (payload: any) => {
       if (editing?.id) {
-        const res = await apiRequest("PATCH", `/api/admin/crypto/addresses/${editing.id}`, payload);
+        const res = await apiRequest("PUT", `/api/admin/crypto/addresses/${editing.id}`, payload);
         return res.json();
       }
       const res = await apiRequest("POST", `/api/admin/crypto/addresses`, payload);
@@ -462,8 +462,8 @@ function AddressManagement() {
 function CryptoPriceSettings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [keys, setKeys] = useState({ coingecko: "", cryptocompare: "" });
-  const [enabled, setEnabled] = useState({ coingecko: true, cryptocompare: true });
+  const [keys, setKeys] = useState({ coingecko: "", binance: "", coincap: "", cryptocompare: "" });
+  const [enabled, setEnabled] = useState({ coingecko: true, binance: true, coincap: true, cryptocompare: true });
   const [fallbackRates, setFallbackRates] = useState({ BTC: "65000", ETH: "3200", USDT: "1", USDC: "1" });
 
   const { data, isLoading } = useQuery({
@@ -476,6 +476,8 @@ function CryptoPriceSettings() {
     const providerMap = Object.fromEntries((data.providers || []).map((item: any) => [item.provider, item]));
     setEnabled({
       coingecko: providerMap.coingecko?.isEnabled !== false,
+      binance: providerMap.binance?.isEnabled !== false,
+      coincap: providerMap.coincap?.isEnabled !== false,
       cryptocompare: providerMap.cryptocompare?.isEnabled !== false,
     });
     setFallbackRates((current) => ({ ...current, ...(data.fallbackRates || {}) }));
@@ -486,6 +488,8 @@ function CryptoPriceSettings() {
       const res = await apiRequest("PUT", "/api/admin/crypto/settings", {
         providers: [
           { provider: "coingecko", apiKey: keys.coingecko, isEnabled: enabled.coingecko },
+          { provider: "binance", apiKey: keys.binance, isEnabled: enabled.binance },
+          { provider: "coincap", apiKey: keys.coincap, isEnabled: enabled.coincap },
           { provider: "cryptocompare", apiKey: keys.cryptocompare, isEnabled: enabled.cryptocompare },
         ],
         fallbackRates,
@@ -496,7 +500,7 @@ function CryptoPriceSettings() {
     onSuccess: () => {
       toast({ title: "Crypto settings saved", description: "Price providers and fallback rates were updated." });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crypto/settings"] });
-      setKeys({ coingecko: "", cryptocompare: "" });
+      setKeys({ coingecko: "", binance: "", coincap: "", cryptocompare: "" });
     },
     onError: (error: any) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
   });
@@ -508,11 +512,13 @@ function CryptoPriceSettings() {
         <h2 className="text-lg font-semibold">Price providers</h2>
         <p className="text-sm text-muted-foreground">Live prices use the enabled providers first, then the configured fallback values.</p>
       </div>
-      {(["coingecko", "cryptocompare"] as const).map((provider) => (
+       {(["coingecko", "binance", "coincap", "cryptocompare"] as const).map((provider) => (
         <div key={provider} className="rounded-xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center justify-between">
             <div>
-              <p className="font-medium">{provider === "coingecko" ? "CoinGecko" : "CryptoCompare"}</p>
+               <p className="font-medium">
+                 {{ coingecko: "CoinGecko", binance: "Binance", coincap: "CoinCap", cryptocompare: "CryptoCompare" }[provider]}
+               </p>
               <p className="text-xs text-muted-foreground">
                 {data?.providers?.find((item: any) => item.provider === provider)?.apiKeyConfigured ? "API key configured" : "Public endpoint"}
               </p>

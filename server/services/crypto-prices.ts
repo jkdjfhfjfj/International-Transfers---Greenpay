@@ -65,6 +65,22 @@ async function getConfiguredApiKey(providers: string[]): Promise<string | undefi
   }
 }
 
+async function getEnabledProviders(): Promise<Set<string>> {
+  const enabled = new Set(["coingecko", "binance", "coincap", "cryptocompare"]);
+  if (!db) return enabled;
+  try {
+    const configurations: any[] = await db.select().from(apiConfigurations);
+    for (const configuration of configurations) {
+      if (configuration?.provider && configuration.isEnabled === false) {
+        enabled.delete(String(configuration.provider).toLowerCase());
+      }
+    }
+  } catch {
+    // Provider defaults remain enabled when settings cannot be read.
+  }
+  return enabled;
+}
+
 function makeSnapshot(
   prices: Record<SupportedCryptoCoin, number>,
   changes24h: Partial<Record<SupportedCryptoCoin, number>>,
@@ -132,20 +148,25 @@ async function fetchCoinCap(): Promise<CryptoPriceSnapshot> {
 async function fetchBinance(): Promise<CryptoPriceSnapshot> {
   const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
   const response = await fetch(
-    `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
+    `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
     {},
   );
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
-  const payload = (await response.json()) as Array<{ symbol: string; price?: string }>;
-  const rows = new Map(payload.map((row) => [row.symbol, Number(row.price)]));
+  const payload = (await response.json()) as Array<{ symbol: string; lastPrice?: string; priceChangePercent?: string }>;
+  const rows = new Map(payload.map((row) => [row.symbol, row]));
   const prices = {
-    BTC: rows.get("BTCUSDT"),
-    ETH: rows.get("ETHUSDT"),
-    USDT: rows.get("USDTUSDT") || 1,
-    USDC: rows.get("USDCUSDT") || 1,
+    BTC: Number(rows.get("BTCUSDT")?.lastPrice),
+    ETH: Number(rows.get("ETHUSDT")?.lastPrice),
+    USDT: Number(rows.get("USDTUSDT")?.lastPrice) || 1,
+    USDC: Number(rows.get("USDCUSDT")?.lastPrice) || 1,
   } as Record<SupportedCryptoCoin, number>;
   if (!Number.isFinite(prices.BTC) || !Number.isFinite(prices.ETH)) throw new Error("Binance did not return all required prices");
-  return makeSnapshot(prices, {}, "binance");
+  const changes24h: Partial<Record<SupportedCryptoCoin, number>> = {};
+  for (const coin of SUPPORTED_CRYPTO_COINS) {
+    const change = Number(rows.get(`${coin}USDT`)?.priceChangePercent);
+    if (Number.isFinite(change)) changes24h[coin] = change;
+  }
+  return makeSnapshot(prices, changes24h, "binance");
 }
 
 async function fetchCryptoCompare(apiKey?: string): Promise<CryptoPriceSnapshot> {
@@ -169,14 +190,16 @@ async function fetchCryptoCompare(apiKey?: string): Promise<CryptoPriceSnapshot>
 async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
   const coinGeckoKey = await getConfiguredApiKey(["coingecko", "crypto_prices"]);
   const cryptoCompareKey = await getConfiguredApiKey(["cryptocompare"]);
-  const providers: Array<() => Promise<CryptoPriceSnapshot>> = [
-    () => fetchCoinGecko(coinGeckoKey),
-    () => fetchBinance(),
-    () => fetchCoinCap(),
-    () => fetchCryptoCompare(cryptoCompareKey),
+  const enabled = await getEnabledProviders();
+  const allProviders: Array<[string, () => Promise<CryptoPriceSnapshot>]> = [
+    ["coingecko", () => fetchCoinGecko(coinGeckoKey)],
+    ["binance", () => fetchBinance()],
+    ["coincap", () => fetchCoinCap()],
+    ["cryptocompare", () => fetchCryptoCompare(cryptoCompareKey)],
   ];
+  const providers = allProviders.filter(([provider]) => enabled.has(provider));
   let lastError: unknown;
-  for (const provider of providers) {
+  for (const [, provider] of providers) {
     try {
       return await provider();
     } catch (error) {
@@ -184,7 +207,7 @@ async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
       console.warn(`[Crypto prices] Provider failed: ${error instanceof Error ? error.message : error}`);
     }
   }
-  throw lastError instanceof Error ? lastError : new Error("No crypto price provider available");
+  throw lastError instanceof Error ? lastError : new Error("No enabled crypto price provider available");
 }
 
 export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {

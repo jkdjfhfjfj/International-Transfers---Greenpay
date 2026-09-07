@@ -72,13 +72,15 @@ export default function CryptoPage() {
     }
   }, []);
 
-  const { data: walletsData, isLoading: walletsLoading } = useQuery({
+  const { data: walletsData, isLoading: walletsLoading, isFetching: walletsFetching, refetch: refetchWallets } = useQuery({
     queryKey: ["/api/crypto/wallets"],
     enabled: !!user?.id,
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/crypto/wallets");
       return res.json();
     },
+    refetchInterval: 30_000,
+    staleTime: 25_000,
   });
 
   const { data: cardsData } = useQuery({
@@ -192,7 +194,8 @@ export default function CryptoPage() {
   const wallets: any[] = (walletsData as any)?.wallets || [];
   const rates: Record<string, number> = (walletsData as any)?.rates || {};
   const changes24h: Record<string, number> = (walletsData as any)?.changes24h || {};
-  const priceSource = (walletsData as any)?.source || "coingecko";
+  const priceSource = (walletsData as any)?.source || "fallback";
+  const priceFetchedAt = (walletsData as any)?.fetchedAt;
   const availableUsdBalance = Number(userWallets.find(wallet => wallet.currency === "USD")?.availableBalance ?? 0);
   const history: any[] = (historyData as any)?.transactions || [];
   const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
@@ -260,7 +263,13 @@ export default function CryptoPage() {
         >
           <p className="text-sm text-white/80 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>
-          <p className="text-xs text-white/60 mt-1">{wallets.length} wallets · {Object.keys(rates).length} supported coins · {priceSource === "coingecko" ? "Live prices" : "Cached prices"}</p>
+          <div className="flex items-center justify-between gap-3 text-xs text-white/70 mt-1">
+            <span>{wallets.length} wallets · {Object.keys(rates).length} supported coins · {priceSource === "fallback" ? "Admin fallback rates" : priceSource === "cache" ? "Cached live prices" : `Live prices · ${priceSource}`}</span>
+            <button onClick={() => refetchWallets()} className="inline-flex items-center gap-1 shrink-0 hover:text-white" aria-label="Refresh crypto prices">
+              <RefreshCw className={`w-3 h-3 ${walletsFetching ? "animate-spin" : ""}`} /> Refresh
+            </button>
+          </div>
+          {priceFetchedAt && <p className="text-[10px] text-white/50 mt-1">Updated {new Date(priceFetchedAt).toLocaleTimeString()}</p>}
         </motion.div>
 
         {/* Tab Bar */}
@@ -361,7 +370,7 @@ export default function CryptoPage() {
                     <p className="text-xs text-muted-foreground">Live USD rates refreshed every minute</p>
                   </div>
                   <span className="text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                    {priceSource === "coingecko" ? "Live" : "Fallback"}
+                     {priceSource === "fallback" ? "Admin fallback" : priceSource === "cache" ? "Cached live" : `Live · ${priceSource}`}
                   </span>
                 </div>
                 <div className="space-y-2">

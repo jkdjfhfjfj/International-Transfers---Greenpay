@@ -63,6 +63,9 @@ export default function StatusPage() {
     moneyTransfers: 'Money Transfers',
     virtualCards: 'Virtual Cards',
     notifications: 'Notifications',
+    cryptoWallet: 'Crypto Wallet',
+    passkeys: 'Passkeys & Biometric Login',
+    billsAndAirtime: 'Bills & Airtime',
   };
 
   return (

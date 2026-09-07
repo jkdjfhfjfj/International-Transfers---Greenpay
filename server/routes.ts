@@ -4924,8 +4924,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Find user with matching biometric credential directly using SQL if possible, 
       // or filter the list more reliably.
-      const allUsers = await storage.getAllUsers();
-      const users = Array.isArray(allUsers) ? allUsers : [];
+       const allUsers = await storage.getAllUsers();
+       const users = Array.isArray(allUsers) ? allUsers : ((allUsers as any)?.users || []);
       
       const match = users.find((u: any) => {
         if (!u.biometricEnabled || !u.biometricCredentialId) return false;
@@ -11049,6 +11049,40 @@ p{color:#6b7280;font-size:14px;}</style>
         console.warn('⚠️ Notifications: Degraded', error);
       }
 
+      // Check live crypto prices and configured fallback rates
+      try {
+        const cryptoPrices = await getCryptoPrices();
+        statusChecks.features.cryptoWallet = {
+          status: cryptoPrices.stale ? "degraded" : "healthy",
+          message: cryptoPrices.stale
+            ? `Crypto wallet is using ${cryptoPrices.source === "fallback" ? "admin fallback rates" : "cached prices"}`
+            : `Crypto wallet prices are live via ${cryptoPrices.source}`,
+          icon: "₿",
+        };
+        if (cryptoPrices.stale) statusChecks.overall = "degraded";
+      } catch (error) {
+        statusChecks.features.cryptoWallet = {
+          status: "degraded",
+          message: "Crypto wallet rates are unavailable",
+          icon: "₿",
+        };
+        statusChecks.overall = "degraded";
+      }
+
+      statusChecks.features.passkeys = {
+        status: "healthy",
+        message: "Passkey registration and assertion verification are available on supported HTTPS browsers",
+        icon: "🔐",
+      };
+
+      statusChecks.features.billsAndAirtime = {
+        status: statumConfigured ? "healthy" : "degraded",
+        message: statumConfigured
+          ? "Bill payments and airtime services are available"
+          : "Airtime provider credentials are not configured",
+        icon: "🧾",
+      };
+
       console.log(`🏁 System status check completed - Overall: ${statusChecks.overall}`);
       res.json(statusChecks);
     } catch (error) {
@@ -13095,13 +13129,19 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.get("/api/admin/crypto/settings", requireAdminAuth, async (_req, res) => {
     try {
-      const supportedProviders = ["coingecko", "cryptocompare"];
+      const supportedProviders = ["coingecko", "binance", "coincap", "cryptocompare"];
+      const displayNames: Record<string, string> = {
+        coingecko: "CoinGecko",
+        binance: "Binance",
+        coincap: "CoinCap",
+        cryptocompare: "CryptoCompare",
+      };
       const configurations = await storage.getAllApiConfigurations();
       const providers = supportedProviders.map((provider) => {
         const configuration = configurations.find((item: any) => item.provider === provider);
         return {
           provider,
-          displayName: configuration?.displayName || (provider === "coingecko" ? "CoinGecko" : "CryptoCompare"),
+           displayName: configuration?.displayName || displayNames[provider],
           isEnabled: configuration?.isEnabled !== false,
           apiKeyConfigured: Boolean(configuration?.apiKey),
         };
@@ -13132,13 +13172,19 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.put("/api/admin/crypto/settings", requireAdminAuth, async (req, res) => {
     try {
       const providers = Array.isArray(req.body?.providers) ? req.body.providers : [];
-      const allowedProviders = new Set(["coingecko", "cryptocompare"]);
+      const allowedProviders = new Set(["coingecko", "binance", "coincap", "cryptocompare"]);
+      const displayNames: Record<string, string> = {
+        coingecko: "CoinGecko",
+        binance: "Binance",
+        coincap: "CoinCap",
+        cryptocompare: "CryptoCompare",
+      };
       for (const providerData of providers) {
         const provider = String(providerData?.provider || "").toLowerCase();
         if (!allowedProviders.has(provider)) continue;
         const updates: any = {
           provider,
-          displayName: provider === "coingecko" ? "CoinGecko" : "CryptoCompare",
+           displayName: displayNames[provider],
           isEnabled: providerData?.isEnabled !== false,
         };
         if (typeof providerData?.apiKey === "string" && providerData.apiKey.trim()) {

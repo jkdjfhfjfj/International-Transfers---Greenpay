@@ -33,7 +33,12 @@ export async function enrollBiometric(userName: string, userEmail: string): Prom
         { alg: -257, type: "public-key" },
       ],
       timeout: 60000,
-      userVerification: "preferred",
+      authenticatorSelection: {
+        residentKey: "required",
+        requireResidentKey: true,
+        userVerification: "required",
+      },
+      userVerification: "required",
   } as PublicKeyCredentialCreationOptions;
   const credential = await navigator.credentials.create({ publicKey: creationOptions }) as PublicKeyCredential | null;
   if (!credential) throw new Error("Biometric enrollment was cancelled");

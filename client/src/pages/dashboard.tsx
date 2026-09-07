@@ -603,7 +603,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-6">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-0">
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
