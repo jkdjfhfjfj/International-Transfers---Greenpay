@@ -262,21 +262,34 @@ function AppContent() {
       lastNotificationIds.current = ids;
       return;
     }
-    if ("Notification" in window && Notification.permission === "granted") {
-      items
+    if (
+      "Notification" in window &&
+      Notification.permission === "granted" &&
+      "serviceWorker" in navigator
+    ) {
+      const newItems = items
         .filter((item: any) => !lastNotificationIds.current?.has(item.id) && !item.isRead)
-        .slice(0, 3)
-        .forEach((item: any) => {
-          const browserNotification = new Notification(item.title, {
-            body: item.message,
-            tag: item.id,
-            icon: "/favicon.png",
+        .slice(0, 3);
+
+      if (newItems.length > 0) {
+        navigator.serviceWorker.ready
+          .then((registration) =>
+            Promise.all(
+              newItems.map((item: any) =>
+                registration.showNotification(item.title, {
+                  body: item.message,
+                  tag: String(item.id),
+                  icon: "/favicon.png",
+                  data: { actionUrl: item.actionUrl || "/" },
+                }),
+              ),
+            ),
+          )
+          .catch((error) => {
+            // Notification permission can be revoked while the app is open.
+            console.warn("Unable to show browser notification:", error);
           });
-          if (item.actionUrl) browserNotification.onclick = () => {
-            window.focus();
-            window.location.href = item.actionUrl;
-          };
-        });
+      }
     }
     lastNotificationIds.current = ids;
   }, [browserNotificationResponse, user?.id]);

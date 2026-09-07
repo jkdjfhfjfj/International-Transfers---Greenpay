@@ -117,6 +117,24 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// Open the notification's destination when the user clicks it.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const actionUrl = event.notification.data && event.notification.data.actionUrl;
+  if (!actionUrl) return;
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      const existingClient = clientList.find((client) => 'focus' in client);
+      if (existingClient) {
+        return existingClient.focus().then(() => existingClient.navigate(actionUrl));
+      }
+      return clients.openWindow(actionUrl);
+    })
+  );
+});
+
 // Handle messages from clients (clear cache, etc)
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'CLEAR_CACHE') {
