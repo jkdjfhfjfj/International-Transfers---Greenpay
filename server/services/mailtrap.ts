@@ -30,6 +30,7 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   pin_changed: '',
   security_settings_changed: '',
   virtual_account_approved: '',
+  virtual_account_rejected: '',
   beneficiary_added: '',
   beneficiary_updated: '',
   beneficiary_deleted: '',
@@ -44,7 +45,12 @@ const TEMPLATE_PARAMETERS: Record<string, string[]> = {
   otp: ['first_name', 'last_name', 'otp'],
   password_reset: ['first_name', 'last_name', 'reset_code'],
   welcome: ['first_name', 'last_name'],
+  kyc_submitted: ['first_name', 'last_name'],
+  kyc_verified: ['first_name', 'last_name'],
   login_alert: ['first_name', 'last_name', 'location', 'ip_address', 'device'],
+  fund_receipt: ['first_name', 'last_name', 'amount', 'currency', 'sender'],
+  card_activation: ['first_name', 'last_name', 'card_last_four'],
+  transaction_export: ['first_name', 'last_name'],
   beneficiary_added: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
   beneficiary_updated: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
   beneficiary_deleted: ['first_name', 'beneficiary_name', 'beneficiary_reference'],
@@ -65,6 +71,14 @@ const TEMPLATE_PARAMETERS: Record<string, string[]> = {
   password_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
   pin_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
   security_settings_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  virtual_account_approved: [
+    'first_name', 'last_name', 'currency', 'application_id', 'account_name',
+    'bank_name', 'account_number', 'routing_number', 'sort_code', 'iban',
+    'swift_code', 'bank_address', 'beneficiary_address', 'payment_instructions',
+  ],
+  virtual_account_rejected: [
+    'first_name', 'last_name', 'currency', 'application_id', 'payment_instructions',
+  ],
 };
 
 export class MailtrapService {
@@ -265,8 +279,12 @@ export class MailtrapService {
       currency,
       transaction_type: typeLabel,
       transaction_id: transactionId,
+      reference: transactionId,
+      fee: '0.00',
+      total: amount,
       status: 'Completed',
       date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+      description: typeLabel,
     });
   }
 

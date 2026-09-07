@@ -817,12 +817,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (user && status === "rejected") {
         await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Application`, message: req.body.adminNotes || "Your virtual account application was not approved at this time. You may re-apply.", type: "error", isGlobal: false, actionUrl: "/virtual-accounts" });
         const { mailtrapService } = await import('./services/mailtrap');
-        // Send generic email notification for rejection
-        mailtrapService.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+        // Use the separately configurable rejected-template UUID.
+        mailtrapService.sendAccountAction(user.email, "virtual_account_rejected", {
+          first_name: firstName,
+          last_name: rest.join(" "),
           currency: application.currency,
           application_id: application.id,
-          account_name: "N/A",
-          bank_name: "", account_number: "", routing_number: "", sort_code: "", iban: "", swift_code: "", bank_address: "", beneficiary_address: "",
           payment_instructions: `Your ${application.currency} virtual account application was not approved. Reason: ${req.body.adminNotes || "Please contact support for details."}`,
         }).catch(console.error);
       }
