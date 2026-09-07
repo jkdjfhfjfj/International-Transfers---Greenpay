@@ -46,7 +46,3 @@ externalPort = 80
 localPort = 23636
 externalPort = 3001
 
-[userenv]
-
-[userenv.shared]
-GROQ_API_KEY = "dddddgxsgnnvxfcg"
