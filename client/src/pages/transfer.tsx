@@ -118,8 +118,6 @@ export default function TransferPage() {
     <div className="min-h-screen bg-background pb-32">
       <WavyHeader
         title="Transfer"
-        subtitle="Move funds between your accounts"
-        onBack={() => setLocation("/dashboard")}
       />
       <main className="max-w-md mx-auto p-4 space-y-4">
         <motion.div
