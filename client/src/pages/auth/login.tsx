@@ -511,6 +511,10 @@ export default function LoginPage() {
                 placeholder="Enter PIN"
                 value={pinCode}
                 onChange={(e) => setPinCode(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                 onPaste={(e) => {
+                   e.preventDefault();
+                   setPinCode(e.clipboardData.getData('text').replace(/[^0-9]/g, '').slice(0, 6));
+                 }}
                 maxLength={6}
                 className="text-center text-2xl tracking-widest font-bold"
               />

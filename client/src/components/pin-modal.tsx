@@ -108,6 +108,10 @@ export function PINModal({
               maxLength={4}
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
+              onPaste={(e) => {
+                e.preventDefault();
+                setPin(e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 4));
+              }}
               className="text-center text-2xl tracking-widest"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleSubmit();

@@ -18,6 +18,17 @@ const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
   card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
   transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
   transaction_completed: '',
+  send: '',
+  receive: '',
+  exchange: '',
+  transfer: '',
+  bill_payment: '',
+  airtime: '',
+  crypto_withdrawal: '',
+  security_alert: '',
+  password_changed: '',
+  pin_changed: '',
+  security_settings_changed: '',
   virtual_account_approved: '',
   beneficiary_added: '',
   beneficiary_updated: '',
@@ -42,6 +53,18 @@ const TEMPLATE_PARAMETERS: Record<string, string[]> = {
   withdrawal_completed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
   withdrawal_failed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'reason'],
   withdrawal_refunded: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'refund_status'],
+  transaction_completed: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  send: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  receive: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  exchange: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description', 'exchange_rate', 'converted_amount', 'target_currency'],
+  transfer: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  bill_payment: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  airtime: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  crypto_withdrawal: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  security_alert: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  password_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  pin_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  security_settings_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
 };
 
 export class MailtrapService {
@@ -244,6 +267,74 @@ export class MailtrapService {
       transaction_id: transactionId,
       status: 'Completed',
       date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+    });
+  }
+
+  async sendTransactionActivity(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    transaction: any,
+  ): Promise<boolean> {
+    const transactionType = String(transaction.type || "transaction");
+    const specificTemplate = ["send", "receive", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType)
+      ? transactionType
+      : transactionType === "withdraw" ? "crypto_withdrawal" : "transaction_completed";
+    const uuid = await this.getTemplateUuid(specificTemplate) || await this.getTemplateUuid("transaction_completed");
+    if (!uuid) return false;
+
+    const amount = Number(transaction.amount || 0);
+    const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+    const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType);
+    const typeLabel = transactionType === "send" ? "Send money" :
+      transactionType === "receive" ? "Money received" :
+      transactionType === "exchange" ? "Currency exchange" :
+      transactionType === "transfer" ? "Account transfer" :
+      transactionType === "bill_payment" ? "Bill payment" :
+      transactionType === "airtime" ? "Airtime purchase" :
+      transactionType === "withdraw" ? "Withdrawal" : "Transaction";
+
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      amount: String(transaction.amount ?? ""),
+      currency: String(transaction.currency ?? ""),
+      transaction_type: typeLabel,
+      transaction_id: String(transaction.id ?? ""),
+      reference: String(transaction.reference || transaction.id || ""),
+      fee: fee.toFixed(2),
+      total: (outgoing ? amount + fee : amount - fee).toFixed(2),
+      status: String(transaction.status || "").replace(/^\w/, (letter: string) => letter.toUpperCase()),
+      date: new Date(transaction.completedAt || transaction.createdAt || Date.now()).toLocaleString("en-US"),
+      description: String(transaction.description || ""),
+      exchange_rate: String(transaction.exchangeRate || transaction.metadata?.exchangeRate || ""),
+      converted_amount: String(transaction.metadata?.convertedAmount || transaction.metadata?.toAmount || ""),
+      target_currency: String(transaction.metadata?.targetCurrency || transaction.metadata?.toCurrency || ""),
+    });
+  }
+
+  async sendSecurityAlert(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    event: string,
+    description: string,
+    details: Record<string, string> = {},
+  ): Promise<boolean> {
+    const templateName =
+      event === "Password changed" ? "password_changed" :
+      event === "PIN changed" ? "pin_changed" :
+      event === "Security settings changed" ? "security_settings_changed" : "security_alert";
+    const uuid = await this.getTemplateUuid(templateName) || await this.getTemplateUuid("security_alert");
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      security_event: event,
+      description,
+      date: new Date().toLocaleString("en-US"),
+      ip_address: details.ip_address || "",
+      action_url: details.action_url || "/settings",
     });
   }
 

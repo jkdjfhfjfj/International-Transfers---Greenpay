@@ -578,6 +578,12 @@ export default function TransactionsPage() {
                               <span className="truncate">{transaction.description}</span>
                             </>
                           )}
+                           {transaction.reference && (
+                             <>
+                               <span>•</span>
+                               <span className="font-mono truncate">TID {transaction.reference}</span>
+                             </>
+                           )}
                           {transaction.status === 'failed' && transaction.metadata?.status_reason && (
                             <>
                               <span>•</span>
@@ -722,7 +728,7 @@ export default function TransactionsPage() {
               <div className="space-y-1">
                 <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
                   <Tag className="h-4 w-4" />
-                  Transaction ID
+                   Internal Transaction ID
                 </label>
                 <div className="flex items-center gap-2 pl-6">
                   <p className="text-xs font-mono text-primary break-all">{selectedTransaction.id}</p>
@@ -741,14 +747,36 @@ export default function TransactionsPage() {
                 </div>
               </div>
 
-              {/* Provider/reference information */}
-              {selectedTransaction.reference && (
+               {/* Customer-facing statement reference/TID */}
+               <div className="space-y-1">
+                 <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                   <Tag className="h-4 w-4" />
+                   Statement Reference / TID
+                 </label>
+                 <div className="flex items-center gap-2 pl-6">
+                   <p className="text-xs font-mono text-primary break-all">{selectedTransaction.reference || selectedTransaction.id}</p>
+                   <button
+                     onClick={() => {
+                       navigator.clipboard.writeText(selectedTransaction.reference || selectedTransaction.id);
+                       toast({ title: "Copied", description: "Statement reference copied to clipboard" });
+                     }}
+                     className="text-muted-foreground hover:text-foreground p-1"
+                   >
+                     <Copy className="h-4 w-4" />
+                   </button>
+                 </div>
+               </div>
+
+               {/* Provider reference information */}
+               {(selectedTransaction.paystackReference || selectedTransaction.metadata?.providerReference || selectedTransaction.metadata?.providerTransactionId) && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
                     <Tag className="h-4 w-4" />
-                    Reference
+                     Provider Reference
                   </label>
-                  <p className="text-xs font-mono text-primary break-all pl-6">{selectedTransaction.reference}</p>
+                   <p className="text-xs font-mono text-primary break-all pl-6">
+                     {selectedTransaction.paystackReference || selectedTransaction.metadata?.providerReference || selectedTransaction.metadata?.providerTransactionId}
+                   </p>
                 </div>
               )}
 
@@ -795,31 +823,52 @@ export default function TransactionsPage() {
                 </div>
               )}
 
-              {/* Withdrawal fee */}
-              {Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0) > 0 && (
+               {/* Fee and net/total */}
+               <div className="space-y-1">
+                 <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                   <DollarSign className="h-4 w-4" />
+                   Fee
+                 </label>
+                 <p className="text-base font-medium pl-6 text-red-600">
+                   {getCurrencySymbol(selectedTransaction.currency)}{formatNumber(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0)}
+                 </p>
+               </div>
+
+               {(() => {
+                 const amount = Number(selectedTransaction.amount || 0);
+                 const fee = Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0);
+                 const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(selectedTransaction.type);
+                 return (
+                   <div className="space-y-1">
+                     <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+                       <DollarSign className="h-4 w-4" />
+                       {outgoing ? "Total Debited" : "Net Received"}
+                     </label>
+                     <p className="text-base font-semibold pl-6">
+                       {getCurrencySymbol(selectedTransaction.currency)}{formatNumber(outgoing ? amount + fee : amount - fee)}
+                     </p>
+                   </div>
+                 );
+               })()}
+
+               {selectedTransaction.completedAt && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-                    <DollarSign className="h-4 w-4" />
-                    Fee
+                     <Calendar className="h-4 w-4" />
+                     Completed At
                   </label>
-                  <p className="text-base font-medium pl-6 text-red-600">
-                    {getCurrencySymbol(selectedTransaction.currency)}{formatNumber(selectedTransaction.fee ?? selectedTransaction.metadata?.fee)}
-                  </p>
+                   <p className="text-base font-medium pl-6">{new Date(selectedTransaction.completedAt).toLocaleString()}</p>
                 </div>
               )}
 
-              {selectedTransaction.type === "withdraw" && (
-                <div className="space-y-1">
-                  <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-                    <DollarSign className="h-4 w-4" />
-                    Total Deducted
-                  </label>
-                  <p className="text-base font-semibold pl-6">
-                    {getCurrencySymbol(selectedTransaction.currency)}
-                    {formatNumber(Number(selectedTransaction.amount || 0) + Number(selectedTransaction.fee ?? selectedTransaction.metadata?.fee ?? 0))}
-                  </p>
-                </div>
-              )}
+               {selectedTransaction.recipientDetails && Object.entries(selectedTransaction.recipientDetails)
+                 .filter(([key, value]) => value != null && value !== "" && key !== "name")
+                 .map(([key, value]) => (
+                   <div className="space-y-1" key={key}>
+                     <label className="text-xs font-semibold text-muted-foreground uppercase pl-6">{key.replace(/([A-Z])/g, " $1")}</label>
+                     <p className="text-sm font-medium pl-6 break-all">{String(value)}</p>
+                   </div>
+                 ))}
 
               {selectedTransaction.type === "withdraw" && (
                 <div className="rounded-lg border border-border p-3 space-y-3">
@@ -862,6 +911,12 @@ export default function TransactionsPage() {
                   <p className="text-sm text-red-700 dark:text-red-400">{selectedTransaction.metadata.errorMessage}</p>
                 </div>
               )}
+               {(selectedTransaction.failureReason || selectedTransaction.metadata?.status_reason) && (
+                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 p-3 rounded-lg space-y-1">
+                   <label className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase">Status Details</label>
+                   <p className="text-sm text-amber-700 dark:text-amber-400">{selectedTransaction.failureReason || selectedTransaction.metadata.status_reason}</p>
+                 </div>
+               )}
             </div>
 
             {/* Action Buttons */}

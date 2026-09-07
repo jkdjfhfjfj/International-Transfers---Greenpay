@@ -1845,6 +1845,12 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Update password
       await storage.updateUserPassword(user.id, hashedPassword);
+       await notificationService.sendSecurityNotification(
+         user.id,
+         "Your password was changed successfully.",
+         "Password changed",
+         { ip_address: req.ip || "" },
+       );
       
       // Clear OTP
       await storage.updateUserOtp(user.id, null, null);
@@ -1972,6 +1978,12 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Update password
       await storage.updateUserPassword(user.id, hashedPassword);
+       await notificationService.sendSecurityNotification(
+         user.id,
+         "Your password was changed successfully.",
+         "Password changed",
+         { ip_address: req.ip || "" },
+       );
       
       // Clear OTP
       await storage.updateUserOtp(user.id, null, null);
@@ -3389,6 +3401,12 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Update password
       await storage.updateUser(id, { password: hashedPassword, passwordSet: true });
+      await notificationService.sendSecurityNotification(
+        id,
+        "Your password was changed successfully.",
+        "Password changed",
+        { ip_address: req.ip || "" },
+      );
 
       res.json({ message: "Password changed successfully" });
     } catch (error) {
@@ -4478,19 +4496,10 @@ p{color:#6b7280;font-size:14px;}</style>
             status: "completed"
           });
           
-          // Send transaction notification via SMS, WhatsApp and Email
+           // Send transaction notification via SMS and WhatsApp.
           const { messagingService } = await import('./services/messaging');
-          const { mailtrapService: sendMailtrap } = await import('./services/mailtrap');
           messagingService.sendTransactionNotification(user.phone, 'send', amount, currency, 'completed', transaction.id)
             .catch(err => console.error('Transaction notification error:', err));
-          if (user.email) {
-            sendMailtrap.sendTransactionCompleted(
-              user.email,
-              user.firstName || user.fullName?.split(' ')[0] || 'User',
-              user.lastName || user.fullName?.split(' ')[1] || '',
-              amount, currency, 'send', transaction.id
-            ).catch(err => console.error('Transaction completed email error:', err));
-          }
         } catch (error) {
           console.error('Transaction completion error:', error);
         }
@@ -4552,16 +4561,12 @@ p{color:#6b7280;font-size:14px;}</style>
       // Send notification
       await notificationService.sendTransactionNotification(userId, transaction);
       
-      // Send fund receipt notification via SMS, WhatsApp, and Email
+       // Send fund receipt notification via SMS and WhatsApp. The shared
+       // transaction notification also handles in-app, browser, and email.
       if (user) {
         const { messagingService } = await import('./services/messaging');
-        const { mailtrapService } = await import('./services/mailtrap');
         messagingService.sendFundReceipt(user.phone, amount, currency, senderDetails.name)
           .catch(err => console.error('Fund receipt notification error:', err));
-        if (user.email) {
-          mailtrapService.sendFundReceipt(user.email, user.fullName?.split(' ')[0] || 'User', user.fullName?.split(' ')[1] || '', amount, currency, senderDetails.name)
-            .catch(err => console.error('Fund receipt email error:', err));
-        }
       }
       
       res.json({ transaction, message: "Payment received successfully" });
@@ -5179,8 +5184,22 @@ p{color:#6b7280;font-size:14px;}</style>
       if (twoFactorEnabled !== undefined) updateData.twoFactorEnabled = twoFactorEnabled;
       if (biometricEnabled !== undefined) updateData.biometricEnabled = biometricEnabled;
       if (darkMode !== undefined) updateData.darkMode = darkMode;
+       const securityChanged = [
+         twoFactorEnabled !== undefined,
+         biometricEnabled !== undefined,
+         pushNotificationsEnabled !== undefined,
+         settings.pinEnabled !== undefined,
+       ].some(Boolean);
       
       const user = await storage.updateUser(userId, updateData);
+       if (user && securityChanged) {
+         await notificationService.sendSecurityNotification(
+           userId,
+           "Your account security or notification settings were updated.",
+           "Security settings changed",
+           { ip_address: req.ip || "" },
+         );
+       }
 
       // Sync default wallet to match new defaultCurrency
       if (defaultCurrency && user) {
@@ -9553,30 +9572,10 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
 
-      // Send email to recipient with fund receipt using Mailtrap
-      const { MailtrapService } = await import('./services/mailtrap');
-      const mailtrapService = new MailtrapService();
-      const transactionDate = new Date().toISOString();
-      
-      mailtrapService.sendTemplate(
-        toUser.email,
-        '5e2a2ec4-37fb-4178-96c4-598977065f9c',
-        {
-          sender: fromUser.fullName,
-          amount: amount,
-          currency: currency,
-          date: transactionDate,
-          transaction_id: recipientTransaction.id
-        }
-      ).then(success => {
-        if (success) {
-          console.log(`✅ Fund receipt email sent to ${toUser.email} - Transaction ID: ${recipientTransaction.id}, Sender: ${fromUser.fullName}, Amount: ${amount} ${currency}, Date: ${transactionDate}`);
-        } else {
-          console.warn(`⚠️ Failed to send fund receipt email to ${toUser.email}`);
-        }
-      }).catch(err => {
-        console.error('Email sending error:', err);
-      });
+       // Shared transaction notifications fan out to in-app, browser push,
+       // and the admin-configured Mailtrap template for both sides.
+       await notificationService.sendTransactionNotification(fromUserId, senderTransaction);
+       await notificationService.sendTransactionNotification(toUserId, recipientTransaction);
 
       // Send notifications to both users
       const { messagingService } = await import('./services/messaging');
@@ -9647,6 +9646,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinCode: hashedPin,
         pinEnabled: true 
       });
+       await notificationService.sendSecurityNotification(
+         user.id,
+         "Your PIN was changed successfully.",
+         "PIN changed",
+         { ip_address: req.ip || "" },
+       );
 
       // Clear OTP
       await storage.updateUserOtp(user.id, null, null);
@@ -9688,6 +9693,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinCode: hashedPin,
         pinEnabled: true
       });
+       await notificationService.sendSecurityNotification(
+         id,
+         "A new transaction PIN was set on your account.",
+         "PIN changed",
+         { ip_address: req.ip || "" },
+       );
 
       // Get updated user
       const updatedUser = await storage.getUser(id);
@@ -9856,6 +9867,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinEnabled: false,
         pinCode: null
       }).where(eq(users.id, id));
+       await notificationService.sendSecurityNotification(
+         id,
+         "Your transaction PIN was disabled.",
+         "PIN changed",
+         { ip_address: req.ip || "" },
+       );
 
       // Get updated user
       const updatedUser = await storage.getUser(id);
@@ -13475,6 +13492,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           feeUsdValue: feeUsdValue.toFixed(2),
         } as any,
       });
+      await notificationService.sendTransactionNotification(userId, transaction);
 
       if (sourceType === "crypto" || destinationType === "crypto") {
         await db.insert(cryptoTransactions).values({
@@ -14324,13 +14342,14 @@ Sitemap: https://geepay.us/sitemap.xml`;
         }
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
-      await db.insert(transactions).values({
+       const [exchangeTransaction] = await db.insert(transactions).values({
         userId, type: "exchange", amount: String(fromAmt), currency: fromWallet.currency,
         fee: String(fee.toFixed(4)), exchangeRate: String(rate.toFixed(6)),
         status: "completed", reference: ref, completedAt: new Date(),
         description: `Exchange ${fromWallet.currency} → ${toWallet.currency}`,
         metadata: { fromWalletId, toWalletId, toCurrency: toWallet.currency, toAmount: toAmount.toFixed(4) } as any,
-      });
+       }).returning();
+       await notificationService.sendTransactionNotification(userId, exchangeTransaction);
       res.json({ success: true, fromAmount: fromAmt.toFixed(4), fromCurrency: fromWallet.currency, toAmount: toAmount.toFixed(4), toCurrency: toWallet.currency, rate: rate.toFixed(6), fee: fee.toFixed(4), reference: ref });
     } catch (e: any) { console.error("Exchange error:", e); res.status(500).json({ message: e.message || "Exchange failed" }); }
   });

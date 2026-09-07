@@ -55,26 +55,80 @@ export class NotificationService {
   }
 
   async sendTransactionNotification(userId: string, transaction: any): Promise<void> {
+    const amount = Number(transaction.amount || 0);
+    const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+    const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(String(transaction.type));
+    const label = String(transaction.type) === "send" ? "send money" :
+      String(transaction.type) === "receive" ? "money received" :
+      String(transaction.type) === "exchange" ? "currency exchange" :
+      String(transaction.type) === "transfer" ? "account transfer" :
+      String(transaction.type) === "bill_payment" ? "bill payment" :
+      String(transaction.type) === "airtime" ? "airtime purchase" :
+      String(transaction.type) === "withdraw" ? "withdrawal" : "transaction";
+    const currency = String(transaction.currency || "");
+    const reference = String(transaction.reference || transaction.id || "");
+    const status = String(transaction.status || "updated");
     const payload: NotificationPayload = {
-      title: 'Transaction Update',
-      body: `Your ${transaction.type} of $${transaction.amount} has been ${transaction.status}`,
+      title: `${label.charAt(0).toUpperCase()}${label.slice(1)} ${status}`,
+      body: `Your ${label} of ${currency} ${transaction.amount} is ${status}. Fee: ${currency} ${fee.toFixed(2)}. TID: ${reference}.`,
       userId,
       type: 'transaction',
-      metadata: { transactionId: transaction.id }
+      metadata: {
+        transactionId: transaction.id,
+        reference,
+        fee: fee.toFixed(2),
+        total: (outgoing ? amount + fee : amount - fee).toFixed(2),
+        currency,
+        transactionType: transaction.type,
+        actionUrl: "/transactions",
+      }
     };
 
     await this.sendNotification(payload);
+    void this.sendTransactionEmail(userId, transaction);
   }
 
-  async sendSecurityNotification(userId: string, message: string): Promise<void> {
+  private async sendTransactionEmail(userId: string, transaction: any): Promise<void> {
+    try {
+      const user = await storage.getUser(userId);
+      if (!user?.email) return;
+      const { mailtrapService } = await import("./mailtrap");
+      await mailtrapService.sendTransactionActivity(
+        user.email,
+        user.fullName?.split(" ")[0] || "User",
+        user.fullName?.split(" ").slice(1).join(" ") || "",
+        transaction,
+      );
+    } catch (error) {
+      console.error("[Notification] Transaction email failed:", error);
+    }
+  }
+
+  async sendSecurityNotification(userId: string, message: string, event = "Security alert", details: Record<string, string> = {}): Promise<void> {
     const payload: NotificationPayload = {
-      title: 'Security Alert',
+      title: event,
       body: message,
       userId,
-      type: 'security'
+      type: 'security',
+      metadata: { actionUrl: "/settings", securityEvent: event },
     };
 
     await this.sendNotification(payload);
+    try {
+      const user = await storage.getUser(userId);
+      if (!user?.email) return;
+      const { mailtrapService } = await import("./mailtrap");
+      await mailtrapService.sendSecurityAlert(
+        user.email,
+        user.fullName?.split(" ")[0] || "User",
+        user.fullName?.split(" ").slice(1).join(" ") || "",
+        event,
+        message,
+        details,
+      );
+    } catch (error) {
+      console.error("[Notification] Security email failed:", error);
+    }
   }
 }
 

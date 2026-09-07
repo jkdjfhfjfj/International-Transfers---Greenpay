@@ -3254,7 +3254,7 @@ __export(mailtrap_exports, {
   MailtrapService: () => MailtrapService,
   mailtrapService: () => mailtrapService2
 });
-import fetch9 from "node-fetch";
+import fetch7 from "node-fetch";
 var DEFAULT_TEMPLATE_UUIDs, TEMPLATE_PARAMETERS, MailtrapService, mailtrapService2;
 var init_mailtrap = __esm({
   "server/services/mailtrap.ts"() {
@@ -3271,6 +3271,17 @@ var init_mailtrap = __esm({
       card_activation: "a1b2c3d4-e5f6-4789-0123-456789abcdef",
       transaction_export: "307e5609-66bb-4235-8653-27f0d5d74a39",
       transaction_completed: "",
+      send: "",
+      receive: "",
+      exchange: "",
+      transfer: "",
+      bill_payment: "",
+      airtime: "",
+      crypto_withdrawal: "",
+      security_alert: "",
+      password_changed: "",
+      pin_changed: "",
+      security_settings_changed: "",
       virtual_account_approved: "",
       beneficiary_added: "",
       beneficiary_updated: "",
@@ -3293,7 +3304,19 @@ var init_mailtrap = __esm({
       withdrawal_processing: ["first_name", "amount", "currency", "transaction_id", "reference", "status"],
       withdrawal_completed: ["first_name", "amount", "currency", "transaction_id", "reference", "status"],
       withdrawal_failed: ["first_name", "amount", "currency", "transaction_id", "reference", "status", "reason"],
-      withdrawal_refunded: ["first_name", "amount", "currency", "transaction_id", "reference", "status", "refund_status"]
+      withdrawal_refunded: ["first_name", "amount", "currency", "transaction_id", "reference", "status", "refund_status"],
+      transaction_completed: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      send: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      receive: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      exchange: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description", "exchange_rate", "converted_amount", "target_currency"],
+      transfer: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      bill_payment: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      airtime: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      crypto_withdrawal: ["first_name", "last_name", "amount", "currency", "transaction_type", "transaction_id", "reference", "fee", "total", "status", "date", "description"],
+      security_alert: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
+      password_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
+      pin_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
+      security_settings_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"]
     };
     MailtrapService = class {
       apiKey = null;
@@ -3351,7 +3374,7 @@ var init_mailtrap = __esm({
             to: [{ email: toEmail }]
           };
           if (attachments?.length) payload.attachments = attachments;
-          const response = await fetch9(this.apiUrl, {
+          const response = await fetch7(this.apiUrl, {
             method: "POST",
             headers: {
               "Api-Token": this.apiKey,
@@ -3451,6 +3474,47 @@ var init_mailtrap = __esm({
           transaction_id: transactionId,
           status: "Completed",
           date: date || (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+        });
+      }
+      async sendTransactionActivity(toEmail, firstName, lastName, transaction) {
+        const transactionType = String(transaction.type || "transaction");
+        const specificTemplate = ["send", "receive", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType) ? transactionType : transactionType === "withdraw" ? "crypto_withdrawal" : "transaction_completed";
+        const uuid = await this.getTemplateUuid(specificTemplate) || await this.getTemplateUuid("transaction_completed");
+        if (!uuid) return false;
+        const amount = Number(transaction.amount || 0);
+        const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+        const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType);
+        const typeLabel = transactionType === "send" ? "Send money" : transactionType === "receive" ? "Money received" : transactionType === "exchange" ? "Currency exchange" : transactionType === "transfer" ? "Account transfer" : transactionType === "bill_payment" ? "Bill payment" : transactionType === "airtime" ? "Airtime purchase" : transactionType === "withdraw" ? "Withdrawal" : "Transaction";
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          amount: String(transaction.amount ?? ""),
+          currency: String(transaction.currency ?? ""),
+          transaction_type: typeLabel,
+          transaction_id: String(transaction.id ?? ""),
+          reference: String(transaction.reference || transaction.id || ""),
+          fee: fee.toFixed(2),
+          total: (outgoing ? amount + fee : amount - fee).toFixed(2),
+          status: String(transaction.status || "").replace(/^\w/, (letter) => letter.toUpperCase()),
+          date: new Date(transaction.completedAt || transaction.createdAt || Date.now()).toLocaleString("en-US"),
+          description: String(transaction.description || ""),
+          exchange_rate: String(transaction.exchangeRate || transaction.metadata?.exchangeRate || ""),
+          converted_amount: String(transaction.metadata?.convertedAmount || transaction.metadata?.toAmount || ""),
+          target_currency: String(transaction.metadata?.targetCurrency || transaction.metadata?.toCurrency || "")
+        });
+      }
+      async sendSecurityAlert(toEmail, firstName, lastName, event, description, details = {}) {
+        const templateName = event === "Password changed" ? "password_changed" : event === "PIN changed" ? "pin_changed" : event === "Security settings changed" ? "security_settings_changed" : "security_alert";
+        const uuid = await this.getTemplateUuid(templateName) || await this.getTemplateUuid("security_alert");
+        if (!uuid) return false;
+        return this.sendTemplate(toEmail, uuid, {
+          first_name: firstName,
+          last_name: lastName,
+          security_event: event,
+          description,
+          date: (/* @__PURE__ */ new Date()).toLocaleString("en-US"),
+          ip_address: details.ip_address || "",
+          action_url: details.action_url || "/settings"
         });
       }
       async sendVirtualAccountApproved(toEmail, firstName, lastName, variables) {
@@ -7136,23 +7200,70 @@ var NotificationService = class {
     }
   }
   async sendTransactionNotification(userId, transaction) {
+    const amount = Number(transaction.amount || 0);
+    const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+    const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(String(transaction.type));
+    const label = String(transaction.type) === "send" ? "send money" : String(transaction.type) === "receive" ? "money received" : String(transaction.type) === "exchange" ? "currency exchange" : String(transaction.type) === "transfer" ? "account transfer" : String(transaction.type) === "bill_payment" ? "bill payment" : String(transaction.type) === "airtime" ? "airtime purchase" : String(transaction.type) === "withdraw" ? "withdrawal" : "transaction";
+    const currency = String(transaction.currency || "");
+    const reference = String(transaction.reference || transaction.id || "");
+    const status = String(transaction.status || "updated");
     const payload = {
-      title: "Transaction Update",
-      body: `Your ${transaction.type} of $${transaction.amount} has been ${transaction.status}`,
+      title: `${label.charAt(0).toUpperCase()}${label.slice(1)} ${status}`,
+      body: `Your ${label} of ${currency} ${transaction.amount} is ${status}. Fee: ${currency} ${fee.toFixed(2)}. TID: ${reference}.`,
       userId,
       type: "transaction",
-      metadata: { transactionId: transaction.id }
+      metadata: {
+        transactionId: transaction.id,
+        reference,
+        fee: fee.toFixed(2),
+        total: (outgoing ? amount + fee : amount - fee).toFixed(2),
+        currency,
+        transactionType: transaction.type,
+        actionUrl: "/transactions"
+      }
     };
     await this.sendNotification(payload);
+    void this.sendTransactionEmail(userId, transaction);
   }
-  async sendSecurityNotification(userId, message) {
+  async sendTransactionEmail(userId, transaction) {
+    try {
+      const user = await storage.getUser(userId);
+      if (!user?.email) return;
+      const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+      await mailtrapService3.sendTransactionActivity(
+        user.email,
+        user.fullName?.split(" ")[0] || "User",
+        user.fullName?.split(" ").slice(1).join(" ") || "",
+        transaction
+      );
+    } catch (error) {
+      console.error("[Notification] Transaction email failed:", error);
+    }
+  }
+  async sendSecurityNotification(userId, message, event = "Security alert", details = {}) {
     const payload = {
-      title: "Security Alert",
+      title: event,
       body: message,
       userId,
-      type: "security"
+      type: "security",
+      metadata: { actionUrl: "/settings", securityEvent: event }
     };
     await this.sendNotification(payload);
+    try {
+      const user = await storage.getUser(userId);
+      if (!user?.email) return;
+      const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
+      await mailtrapService3.sendSecurityAlert(
+        user.email,
+        user.fullName?.split(" ")[0] || "User",
+        user.fullName?.split(" ").slice(1).join(" ") || "",
+        event,
+        message,
+        details
+      );
+    } catch (error) {
+      console.error("[Notification] Security email failed:", error);
+    }
   }
 };
 var notificationService = new NotificationService();
@@ -7457,7 +7568,7 @@ var CloudinaryStorageService = class {
 var cloudinaryStorage = new CloudinaryStorageService();
 
 // server/statumService.ts
-import fetch7 from "node-fetch";
+import fetch8 from "node-fetch";
 var StatumService = class {
   consumerKey;
   consumerSecret;
@@ -7507,7 +7618,7 @@ var StatumService = class {
         amount
       };
       console.log(`\u{1F4E4} Request body:`, JSON.stringify(requestBody, null, 2));
-      const response = await fetch7(this.apiUrl, {
+      const response = await fetch8(this.apiUrl, {
         method: "POST",
         headers: {
           "Authorization": this.getAuthHeader(),
@@ -7720,7 +7831,7 @@ var aiRateLimiter = new AIRateLimiter();
 // server/services/crypto-prices.ts
 init_schema();
 init_db();
-import fetch8 from "node-fetch";
+import fetch9 from "node-fetch";
 var SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"];
 var COINGECKO_IDS = {
   BTC: "bitcoin",
@@ -7793,7 +7904,7 @@ function makeSnapshot(prices, changes24h, source) {
 }
 async function fetchCoinGecko(apiKey) {
   const ids = SUPPORTED_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
-  const response = await fetch8(
+  const response = await fetch9(
     `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
     { headers: apiKey ? { "x-cg-demo-api-key": apiKey } : void 0 }
   );
@@ -7816,7 +7927,7 @@ async function fetchCoinGecko(apiKey) {
   return makeSnapshot(prices, changes24h, "coingecko");
 }
 async function fetchCoinCap(apiKey) {
-  const response = await fetch8("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
+  const response = await fetch9("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
     headers: apiKey ? { authorization: `Bearer ${apiKey}` } : void 0
   });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);
@@ -7837,7 +7948,7 @@ async function fetchCoinCap(apiKey) {
 }
 async function fetchBinance(apiKey) {
   const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
-  const response = await fetch8(
+  const response = await fetch9(
     `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
     { headers: apiKey ? { "X-MBX-APIKEY": apiKey } : void 0 }
   );
@@ -7859,7 +7970,7 @@ async function fetchBinance(apiKey) {
   return makeSnapshot(prices, changes24h, "binance");
 }
 async function fetchCryptoCompare(apiKey) {
-  const response = await fetch8(
+  const response = await fetch9(
     "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,USDT,USDC&tsyms=USD",
     { headers: apiKey ? { authorization: `Apikey ${apiKey}` } : void 0 }
   );
@@ -9427,6 +9538,12 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const hashedPassword = await bcrypt2.hash(newPassword, 10);
       await storage.updateUserPassword(user.id, hashedPassword);
+      await notificationService.sendSecurityNotification(
+        user.id,
+        "Your password was changed successfully.",
+        "Password changed",
+        { ip_address: req.ip || "" }
+      );
       await storage.updateUserOtp(user.id, null, null);
       const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
       Promise.all([
@@ -9521,6 +9638,12 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const hashedPassword = await bcrypt2.hash(newPassword, 10);
       await storage.updateUserPassword(user.id, hashedPassword);
+      await notificationService.sendSecurityNotification(
+        user.id,
+        "Your password was changed successfully.",
+        "Password changed",
+        { ip_address: req.ip || "" }
+      );
       await storage.updateUserOtp(user.id, null, null);
       const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
       Promise.all([
@@ -10663,6 +10786,12 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const hashedPassword = await bcrypt2.hash(newPassword, 10);
       await storage.updateUser(id, { password: hashedPassword, passwordSet: true });
+      await notificationService.sendSecurityNotification(
+        id,
+        "Your password was changed successfully.",
+        "Password changed",
+        { ip_address: req.ip || "" }
+      );
       res.json({ message: "Password changed successfully" });
     } catch (error) {
       console.error("Password change error:", error);
@@ -11574,19 +11703,7 @@ p{color:#6b7280;font-size:14px;}</style>
             status: "completed"
           });
           const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
-          const { mailtrapService: sendMailtrap } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
           messagingService3.sendTransactionNotification(user.phone, "send", amount, currency, "completed", transaction.id).catch((err) => console.error("Transaction notification error:", err));
-          if (user.email) {
-            sendMailtrap.sendTransactionCompleted(
-              user.email,
-              user.firstName || user.fullName?.split(" ")[0] || "User",
-              user.lastName || user.fullName?.split(" ")[1] || "",
-              amount,
-              currency,
-              "send",
-              transaction.id
-            ).catch((err) => console.error("Transaction completed email error:", err));
-          }
         } catch (error) {
           console.error("Transaction completion error:", error);
         }
@@ -11638,11 +11755,7 @@ p{color:#6b7280;font-size:14px;}</style>
       await notificationService.sendTransactionNotification(userId, transaction);
       if (user) {
         const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
-        const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
         messagingService3.sendFundReceipt(user.phone, amount, currency, senderDetails.name).catch((err) => console.error("Fund receipt notification error:", err));
-        if (user.email) {
-          mailtrapService3.sendFundReceipt(user.email, user.fullName?.split(" ")[0] || "User", user.fullName?.split(" ")[1] || "", amount, currency, senderDetails.name).catch((err) => console.error("Fund receipt email error:", err));
-        }
       }
       res.json({ transaction, message: "Payment received successfully" });
     } catch (error) {
@@ -12142,7 +12255,21 @@ p{color:#6b7280;font-size:14px;}</style>
       if (twoFactorEnabled !== void 0) updateData.twoFactorEnabled = twoFactorEnabled;
       if (biometricEnabled !== void 0) updateData.biometricEnabled = biometricEnabled;
       if (darkMode !== void 0) updateData.darkMode = darkMode;
+      const securityChanged = [
+        twoFactorEnabled !== void 0,
+        biometricEnabled !== void 0,
+        pushNotificationsEnabled !== void 0,
+        settings.pinEnabled !== void 0
+      ].some(Boolean);
       const user = await storage.updateUser(userId, updateData);
+      if (user && securityChanged) {
+        await notificationService.sendSecurityNotification(
+          userId,
+          "Your account security or notification settings were updated.",
+          "Security settings changed",
+          { ip_address: req.ip || "" }
+        );
+      }
       if (defaultCurrency && user) {
         try {
           const userWallets = await db.select().from(wallets).where(eq3(wallets.userId, userId));
@@ -15768,28 +15895,8 @@ p{color:#6b7280;font-size:14px;}</style>
         await storage.updateTransaction(recipientTransaction.id, { status: "failed" });
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
-      const { MailtrapService: MailtrapService2 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
-      const mailtrapService3 = new MailtrapService2();
-      const transactionDate = (/* @__PURE__ */ new Date()).toISOString();
-      mailtrapService3.sendTemplate(
-        toUser.email,
-        "5e2a2ec4-37fb-4178-96c4-598977065f9c",
-        {
-          sender: fromUser.fullName,
-          amount,
-          currency,
-          date: transactionDate,
-          transaction_id: recipientTransaction.id
-        }
-      ).then((success) => {
-        if (success) {
-          console.log(`\u2705 Fund receipt email sent to ${toUser.email} - Transaction ID: ${recipientTransaction.id}, Sender: ${fromUser.fullName}, Amount: ${amount} ${currency}, Date: ${transactionDate}`);
-        } else {
-          console.warn(`\u26A0\uFE0F Failed to send fund receipt email to ${toUser.email}`);
-        }
-      }).catch((err) => {
-        console.error("Email sending error:", err);
-      });
+      await notificationService.sendTransactionNotification(fromUserId, senderTransaction);
+      await notificationService.sendTransactionNotification(toUserId, recipientTransaction);
       const { messagingService: messagingService3 } = await Promise.resolve().then(() => (init_messaging(), messaging_exports));
       messagingService3.sendMessage(
         fromUser.phone,
@@ -15842,6 +15949,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinCode: hashedPin,
         pinEnabled: true
       });
+      await notificationService.sendSecurityNotification(
+        user.id,
+        "Your PIN was changed successfully.",
+        "PIN changed",
+        { ip_address: req.ip || "" }
+      );
       await storage.updateUserOtp(user.id, null, null);
       console.log(`[ResetPIN] Success for user ${user.id}`);
       res.json({ success: true, message: "PIN reset successful" });
@@ -15869,6 +15982,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinCode: hashedPin,
         pinEnabled: true
       });
+      await notificationService.sendSecurityNotification(
+        id,
+        "A new transaction PIN was set on your account.",
+        "PIN changed",
+        { ip_address: req.ip || "" }
+      );
       const updatedUser = await storage.getUser(id);
       const { password: _, ...userResponse } = updatedUser;
       res.json({ message: "PIN set successfully", user: userResponse });
@@ -16004,6 +16123,12 @@ p{color:#6b7280;font-size:14px;}</style>
         pinEnabled: false,
         pinCode: null
       }).where(eq4(users2.id, id));
+      await notificationService.sendSecurityNotification(
+        id,
+        "Your transaction PIN was disabled.",
+        "PIN changed",
+        { ip_address: req.ip || "" }
+      );
       const updatedUser = await storage.getUser(id);
       if (req.session.user) {
         req.session.user.pinEnabled = false;
@@ -19004,6 +19129,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           feeUsdValue: feeUsdValue.toFixed(2)
         }
       });
+      await notificationService.sendTransactionNotification(userId, transaction);
       if (sourceType === "crypto" || destinationType === "crypto") {
         await db.insert(cryptoTransactions).values({
           userId,
@@ -19770,7 +19896,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         }
         return res.status(400).json({ message: error?.message || "Insufficient balance" });
       }
-      await db.insert(transactions).values({
+      const [exchangeTransaction] = await db.insert(transactions).values({
         userId,
         type: "exchange",
         amount: String(fromAmt),
@@ -19782,7 +19908,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
         completedAt: /* @__PURE__ */ new Date(),
         description: `Exchange ${fromWallet.currency} \u2192 ${toWallet.currency}`,
         metadata: { fromWalletId, toWalletId, toCurrency: toWallet.currency, toAmount: toAmount.toFixed(4) }
-      });
+      }).returning();
+      await notificationService.sendTransactionNotification(userId, exchangeTransaction);
       res.json({ success: true, fromAmount: fromAmt.toFixed(4), fromCurrency: fromWallet.currency, toAmount: toAmount.toFixed(4), toCurrency: toWallet.currency, rate: rate.toFixed(6), fee: fee.toFixed(4), reference: ref });
     } catch (e) {
       console.error("Exchange error:", e);

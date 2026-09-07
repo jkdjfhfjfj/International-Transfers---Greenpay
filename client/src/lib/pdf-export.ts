@@ -9,9 +9,17 @@ interface Transaction {
   currency: string;
   status: string;
   createdAt: string;
+  completedAt?: string;
   description?: string;
+  fee?: string | number;
+  reference?: string;
+  paystackReference?: string;
+  failureReason?: string;
+  exchangeRate?: string | number;
+  metadata?: Record<string, any>;
   recipientDetails?: {
     name?: string;
+    [key: string]: any;
   };
 }
 
@@ -79,9 +87,10 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
       .filter(t => (t.type === 'receive' || t.type === 'deposit') && t.status === 'completed')
       .reduce((sum, t) => sum + parseFloat(t.amount), 0);
     const totalOut = curTxns
-      .filter(t => (t.type === 'send' || t.type === 'withdraw' || t.type === 'card_purchase') && t.status === 'completed')
+      .filter(t => ['send', 'withdraw', 'card_purchase', 'exchange', 'transfer', 'bill_payment', 'airtime'].includes(t.type) && t.status === 'completed')
       .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-    return { cur, sym: getCurrencySymbol(cur), totalIn, totalOut };
+    const totalFees = curTxns.reduce((sum, t) => sum + Number(t.fee ?? t.metadata?.fee ?? 0), 0);
+    return { cur, sym: getCurrencySymbol(cur), totalIn, totalOut, totalFees };
   });
   
   // Summary Box — height grows with number of currencies
@@ -100,20 +109,22 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
   
   let yPos = 100;
   
-  for (const { cur, sym, totalIn, totalOut } of currencyStats) {
+   for (const { cur, sym, totalIn, totalOut, totalFees } of currencyStats) {
     doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
     doc.text(`${cur}:`, 18, yPos);
     doc.setTextColor(34, 197, 94); // Green for income
     doc.text(`+${sym}${formatNumber(totalIn)}`, 50, yPos);
     doc.setTextColor(239, 68, 68); // Red for expenses
     doc.text(`-${sym}${formatNumber(totalOut)}`, 90, yPos);
+    doc.setTextColor(grayColor[0], grayColor[1], grayColor[2]);
+    doc.text(`Fees ${sym}${formatNumber(totalFees)}`, 135, yPos);
     yPos += 6;
   }
   
   // Transaction Table — start below summary box
   const tableStartY = 85 + summaryBoxH + 10;
   const tableData = transactions.map(transaction => {
-    const date = new Date(transaction.createdAt).toLocaleDateString('en-US', {
+     const date = new Date(transaction.completedAt || transaction.createdAt).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -128,20 +139,34 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
     const prefix = (transaction.type === 'send' || transaction.type === 'withdraw' || 
                     transaction.type === 'card_purchase' || transaction.type === 'exchange') ? '-' : '+';
     
-    const amount = `${prefix}${getCurrencySymbol(transaction.currency)}${formatNumber(transaction.amount)}`;
+     const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+     const outgoing = ['send', 'withdraw', 'card_purchase', 'exchange', 'transfer', 'bill_payment', 'airtime'].includes(transaction.type);
+     const total = outgoing ? Number(transaction.amount) + fee : Number(transaction.amount) - fee;
+     const amount = `${prefix}${getCurrencySymbol(transaction.currency)}${formatNumber(transaction.amount)}`;
+     const recipientDetails = transaction.recipientDetails || {};
+     const contact = Object.entries(recipientDetails)
+       .filter(([key, value]) => key !== 'name' && value != null && value !== '')
+       .map(([, value]) => String(value))
+       .join(' · ');
+     const providerReference = transaction.paystackReference || transaction.metadata?.providerReference || transaction.metadata?.providerTransactionId || '';
     
     return [
-      date,
+       date,
+       transaction.reference || transaction.id,
       recipientName,
+       contact || transaction.description || '',
       amount,
+       `${getCurrencySymbol(transaction.currency)}${formatNumber(fee)}`,
+       `${getCurrencySymbol(transaction.currency)}${formatNumber(total)}`,
       transaction.currency?.toUpperCase() || 'USD',
-      transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)
+       transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1),
+       providerReference
     ];
   });
   
   autoTable(doc, {
     startY: tableStartY,
-    head: [['Date', 'Description', 'Amount', 'Currency', 'Status']],
+     head: [['Date', 'TID / Reference', 'Description', 'Contact / Details', 'Amount', 'Fee', 'Net / Total', 'Currency', 'Status', 'Provider Ref']],
     body: tableData,
     theme: 'grid',
     headStyles: {
@@ -158,11 +183,16 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
       fillColor: [249, 250, 251]
     },
     columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: 60 },
-      2: { cellWidth: 35, halign: 'right' },
-      3: { cellWidth: 25, halign: 'center' },
-      4: { cellWidth: 30, halign: 'center' }
+       0: { cellWidth: 19 },
+       1: { cellWidth: 25 },
+       2: { cellWidth: 28 },
+       3: { cellWidth: 25 },
+       4: { cellWidth: 22, halign: 'right' },
+       5: { cellWidth: 16, halign: 'right' },
+       6: { cellWidth: 22, halign: 'right' },
+       7: { cellWidth: 16, halign: 'center' },
+       8: { cellWidth: 20, halign: 'center' },
+       9: { cellWidth: 25 }
     },
     margin: { left: 14, right: 14 },
     didDrawPage: (data) => {

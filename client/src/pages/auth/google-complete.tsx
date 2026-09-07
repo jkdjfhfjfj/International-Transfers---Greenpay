@@ -330,11 +330,6 @@ export default function GoogleCompletePage() {
       {step < 4 && (
         <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           <div className="max-w-sm mx-auto p-4 flex gap-3">
-            {step > 1 && (
-              <Button variant="outline" className="rounded-xl" onClick={() => setStep(step - 1)}>
-                Back
-              </Button>
-            )}
             <Button
               className="flex-1 rounded-xl"
               style={{ height: 52 }}

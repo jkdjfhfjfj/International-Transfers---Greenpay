@@ -119,6 +119,11 @@ export default function ResetPasswordPage() {
                         className="h-12 text-center text-2xl tracking-widest"
                         maxLength={6}
                         autoComplete="one-time-code"
+                         onChange={(event) => field.onChange(event.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+                         onPaste={(event) => {
+                           event.preventDefault();
+                           field.onChange(event.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 6));
+                         }}
                       />
                     </FormControl>
                     <FormMessage />
