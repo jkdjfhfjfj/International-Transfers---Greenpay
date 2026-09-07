@@ -116,9 +116,7 @@ export default function TransferPage() {
 
   return (
     <div className="min-h-screen bg-background pb-32">
-      <WavyHeader
-        title="Transfer"
-      />
+      <WavyHeader />
       <main className="max-w-md mx-auto p-4 space-y-4">
         <motion.div
           initial={{ opacity: 0, y: 12 }}
