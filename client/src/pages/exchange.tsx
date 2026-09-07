@@ -103,6 +103,11 @@ export default function ExchangePage() {
       setAmount("");
       toast({ title: "Exchange successful!", description: `${result.fromAmount} ${result.fromCurrency} → ${parseFloat(result.toAmount).toFixed(4)} ${result.toCurrency}` });
     } catch (e: any) {
+      if (e?.requiresSetup) {
+        toast({ title: "Security setup required", description: "Set up a PIN or authenticator before making transactions." });
+        setLocation("/settings");
+        return;
+      }
       if (e?.requiresPin || e?.requiresAuthenticator) {
         setSecurityPrompt({ pin: Boolean(e.requiresPin), authenticator: Boolean(e.requiresAuthenticator) });
         return;

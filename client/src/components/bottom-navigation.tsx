@@ -64,7 +64,7 @@ export default function BottomNavigation() {
         className="bg-background/95 border-t border-border shadow-[0_-4px_18px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:shadow-[0_-4px_18px_rgba(0,0,0,0.28)]"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
       >
-        <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 64 }}>
+        <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 72 }}>
           {navItems.map((item) => {
             const { Icon } = item;
             const isActive =

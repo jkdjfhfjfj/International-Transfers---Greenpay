@@ -158,6 +158,11 @@ export default function CryptoPage() {
       setTransferAmount("");
     },
     onError: (error: any) => {
+      if (error?.requiresSetup) {
+        toast({ title: "Security setup required", description: "Set up a PIN or authenticator before making crypto transactions." });
+        setLocation("/settings");
+        return;
+      }
       if (error?.requiresPin || error?.requiresAuthenticator) {
         setPendingSecurityAction("transfer");
         setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });

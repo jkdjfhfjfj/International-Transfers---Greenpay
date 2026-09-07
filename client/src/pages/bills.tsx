@@ -11,6 +11,7 @@ import { useWallets } from "@/hooks/use-wallets";
 import { apiRequest } from "@/lib/queryClient";
 import { Receipt, CheckCircle, Clock, Zap } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
+import { PINModal } from "@/components/pin-modal";
 
 const BILL_PROVIDERS = [
   { id: "KPLC", name: "KPLC", label: "KPLC (Electricity)", icon: "⚡", color: "from-yellow-500 to-yellow-600", needsId: "meterNumber" },
@@ -47,6 +48,7 @@ export default function BillsPage() {
   const [identifier, setIdentifier] = useState("");
   const [amount, setAmount] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -68,15 +70,18 @@ export default function BillsPage() {
   };
 
   const billPaymentMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (security?: { pin?: string; authenticatorCode?: string }) => {
       const response = await apiRequest("POST", "/api/bills/pay", {
         userId: user?.id,
         provider: selectedProvider?.id,
         meterNumber: selectedProvider?.needsId === "meterNumber" ? identifier : null,
         accountNumber: selectedProvider?.needsId === "accountNumber" ? identifier : null,
         amount,
+        ...security,
       });
-      return response.json();
+      const data = await response.json();
+      if (!response.ok) throw data;
+      return data;
     },
     onSuccess: () => {
       setStep(4);
@@ -92,6 +97,18 @@ export default function BillsPage() {
       }, 1500);
     },
     onError: (error: any) => {
+      if (error.requiresPin || error.requiresAuthenticator || error.requiresSetup) {
+        if (error.requiresSetup) {
+          toast({ title: "Security setup required", description: "Set up a PIN or authenticator before paying bills." });
+          setLocation("/settings");
+          return;
+        }
+        setSecurityPrompt({
+          pin: Boolean(error.securityOptions?.pin ?? error.requiresPin),
+          authenticator: Boolean(error.securityOptions?.authenticator ?? error.requiresAuthenticator),
+        });
+        return;
+      }
       toast({
         title: "Payment Failed",
         description: error.message || "Unable to process bill payment. Please try again.",
@@ -149,7 +166,7 @@ export default function BillsPage() {
   };
 
   const handleConfirmPayment = () => {
-    billPaymentMutation.mutate();
+    billPaymentMutation.mutate({});
   };
 
   const kesBalance = wallets.find((wallet) => wallet.currency === "KES")?.availableBalance || 0;
@@ -455,6 +472,19 @@ export default function BillsPage() {
           )}
         </DialogContent>
       </Dialog>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Verify bill payment"
+        description="Verify with your PIN or authenticator to pay this bill."
+        onSuccess={(pin, authenticatorCode) => {
+          setSecurityPrompt(null);
+          billPaymentMutation.mutate({ pin, authenticatorCode });
+        }}
+        isLoading={billPaymentMutation.isPending}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -549,6 +549,16 @@ export const announcements = pgTable("announcements", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// A dismissal belongs to both the announcement and the authenticated user.
+// This keeps "Do not show again" independent per account and across devices.
+export const announcementDismissals = pgTable("announcement_dismissals", {
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  announcementId: varchar("announcement_id").references(() => announcements.id, { onDelete: "cascade" }).notNull(),
+  dismissedAt: timestamp("dismissed_at").defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.announcementId] }),
+}));
 
 export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
   id: true,

@@ -232,6 +232,16 @@ function AppContent() {
   // Initialize FCM push notifications
   useFCM(isAuthenticated);
 
+  // Use the browser Notification API for web notifications. This is
+  // intentionally separate from Capacitor/FCM; the persisted notification
+  // feed remains the source of truth after refresh.
+  useEffect(() => {
+    if (!isAuthenticated || !("Notification" in window)) return;
+    if (Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [isAuthenticated]);
+
   // Web notifications are delivered from the same persisted notification feed
   // used by the bell menu, so account actions remain visible after refresh.
   const lastNotificationIds = useRef<Set<string> | null>(null);

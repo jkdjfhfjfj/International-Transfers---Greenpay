@@ -104,6 +104,11 @@ export default function PaymentRequestsPage() {
         window.location.reload();
       } else {
         const error = await response.json().catch(() => ({}));
+        if (error.requiresSetup) {
+          toast({ title: "Security setup required", description: "Set up a PIN or authenticator before paying a request." });
+          setLocation("/settings");
+          return;
+        }
         if (error.requiresPin || error.requiresAuthenticator) {
           setPendingPayment(id);
           setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });

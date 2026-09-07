@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,10 +28,15 @@ export function PINModal({
 }: PINModalProps) {
   const [pin, setPin] = useState("");
   const [authenticatorCode, setAuthenticatorCode] = useState("");
+  const [method, setMethod] = useState<"pin" | "authenticator">(requiresPin ? "pin" : "authenticator");
   const { toast } = useToast();
 
+  useEffect(() => {
+    setMethod(requiresPin ? "pin" : "authenticator");
+  }, [requiresPin, requiresAuthenticator]);
+
   const handleSubmit = () => {
-    if (requiresPin && pin.length !== 4) {
+    if (method === "pin" && pin.length !== 4) {
       toast({
         title: "Invalid PIN",
         description: "PIN must be 4 digits",
@@ -40,7 +45,7 @@ export function PINModal({
       return;
     }
 
-    if (requiresPin && !/^\d{4}$/.test(pin)) {
+    if (method === "pin" && !/^\d{4}$/.test(pin)) {
       toast({
         title: "Invalid PIN",
         description: "PIN must contain only numbers",
@@ -49,7 +54,7 @@ export function PINModal({
       return;
     }
 
-    if (requiresAuthenticator && !/^\d{6}$/.test(authenticatorCode)) {
+    if (method === "authenticator" && !/^\d{6}$/.test(authenticatorCode)) {
       toast({
         title: "Authenticator code required",
         description: "Enter the current 6-digit code from your authenticator app.",
@@ -58,7 +63,7 @@ export function PINModal({
       return;
     }
 
-    onSuccess(pin, authenticatorCode || undefined);
+    onSuccess(method === "pin" ? pin : "", method === "authenticator" ? authenticatorCode : undefined);
     setPin("");
     setAuthenticatorCode("");
   };
@@ -84,20 +89,34 @@ export function PINModal({
             {description}
           </p>
 
-          <Input
-            type="password"
-            inputMode="numeric"
-            placeholder="••••"
-            maxLength={4}
-            value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
-            className="text-center text-2xl tracking-widest"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSubmit();
-            }}
-          />
+          {requiresPin && requiresAuthenticator && (
+            <div className="grid grid-cols-2 gap-2">
+              <Button type="button" variant={method === "pin" ? "default" : "outline"} onClick={() => setMethod("pin")}>
+                PIN
+              </Button>
+              <Button type="button" variant={method === "authenticator" ? "default" : "outline"} onClick={() => setMethod("authenticator")}>
+                Authenticator
+              </Button>
+            </div>
+          )}
 
-          {requiresAuthenticator && (
+          {method === "pin" && requiresPin && (
+            <Input
+              type="password"
+              inputMode="numeric"
+              placeholder="••••"
+              maxLength={4}
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
+              className="text-center text-2xl tracking-widest"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleSubmit();
+              }}
+              autoFocus
+            />
+          )}
+
+          {method === "authenticator" && requiresAuthenticator && (
             <Input
               type="text"
               inputMode="numeric"
@@ -121,10 +140,10 @@ export function PINModal({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={(requiresPin && pin.length !== 4) || (requiresAuthenticator && authenticatorCode.length !== 6) || isLoading}
+              disabled={(method === "pin" && pin.length !== 4) || (method === "authenticator" && authenticatorCode.length !== 6) || isLoading}
               className="flex-1"
             >
-              {isLoading ? "Verifying..." : "Verify PIN"}
+              {isLoading ? "Verifying..." : "Verify"}
             </Button>
           </div>
         </div>

@@ -133,6 +133,12 @@ async function alterMissingColumns() {
       expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
+    `CREATE TABLE IF NOT EXISTS announcement_dismissals (
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      announcement_id VARCHAR NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
+      dismissed_at TIMESTAMP DEFAULT NOW(),
+      PRIMARY KEY (user_id, announcement_id)
+    )`,
     `CREATE TABLE IF NOT EXISTS payment_requests (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
       from_user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,

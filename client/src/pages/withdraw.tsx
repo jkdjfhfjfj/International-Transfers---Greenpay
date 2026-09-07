@@ -17,6 +17,7 @@ import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight, Bookmark, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { PINModal } from "@/components/pin-modal";
 
 const withdrawSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than zero"),
@@ -37,6 +38,7 @@ export default function WithdrawPage() {
   const [, setLocation] = useLocation();
   const [selectedMethod, setSelectedMethod] = useState<string>("");
   const [pendingWithdrawal, setPendingWithdrawal] = useState<WithdrawForm | null>(null);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [saveBeneficiary, setSaveBeneficiary] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -102,7 +104,7 @@ export default function WithdrawPage() {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: async (data: WithdrawForm) => {
+    mutationFn: async (data: WithdrawForm & { pin?: string; authenticatorCode?: string }) => {
       if (saveBeneficiary && data.accountDetails.accountName) {
         await saveBeneficiaryMutation.mutateAsync();
       }
@@ -116,8 +118,12 @@ export default function WithdrawPage() {
         // only included for older deployments that still read the payload.
         fee: withdrawalFee.toFixed(2),
         recipientDetails: data.accountDetails,
+        pin: data.pin,
+        authenticatorCode: data.authenticatorCode,
       });
-      return response.json();
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result;
     },
     onSuccess: (data) => {
       toast({
@@ -132,6 +138,18 @@ export default function WithdrawPage() {
       setLocation("/dashboard");
     },
     onError: (error: any) => {
+      if (error.requiresPin || error.requiresAuthenticator || error.requiresSetup) {
+        if (error.requiresSetup) {
+          toast({ title: "Security setup required", description: "Set up a PIN or authenticator before making withdrawals." });
+          setLocation("/settings");
+          return;
+        }
+        setSecurityPrompt({
+          pin: Boolean(error.securityOptions?.pin ?? error.requiresPin),
+          authenticator: Boolean(error.securityOptions?.authenticator ?? error.requiresAuthenticator),
+        });
+        return;
+      }
       const errorMessage = error?.response?.data?.message || "Unable to process withdrawal. Please try again.";
       toast({
         title: "Withdrawal failed",
@@ -771,6 +789,19 @@ export default function WithdrawPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Verify withdrawal"
+        description="Verify with your PIN or authenticator to submit this withdrawal."
+        onSuccess={(pin, authenticatorCode) => {
+          setSecurityPrompt(null);
+          if (pendingWithdrawal) withdrawMutation.mutate({ ...pendingWithdrawal, pin, authenticatorCode });
+        }}
+        isLoading={withdrawMutation.isPending}
+      />
     </div>
   );
 }

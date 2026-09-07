@@ -150,6 +150,16 @@ export default function DashboardPage() {
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
+    {
+      id: "transfer",
+      icon: ArrowLeftRight,
+      label: "Transfer",
+      path: "/send-money",
+      accent: '#16a34a',
+      tint: 'rgba(22,163,74,0.08)',
+      disabled: false,
+      requiresCard: false
+    },
     { 
       id: "receive", 
       icon: Download, 
@@ -568,7 +578,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.2 }}
         >
           <h2 className="text-lg font-bold mb-4">Quick Actions</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-6">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
               return (
@@ -603,7 +613,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-28">
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',

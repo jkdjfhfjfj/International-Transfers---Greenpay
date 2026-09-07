@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Megaphone, Gift, Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 
 interface Announcement {
   id: string;
@@ -172,15 +173,12 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
   const [isVisible, setIsVisible] = useState(false);
   const [progress, setProgress] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
-  const dismissedStorageKey = `geepay-dismissed-announcements:${userId || "anonymous"}`;
-  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(`geepay-dismissed-announcements:${userId || "anonymous"}`) || "[]");
-    } catch {
-      return [];
-    }
-  });
+  const [dismissedIds, setDismissedIds] = useState<string[]>([]);
   const visibleAnnouncements = announcements.filter((announcement) => !dismissedIds.includes(announcement.id));
+
+  useEffect(() => {
+    setDismissedIds([]);
+  }, [userId]);
 
   const duration = 25000;
   const interval = 100;
@@ -231,9 +229,12 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
 
   const handleClose = () => setIsVisible(false);
   const handleDismissForever = () => {
-    const next = [...dismissedIds, visibleAnnouncements[currentIndex].id];
+    const announcementId = visibleAnnouncements[currentIndex].id;
+    const next = [...dismissedIds, announcementId];
     setDismissedIds(next);
-    localStorage.setItem(dismissedStorageKey, JSON.stringify(next));
+    apiRequest("POST", `/api/announcements/${announcementId}/dismiss`).catch(() => {
+      setDismissedIds((current) => current.filter((id) => id !== announcementId));
+    });
     setIsVisible(false);
   };
 
@@ -327,7 +328,7 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
 
                 <div className="flex-1 min-w-0 pr-8">
                   <h4 className="font-bold text-sm text-foreground leading-tight">{current.title}</h4>
-                   <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap max-h-32 overflow-y-auto">{current.content}</p>
+                  <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">{current.content}</p>
 
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {hasMedia && (

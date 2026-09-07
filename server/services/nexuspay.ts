@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 
-const NEXUSPAY_BASE_URL = 'https://app.makamescopay.com/api';
+const NEXUSPAY_BASE_URL = 'https://makamescopay.com/api';
 
 export interface NexusCurrency {
   code: string;
@@ -63,7 +63,7 @@ export class NexusPayService {
   private headers(apiKey: string) {
     return {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'X-API-Key': apiKey,
     };
   }
 
@@ -90,15 +90,26 @@ export class NexusPayService {
     if (params.email) body.email = params.email;
     if (params.correspondent) body.correspondent = params.correspondent;
 
-    const response = await fetch(`${this.baseUrl}/checkout`, {
+    const response = await fetch(`${this.baseUrl}/payments/stkpush`, {
       method: 'POST',
       headers: this.headers(apiKey),
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        phoneNumber: params.phone,
+        amount: params.amount,
+        currency: params.currency,
+        email: params.email,
+        description: body.description,
+        correspondent: params.correspondent,
+      }),
     });
 
     const data = await response.json() as any;
-    if (!response.ok) throw new Error(data.error || `NexusPay checkout failed: ${response.status}`);
-    return data;
+    if (!response.ok) throw new Error(data.error || data.message || `NexusPay checkout failed: ${response.status}`);
+    return {
+      reference: data.reference || data.transactionId || data.id,
+      status: data.status || 'pending',
+      redirectUrl: data.redirectUrl || data.checkoutUrl || null,
+    };
   }
 
   async getStatus(reference: string): Promise<{
@@ -113,13 +124,19 @@ export class NexusPayService {
     const apiKey = await this.getApiKey();
     if (!apiKey) throw new Error('NexusPay API key not configured');
 
-    const response = await fetch(`${this.baseUrl}/status/${reference}`, {
+    const response = await fetch(`${this.baseUrl}/payments/${reference}`, {
       headers: this.headers(apiKey),
     });
 
     const data = await response.json() as any;
-    if (!response.ok) throw new Error(data.error || `Status check failed: ${response.status}`);
-    return data;
+    if (!response.ok) throw new Error(data.error || data.message || `Status check failed: ${response.status}`);
+    return {
+      ...data,
+      reference: data.reference || reference,
+      status: data.status === 'success' ? 'completed' : data.status,
+      amount: String(data.amount || data.amountPaid || 0),
+      currency: data.currency || 'KES',
+    };
   }
 
   async getCountries(): Promise<any[]> {

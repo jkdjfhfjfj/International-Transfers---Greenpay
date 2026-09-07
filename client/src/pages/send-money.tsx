@@ -34,7 +34,7 @@ export default function SendMoneyPage() {
   const [transferDescription, setTransferDescription] = useState("");
   const [greenPaySearchResults, setGreenPaySearchResults] = useState<UserSearchResult[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
-  const [showPINModal, setShowPINModal] = useState(false);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
   const [pendingTransferData, setPendingTransferData] = useState<any>(null);
   
@@ -104,6 +104,9 @@ export default function SendMoneyPage() {
       if (response.status === 400 && data.requiresPin) {
         throw { ...data, requiresPin: true };
       }
+      if (response.status === 400 && (data.requiresAuthenticator || data.requiresSetup)) {
+        throw data;
+      }
       
       if (!response.ok) {
         throw new Error(data.message || "Transfer failed");
@@ -129,8 +132,16 @@ export default function SendMoneyPage() {
       }, 2000);
     },
     onError: (error: any) => {
-      if (error.requiresPin) {
-        setShowPINModal(true);
+      if (error.requiresSetup) {
+        toast({ title: "Security setup required", description: "Set up a PIN or authenticator before sending money." });
+        setLocation("/settings");
+        return;
+      }
+      if (error.requiresPin || error.requiresAuthenticator) {
+        setSecurityPrompt({
+          pin: Boolean(error.securityOptions?.pin ?? error.requiresPin),
+          authenticator: Boolean(error.securityOptions?.authenticator ?? error.requiresAuthenticator),
+        });
         return;
       }
       
@@ -170,10 +181,10 @@ export default function SendMoneyPage() {
     setPendingTransferData(null);
   };
 
-  const handlePINVerified = (pin: string) => {
+  const handlePINVerified = (pin: string, authenticatorCode?: string) => {
     if (pendingTransferData) {
-      setShowPINModal(false);
-      greenPayTransferMutation.mutate({ ...pendingTransferData, pin });
+      setSecurityPrompt(null);
+      greenPayTransferMutation.mutate({ ...pendingTransferData, pin, authenticatorCode });
     }
   };
 
@@ -543,11 +554,14 @@ export default function SendMoneyPage() {
         </div>
       )}
       <PINModal
-        isOpen={showPINModal}
-        onClose={() => setShowPINModal(false)}
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
         onSuccess={handlePINVerified}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
         title="Verify Transfer"
-        description="Enter your 4-digit PIN to complete this transfer"
+        description="Verify with your PIN or authenticator to complete this transfer"
+        isLoading={greenPayTransferMutation.isPending}
       />
     </div>
   );

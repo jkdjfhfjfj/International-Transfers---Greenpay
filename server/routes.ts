@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -124,24 +124,51 @@ async function verifyTransactionSecurity(
     const raw = settings.find((setting) => setting.key === key)?.value as any;
     return String(raw?.value ?? raw).toLowerCase() === "true";
   };
-  const pinRequired = Boolean(user.pinEnabled) || settingValue("pin_required");
-  const authenticatorRequired = Boolean(user.twoFactorEnabled) || settingValue("two_factor_required");
-  if (pinRequired) {
-    if (!user.pinCode) return { ok: false, status: 400, message: "Set up your PIN before making transactions" };
-    if (!credentials.pin) return { ok: false, status: 400, requiresPin: true, message: "PIN required" };
-    if (!(await bcrypt.compare(credentials.pin, user.pinCode))) {
-      return { ok: false, status: 401, message: "Invalid PIN" };
-    }
+  const pinEnabled = Boolean(user.pinEnabled && user.pinCode);
+  const authenticatorEnabled = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
+  const pinRequired = settingValue("pin_required");
+  const authenticatorRequired = settingValue("two_factor_required");
+  const methods = {
+    pin: pinEnabled || pinRequired,
+    authenticator: authenticatorEnabled || authenticatorRequired,
+  };
+
+  // Every balance-changing operation must be authenticated. If the user has
+  // both methods enabled, either valid method is accepted (not both).
+  if (!methods.pin && !methods.authenticator) {
+    return {
+      ok: false,
+      status: 400,
+      requiresSetup: true,
+      message: "Set up a transaction PIN or authenticator before making transactions",
+    };
   }
-  if (authenticatorRequired) {
-    if (!user.twoFactorSecret) return { ok: false, status: 400, message: "Set up your authenticator before making transactions" };
-    if (!credentials.authenticatorCode) {
-      return { ok: false, status: 400, requiresAuthenticator: true, message: "Authenticator code required" };
-    }
-    if (!twoFactorService.verifyToken(user.twoFactorSecret, credentials.authenticatorCode)) {
-      return { ok: false, status: 401, message: "Invalid authenticator code" };
-    }
+  if (methods.pin && !pinEnabled && pinRequired) {
+    return { ok: false, status: 400, requiresSetup: true, requiresPin: true, message: "Set up your PIN before making transactions" };
   }
+  if (methods.authenticator && !authenticatorEnabled && authenticatorRequired) {
+    return { ok: false, status: 400, requiresSetup: true, requiresAuthenticator: true, message: "Set up your authenticator before making transactions" };
+  }
+
+  const hasPin = Boolean(credentials.pin);
+  const hasAuthenticator = Boolean(credentials.authenticatorCode);
+  if (!hasPin && !hasAuthenticator) {
+    return {
+      ok: false,
+      status: 400,
+      requiresPin: methods.pin && pinEnabled,
+      requiresAuthenticator: methods.authenticator && authenticatorEnabled,
+      securityOptions: { pin: methods.pin && pinEnabled, authenticator: methods.authenticator && authenticatorEnabled },
+      message: "PIN or authenticator code required",
+    };
+  }
+
+  let valid = false;
+  if (hasPin && pinEnabled) valid = await bcrypt.compare(credentials.pin!, user.pinCode!);
+  if (!valid && hasAuthenticator && authenticatorEnabled) {
+    valid = twoFactorService.verifyToken(user.twoFactorSecret!, credentials.authenticatorCode!);
+  }
+  if (!valid) return { ok: false, status: 401, message: "Invalid PIN or authenticator code" };
   return { ok: true };
 }
 
@@ -823,6 +850,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/virtual-accounts/:id/transfer", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
+      const security = await verifyTransactionSecurity(userId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
       const amount = Number(req.body.amount);
       if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ message: "Enter a valid transfer amount" });
       const account = await db.query.virtualAccounts.findFirst({ where: and(eq(virtualAccounts.id, req.params.id), eq(virtualAccounts.userId, userId)) });
@@ -3626,6 +3655,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Security: users can only purchase airtime for themselves
       const userId = sessionUserId;
+      const security = await verifyTransactionSecurity(userId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       console.log(`📱 Airtime purchase request - User: ${userId}, Phone: ${phoneNumber}, Amount: ${amount} ${currency}, Provider: ${provider}`);
 
@@ -3882,6 +3913,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Security: users can only pay bills from their own account
       const userId = sessionUserId;
+      const security = await verifyTransactionSecurity(userId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       console.log(`💳 Bill payment request - User: ${userId}, Provider: ${provider}, Amount: ${amount} KES`);
 
@@ -4054,6 +4087,8 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const sessionUserId = (req as any).session?.userId;
       const { cardId, direction, amount } = req.body; // direction: 'wallet_to_card' | 'card_to_wallet'
+      const security = await verifyTransactionSecurity(sessionUserId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
       
       if (!cardId || !direction || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
         return res.status(400).json({ message: "Invalid transfer parameters" });
@@ -9612,9 +9647,12 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Notification endpoints
-  app.get("/api/notifications/:userId", async (req, res) => {
+  app.get("/api/notifications/:userId", requireAuth, async (req, res) => {
     try {
       const { userId } = req.params;
+      if ((req.session as any).userId !== userId) {
+        return res.status(403).json({ message: "You can only view your own notifications" });
+      }
       
       // Get user-specific notifications and global notifications
       const userNotifications = await storage.getNotificationsByUserId(userId);
@@ -10347,6 +10385,8 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Security: users can only create transactions for themselves
       const userId = sessionUserId;
+      const security = await verifyTransactionSecurity(userId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
       
       // Get user
       const user = await storage.getUser(userId);
@@ -12236,13 +12276,32 @@ Sitemap: https://geepay.us/sitemap.xml`;
   });
 
   // Announcements API
-  app.get("/api/announcements", async (req, res) => {
+  app.get("/api/announcements", requireAuth, async (req, res) => {
     try {
-      const announcements = await storage.getActiveAnnouncements();
+      const userId = (req.session as any).userId;
+      const dismissed = await db.select({ announcementId: announcementDismissals.announcementId })
+        .from(announcementDismissals)
+        .where(eq(announcementDismissals.userId, userId));
+      const dismissedIds = new Set(dismissed.map((item) => item.announcementId));
+      const announcements = (await storage.getActiveAnnouncements())
+        .filter((announcement) => !dismissedIds.has(announcement.id));
       res.json({ announcements });
     } catch (error) {
       console.error('Fetch announcements error:', error);
       res.status(500).json({ message: "Failed to fetch announcements" });
+    }
+  });
+
+  app.post("/api/announcements/:id/dismiss", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      await db.insert(announcementDismissals)
+        .values({ userId, announcementId: req.params.id })
+        .onConflictDoNothing();
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Dismiss announcement error:", error);
+      res.status(500).json({ message: "Failed to dismiss announcement" });
     }
   });
 
@@ -13573,11 +13632,50 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
-      const result = await nexusPayService.checkout({ amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent, description: description || `Deposit to ${normalizedCurrency} wallet` });
+      const configuredGateway = String((await storage.getSystemSetting("payment", "default_gateway"))?.value || "nexuspay").replace(/"/g, "").toLowerCase();
+      const gatewayOrder = Array.from(new Set([
+        configuredGateway,
+        normalizedCurrency === "KES" ? "payhero" : "paystack",
+        "nexuspay",
+      ]));
+      let result: { reference: string; status: string; redirectUrl: string | null } | null = null;
+      let selectedGateway = "";
+      const gatewayErrors: string[] = [];
+
+      for (const gateway of gatewayOrder) {
+        try {
+          if (gateway === "nexuspay") {
+            const checkout = await nexusPayService.checkout({
+              amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent,
+              description: description || `Deposit to ${normalizedCurrency} wallet`,
+            });
+            result = checkout;
+          } else if (gateway === "payhero" && normalizedCurrency === "KES" && phone) {
+            const reference = payHeroService.generateReference();
+            const payment = await payHeroService.initiateMpesaPayment(parseFloat(amount), phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
+            if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
+            result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
+          } else if (gateway === "paystack" && email) {
+            const reference = paystackService.generateReference();
+            const payment = await paystackService.initializePayment(email, parseFloat(amount), reference, normalizedCurrency, phone);
+            if (!payment.status) throw new Error(payment.message || "Paystack initialization failed");
+            result = { reference, status: "pending", redirectUrl: payment.data?.authorization_url || null };
+          }
+          if (result) {
+            selectedGateway = gateway;
+            break;
+          }
+        } catch (error: any) {
+          gatewayErrors.push(`${gateway}: ${error?.message || "failed"}`);
+        }
+      }
+      if (!result) {
+        throw new Error(gatewayErrors.join("; ") || "No configured payment gateway could process this deposit");
+      }
       await db.insert(transactions).values({
         userId, type: "deposit", amount: String(amount), currency: normalizedCurrency, status: "pending",
         reference: result.reference, description: `NexusPay ${currency} deposit`,
-        metadata: { walletId, channel, gateway: currencyMeta?.gateway, redirectUrl: result.redirectUrl } as any,
+        metadata: { walletId, channel, gateway: selectedGateway, redirectUrl: result.redirectUrl } as any,
       });
       res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
     } catch (e: any) { console.error("Global deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
@@ -13587,7 +13685,34 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const userId = (req.session as any).userId;
       const { reference } = req.params;
-      const status = await nexusPayService.getStatus(reference);
+      const [existingTransaction] = await db.select().from(transactions).where(eq(transactions.reference, reference));
+      if (existingTransaction && existingTransaction.userId !== userId) {
+        return res.status(403).json({ message: "Transaction not found" });
+      }
+      const gateway = String((existingTransaction?.metadata as any)?.gateway || "nexuspay");
+      let status: any;
+      if (gateway === "payhero") {
+        const providerStatus = await payHeroService.checkTransactionStatus(reference);
+        const normalizedStatus = String(providerStatus.status || "").toLowerCase();
+        status = {
+          status: providerStatus.success && ["success", "completed", "paid"].includes(normalizedStatus)
+            ? "completed"
+            : ["failed", "cancelled", "rejected"].includes(normalizedStatus) ? "failed" : "pending",
+          reference,
+          amount: String(providerStatus.data?.amount || existingTransaction?.amount || 0),
+          currency: existingTransaction?.currency || "KES",
+        };
+      } else if (gateway === "paystack") {
+        const providerStatus = await paystackService.verifyPayment(reference);
+        status = {
+          status: providerStatus.status && providerStatus.data?.status === "success" ? "completed" : "pending",
+          reference,
+          amount: String(Number(providerStatus.data?.amount || existingTransaction?.amount || 0) / 100),
+          currency: providerStatus.data?.currency || existingTransaction?.currency || "KES",
+        };
+      } else {
+        status = await nexusPayService.getStatus(reference);
+      }
       if (status.status === "completed") {
         const [txn] = await db.select().from(transactions).where(eq(transactions.reference, reference));
         if (txn && txn.userId !== userId) {
@@ -13855,7 +13980,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.get("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
     try {
-      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key')`);
+      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key', 'default_gateway')`);
       const map: Record<string, string> = {};
       for (const row of result.rows) map[row.key] = row.value;
       const fallbackResult = await pool.query(`SELECT key, value FROM system_settings WHERE category = 'exchange_rate_fallback'`);
@@ -13865,6 +13990,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         defaultCurrency: map.default_currency || "USD",
         enabledCurrencies: (map.enabled_currencies || "USD,KES").split(","),
         nexusApiKey: map.nexuspay_api_key || "",
+        defaultGateway: map.default_gateway || "nexuspay",
         fallbackRates,
       });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -13872,13 +13998,14 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.put("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
     try {
-      const { defaultCurrency, enabledCurrencies, nexusApiKey, fallbackRates } = req.body;
+      const { defaultCurrency, enabledCurrencies, nexusApiKey, defaultGateway, fallbackRates } = req.body;
       const upsert = async (key: string, value: string, category: string) => {
         await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), updated_at = NOW()`, [key, value, category]);
       };
       if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
       if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
       if (nexusApiKey !== undefined) { await upsert("nexuspay_api_key", nexusApiKey, "payment"); if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey; }
+      if (defaultGateway) await upsert("default_gateway", String(defaultGateway), "payment");
       if (fallbackRates && typeof fallbackRates === "object") {
         for (const [code, rate] of Object.entries(fallbackRates)) {
           if (rate) await upsert(code, String(rate), "exchange_rate_fallback");

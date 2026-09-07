@@ -13,6 +13,7 @@ import { SiVisa, SiMastercard } from "react-icons/si";
 import { formatNumber } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import { useWallets } from "@/hooks/use-wallets";
+import { PINModal } from "@/components/pin-modal";
 
 export default function VirtualCardPage() {
   const [, setLocation] = useLocation();
@@ -24,6 +25,7 @@ export default function VirtualCardPage() {
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
   const [transferAmount, setTransferAmount] = useState('');
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const touchStartX = useRef<number | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
@@ -141,9 +143,11 @@ export default function VirtualCardPage() {
   });
 
   const transferMutation = useMutation({
-    mutationFn: async ({ cardId, direction, amount }: { cardId: string; direction: string; amount: string }) => {
-      const res = await apiRequest("POST", "/api/virtual-card/transfer", { cardId, direction, amount });
-      return res.json();
+    mutationFn: async ({ cardId, direction, amount, pin, authenticatorCode }: { cardId: string; direction: string; amount: string; pin?: string; authenticatorCode?: string }) => {
+      const res = await apiRequest("POST", "/api/virtual-card/transfer", { cardId, direction, amount, pin, authenticatorCode });
+      const data = await res.json();
+      if (!res.ok) throw data;
+      return data;
     },
     onSuccess: (data) => {
       toast({ title: "Transfer Complete", description: data.message });
@@ -152,7 +156,21 @@ export default function VirtualCardPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/virtual-card", user?.id] });
       queryClient.invalidateQueries({ queryKey: ["/api/user"] });
     },
-    onError: (e: any) => toast({ title: "Transfer Failed", description: e.message || "Could not complete transfer.", variant: "destructive" }),
+    onError: (e: any) => {
+      if (e.requiresPin || e.requiresAuthenticator || e.requiresSetup) {
+        if (e.requiresSetup) {
+          toast({ title: "Security setup required", description: "Set up a PIN or authenticator before transferring card funds." });
+          setLocation("/settings");
+          return;
+        }
+        setSecurityPrompt({
+          pin: Boolean(e.securityOptions?.pin ?? e.requiresPin),
+          authenticator: Boolean(e.securityOptions?.authenticator ?? e.requiresAuthenticator),
+        });
+        return;
+      }
+      toast({ title: "Transfer Failed", description: e.message || "Could not complete transfer.", variant: "destructive" });
+    },
   });
 
   // Swipe handlers
@@ -832,6 +850,19 @@ export default function VirtualCardPage() {
         )}
 
       </div>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Verify card transfer"
+        description="Verify with your PIN or authenticator to move funds."
+        onSuccess={(pin, authenticatorCode) => {
+          setSecurityPrompt(null);
+          if (card) transferMutation.mutate({ cardId: card.id, direction: transferDirection, amount: transferAmount, pin, authenticatorCode });
+        }}
+        isLoading={transferMutation.isPending}
+      />
     </div>
   );
 }

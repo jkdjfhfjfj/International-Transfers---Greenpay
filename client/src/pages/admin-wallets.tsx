@@ -65,6 +65,7 @@ export default function AdminWalletsPage() {
   const [settingsTab, setSettingsTab] = useState(false);
   const [defaultCurrency, setDefaultCurrency] = useState("USD");
   const [nexusApiKey, setNexusApiKey] = useState("");
+  const [defaultGateway, setDefaultGateway] = useState("nexuspay");
   const [fallbackRates, setFallbackRates] = useState<Record<string, string>>({});
   const [enabledCurrencies, setEnabledCurrencies] = useState<string[]>([]);
 
@@ -76,13 +77,14 @@ export default function AdminWalletsPage() {
     },
   });
 
-  const { data: settingsData } = useQuery<{ defaultCurrency: string; enabledCurrencies: string[]; nexusApiKey: string; fallbackRates: Record<string, string> }>({
+  const { data: settingsData } = useQuery<{ defaultCurrency: string; enabledCurrencies: string[]; nexusApiKey: string; defaultGateway: string; fallbackRates: Record<string, string> }>({
     queryKey: ["/api/admin/currencies/settings"],
     queryFn: async () => {
       const r = await apiRequest("GET", "/api/admin/currencies/settings");
       const d = await r.json();
       setDefaultCurrency(d.defaultCurrency || "USD");
       setNexusApiKey(d.nexusApiKey || "");
+      setDefaultGateway(d.defaultGateway || "nexuspay");
       setEnabledCurrencies(d.enabledCurrencies || []);
       setFallbackRates(d.fallbackRates || {});
       return d;
@@ -174,6 +176,7 @@ export default function AdminWalletsPage() {
         defaultCurrency,
         enabledCurrencies,
         nexusApiKey,
+        defaultGateway,
         fallbackRates,
       });
       const data = await r.json();
@@ -250,6 +253,18 @@ export default function AdminWalletsPage() {
                   onChange={e => setNexusApiKey(e.target.value)}
                 />
                 <p className="text-xs text-gray-500">From your NexusPay dashboard → API Keys</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Default Payment Gateway</Label>
+                <Select value={defaultGateway} onValueChange={setDefaultGateway}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nexuspay">Makamesco / Nexus Pay</SelectItem>
+                    <SelectItem value="payhero">PayHero M-Pesa</SelectItem>
+                    <SelectItem value="paystack">Paystack</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-gray-500">The selected gateway is tried first; configured compatible gateways are used as fallback.</p>
               </div>
             </div>
 

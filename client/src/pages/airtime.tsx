@@ -36,7 +36,7 @@ export default function AirtimePage() {
   const { wallets } = useWallets();
   const queryClient = useQueryClient();
   const [selectedProvider, setSelectedProvider] = useState("");
-  const [showPINModal, setShowPINModal] = useState(false);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingAirtimeData, setPendingAirtimeData] = useState<AirtimeForm | null>(null);
 
   const form = useForm<AirtimeForm>({
@@ -65,7 +65,7 @@ export default function AirtimePage() {
   ];
 
   const airtimeMutation = useMutation({
-    mutationFn: async (data: AirtimeForm & { pin?: string }) => {
+    mutationFn: async (data: AirtimeForm & { pin?: string; authenticatorCode?: string }) => {
       const response = await apiRequest("POST", "/api/airtime/purchase", {
         userId: user?.id,
         ...data,
@@ -73,8 +73,8 @@ export default function AirtimePage() {
       const result = await response.json();
       
       // If PIN is required, don't treat as error yet
-      if (response.status === 400 && result.requiresPin) {
-        throw { ...result, requiresPin: true };
+      if (response.status === 400 && (result.requiresPin || result.requiresAuthenticator || result.requiresSetup)) {
+        throw result;
       }
       
       if (!response.ok) {
@@ -94,8 +94,16 @@ export default function AirtimePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions", user?.id] });
     },
     onError: (error: any) => {
-      if (error.requiresPin) {
-        setShowPINModal(true);
+      if (error.requiresPin || error.requiresAuthenticator || error.requiresSetup) {
+        if (error.requiresSetup) {
+          toast({ title: "Security setup required", description: "Set up a PIN or authenticator before purchasing airtime." });
+          setLocation("/settings");
+          return;
+        }
+        setSecurityPrompt({
+          pin: Boolean(error.securityOptions?.pin ?? error.requiresPin),
+          authenticator: Boolean(error.securityOptions?.authenticator ?? error.requiresAuthenticator),
+        });
         return;
       }
       
@@ -124,10 +132,10 @@ export default function AirtimePage() {
     airtimeMutation.mutate(data);
   };
 
-  const handlePINVerified = (pin: string) => {
+  const handlePINVerified = (pin: string, authenticatorCode?: string) => {
     if (pendingAirtimeData) {
-      setShowPINModal(false);
-      airtimeMutation.mutate({ ...pendingAirtimeData, pin });
+      setSecurityPrompt(null);
+      airtimeMutation.mutate({ ...pendingAirtimeData, pin, authenticatorCode });
     }
   };
 
@@ -305,11 +313,13 @@ export default function AirtimePage() {
 
       {/* PIN Modal */}
       <PINModal
-        isOpen={showPINModal}
-        onClose={() => setShowPINModal(false)}
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
         onSuccess={handlePINVerified}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
         title="Verify Purchase"
-        description="Enter your 4-digit PIN to complete this airtime purchase"
+        description="Verify with your PIN or authenticator to complete this airtime purchase"
       />
     </div>
   );
