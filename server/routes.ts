@@ -28,7 +28,7 @@ import { ActivityLogger } from "./services/activity-logger";
 import { validateApiKey, optionalApiKey } from "./middleware/api-key";
 import { openaiService } from "./services/ai";
 import { aiRateLimiter } from "./services/ai-rate-limiter";
-import { getCryptoPrice, getCryptoPrices, SUPPORTED_CRYPTO_COINS } from "./services/crypto-prices";
+import { getCryptoPrice, getCryptoPrices, invalidateCryptoPriceCache, SUPPORTED_CRYPTO_COINS } from "./services/crypto-prices";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
@@ -13213,6 +13213,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           );
         }
       }
+      invalidateCryptoPriceCache();
       res.json({ success: true });
     } catch (error: any) {
       res.status(500).json({ message: error?.message || "Failed to save crypto settings" });

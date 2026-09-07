@@ -7759,8 +7759,9 @@ async function getConfiguredApiKey(providers) {
   if (!db) return void 0;
   try {
     const configurations = await db.select().from(apiConfigurations);
+    const normalizedProviders = providers.map((provider) => provider.toLowerCase());
     const configuration = configurations.find(
-      (item) => item.isEnabled !== false && providers.includes(item.provider) && item.apiKey
+      (item) => item.isEnabled !== false && normalizedProviders.includes(String(item.provider || "").toLowerCase()) && item.apiKey
     );
     return configuration?.apiKey || void 0;
   } catch {
@@ -7814,8 +7815,10 @@ async function fetchCoinGecko(apiKey) {
   }
   return makeSnapshot(prices, changes24h, "coingecko");
 }
-async function fetchCoinCap() {
-  const response = await fetch8("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin");
+async function fetchCoinCap(apiKey) {
+  const response = await fetch8("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
+    headers: apiKey ? { authorization: `Bearer ${apiKey}` } : void 0
+  });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);
   const payload = await response.json();
   const rows = new Map((payload.data || []).map((row) => [row.id, row]));
@@ -7832,11 +7835,11 @@ async function fetchCoinCap() {
   }
   return makeSnapshot(prices, changes24h, "coincap");
 }
-async function fetchBinance() {
+async function fetchBinance(apiKey) {
   const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
   const response = await fetch8(
     `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
-    {}
+    { headers: apiKey ? { "X-MBX-APIKEY": apiKey } : void 0 }
   );
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
   const payload = await response.json();
@@ -7875,12 +7878,14 @@ async function fetchCryptoCompare(apiKey) {
 async function fetchLivePrices() {
   const fallbackPrices = await getFallbackPrices();
   const coinGeckoKey = await getConfiguredApiKey(["coingecko", "crypto_prices"]);
+  const binanceKey = await getConfiguredApiKey(["binance"]);
+  const coinCapKey = await getConfiguredApiKey(["coincap"]);
   const cryptoCompareKey = await getConfiguredApiKey(["cryptocompare"]);
   const enabled = await getEnabledProviders();
   const allProviders = [
     ["coingecko", () => fetchCoinGecko(coinGeckoKey)],
-    ["binance", () => fetchBinance()],
-    ["coincap", () => fetchCoinCap()],
+    ["binance", () => fetchBinance(binanceKey)],
+    ["coincap", () => fetchCoinCap(coinCapKey)],
     ["cryptocompare", () => fetchCryptoCompare(cryptoCompareKey)]
   ];
   const providers = allProviders.filter(([provider]) => enabled.has(provider));
@@ -7891,7 +7896,10 @@ async function fetchLivePrices() {
       console.warn(`[Crypto prices] Provider failed: ${error instanceof Error ? error.message : error}`);
     }
   }
-  return makeSnapshot(fallbackPrices, {}, "fallback");
+  return { ...makeSnapshot(fallbackPrices, {}, "fallback"), stale: true };
+}
+function invalidateCryptoPriceCache() {
+  cachedSnapshot = null;
 }
 async function getCryptoPrices() {
   if (cachedSnapshot && Date.now() - Date.parse(cachedSnapshot.fetchedAt) < CACHE_TTL_MS) {
@@ -18771,6 +18779,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           );
         }
       }
+      invalidateCryptoPriceCache();
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ message: error?.message || "Failed to save crypto settings" });

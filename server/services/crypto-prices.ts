@@ -56,8 +56,12 @@ async function getConfiguredApiKey(providers: string[]): Promise<string | undefi
   if (!db) return undefined;
   try {
     const configurations: any[] = await db.select().from(apiConfigurations);
+    const normalizedProviders = providers.map((provider) => provider.toLowerCase());
     const configuration = configurations.find(
-      (item) => item.isEnabled !== false && providers.includes(item.provider) && item.apiKey,
+      (item) =>
+        item.isEnabled !== false &&
+        normalizedProviders.includes(String(item.provider || "").toLowerCase()) &&
+        item.apiKey,
     );
     return configuration?.apiKey || undefined;
   } catch {
@@ -126,8 +130,10 @@ async function fetchCoinGecko(apiKey?: string): Promise<CryptoPriceSnapshot> {
   return makeSnapshot(prices, changes24h, "coingecko");
 }
 
-async function fetchCoinCap(): Promise<CryptoPriceSnapshot> {
-  const response = await fetch("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin");
+async function fetchCoinCap(apiKey?: string): Promise<CryptoPriceSnapshot> {
+  const response = await fetch("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
+    headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
+  });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);
   const payload = (await response.json()) as { data?: Array<{ id: string; priceUsd?: string; changePercent24Hr?: string }> };
   const rows = new Map((payload.data || []).map((row) => [row.id, row]));
@@ -145,11 +151,11 @@ async function fetchCoinCap(): Promise<CryptoPriceSnapshot> {
   return makeSnapshot(prices, changes24h, "coincap");
 }
 
-async function fetchBinance(): Promise<CryptoPriceSnapshot> {
+async function fetchBinance(apiKey?: string): Promise<CryptoPriceSnapshot> {
   const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
   const response = await fetch(
     `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
-    {},
+    { headers: apiKey ? { "X-MBX-APIKEY": apiKey } : undefined },
   );
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
   const payload = (await response.json()) as Array<{ symbol: string; lastPrice?: string; priceChangePercent?: string }>;
@@ -193,12 +199,14 @@ async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
   // rather than making the wallet endpoint fail.
   const fallbackPrices = await getFallbackPrices();
   const coinGeckoKey = await getConfiguredApiKey(["coingecko", "crypto_prices"]);
+  const binanceKey = await getConfiguredApiKey(["binance"]);
+  const coinCapKey = await getConfiguredApiKey(["coincap"]);
   const cryptoCompareKey = await getConfiguredApiKey(["cryptocompare"]);
   const enabled = await getEnabledProviders();
   const allProviders: Array<[string, () => Promise<CryptoPriceSnapshot>]> = [
     ["coingecko", () => fetchCoinGecko(coinGeckoKey)],
-    ["binance", () => fetchBinance()],
-    ["coincap", () => fetchCoinCap()],
+    ["binance", () => fetchBinance(binanceKey)],
+    ["coincap", () => fetchCoinCap(coinCapKey)],
     ["cryptocompare", () => fetchCryptoCompare(cryptoCompareKey)],
   ];
   const providers = allProviders.filter(([provider]) => enabled.has(provider));
@@ -209,7 +217,11 @@ async function fetchLivePrices(): Promise<CryptoPriceSnapshot> {
       console.warn(`[Crypto prices] Provider failed: ${error instanceof Error ? error.message : error}`);
     }
   }
-  return makeSnapshot(fallbackPrices, {}, "fallback");
+  return { ...makeSnapshot(fallbackPrices, {}, "fallback"), stale: true };
+}
+
+export function invalidateCryptoPriceCache() {
+  cachedSnapshot = null;
 }
 
 export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {

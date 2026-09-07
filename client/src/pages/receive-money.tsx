@@ -5,7 +5,7 @@ import { useRoute } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +19,7 @@ import { mockCurrencies } from "@/lib/mock-data";
 import { WavyHeader } from "@/components/wavy-header";
 import { Badge } from "@/components/ui/badge";
 import { Copy, Share2, QrCode, Inbox } from "lucide-react";
+import { PINModal } from "@/components/pin-modal";
 
 const paymentRequestSchema = z.object({
   amount: z.string().min(1, "Amount is required").refine((val) => parseFloat(val) > 0, "Amount must be greater than 0"),
@@ -41,6 +42,10 @@ export default function ReceiveMoneyPage() {
   const [receiverUserId, setReceiverUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const [paymentToConfirm, setPaymentToConfirm] = useState<any | null>(null);
+  const [pendingPaymentId, setPendingPaymentId] = useState<string | null>(null);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
 
   useEffect(() => {
     if (match && params?.userId) {
@@ -58,11 +63,53 @@ export default function ReceiveMoneyPage() {
     },
   });
 
-  const { data: receivedRequests = { requests: [] } } = useQuery({
+  const { data: receivedRequests = { requests: [] }, isError: receivedRequestsError } = useQuery({
     queryKey: ["/api/payment-requests-received"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payment-requests-received");
       return response.json();
+    },
+    enabled: !!user?.id,
+  });
+
+  const payRequestMutation = useMutation({
+    mutationFn: async ({ requestId, security }: { requestId: string; security?: { pin?: string; authenticatorCode?: string } }) => {
+      const response = await apiRequest("PUT", `/api/payment-requests/${requestId}/accept`, security || {});
+      return response.json();
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Payment successful",
+        description: data.message || "The payment request has been paid.",
+      });
+      setPaymentToConfirm(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-requests-received"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-requests-received", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+    },
+    onError: (error: any) => {
+      if (error?.requiresSetup) {
+        toast({
+          title: "Security setup required",
+          description: "Set up a PIN or authenticator before paying this request.",
+        });
+        setLocation("/settings");
+        return;
+      }
+      if (error?.requiresPin || error?.requiresAuthenticator) {
+        setPendingPaymentId(paymentToConfirm?.id || null);
+        setSecurityPrompt({
+          pin: Boolean(error.requiresPin),
+          authenticator: Boolean(error.requiresAuthenticator),
+        });
+        return;
+      }
+      toast({
+        title: "Payment failed",
+        description: error?.message || "Unable to pay this request. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -457,7 +504,12 @@ export default function ReceiveMoneyPage() {
             <h3 className="font-semibold">Incoming Payment Requests</h3>
           </div>
           
-          {receivedRequests.requests && receivedRequests.requests.length > 0 ? (
+          {receivedRequestsError ? (
+            <div className="p-8 text-center">
+              <p className="font-medium text-red-600 dark:text-red-400">Unable to load payment requests</p>
+              <p className="text-sm text-muted-foreground mt-1">Please try again in a moment.</p>
+            </div>
+          ) : receivedRequests.requests && receivedRequests.requests.length > 0 ? (
             <div className="divide-y divide-border">
               {receivedRequests.requests.map((request: any) => (
                 <motion.div
@@ -473,8 +525,8 @@ export default function ReceiveMoneyPage() {
                     </div>
                     <div className="text-right">
                       <p className="font-semibold text-primary">{request.currency} {request.amount}</p>
-                      <Badge variant={request.status === 'pending' ? 'default' : 'secondary'} className="text-xs mt-1">
-                        {request.status === 'pending' ? '⏳ Pending' : '✓ Paid'}
+                       <Badge variant={request.status === 'pending' ? 'default' : 'secondary'} className="text-xs mt-1">
+                         {request.status === 'pending' ? '⏳ Pending' : request.status === 'paid' ? '✓ Paid' : request.status}
                       </Badge>
                     </div>
                   </div>
@@ -483,22 +535,10 @@ export default function ReceiveMoneyPage() {
                     <Button
                       size="sm"
                       className="w-full mt-2"
-                      onClick={async () => {
-                        const response = await apiRequest("PUT", `/api/payment-requests/${request.id}/accept`);
-                        if (response.ok) {
-                          toast({ title: "Payment completed", description: "The payment request has been paid." });
-                          window.location.reload();
-                        } else {
-                          const error = await response.json().catch(() => ({}));
-                          toast({
-                            title: "Payment failed",
-                            description: error.message || "Unable to pay this request.",
-                            variant: "destructive",
-                          });
-                        }
-                      }}
+                       onClick={() => setPaymentToConfirm(request)}
+                       disabled={payRequestMutation.isPending}
                     >
-                      Pay Now
+                       {payRequestMutation.isPending ? "Paying..." : "Pay Now"}
                     </Button>
                   )}
                 </motion.div>
@@ -513,6 +553,55 @@ export default function ReceiveMoneyPage() {
           )}
         </motion.div>
       </div>
+      {paymentToConfirm && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">Confirm payment</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Pay {paymentToConfirm.currency} {paymentToConfirm.amount} from your wallet?
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">
+              This will debit your wallet and cannot be undone after confirmation.
+            </p>
+            <div className="mt-5 flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setPaymentToConfirm(null)}
+                disabled={payRequestMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => payRequestMutation.mutate({ requestId: paymentToConfirm.id })}
+                disabled={payRequestMutation.isPending}
+              >
+                {payRequestMutation.isPending ? "Paying..." : "Confirm & Pay"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => {
+          setSecurityPrompt(null);
+          setPendingPaymentId(null);
+        }}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Confirm payment"
+        description="Verify your transaction security settings to pay this request."
+        onSuccess={(pin, authenticatorCode) => {
+          if (!pendingPaymentId) return;
+          const requestId = pendingPaymentId;
+          setSecurityPrompt(null);
+          setPendingPaymentId(null);
+          payRequestMutation.mutate({ requestId, security: { pin, authenticatorCode } });
+        }}
+        isLoading={payRequestMutation.isPending}
+      />
     </div>
   );
 }
