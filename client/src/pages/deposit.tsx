@@ -22,6 +22,7 @@ type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
+  usdToKesRate?: number;
   bonuses: Array<{
     id: string;
     method: string;
@@ -115,6 +116,13 @@ export default function DepositPage() {
 
   const methods = config?.methods || {};
   const isEnabled = (m: string) => methods[`${m}_enabled`] === "true";
+  const configuredGateway = String(methods.default_gateway || "payhero").toLowerCase();
+  const isMakamescoKesDeposit = selectedMethod === "nexuspay"
+    && nexusCurrency === "KES"
+    && ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
+  const quotedKesAmount = isMakamescoKesDeposit && amount
+    ? Math.round(parseFloat(amount) * Number(config?.usdToKesRate || 129))
+    : 0;
 
   const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card"] as const).filter(m => isEnabled(m));
   const nexuspayEnabled = isEnabled("global");
@@ -675,7 +683,9 @@ export default function DepositPage() {
 
                   {/* Amount */}
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Amount ({nexusCurrency})</label>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Amount ({isMakamescoKesDeposit ? "USD" : nexusCurrency})
+                    </label>
                     <Input
                       type="number" step="any"
                       value={amount}
@@ -683,6 +693,12 @@ export default function DepositPage() {
                       placeholder="0.00"
                       className="text-base"
                     />
+                    {isMakamescoKesDeposit && (
+                      <p className="text-xs text-muted-foreground">
+                        Makamesco will charge approximately KES {quotedKesAmount.toLocaleString()} at
+                        {` ${Number(config?.usdToKesRate || 129).toFixed(2)}`} KES/USD.
+                      </p>
+                    )}
                   </div>
 
                   {/* Phone — mobile money only */}

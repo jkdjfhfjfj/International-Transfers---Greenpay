@@ -9,7 +9,7 @@ import {
 
 const NAV_ITEMS = [
   { id: "dashboard",    icon: LayoutDashboard,    label: "Home",        path: "/dashboard" },
-  { id: "send-money",   icon: ArrowLeftRight,      label: "Transfer",    path: "/send-money" },
+  { id: "send-money",   icon: ArrowLeftRight,      label: "Send",        path: "/send-money" },
   { id: "virtual-card", icon: CreditCard,           label: "Card",        path: "/virtual-card" },
   { id: "transactions", icon: History,              label: "History",     path: "/transactions" },
   { id: "airtime",      icon: Smartphone,           label: "Airtime",     path: "/airtime" },

@@ -38,7 +38,7 @@ const COIN_NETWORKS: Record<string, string> = {
   USDC: "Ethereum (ERC-20)",
 };
 
-type Tab = "wallets" | "deposit" | "withdraw" | "transfer" | "history";
+type Tab = "wallets" | "popular" | "deposit" | "withdraw" | "transfer" | "history";
 
 export default function CryptoPage() {
   const [activeTab, setActiveTab] = useState<Tab>("wallets");
@@ -67,7 +67,7 @@ export default function CryptoPage() {
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
-    if (requestedTab && ["wallets", "deposit", "withdraw", "transfer", "history"].includes(requestedTab)) {
+    if (requestedTab && ["wallets", "popular", "deposit", "withdraw", "transfer", "history"].includes(requestedTab)) {
       setActiveTab(requestedTab as Tab);
     }
   }, []);
@@ -239,6 +239,7 @@ export default function CryptoPage() {
 
   const tabs: { id: Tab; label: string; icon: any }[] = [
     { id: "wallets", label: "Wallets", icon: "account_balance_wallet" },
+    { id: "popular", label: "Popular", icon: "trending_up" },
     { id: "deposit", label: "Deposit", icon: "arrow_downward" },
     { id: "withdraw", label: "Withdraw", icon: "arrow_upward" },
     { id: "transfer", label: "Transfer", icon: "swap_horiz" },
@@ -326,10 +327,59 @@ export default function CryptoPage() {
                     <ArrowDownToLine className="w-4 h-4" style={{ color: coinMeta.accent }} />
                   </button>
 
-                   <p className="text-xs text-muted-foreground mt-2">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                   <div className="mt-3 pt-3 border-t border-border grid grid-cols-2 gap-2 text-[11px]">
+                     <div>
+                       <p className="text-muted-foreground">Network</p>
+                       <p className="font-medium text-foreground">{wallet.network || COIN_NETWORKS[wallet.coin] || "Supported network"}</p>
+                     </div>
+                     <div>
+                       <p className="text-muted-foreground">Live rate</p>
+                       <p className="font-medium text-foreground">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                     </div>
+                     <div>
+                       <p className="text-muted-foreground">USD value</p>
+                       <p className="font-medium text-foreground">${Number(wallet.usdBalance || 0).toFixed(2)}</p>
+                     </div>
+                     <div>
+                       <p className="text-muted-foreground">Last updated</p>
+                       <p className="font-medium text-foreground">{wallet.updatedAt ? new Date(wallet.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Just now"}</p>
+                     </div>
+                   </div>
                 </motion.div>
                 );
               })}
+            </motion.div>
+          )}
+
+          {/* POPULAR MARKETS TAB */}
+          {activeTab === "popular" && (
+            <motion.div key="popular" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-3">
+              <div className="bg-card border border-border rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-bold">Popular crypto</p>
+                    <p className="text-xs text-muted-foreground">Live USD rates refreshed every minute</p>
+                  </div>
+                  <span className="text-[10px] px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                    {priceSource === "coingecko" ? "Live" : "Fallback"}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {["BTC", "ETH", "USDT", "USDC"].map((coin) => {
+                    const change = changes24h[coin];
+                    const meta = COIN_COLORS[coin];
+                    return (
+                      <button key={coin} onClick={() => { setSelectedCoin(coin); setActiveTab("wallets"); }} className="w-full flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 text-left hover:bg-muted transition-colors">
+                        <span className="flex items-center gap-3">
+                          <span className="w-9 h-9 rounded-xl flex items-center justify-center font-bold" style={{ background: meta?.tint, color: meta?.accent }}>{COIN_ICONS[coin]}</span>
+                          <span><span className="block font-semibold text-sm">{COIN_NAMES[coin]}</span><span className="block text-xs text-muted-foreground">{coin}</span></span>
+                        </span>
+                        <span className="text-right"><span className="block font-bold text-sm">${Number(rates[coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span><span className={`block text-[11px] ${Number(change) >= 0 ? "text-green-600" : "text-red-500"}`}>{typeof change === "number" ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}</span></span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </motion.div>
           )}
 

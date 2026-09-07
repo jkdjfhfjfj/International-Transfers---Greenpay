@@ -107,6 +107,10 @@ export default function VirtualCardPage() {
     },
     onSuccess: (data) => {
       if (data.success) {
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+          return;
+        }
         toast({ title: "STK Push Sent!", description: data.message || "Check your phone and enter your M-Pesa PIN." });
         setTimeout(() => setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`), 2000);
       } else {

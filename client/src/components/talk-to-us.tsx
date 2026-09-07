@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { X, MessageCircle, Bot, ChevronUp, Mail, Headphones } from 'lucide-react';
+import { X, MessageCircle, Bot, ChevronUp, Mail, Headphones, GripVertical } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 import { useLocation } from 'wouter';
 
@@ -274,7 +274,9 @@ export function TalkToUs() {
             setMenuOpen(prev => !prev);
           }
         }}
-        className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing md:bottom-6"
+         title="Drag to move this button"
+         aria-label="Talk to us. Drag to move."
+         className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing md:bottom-6"
       >
         <motion.div
           animate={{ rotate: menuOpen ? 180 : 0 }}
@@ -283,6 +285,7 @@ export function TalkToUs() {
           <ChevronUp className="w-4 h-4" />
         </motion.div>
         <span className="text-sm font-semibold">Talk to us</span>
+         <span className="flex items-center gap-0.5 text-[9px] font-medium text-white/75"><GripVertical className="w-3 h-3" /> Drag</span>
         <MessageCircle className="w-4 h-4" />
       </motion.button>
     </>

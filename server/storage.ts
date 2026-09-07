@@ -1424,26 +1424,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createWithdrawalEvent(event: InsertWithdrawalEvent): Promise<WithdrawalEvent> {
-    const id = randomUUID();
-    const created: WithdrawalEvent = {
-      ...event,
-      id,
-      description: event.description ?? null,
-      provider: event.provider ?? null,
-      providerReference: event.providerReference ?? null,
-      retryCount: event.retryCount ?? 0,
-      refundStatus: event.refundStatus ?? "not_applicable",
-      metadata: event.metadata ?? null,
-      createdAt: new Date(),
-    };
-    this.withdrawalEvents.set(id, created);
+    const [created] = await db
+      .insert(withdrawalEvents)
+      .values({
+        ...event,
+        description: event.description ?? null,
+        provider: event.provider ?? null,
+        providerReference: event.providerReference ?? null,
+        retryCount: event.retryCount ?? 0,
+        refundStatus: event.refundStatus ?? "not_applicable",
+        metadata: event.metadata ?? null,
+      })
+      .returning();
     return created;
   }
 
   async getWithdrawalEvents(transactionId: string): Promise<WithdrawalEvent[]> {
-    return Array.from(this.withdrawalEvents.values())
-      .filter((event) => event.transactionId === transactionId)
-      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    return await db
+      .select()
+      .from(withdrawalEvents)
+      .where(eq(withdrawalEvents.transactionId, transactionId))
+      .orderBy(asc(withdrawalEvents.createdAt));
   }
 
   // Payment Request operations

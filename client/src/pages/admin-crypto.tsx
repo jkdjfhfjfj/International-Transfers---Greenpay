@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown, Plus, Pencil, Trash2, Wallet } from "lucide-react";
+import { CheckCircle2, Clock, XCircle, RefreshCw, ChevronDown, Plus, Pencil, Trash2, Wallet, Settings2 } from "lucide-react";
 
 const COIN_COLORS: Record<string, string> = {
   BTC: "text-orange-500",
@@ -459,19 +459,112 @@ function AddressManagement() {
   );
 }
 
+function CryptoPriceSettings() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [keys, setKeys] = useState({ coingecko: "", cryptocompare: "" });
+  const [enabled, setEnabled] = useState({ coingecko: true, cryptocompare: true });
+  const [fallbackRates, setFallbackRates] = useState({ BTC: "65000", ETH: "3200", USDT: "1", USDC: "1" });
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/admin/crypto/settings"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/crypto/settings")).json(),
+  });
+
+  useEffect(() => {
+    if (!data) return;
+    const providerMap = Object.fromEntries((data.providers || []).map((item: any) => [item.provider, item]));
+    setEnabled({
+      coingecko: providerMap.coingecko?.isEnabled !== false,
+      cryptocompare: providerMap.cryptocompare?.isEnabled !== false,
+    });
+    setFallbackRates((current) => ({ ...current, ...(data.fallbackRates || {}) }));
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("PUT", "/api/admin/crypto/settings", {
+        providers: [
+          { provider: "coingecko", apiKey: keys.coingecko, isEnabled: enabled.coingecko },
+          { provider: "cryptocompare", apiKey: keys.cryptocompare, isEnabled: enabled.cryptocompare },
+        ],
+        fallbackRates,
+      });
+      if (!res.ok) throw new Error((await res.json()).message || "Failed to save crypto settings");
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Crypto settings saved", description: "Price providers and fallback rates were updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/crypto/settings"] });
+      setKeys({ coingecko: "", cryptocompare: "" });
+    },
+    onError: (error: any) => toast({ title: "Save failed", description: error.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="py-10 text-center text-sm text-muted-foreground">Loading crypto settings...</div>;
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-semibold">Price providers</h2>
+        <p className="text-sm text-muted-foreground">Live prices use the enabled providers first, then the configured fallback values.</p>
+      </div>
+      {(["coingecko", "cryptocompare"] as const).map((provider) => (
+        <div key={provider} className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium">{provider === "coingecko" ? "CoinGecko" : "CryptoCompare"}</p>
+              <p className="text-xs text-muted-foreground">
+                {data?.providers?.find((item: any) => item.provider === provider)?.apiKeyConfigured ? "API key configured" : "Public endpoint"}
+              </p>
+            </div>
+            <Switch checked={enabled[provider]} onCheckedChange={(value) => setEnabled((current) => ({ ...current, [provider]: value }))} />
+          </div>
+          <Input
+            type="password"
+            value={keys[provider]}
+            onChange={(event) => setKeys((current) => ({ ...current, [provider]: event.target.value }))}
+            placeholder="Enter a new API key (optional)"
+          />
+        </div>
+      ))}
+      <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+        <div>
+          <p className="font-medium">Fallback rates (USD)</p>
+          <p className="text-xs text-muted-foreground">Used when all live providers are unavailable.</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {(["BTC", "ETH", "USDT", "USDC"] as const).map((coin) => (
+            <div key={coin}>
+              <Label>{coin}</Label>
+              <Input type="number" min="0.00000001" value={fallbackRates[coin]} onChange={(event) => setFallbackRates((current) => ({ ...current, [coin]: event.target.value }))} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+        <Settings2 className="w-4 h-4 mr-2" /> {saveMutation.isPending ? "Saving..." : "Save price settings"}
+      </Button>
+    </div>
+  );
+}
+
 export default function AdminCryptoPage() {
   return (
     <AdminShell title="Crypto Management">
       <Tabs defaultValue="transactions" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 max-w-md">
+        <TabsList className="grid w-full grid-cols-3 max-w-lg">
           <TabsTrigger value="transactions" data-testid="tab-transactions">Transactions</TabsTrigger>
           <TabsTrigger value="addresses" data-testid="tab-addresses">Deposit Addresses</TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">Price Settings</TabsTrigger>
         </TabsList>
         <TabsContent value="transactions" className="mt-4">
           <CryptoManagement />
         </TabsContent>
         <TabsContent value="addresses" className="mt-4">
           <AddressManagement />
+        </TabsContent>
+        <TabsContent value="settings" className="mt-4">
+          <CryptoPriceSettings />
         </TabsContent>
       </Tabs>
     </AdminShell>

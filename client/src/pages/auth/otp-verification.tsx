@@ -101,6 +101,15 @@ export default function OtpVerificationPage() {
     }
   };
 
+  const handlePaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!pasted) return;
+    const next = new Array(6).fill("").map((_, index) => pasted[index] || "");
+    setOtp(next);
+    inputRefs.current[Math.min(pasted.length, 6) - 1]?.focus();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const otpCode = otp.join("");
@@ -187,6 +196,7 @@ export default function OtpVerificationPage() {
                   onChange={(e) => handleChange(e.target, index)}
                   onKeyDown={(e) => handleKeyDown(e, index)}
                   onFocus={(e) => e.target.select()}
+                   onPaste={index === 0 ? handlePaste : undefined}
                   ref={(ref) => (inputRefs.current[index] = ref)}
                   className="w-12 h-12 text-center text-xl font-bold border border-border rounded-xl bg-input focus:outline-none focus:ring-2 focus:ring-ring transition-all"
                 />

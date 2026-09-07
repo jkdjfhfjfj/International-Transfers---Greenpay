@@ -228,10 +228,11 @@ export default function SettingsPage() {
   };
 
   const handlePasswordChange = () => {
-    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+    const needsCurrentPassword = user?.passwordSet !== false;
+    if ((needsCurrentPassword && !passwordData.currentPassword) || !passwordData.newPassword || !passwordData.confirmPassword) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all password fields",
+        description: needsCurrentPassword ? "Please fill in all password fields" : "Please enter and confirm your new password",
         variant: "destructive",
       });
       return;
@@ -800,15 +801,19 @@ export default function SettingsPage() {
                     {isChangingPassword && (
                       <div className="mt-4 space-y-3">
                         <div>
-                          <Label htmlFor="currentPassword" className="text-sm">Current Password</Label>
-                          <Input
-                            id="currentPassword"
-                            type="password"
-                            placeholder="Enter current password"
-                            value={passwordData.currentPassword}
-                            onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                            className="mt-1.5"
-                          />
+                           {user?.passwordSet !== false && (
+                             <>
+                               <Label htmlFor="currentPassword" className="text-sm">Current Password</Label>
+                               <Input
+                                 id="currentPassword"
+                                 type="password"
+                                 placeholder="Enter current password"
+                                 value={passwordData.currentPassword}
+                                 onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
+                                 className="mt-1.5"
+                               />
+                             </>
+                           )}
                         </div>
                         <div>
                           <Label htmlFor="newPassword" className="text-sm">New Password</Label>
@@ -845,7 +850,7 @@ export default function SettingsPage() {
                           ) : (
                             <>
                               <span className="material-icons text-sm mr-2">check</span>
-                              Update Password
+                              {user?.passwordSet === false ? "Set Password" : "Update Password"}
                             </>
                           )}
                         </Button>

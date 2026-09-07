@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -32,6 +32,24 @@ import { getCryptoPrice, getCryptoPrices, SUPPORTED_CRYPTO_COINS } from "./servi
 const cloudinaryStorage = new CloudinaryStorageService();
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
+
+function settingText(value: unknown, fallback = ""): string {
+  const raw = (value as any)?.value ?? value;
+  if (raw && typeof raw === "object") {
+    return String(raw.value ?? raw.key ?? fallback).trim();
+  }
+  return String(raw ?? fallback).replace(/^"|"$/g, "").trim();
+}
+
+async function getUsdToKesRate(): Promise<number> {
+  try {
+    const rate = await createExchangeRateService(storage).getExchangeRate("USD", "KES");
+    if (Number.isFinite(rate) && rate > 0) return rate;
+  } catch (error) {
+    console.warn("[USD/KES] Exchange rate lookup failed; using fallback", error);
+  }
+  return 129;
+}
 
 async function addWithdrawalEvent(
   transaction: { id: string; userId: string },
@@ -1238,9 +1256,10 @@ p{color:#6b7280;font-size:14px;}</style>
         phone: formattedPhone,
         country,
         password: randomPassword,
+        passwordSet: false,
       });
 
-      await storage.updateUser(user.id, {
+      const completedUser = await storage.updateUser(user.id, {
         isEmailVerified: true, isPhoneVerified: true,
         googleId: pending.googleId, profilePhotoUrl: pending.profilePhotoUrl,
       } as any);
@@ -1274,7 +1293,7 @@ p{color:#6b7280;font-size:14px;}</style>
       whatsappService.sendAccountCreation(formattedPhone, fullName).catch(() => {});
       mailtrapService.sendWelcome(pending.email, fullName.split(' ')[0] || 'User', fullName.split(' ')[1] || '').catch(() => {});
 
-      const { password: _, ...userResponse } = user;
+      const { password: _, ...userResponse } = completedUser || user;
       await new Promise<void>(r => req.session.save(() => r()));
       res.json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true } });
     } catch (err) {
@@ -1333,6 +1352,8 @@ p{color:#6b7280;font-size:14px;}</style>
       // Check PIN requirement
       const pinRequiredSetting = await storage.getSystemSetting("security", "pin_required");
       const pinRequired = pinRequiredSetting?.value === 'true';
+      const hasPin = Boolean(user.pinEnabled && user.pinCode);
+      const hasAuthenticator = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
       
       // Check if messaging credentials are configured (SMS or WhatsApp)
       const apiKeySetting = await storage.getSystemSetting("messaging", "sms_api_key");
@@ -1387,10 +1408,17 @@ p{color:#6b7280;font-size:14px;}</style>
         console.log('OTP disabled by admin');
         
         // Check both admin PIN requirement AND user PIN setting
-        if ((pinRequired || user.pinEnabled) && user.pinCode) {
+        if ((pinRequired || hasPin) && hasPin) {
           return res.status(200).json({
             message: "PIN verification required",
             requiresPin: true,
+            userId: user.id
+          });
+        }
+        if (hasAuthenticator) {
+          return res.status(200).json({
+            message: "Authenticator verification required",
+            requiresAuthenticator: true,
             userId: user.id
           });
         }
@@ -1435,6 +1463,18 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // OTP is required - attempt to send if messaging is configured
       if (messagesConfigured) {
+        // Let users with a configured second factor choose it instead of
+        // receiving a new OTP. OTP remains available as the fallback.
+        if (hasPin || hasAuthenticator) {
+          return res.json({
+            requiresPin: hasPin,
+            requiresAuthenticator: hasAuthenticator,
+            requiresOtp: true,
+            userId: user.id,
+            phone: user.phone,
+            email: user.email,
+          });
+        }
         // OTP is required and messaging is configured - send OTP
         const { messagingService } = await import('./services/messaging');
         const { mailtrapService } = await import('./services/mailtrap');
@@ -2689,7 +2729,8 @@ p{color:#6b7280;font-size:14px;}</style>
       // Allow card purchase for production - KYC verification can be added later
       // Note: In production environment, additional KYC verification may be required
 
-      // Generate unique reference
+      // Generate a provider reference. The provider is selected from the
+      // admin payment setting instead of always forcing PayHero.
       const reference = payHeroService.generateReference();
       
       // Validate user email
@@ -2705,46 +2746,98 @@ p{color:#6b7280;font-size:14px;}</style>
       // Get current card price from system settings
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const usdAmount = parseFloat(cardPriceSetting?.value || "60.00");
-      const kesAmount = await payHeroService.convertUSDtoKES(usdAmount);
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
       
       console.log(`Converting $${usdAmount} USD to ${kesAmount} KES for card purchase`);
 
-      // Initialize payment with PayHero M-Pesa STK Push  
-      const callbackUrl = `${req.protocol}://${req.get('host')}/payment-processing?reference=${reference}&type=virtual-card`;
-      
-      const paymentData = await payHeroService.initiateMpesaPayment(
-        kesAmount, // Amount in KES
-        user.phone, // Phone number for M-Pesa STK Push
-        reference, // External reference
-        user.fullName, // Customer name
-        callbackUrl // Callback URL for tracking
-      );
-      
-      if (!paymentData.success) {
-        if (paymentData.status === 'INVALID_PHONE_NUMBER' || paymentData.status === 'INVALID_PHONE_FORMAT') {
-          return res.status(400).json({ 
-            message: 'Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).',
-            status: paymentData.status 
-          });
-        }
-        if (paymentData.status === 'TIMEOUT') {
-          return res.status(504).json({
-            message: 'M-Pesa service is taking too long to respond. Please wait a moment and try again.',
-            status: 'TIMEOUT'
-          });
-        }
-        return res.status(400).json({ 
-          message: paymentData.message || 'Payment initiation failed. Please try again or contact support.',
-          status: paymentData.status 
+      const configuredGateway = settingText(
+        (await storage.getSystemSetting("payment", "default_gateway"))?.value,
+        "payhero",
+      ).toLowerCase();
+      const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+        ? "nexuspay"
+        : configuredGateway;
+      const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/payhero/callback`;
+      let paymentReference = reference;
+      let checkoutRequestId = "";
+      let paymentStatus = "pending";
+      let redirectUrl: string | null = null;
+      let paymentMessage = "STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment.";
+
+      if (gateway === "nexuspay") {
+        const payment = await nexusPayService.checkout({
+          amount: kesAmount,
+          currency: "KES",
+          channel: "mobile_money",
+          phone: user.phone,
+          email: user.email,
+          description: "Virtual card purchase via Makamesco NexusPay",
         });
+        paymentReference = payment.reference || reference;
+        paymentStatus = payment.status || "pending";
+        redirectUrl = payment.redirectUrl;
+        paymentMessage = redirectUrl
+          ? "Redirecting you to complete the M-Pesa payment."
+          : "Check your phone for the payment prompt.";
+      } else if (gateway === "paystack") {
+        const payment = await paystackService.initializePayment(
+          user.email,
+          kesAmount,
+          reference,
+          "KES",
+          user.phone,
+          `${req.protocol}://${req.get('host')}/api/payment-callback?type=virtual-card`,
+          { type: "virtual_card", usd_amount: usdAmount.toFixed(2), exchange_rate: exchangeRate.toString() },
+        );
+        if (!payment.status) {
+          return res.status(400).json({ message: payment.message || "Payment initialization failed.", status: "FAILED" });
+        }
+        paymentReference = payment.data?.reference || reference;
+        paymentStatus = payment.data?.status || "pending";
+        redirectUrl = payment.data?.authorization_url || null;
+        paymentMessage = redirectUrl
+          ? "Redirecting you to complete the payment."
+          : "Payment initialized successfully.";
+      } else {
+        const payment = await payHeroService.initiateMpesaPayment(
+          kesAmount,
+          user.phone,
+          reference,
+          user.fullName,
+          callbackUrl,
+        );
+        if (!payment.success) {
+          if (payment.status === 'INVALID_PHONE_NUMBER' || payment.status === 'INVALID_PHONE_FORMAT') {
+            return res.status(400).json({
+              message: 'Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).',
+              status: payment.status
+            });
+          }
+          if (payment.status === 'TIMEOUT') {
+            return res.status(504).json({
+              message: 'M-Pesa service is taking too long to respond. Please wait a moment and try again.',
+              status: 'TIMEOUT'
+            });
+          }
+          return res.status(400).json({
+            message: payment.message || 'Payment initiation failed. Please try again or contact support.',
+            status: payment.status
+          });
+        }
+        paymentReference = payment.reference || reference;
+        checkoutRequestId = payment.CheckoutRequestID || "";
+        paymentStatus = payment.status || "pending";
       }
       
       res.json({ 
         success: true,
-        reference: paymentData.reference,
-        checkoutRequestId: paymentData.CheckoutRequestID,
-        status: paymentData.status,
-        message: 'STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment.'
+        reference: paymentReference,
+        checkoutRequestId,
+        status: paymentStatus,
+        gateway,
+        redirectUrl,
+        message: paymentMessage,
       });
 
       // Create a transaction record for tracking
@@ -2754,10 +2847,15 @@ p{color:#6b7280;font-size:14px;}</style>
         amount: usdAmount.toString(),
         currency: "USD",
         status: "pending",
-        paystackReference: paymentData.reference || paymentData.CheckoutRequestID,
+        reference: paymentReference,
+        paystackReference: paymentReference,
         description: "Virtual Card Purchase",
+        exchangeRate: exchangeRate.toString(),
         metadata: { 
           phoneNumber: user.phone,
+          gateway,
+          gatewayAmount: kesAmount.toString(),
+          redirectUrl,
           status_reason: "Awaiting M-Pesa payment confirmation"
         }
       });
@@ -2931,11 +3029,21 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
 
       const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
-      if (String(gatewaySetting?.value || "payhero").toLowerCase() === "nexuspay") {
+      const configuredGateway = settingText(gatewaySetting?.value, "payhero").toLowerCase();
+      const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+        ? "nexuspay"
+        : configuredGateway;
+      const usdAmount = parseFloat(amount);
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
+
+      if (gateway === "nexuspay") {
         const reference = `DEP-NEXUS-${Date.now()}-${userId.slice(-6)}`;
         const result = await nexusPayService.checkout({
-          amount: parseFloat(amount),
-          currency: "USD",
+          // The M-Pesa rail is KES. The amount entered by the user remains
+          // USD for wallet crediting and is converted only at checkout.
+          amount: kesAmount,
+          currency: "KES",
           channel: "mobile_money",
           phone: phoneToUse,
           email: user.email,
@@ -2944,35 +3052,40 @@ p{color:#6b7280;font-size:14px;}</style>
         await db.insert(transactions).values({
           userId,
           type: "deposit",
-          amount: parseFloat(amount).toFixed(2),
+          amount: usdAmount.toFixed(2),
           currency: "USD",
           status: "pending",
           description: "M-Pesa deposit via Makamesco Nexus Pay",
           fee: "0.00",
           reference: result.reference || reference,
-          metadata: { paymentMethod: "mpesa", gateway: "nexuspay", redirectUrl: result.redirectUrl } as any,
+          exchangeRate: exchangeRate.toString(),
+          paystackReference: result.reference || reference,
+          metadata: {
+            paymentMethod: "mpesa",
+            gateway: "nexuspay",
+            gatewayAmount: kesAmount.toFixed(2),
+            exchangeRate,
+            redirectUrl: result.redirectUrl,
+          } as any,
         });
         return res.json({
           success: true,
           gateway: "nexuspay",
           reference: result.reference || reference,
           redirectUrl: result.redirectUrl,
+          amount: usdAmount.toFixed(2),
+          gatewayAmount: kesAmount.toFixed(2),
+          gatewayCurrency: "KES",
+          exchangeRate,
           message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
         });
       }
 
-      let exchangeRate = 129;
-      try {
-        const rateService = await createExchangeRateService();
-        exchangeRate = await rateService.getRate("USD", "KES");
-      } catch (e) { console.warn("[Deposit/Mpesa] Using fallback rate"); }
-
-      const kesAmount = parseFloat(amount) * exchangeRate;
       const reference = `DEP-${Date.now()}-${userId.slice(-6)}`;
       const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/payhero/callback`;
 
       const paymentData = await payHeroService.initiateMpesaPayment(
-        Math.round(kesAmount),
+        kesAmount,
         phoneToUse,
         reference,
         user.fullName,
@@ -2992,14 +3105,15 @@ p{color:#6b7280;font-size:14px;}</style>
       await storage.createTransaction({
         userId,
         type: 'deposit',
-        amount: parseFloat(amount).toFixed(2),
+        amount: usdAmount.toFixed(2),
         currency: 'USD',
         status: 'pending',
+        reference: paymentData.reference || reference,
         description: `M-Pesa deposit via PayHero`,
         fee: '0.00',
         exchangeRate: exchangeRate.toString(),
         paystackReference: paymentData.reference || reference,
-        metadata: { paymentMethod: 'mpesa', phoneNumber: phoneToUse, kesAmount: kesAmount.toFixed(2), exchangeRate }
+        metadata: { paymentMethod: 'mpesa', phoneNumber: phoneToUse, gateway: 'payhero', gatewayAmount: kesAmount.toFixed(2), exchangeRate }
       });
 
       res.json({
@@ -3017,12 +3131,43 @@ p{color:#6b7280;font-size:14px;}</style>
   // Poll M-Pesa deposit status
   app.get("/api/deposit/mpesa/status/:reference", requireAuth, async (req, res) => {
     try {
+      const userId = (req.session as any).userId;
       const { reference } = req.params;
       const transaction = await db.query.transactions.findFirst({
-        where: eq(transactions.paystackReference, reference)
+        where: (table, { or, eq }) => or(eq(table.paystackReference, reference), eq(table.reference, reference))
       });
       if (!transaction) return res.status(404).json({ message: "Transaction not found" });
-      res.json({ status: transaction.status, amount: transaction.amount, description: transaction.description });
+      if (transaction.userId !== userId) return res.status(403).json({ message: "Transaction not found" });
+
+      const metadata = (transaction.metadata || {}) as any;
+      let currentStatus = transaction.status;
+      if (metadata.gateway === "nexuspay" && transaction.status !== "completed" && transaction.status !== "failed") {
+        const providerStatus = await nexusPayService.getStatus(reference);
+        if (providerStatus.status === "completed") {
+          const wallet = await ensureUserWallet(userId, "USD");
+          if (!wallet) return res.status(400).json({ message: "USD wallet is not enabled" });
+          await applyLedgerEntry({
+            walletId: wallet.id,
+            userId,
+            currency: "USD",
+            amount: parseFloat(transaction.amount),
+            entryType: "deposit",
+            idempotencyKey: `deposit:${transaction.id}`,
+            transactionId: transaction.id,
+            description: transaction.description || "M-Pesa deposit",
+          });
+          await db.update(transactions)
+            .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+            .where(eq(transactions.id, transaction.id));
+          currentStatus = "completed";
+        } else if (providerStatus.status === "failed") {
+          await db.update(transactions)
+            .set({ status: "failed", updatedAt: new Date() })
+            .where(eq(transactions.id, transaction.id));
+          currentStatus = "failed";
+        }
+      }
+      res.json({ status: currentStatus, amount: transaction.amount, currency: transaction.currency, description: transaction.description });
     } catch (error) {
       res.status(500).json({ message: "Error checking status" });
     }
@@ -3043,7 +3188,15 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const activeBonuses = await db.select().from(depositBonuses)
         .where(eq(depositBonuses.isActive, true));
-      res.json({ methods: settingsMap, bonuses: activeBonuses });
+      const defaultGateway = settingText(
+        (await storage.getSystemSetting("payment", "default_gateway"))?.value,
+        "payhero",
+      ).toLowerCase();
+      res.json({
+        methods: { ...settingsMap, default_gateway: defaultGateway },
+        bonuses: activeBonuses,
+        usdToKesRate: await getUsdToKesRate(),
+      });
     } catch (error) {
       console.error("[Deposit Config Error]:", error);
       res.status(500).json({ message: "Error loading deposit config" });
@@ -3199,8 +3352,8 @@ p{color:#6b7280;font-size:14px;}</style>
       const { id } = req.params;
       const { currentPassword, newPassword } = req.body;
 
-      if (!currentPassword || !newPassword) {
-        return res.status(400).json({ message: "Current and new password are required" });
+      if (!newPassword) {
+        return res.status(400).json({ message: "New password is required" });
       }
 
       // Validate new password strength (server-side)
@@ -3213,18 +3366,28 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
+      if ((req.session as any).userId !== id) {
+        return res.status(403).json({ message: "You can only change your own password" });
+      }
 
-      // Verify current password
-      const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
-      if (!isPasswordValid) {
-        return res.status(401).json({ message: "Current password is incorrect" });
+      // Google-only accounts have no user-created password yet. Let them set
+      // one without a current-password challenge, while normal accounts still
+      // require the existing password.
+      if (user.passwordSet !== false) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: "Current password is required" });
+        }
+        const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+        if (!isPasswordValid) {
+          return res.status(401).json({ message: "Current password is incorrect" });
+        }
       }
 
       // Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 10);
 
       // Update password
-      await storage.updateUser(id, { password: hashedPassword });
+      await storage.updateUser(id, { password: hashedPassword, passwordSet: true });
 
       res.json({ message: "Password changed successfully" });
     } catch (error) {
@@ -3355,6 +3518,23 @@ p{color:#6b7280;font-size:14px;}</style>
       const paymentData = verificationResult.data;
       
       if (paymentData.status === 'success') {
+        const transaction = await db.query.transactions.findFirst({
+          where: or(
+            eq(transactions.reference, String(actualReference)),
+            eq(transactions.paystackReference, String(actualReference)),
+          ),
+        });
+        if (transaction && transaction.status !== "completed") {
+          await storage.updateTransactionStatus(transaction.id, "completed");
+          if (transaction.type === "card_purchase") {
+            const { virtualCardService } = await import("./services/virtual-card");
+            const cards = await storage.getVirtualCardsByUserId(transaction.userId);
+            if (cards.length === 0) {
+              await virtualCardService.generateCard(transaction.userId);
+              await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+            }
+          }
+        }
         // Payment successful - redirect to success page
         if (type === 'virtual-card') {
           return res.redirect(`/payment-success?reference=${actualReference}&type=virtual-card`);
@@ -9567,6 +9747,40 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  app.post("/api/auth/verify-authenticator", async (req, res) => {
+    try {
+      const { userId, code } = req.body;
+      const user = userId ? await storage.getUser(userId) : null;
+      if (!user || !user.twoFactorEnabled || !user.twoFactorSecret) {
+        return res.status(400).json({ message: "Authenticator is not enabled" });
+      }
+      if (!/^\d{6}$/.test(String(code || "")) || !twoFactorService.verifyToken(user.twoFactorSecret, String(code))) {
+        return res.status(401).json({ message: "Invalid authenticator code" });
+      }
+      req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ message: "Session error" });
+        (req.session as any).userId = user.id;
+        (req.session as any).user = { id: user.id, email: user.email };
+        storage.createLoginHistory({
+          userId: user.id,
+          ipAddress: req.ip || (req.headers["x-forwarded-for"] as string) || "Unknown",
+          userAgent: req.headers["user-agent"] || "Unknown",
+          deviceType: req.headers["user-agent"]?.includes("Mobile") ? "mobile" : "desktop",
+          browser: req.headers["user-agent"]?.split("/")[0] || "Unknown",
+          status: "success",
+        }).catch(() => {});
+        const { password: _, ...userResponse } = user;
+        req.session.save((saveErr) => {
+          if (saveErr) return res.status(500).json({ message: "Session save error" });
+          res.json({ user: userResponse });
+        });
+      });
+    } catch (error) {
+      console.error("Authenticator login verification error:", error);
+      res.status(500).json({ message: "Authenticator verification failed" });
+    }
+  });
+
   // PIN disable/reset endpoint
   app.post("/api/users/:id/pin/disable", requireAuth, async (req, res) => {
     try {
@@ -10106,12 +10320,13 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Valid USD amount is required" });
       }
       
-      const kesAmount = await payHeroService.convertUSDtoKES(parseFloat(usdAmount));
+      const exchangeRate = await getUsdToKesRate();
+      const kesAmount = Math.round(parseFloat(usdAmount) * exchangeRate);
       
       res.json({ 
         usdAmount: parseFloat(usdAmount),
         kesAmount: kesAmount,
-        exchangeRate: 129
+        exchangeRate
       });
     } catch (error) {
       console.error('Error converting USD to KES:', error);
@@ -10351,12 +10566,61 @@ p{color:#6b7280;font-size:14px;}</style>
       }
 
       console.log('Checking transaction status for reference:', reference);
-      
-      const statusResult = await payHeroService.checkTransactionStatus(reference);
-      
+
+      const transaction = await db.query.transactions.findFirst({
+        where: or(eq(transactions.reference, reference), eq(transactions.paystackReference, reference)),
+      });
+      const metadata = (transaction?.metadata || {}) as any;
+      const gateway = String(metadata.gateway || "payhero").toLowerCase();
+
+      if (transaction?.status === "completed") {
+        return res.json({ success: true, status: "completed", data: { reference } });
+      }
+
+      let statusResult: { success: boolean; status: string; data?: any; message?: string };
+      if (gateway === "nexuspay" || gateway === "makamesco" || gateway === "makamescopay") {
+        const providerStatus = await nexusPayService.getStatus(reference);
+        statusResult = {
+          success: true,
+          status: providerStatus.status,
+          data: providerStatus,
+        };
+      } else if (gateway === "paystack") {
+        const providerStatus = await paystackService.verifyPayment(reference);
+        statusResult = {
+          success: providerStatus.status,
+          status: providerStatus.data?.status || "unknown",
+          data: providerStatus.data,
+          message: providerStatus.message,
+        };
+      } else {
+        statusResult = await payHeroService.checkTransactionStatus(reference);
+      }
+
+      const normalizedStatus = String(statusResult.status || "").toLowerCase();
+      const completed = ["success", "completed", "paid"].includes(normalizedStatus);
+      const failed = ["failed", "cancelled", "rejected"].includes(normalizedStatus);
+      if (transaction && completed && transaction.status !== "completed") {
+        await storage.updateTransactionStatus(transaction.id, "completed");
+        await storage.updateTransactionMetadata(transaction.id, {
+          ...metadata,
+          status_reason: "Payment provider confirmed successful payment",
+        });
+        if (transaction.type === "card_purchase") {
+          const { virtualCardService } = await import("./services/virtual-card");
+          const cards = await storage.getVirtualCardsByUserId(transaction.userId);
+          if (cards.length === 0) {
+            await virtualCardService.generateCard(transaction.userId);
+            await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+          }
+        }
+      } else if (transaction && failed) {
+        await storage.updateTransactionStatus(transaction.id, "failed");
+      }
+
       res.json({
         success: statusResult.success,
-        status: statusResult.status,
+        status: completed ? "completed" : failed ? "failed" : statusResult.status,
         data: statusResult.data,
         message: statusResult.message
       });
@@ -12784,6 +13048,86 @@ Sitemap: https://geepay.us/sitemap.xml`;
     }
   });
 
+  app.get("/api/admin/crypto/settings", requireAdminAuth, async (_req, res) => {
+    try {
+      const supportedProviders = ["coingecko", "cryptocompare"];
+      const configurations = await storage.getAllApiConfigurations();
+      const providers = supportedProviders.map((provider) => {
+        const configuration = configurations.find((item: any) => item.provider === provider);
+        return {
+          provider,
+          displayName: configuration?.displayName || (provider === "coingecko" ? "CoinGecko" : "CryptoCompare"),
+          isEnabled: configuration?.isEnabled !== false,
+          apiKeyConfigured: Boolean(configuration?.apiKey),
+        };
+      });
+      const result = await pool.query(
+        `SELECT key, value FROM system_settings WHERE category = 'crypto_price_fallback'`,
+      );
+      const fallbackRates: Record<string, string> = {};
+      for (const row of result.rows) {
+        const raw = row.value;
+        fallbackRates[row.key] = String(typeof raw === "object" && raw !== null ? raw.value ?? "" : raw ?? "")
+          .replace(/^"|"$/g, "");
+      }
+      res.json({
+        providers,
+        fallbackRates: {
+          BTC: fallbackRates.BTC || "65000",
+          ETH: fallbackRates.ETH || "3200",
+          USDT: fallbackRates.USDT || "1",
+          USDC: fallbackRates.USDC || "1",
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || "Failed to load crypto settings" });
+    }
+  });
+
+  app.put("/api/admin/crypto/settings", requireAdminAuth, async (req, res) => {
+    try {
+      const providers = Array.isArray(req.body?.providers) ? req.body.providers : [];
+      const allowedProviders = new Set(["coingecko", "cryptocompare"]);
+      for (const providerData of providers) {
+        const provider = String(providerData?.provider || "").toLowerCase();
+        if (!allowedProviders.has(provider)) continue;
+        const updates: any = {
+          provider,
+          displayName: provider === "coingecko" ? "CoinGecko" : "CryptoCompare",
+          isEnabled: providerData?.isEnabled !== false,
+        };
+        if (typeof providerData?.apiKey === "string" && providerData.apiKey.trim()) {
+          updates.apiKey = providerData.apiKey.trim();
+        }
+        const existing = await storage.getApiConfiguration(provider);
+        if (existing) {
+          await storage.updateApiConfiguration(provider, updates);
+        } else {
+          await storage.createApiConfiguration(updates);
+        }
+      }
+
+      const fallbackRates = req.body?.fallbackRates;
+      if (fallbackRates && typeof fallbackRates === "object") {
+        for (const coin of SUPPORTED_CRYPTO_COINS) {
+          const value = Number(fallbackRates[coin]);
+          if (!Number.isFinite(value) || value <= 0) {
+            return res.status(400).json({ message: `Invalid fallback rate for ${coin}` });
+          }
+          await pool.query(
+            `INSERT INTO system_settings (key, value, category)
+             VALUES ($1, to_json($2::text), 'crypto_price_fallback')
+             ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = 'crypto_price_fallback', updated_at = NOW()`,
+            [coin, String(value)],
+          );
+        }
+      }
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || "Failed to save crypto settings" });
+    }
+  });
+
   // GET available admin-configured deposit addresses (public to authed users)
   app.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
     try {
@@ -13546,17 +13890,31 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map(c => [c.code, c]));
       let userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
 
-      // Auto-create a default wallet if user has none
-      if (userWallets.length === 0) {
-        try {
-          const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-          const defCurrencySetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
-          const defCurrency = defCurrencySetting.rows[0]?.value?.replace(/['"]/g, '') || userRecord[0]?.defaultCurrency || "USD";
-          const [newWallet] = await db.insert(wallets).values({ userId, currency: defCurrency, isDefault: true, isActive: true }).returning();
-          userWallets = [newWallet];
-        } catch (autoCreateErr) {
-          console.error('Wallet auto-create error:', autoCreateErr);
+      // Ensure the configured default and KES wallets exist in the first
+      // response, so a new user never has to sign out and back in to see KES.
+      try {
+        const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+        const defCurrencyResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const rawDefault = defCurrencyResult.rows[0]?.value;
+        const configuredDefault = String(typeof rawDefault === "object" ? rawDefault?.value || "" : rawDefault || "")
+          .replace(/['"]/g, "").trim().toUpperCase();
+        const desiredCurrencies = Array.from(new Set([
+          configuredDefault || userRecord[0]?.defaultCurrency || "USD",
+          "KES",
+        ]));
+        const enabled = await getEnabledCurrencyCodes();
+        for (const currency of desiredCurrencies) {
+          if (!enabled.includes(currency) || userWallets.some(wallet => normalizeCurrency(wallet.currency) === currency)) continue;
+          const [newWallet] = await db.insert(wallets).values({
+            userId,
+            currency,
+            isDefault: userWallets.length === 0,
+            isActive: true,
+          }).returning();
+          userWallets.push(newWallet);
         }
+      } catch (autoCreateErr) {
+        console.error("Wallet auto-create error:", autoCreateErr);
       }
 
       const enriched = await Promise.all(userWallets.map(async w => {
@@ -13571,6 +13929,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           currencyMeta: currencyMeta[w.currency] || null,
         };
       }));
+      enriched.sort((a, b) => Number(b.isDefault) - Number(a.isDefault) || String(a.currency).localeCompare(String(b.currency)));
       res.json({ wallets: enriched });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -13626,7 +13985,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
         return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
       }
-      if (parseFloat(amount) <= 0) return res.status(400).json({ message: "Amount must be greater than 0" });
+      const inputAmount = parseFloat(amount);
+      if (!Number.isFinite(inputAmount) || inputAmount <= 0) {
+        return res.status(400).json({ message: "Amount must be greater than 0" });
+      }
       const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
@@ -13636,12 +13998,21 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
       const rawGateway = (await storage.getSystemSetting("payment", "default_gateway"))?.value as any;
-      const configuredGateway = String(rawGateway?.value ?? rawGateway ?? "nexuspay").replace(/"/g, "").trim().toLowerCase();
+      const configuredGateway = settingText(rawGateway, "nexuspay").toLowerCase();
+      const makamescoKesInput = normalizedCurrency === "KES" &&
+        ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
+      const exchangeRate = makamescoKesInput ? await getUsdToKesRate() : 1;
+      const paymentAmount = makamescoKesInput
+        ? Math.max(1, Math.round(inputAmount * exchangeRate))
+        : inputAmount;
+      const canonicalGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+        ? "nexuspay"
+        : configuredGateway;
       const configuredApiKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
       const hasNexusPayKey = Boolean(String(configuredApiKey?.value ?? configuredApiKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim());
       const compatibleGateways = new Set(["nexuspay", "payhero", "paystack"]);
       const gatewayOrder = Array.from(new Set([
-        compatibleGateways.has(configuredGateway) ? configuredGateway : "",
+        compatibleGateways.has(canonicalGateway) ? canonicalGateway : "",
         normalizedCurrency === "KES" && phone ? "payhero" : "",
         email ? "paystack" : "",
         hasNexusPayKey ? "nexuspay" : "",
@@ -13655,18 +14026,18 @@ Sitemap: https://geepay.us/sitemap.xml`;
            if (gateway === "nexuspay") {
              if (!hasNexusPayKey) throw new Error("NexusPay is selected but no API key is configured");
             const checkout = await nexusPayService.checkout({
-              amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent,
+               amount: paymentAmount, currency: normalizedCurrency, channel, phone, email, correspondent,
               description: description || `Deposit to ${normalizedCurrency} wallet`,
             });
             result = checkout;
           } else if (gateway === "payhero" && normalizedCurrency === "KES" && phone) {
             const reference = payHeroService.generateReference();
-            const payment = await payHeroService.initiateMpesaPayment(parseFloat(amount), phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
+             const payment = await payHeroService.initiateMpesaPayment(paymentAmount, phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
             if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
             result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
           } else if (gateway === "paystack" && email) {
             const reference = paystackService.generateReference();
-            const payment = await paystackService.initializePayment(email, parseFloat(amount), reference, normalizedCurrency, phone);
+             const payment = await paystackService.initializePayment(email, paymentAmount, reference, normalizedCurrency, phone);
             if (!payment.status) throw new Error(payment.message || "Paystack initialization failed");
             result = { reference, status: "pending", redirectUrl: payment.data?.authorization_url || null };
           }
@@ -13682,11 +14053,29 @@ Sitemap: https://geepay.us/sitemap.xml`;
         throw new Error(gatewayErrors.join("; ") || "No configured payment gateway could process this deposit");
       }
       await db.insert(transactions).values({
-        userId, type: "deposit", amount: String(amount), currency: normalizedCurrency, status: "pending",
+         userId, type: "deposit", amount: paymentAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
         reference: result.reference, description: `NexusPay ${currency} deposit`,
-        metadata: { walletId, channel, gateway: selectedGateway, redirectUrl: result.redirectUrl } as any,
+         metadata: {
+           walletId,
+           channel,
+           gateway: selectedGateway,
+           redirectUrl: result.redirectUrl,
+           ...(makamescoKesInput ? {
+             inputCurrency: "USD",
+             inputAmount: inputAmount.toFixed(2),
+             exchangeRate,
+           } : {}),
+         } as any,
       });
-      res.json({ success: true, reference: result.reference, status: result.status, redirectUrl: result.redirectUrl, message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt." });
+       res.json({
+         success: true,
+         reference: result.reference,
+         status: result.status,
+         redirectUrl: result.redirectUrl,
+         amount: paymentAmount.toFixed(2),
+         ...(makamescoKesInput ? { inputAmount: inputAmount.toFixed(2), inputCurrency: "USD", exchangeRate } : {}),
+         message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
+       });
     } catch (e: any) { console.error("Global deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
   });
 

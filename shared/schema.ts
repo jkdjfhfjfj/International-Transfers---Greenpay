@@ -10,6 +10,7 @@ export const users = pgTable("users", {
   phone: text("phone").notNull().unique(),
   country: text("country").notNull(),
   password: text("password").notNull(),
+  passwordSet: boolean("password_set").default(true),
   profilePhotoUrl: text("profile_photo_url"),
   isEmailVerified: boolean("is_email_verified").default(false),
   isPhoneVerified: boolean("is_phone_verified").default(false),
@@ -77,6 +78,7 @@ export const kycDocuments = pgTable("kyc_documents", {
 export const virtualCards = pgTable("virtual_cards", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull().default("USD"),
   cardNumber: text("card_number").notNull(),
   expiryDate: text("expiry_date").notNull(),
   cvv: text("cvv").notNull(),

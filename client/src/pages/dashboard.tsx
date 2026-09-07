@@ -150,16 +150,6 @@ export default function DashboardPage() {
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
-    {
-      id: "transfer",
-      icon: ArrowLeftRight,
-      label: "Transfer",
-      path: "/send-money",
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
-      disabled: false,
-      requiresCard: false
-    },
     { 
       id: "receive", 
       icon: Download, 
@@ -613,7 +603,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-40">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-6">
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
@@ -635,6 +625,11 @@ export default function DashboardPage() {
                 id: 'transfer', label: 'Transfer', path: '/crypto?tab=transfer', testId: 'button-transfer',
                 accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'swap_horiz',
+              },
+              {
+                id: 'crypto', label: 'Crypto', path: '/crypto', testId: 'button-crypto',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                icon: 'currency_bitcoin',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',

@@ -125,6 +125,10 @@ export function PINModal({
               maxLength={6}
               value={authenticatorCode}
               onChange={(e) => setAuthenticatorCode(e.target.value.replace(/[^0-9]/g, ""))}
+              onPaste={(e) => {
+                e.preventDefault();
+                setAuthenticatorCode(e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 6));
+              }}
               className="text-center tracking-widest"
             />
           )}

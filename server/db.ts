@@ -179,6 +179,8 @@ async function alterMissingColumns() {
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT TRUE`,
+    `UPDATE users SET password_set = FALSE WHERE google_id IS NOT NULL AND password_set IS DISTINCT FROM FALSE`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS email TEXT`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS account_number TEXT`,
@@ -256,6 +258,10 @@ async function alterMissingColumns() {
     )`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS freeze_reason TEXT`,
     `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS block_reason TEXT`,
+    // Card balances are ledger-backed and need an explicit currency for
+    // card-to-wallet and wallet-to-card transfers on older Render databases.
+    `ALTER TABLE virtual_cards ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'USD'`,
+    `UPDATE virtual_cards SET currency = 'USD' WHERE currency IS NULL`,
 
     // Admin-configured virtual account details shared by approved users
     `CREATE TABLE IF NOT EXISTS virtual_account_settings (

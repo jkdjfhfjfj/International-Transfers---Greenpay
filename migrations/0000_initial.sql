@@ -492,6 +492,7 @@ CREATE TABLE "users" (
 	"phone" text NOT NULL,
 	"country" text NOT NULL,
 	"password" text NOT NULL,
+"password_set" boolean DEFAULT true,
 	"profile_photo_url" text,
 	"is_email_verified" boolean DEFAULT false,
 	"is_phone_verified" boolean DEFAULT false,
@@ -590,6 +591,7 @@ CREATE TABLE "virtual_accounts" (
 CREATE TABLE "virtual_cards" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" varchar NOT NULL,
+"currency" text DEFAULT 'USD' NOT NULL,
 	"card_number" text NOT NULL,
 	"expiry_date" text NOT NULL,
 	"cvv" text NOT NULL,

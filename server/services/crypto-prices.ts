@@ -1,7 +1,7 @@
 import fetch from "node-fetch";
 import { eq } from "drizzle-orm";
 import { apiConfigurations } from "@shared/schema";
-import { db } from "../db";
+import { db, pool } from "../db";
 
 export const SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"] as const;
 export type SupportedCryptoCoin = (typeof SUPPORTED_CRYPTO_COINS)[number];
@@ -31,6 +31,26 @@ export type CryptoPriceSnapshot = {
 let cachedSnapshot: CryptoPriceSnapshot | null = null;
 let requestInFlight: Promise<CryptoPriceSnapshot> | null = null;
 const CACHE_TTL_MS = 60_000;
+
+async function getFallbackPrices(): Promise<Record<SupportedCryptoCoin, number>> {
+  const prices = { ...FALLBACK_PRICES };
+  if (!pool) return prices;
+  try {
+    const result = await pool.query(
+      `SELECT key, value FROM system_settings WHERE category = 'crypto_price_fallback'`,
+    );
+    for (const row of result.rows) {
+      const coin = String(row.key || "").toUpperCase() as SupportedCryptoCoin;
+      if (!SUPPORTED_CRYPTO_COINS.includes(coin)) continue;
+      const raw = row.value;
+      const value = Number(typeof raw === "object" && raw !== null ? raw.value : String(raw ?? "").replace(/^"|"$/g, ""));
+      if (Number.isFinite(value) && value > 0) prices[coin] = value;
+    }
+  } catch {
+    // Keep the safe in-code defaults when settings are unavailable.
+  }
+  return prices;
+}
 
 async function getConfiguredApiKey(providers: string[]): Promise<string | undefined> {
   if (!db) return undefined;
@@ -184,7 +204,7 @@ export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {
         return { ...cachedSnapshot, source: "cache" as const, stale: true };
       }
       return {
-        prices: { ...FALLBACK_PRICES },
+        prices: await getFallbackPrices(),
         changes24h: {},
         fetchedAt: new Date().toISOString(),
         source: "fallback" as const,
