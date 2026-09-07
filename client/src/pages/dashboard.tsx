@@ -247,7 +247,7 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-8">
-      <AnnouncementSlide announcements={announcementsList} />
+      <AnnouncementSlide announcements={announcementsList} userId={user?.id} />
       <div className="max-w-md mx-auto px-4">
         {/* Dashboard Announcement (System Setting Legacy) */}
         {showAnnouncement && announcementText && !announcementsList.find((a: any) => a.content === announcementText) && (

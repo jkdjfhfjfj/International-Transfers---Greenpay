@@ -230,7 +230,7 @@ function AppContent() {
   const { getMaintenanceMode } = useSystemSettings();
   
   // Initialize FCM push notifications
-  useFCM();
+  useFCM(isAuthenticated);
 
   // Web notifications are delivered from the same persisted notification feed
   // used by the bell menu, so account actions remain visible after refresh.

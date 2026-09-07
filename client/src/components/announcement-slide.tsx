@@ -14,6 +14,7 @@ interface Announcement {
 
 interface AnnouncementSlideProps {
   announcements: Announcement[];
+  userId?: string;
 }
 
 function isVideo(url?: string) {
@@ -166,14 +167,15 @@ function MediaModal({ url, title, onClose }: { url: string; title: string; onClo
   );
 }
 
-export default function AnnouncementSlide({ announcements }: AnnouncementSlideProps) {
+export default function AnnouncementSlide({ announcements, userId }: AnnouncementSlideProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [progress, setProgress] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const dismissedStorageKey = `geepay-dismissed-announcements:${userId || "anonymous"}`;
   const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem("geepay-dismissed-announcements") || "[]");
+      return JSON.parse(localStorage.getItem(`geepay-dismissed-announcements:${userId || "anonymous"}`) || "[]");
     } catch {
       return [];
     }
@@ -231,7 +233,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
   const handleDismissForever = () => {
     const next = [...dismissedIds, visibleAnnouncements[currentIndex].id];
     setDismissedIds(next);
-    localStorage.setItem("geepay-dismissed-announcements", JSON.stringify(next));
+    localStorage.setItem(dismissedStorageKey, JSON.stringify(next));
     setIsVisible(false);
   };
 

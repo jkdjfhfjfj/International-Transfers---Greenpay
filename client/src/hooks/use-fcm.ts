@@ -1,12 +1,13 @@
 import { useEffect } from 'react';
 import { useToast } from './use-toast';
 
-export const useFCM = () => {
+export const useFCM = (enabled = true) => {
   const { toast } = useToast();
 
   useEffect(() => {
     const initializeFCM = async () => {
       try {
+        if (!enabled) return;
         if (typeof window === 'undefined') return;
 
         // Browser notifications use the persisted notification feed in App.tsx.
@@ -63,7 +64,7 @@ export const useFCM = () => {
     };
 
     initializeFCM();
-  }, [toast]);
+  }, [toast, enabled]);
 };
 
 async function registerTokenWithBackend(token: string) {
