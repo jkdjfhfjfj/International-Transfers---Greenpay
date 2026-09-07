@@ -54,7 +54,10 @@ export class NexusPayService {
           `SELECT value FROM system_settings WHERE key = $1 AND category = $2 LIMIT 1`,
           ['nexuspay_api_key', 'payment']
         );
-        if (result.rows.length > 0 && result.rows[0].value) return result.rows[0].value;
+        if (result.rows.length > 0 && result.rows[0].value) {
+          const raw = result.rows[0].value as any;
+          return typeof raw === 'object' ? String(raw.value || '') : String(raw).replace(/^"|"$/g, '');
+        }
       }
     } catch {}
     return null;
@@ -79,16 +82,10 @@ export class NexusPayService {
     const apiKey = await this.getApiKey();
     if (!apiKey) throw new Error('NexusPay API key not configured. Set NEXUSPAY_API_KEY or configure it in admin settings.');
 
-    const body: Record<string, any> = {
-      amount: params.amount,
-      currency: params.currency,
-      channel: params.channel,
-      description: params.description || 'Geepay wallet deposit',
-    };
-
-    if (params.phone) body.phone = params.phone;
-    if (params.email) body.email = params.email;
-    if (params.correspondent) body.correspondent = params.correspondent;
+    if (!params.phone) {
+      throw new Error('NexusPay STK Push requires a customer phone number');
+    }
+    const accountReference = `GEEPAY-${Date.now()}`;
 
     const response = await fetch(`${this.baseUrl}/payments/stkpush`, {
       method: 'POST',
@@ -96,19 +93,18 @@ export class NexusPayService {
       body: JSON.stringify({
         phoneNumber: params.phone,
         amount: params.amount,
-        currency: params.currency,
-        email: params.email,
-        description: body.description,
-        correspondent: params.correspondent,
+        accountReference,
+        transactionDesc: params.description || 'Geepay wallet deposit',
       }),
     });
 
     const data = await response.json() as any;
     if (!response.ok) throw new Error(data.error || data.message || `NexusPay checkout failed: ${response.status}`);
+    const payload = data.data || data;
     return {
-      reference: data.reference || data.transactionId || data.id,
-      status: data.status || 'pending',
-      redirectUrl: data.redirectUrl || data.checkoutUrl || null,
+      reference: payload.reference || payload.transactionId || payload.checkoutRequestId || payload.id || accountReference,
+      status: payload.status || 'pending',
+      redirectUrl: payload.redirectUrl || payload.checkoutUrl || null,
     };
   }
 
@@ -130,12 +126,13 @@ export class NexusPayService {
 
     const data = await response.json() as any;
     if (!response.ok) throw new Error(data.error || data.message || `Status check failed: ${response.status}`);
+    const payload = data.data || data;
     return {
-      ...data,
-      reference: data.reference || reference,
-      status: data.status === 'success' ? 'completed' : data.status,
-      amount: String(data.amount || data.amountPaid || 0),
-      currency: data.currency || 'KES',
+      ...payload,
+      reference: payload.reference || reference,
+      status: payload.status === 'success' || payload.status === 'completed' ? 'completed' : payload.status === 'failed' || payload.status === 'cancelled' ? 'failed' : 'pending',
+      amount: String(payload.amount || payload.amountPaid || 0),
+      currency: payload.currency || 'KES',
     };
   }
 

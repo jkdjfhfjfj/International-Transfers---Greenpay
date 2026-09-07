@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useWallets } from "@/hooks/use-wallets";
 import { useToast } from "@/hooks/use-toast";
@@ -48,13 +49,28 @@ export default function CryptoPage() {
   const [transferSource, setTransferSource] = useState("");
   const [transferDestination, setTransferDestination] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
+  const [transferReview, setTransferReview] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingSecurityAction, setPendingSecurityAction] = useState<"transfer" | null>(null);
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { wallets: userWallets } = useWallets();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: transferFees } = useQuery({
+    queryKey: ["/api/transaction-fees"],
+    enabled: !!user?.id,
+    queryFn: async () => (await apiRequest("GET", "/api/transaction-fees")).json(),
+  });
+
+  useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    if (requestedTab && ["wallets", "deposit", "withdraw", "transfer", "history"].includes(requestedTab)) {
+      setActiveTab(requestedTab as Tab);
+    }
+  }, []);
 
   const { data: walletsData, isLoading: walletsLoading } = useQuery({
     queryKey: ["/api/crypto/wallets"],
@@ -156,6 +172,7 @@ export default function CryptoPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions"] });
       setTransferAmount("");
+      setTransferReview(false);
     },
     onError: (error: any) => {
       if (error?.requiresSetup) {
@@ -192,6 +209,8 @@ export default function CryptoPage() {
   ];
   const selectedSource = transferSource || sourceOptions[0]?.value || "";
   const selectedDestination = transferDestination || destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
+  const transferFeeRate = Number((transferFees as any)?.exchangeFeeRate || 0);
+  const transferFee = Number(transferAmount || 0) * transferFeeRate;
 
   const addressesByCoin: Record<string, any[]> = allDepositAddresses.reduce((acc, addr) => {
     const c = (addr.coin || "").toUpperCase();
@@ -227,7 +246,7 @@ export default function CryptoPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background pb-36">
       <WavyHeader size="sm" />
 
       <div className="p-4 space-y-4">
@@ -526,13 +545,24 @@ export default function CryptoPage() {
                   <label className="text-sm font-medium text-muted-foreground">Amount in source account</label>
                   <input type="number" min="0.00000001" step="any" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
                 </div>
+                {transferReview && (
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2 text-sm">
+                    <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{Number(transferAmount).toFixed(8)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Configured fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{transferFee.toFixed(8)}</span></div>
+                    <div className="flex justify-between font-semibold border-t border-primary/10 pt-2"><span>Total debited</span><span>{(Number(transferAmount) + transferFee).toFixed(8)}</span></div>
+                    <p className="text-xs text-muted-foreground">The destination amount is calculated using the current exchange rate. Review the source and destination before confirming.</p>
+                  </div>
+                )}
                 <button
-                  onClick={() => transferMutation.mutate({})}
+                  onClick={() => transferReview ? transferMutation.mutate({}) : setTransferReview(true)}
                   disabled={!selectedSource || !selectedDestination || !transferAmount || Number(transferAmount) <= 0 || transferMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50"
                 >
-                  {transferMutation.isPending ? "Transferring..." : "Transfer funds"}
+                  {transferMutation.isPending ? "Transferring..." : transferReview ? "Confirm transfer" : "Review transfer"}
                 </button>
+                {transferReview && !transferMutation.isPending && (
+                  <button onClick={() => setTransferReview(false)} className="w-full py-2 text-sm text-muted-foreground">Edit transfer</button>
+                )}
               </div>
             </motion.div>
           )}

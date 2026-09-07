@@ -256,7 +256,7 @@ export default function DashboardPage() {
   const announcementText = settings?.general?.dashboard_announcement;
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-8">
+    <div className="min-h-screen bg-background pb-32 md:pb-8">
       <AnnouncementSlide announcements={announcementsList} userId={user?.id} />
       <div className="max-w-md mx-auto px-4">
         {/* Dashboard Announcement (System Setting Legacy) */}
@@ -613,7 +613,7 @@ export default function DashboardPage() {
           transition={{ delay: 0.3 }}
         >
           <h2 className="text-lg font-bold mb-4">Services</h2>
-          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-28">
+          <div className="grid grid-cols-4 gap-x-3 gap-y-5 pb-40">
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
@@ -630,6 +630,11 @@ export default function DashboardPage() {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
                 accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
                 icon: 'currency_exchange',
+              },
+              {
+                id: 'transfer', label: 'Transfer', path: '/crypto?tab=transfer', testId: 'button-transfer',
+                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                icon: 'swap_horiz',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',

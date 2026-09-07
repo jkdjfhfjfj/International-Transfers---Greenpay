@@ -128,26 +128,27 @@ async function verifyTransactionSecurity(
   const authenticatorEnabled = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
   const pinRequired = settingValue("pin_required");
   const authenticatorRequired = settingValue("two_factor_required");
+  // A transaction must use one security method that the user has actually
+  // configured. Admin switches determine whether the app should require
+  // transaction security, but must not make an unconfigured method block a
+  // configured alternative.
+  const securityRequired = pinRequired || authenticatorRequired || pinEnabled || authenticatorEnabled;
   const methods = {
-    pin: pinEnabled || pinRequired,
-    authenticator: authenticatorEnabled || authenticatorRequired,
+    pin: pinEnabled,
+    authenticator: authenticatorEnabled,
   };
 
   // Every balance-changing operation must be authenticated. If the user has
   // both methods enabled, either valid method is accepted (not both).
-  if (!methods.pin && !methods.authenticator) {
+  if (!securityRequired || (!methods.pin && !methods.authenticator)) {
     return {
       ok: false,
       status: 400,
       requiresSetup: true,
+      requiresPin: pinRequired && !pinEnabled,
+      requiresAuthenticator: authenticatorRequired && !authenticatorEnabled,
       message: "Set up a transaction PIN or authenticator before making transactions",
     };
-  }
-  if (methods.pin && !pinEnabled && pinRequired) {
-    return { ok: false, status: 400, requiresSetup: true, requiresPin: true, message: "Set up your PIN before making transactions" };
-  }
-  if (methods.authenticator && !authenticatorEnabled && authenticatorRequired) {
-    return { ok: false, status: 400, requiresSetup: true, requiresAuthenticator: true, message: "Set up your authenticator before making transactions" };
   }
 
   const hasPin = Boolean(credentials.pin);
@@ -4236,7 +4237,7 @@ p{color:#6b7280;font-size:14px;}</style>
   app.post("/api/transactions/send", requireAuth, async (req, res) => {
     try {
       const sessionUserId = (req as any).session?.userId;
-      const { amount, currency, recipientDetails, targetCurrency } = req.body;
+      const { amount, currency, recipientDetails, targetCurrency, pin, authenticatorCode } = req.body;
       
       if (!sessionUserId) {
         return res.status(401).json({ message: "Authentication required" });
@@ -4244,6 +4245,8 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Security: users can only send from their own account
       const userId = sessionUserId;
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
       
       // Verify user exists and has virtual card
       const user = await storage.getUser(userId);
@@ -13632,19 +13635,25 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
-      const configuredGateway = String((await storage.getSystemSetting("payment", "default_gateway"))?.value || "nexuspay").replace(/"/g, "").toLowerCase();
+      const rawGateway = (await storage.getSystemSetting("payment", "default_gateway"))?.value as any;
+      const configuredGateway = String(rawGateway?.value ?? rawGateway ?? "nexuspay").replace(/"/g, "").trim().toLowerCase();
+      const configuredApiKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
+      const hasNexusPayKey = Boolean(String(configuredApiKey?.value ?? configuredApiKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim());
+      const compatibleGateways = new Set(["nexuspay", "payhero", "paystack"]);
       const gatewayOrder = Array.from(new Set([
-        configuredGateway,
-        normalizedCurrency === "KES" ? "payhero" : "paystack",
-        "nexuspay",
-      ]));
+        compatibleGateways.has(configuredGateway) ? configuredGateway : "",
+        normalizedCurrency === "KES" && phone ? "payhero" : "",
+        email ? "paystack" : "",
+        hasNexusPayKey ? "nexuspay" : "",
+      ].filter(Boolean)));
       let result: { reference: string; status: string; redirectUrl: string | null } | null = null;
       let selectedGateway = "";
       const gatewayErrors: string[] = [];
 
       for (const gateway of gatewayOrder) {
         try {
-          if (gateway === "nexuspay") {
+           if (gateway === "nexuspay") {
+             if (!hasNexusPayKey) throw new Error("NexusPay is selected but no API key is configured");
             const checkout = await nexusPayService.checkout({
               amount: parseFloat(amount), currency: normalizedCurrency, channel, phone, email, correspondent,
               description: description || `Deposit to ${normalizedCurrency} wallet`,
@@ -13982,13 +13991,16 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key', 'default_gateway')`);
       const map: Record<string, string> = {};
-      for (const row of result.rows) map[row.key] = row.value;
+      for (const row of result.rows) {
+        const value = row.value as any;
+        map[row.key] = typeof value === "object" && value !== null ? String(value.value ?? "") : String(value ?? "").replace(/^"|"$/g, "");
+      }
       const fallbackResult = await pool.query(`SELECT key, value FROM system_settings WHERE category = 'exchange_rate_fallback'`);
       const fallbackRates: Record<string, string> = {};
       for (const row of fallbackResult.rows) fallbackRates[row.key] = row.value;
       res.json({
         defaultCurrency: map.default_currency || "USD",
-        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(","),
+        enabledCurrencies: (map.enabled_currencies || "USD,KES").split(",").map(code => code.trim()).filter(Boolean),
         nexusApiKey: map.nexuspay_api_key || "",
         defaultGateway: map.default_gateway || "nexuspay",
         fallbackRates,
@@ -14000,12 +14012,25 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const { defaultCurrency, enabledCurrencies, nexusApiKey, defaultGateway, fallbackRates } = req.body;
       const upsert = async (key: string, value: string, category: string) => {
-        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), updated_at = NOW()`, [key, value, category]);
+        await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = EXCLUDED.category, updated_at = NOW()`, [key, value, category]);
       };
       if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
       if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
       if (nexusApiKey !== undefined) { await upsert("nexuspay_api_key", nexusApiKey, "payment"); if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey; }
-      if (defaultGateway) await upsert("default_gateway", String(defaultGateway), "payment");
+      if (defaultGateway) {
+        const gateway = String(defaultGateway).trim().toLowerCase();
+        if (!["nexuspay", "payhero", "paystack"].includes(gateway)) {
+          return res.status(400).json({ message: "Unsupported payment gateway" });
+        }
+        if (gateway === "nexuspay") {
+          const key = String(nexusApiKey ?? "").trim();
+          const existingKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
+          if (!key && !String(existingKey?.value ?? existingKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim()) {
+            return res.status(400).json({ message: "Configure a NexusPay secret key before selecting NexusPay as the default gateway" });
+          }
+        }
+        await upsert("default_gateway", gateway, "payment");
+      }
       if (fallbackRates && typeof fallbackRates === "object") {
         for (const [code, rate] of Object.entries(fallbackRates)) {
           if (rate) await upsert(code, String(rate), "exchange_rate_fallback");

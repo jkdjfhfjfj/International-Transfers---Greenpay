@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Sparkles, Megaphone, Gift, Play, Pause, Volume2, VolumeX, Maximize2, ChevronLeft, ChevronRight, Image as ImageIcon, Video as VideoIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -174,6 +175,7 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
   const [progress, setProgress] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
   const [dismissedIds, setDismissedIds] = useState<string[]>([]);
+  const queryClient = useQueryClient();
   const visibleAnnouncements = announcements.filter((announcement) => !dismissedIds.includes(announcement.id));
 
   useEffect(() => {
@@ -232,9 +234,9 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
     const announcementId = visibleAnnouncements[currentIndex].id;
     const next = [...dismissedIds, announcementId];
     setDismissedIds(next);
-    apiRequest("POST", `/api/announcements/${announcementId}/dismiss`).catch(() => {
-      setDismissedIds((current) => current.filter((id) => id !== announcementId));
-    });
+    apiRequest("POST", `/api/announcements/${announcementId}/dismiss`)
+      .then(() => queryClient.invalidateQueries({ queryKey: ["/api/announcements"] }))
+      .catch(() => setDismissedIds((current) => current.filter((id) => id !== announcementId)));
     setIsVisible(false);
   };
 
@@ -328,7 +330,7 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
 
                 <div className="flex-1 min-w-0 pr-8">
                   <h4 className="font-bold text-sm text-foreground leading-tight">{current.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words">{current.content}</p>
+                   <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap break-words max-h-[50vh] overflow-y-auto pr-1">{current.content}</p>
 
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {hasMedia && (
