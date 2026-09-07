@@ -4,7 +4,13 @@ import { apiUrl } from "./api-config";
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let details: Record<string, unknown> = {};
+    try {
+      details = JSON.parse(text);
+    } catch {
+      // Keep the raw response text in the user-facing error when it is not JSON.
+    }
+    throw Object.assign(new Error(`${res.status}: ${details.message || text}`), details);
   }
 }
 

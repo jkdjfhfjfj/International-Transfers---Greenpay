@@ -35,6 +35,7 @@ export default function SendMoneyPage() {
   const [greenPaySearchResults, setGreenPaySearchResults] = useState<UserSearchResult[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
   const [showPINModal, setShowPINModal] = useState(false);
+  const [showTransferConfirmation, setShowTransferConfirmation] = useState(false);
   const [pendingTransferData, setPendingTransferData] = useState<any>(null);
   
   const { user } = useAuth();
@@ -217,8 +218,14 @@ export default function SendMoneyPage() {
       description: transferDescription || `Transfer to ${selectedGreenPayUser.fullName}`
     };
     
-    console.log('[Frontend Transfer] Sending payload:', transferPayload);
-    greenPayTransferMutation.mutate(transferPayload);
+    setPendingTransferData(transferPayload);
+    setShowTransferConfirmation(true);
+  };
+
+  const confirmGreenPayTransfer = () => {
+    if (!pendingTransferData) return;
+    setShowTransferConfirmation(false);
+    greenPayTransferMutation.mutate(pendingTransferData);
   };
 
   // Check if user has virtual card requirement (use real card data, not just user flag)
@@ -238,7 +245,7 @@ export default function SendMoneyPage() {
             <div className="bg-card border border-border rounded-2xl p-6 shadow-sm text-center space-y-3 mb-4">
               <h2 className="text-xl font-bold">Virtual Card Required</h2>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                To send money to other GreenPay users, you first need an active virtual card.
+                To send money to other Geepay users, you first need an active virtual card.
                 Get yours in seconds and unlock full access.
               </p>
 
@@ -281,10 +288,10 @@ export default function SendMoneyPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5" />
-                Find GreenPay User
+                Find Geepay User
               </CardTitle>
               <CardDescription>
-                Search for a GreenPay user by email or full name
+                Search for a Geepay user by email or full name
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -452,9 +459,9 @@ export default function SendMoneyPage() {
                 <span className="material-icons text-blue-600 text-sm">info</span>
               </div>
               <div className="space-y-1">
-                <p className="font-medium text-sm">About GreenPay Transfers</p>
+                <p className="font-medium text-sm">About Geepay Transfers</p>
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• Transfers between GreenPay users are instant and free</p>
+                  <p>• Transfers between Geepay users are instant and use the configured fee</p>
                   <p>• Both sender and recipient will receive notifications</p>
                   <p>• Transfers are processed immediately with real-time balance updates</p>
                 </div>
@@ -491,10 +498,10 @@ export default function SendMoneyPage() {
               <DollarSign className="w-6 h-6" />
             </div>
           </div>
-          <p className="text-green-200 text-sm">GreenPay Wallet · {transferCurrency}</p>
+          <p className="text-green-200 text-sm">Geepay Wallet · {transferCurrency}</p>
         </motion.div>
 
-        {/* GreenPay User Transfers */}
+        {/* Geepay User Transfers */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -503,10 +510,10 @@ export default function SendMoneyPage() {
           <div className="mb-4">
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Send to GreenPay Users
+              Send to Geepay Users
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Transfer money instantly to other GreenPay users - free and instant
+              Transfer money instantly to other Geepay users
             </p>
           </div>
           {renderGreenPayTransferContent()}
@@ -514,6 +521,27 @@ export default function SendMoneyPage() {
       </div>
 
       {/* PIN Modal */}
+      {showTransferConfirmation && pendingTransferData && selectedGreenPayUser && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">Confirm transfer</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Send {getCurrencySymbol(transferCurrency)}{transferAmount} to {selectedGreenPayUser.fullName}?
+            </p>
+            {transferDescription && (
+              <p className="mt-2 rounded-lg bg-muted p-3 text-xs text-muted-foreground">{transferDescription}</p>
+            )}
+            <div className="mt-5 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setShowTransferConfirmation(false)}>
+                Cancel
+              </Button>
+              <Button className="flex-1" onClick={confirmGreenPayTransfer}>
+                Confirm and send
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
       <PINModal
         isOpen={showPINModal}
         onClose={() => setShowPINModal(false)}

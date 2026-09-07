@@ -142,6 +142,8 @@ export function useWalletExchange() {
       fromWalletId: string;
       toWalletId: string;
       amount: number;
+      pin?: string;
+      authenticatorCode?: string;
     }) => {
       const r = await apiRequest("POST", "/api/exchange/swap", params);
       const data = await r.json();

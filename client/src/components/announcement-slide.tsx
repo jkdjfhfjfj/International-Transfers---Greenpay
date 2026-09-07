@@ -171,20 +171,30 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
   const [isVisible, setIsVisible] = useState(false);
   const [progress, setProgress] = useState(0);
   const [mediaOpen, setMediaOpen] = useState(false);
+  const [dismissedIds, setDismissedIds] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem("geepay-dismissed-announcements") || "[]");
+    } catch {
+      return [];
+    }
+  });
+  const visibleAnnouncements = announcements.filter((announcement) => !dismissedIds.includes(announcement.id));
 
   const duration = 25000;
   const interval = 100;
 
   useEffect(() => {
-    if (announcements.length > 0) {
+    if (visibleAnnouncements.length > 0) {
       setIsVisible(true);
       setProgress(0);
       setCurrentIndex(0);
+    } else {
+      setIsVisible(false);
     }
-  }, [announcements]);
+  }, [announcements, visibleAnnouncements.length]);
 
   useEffect(() => {
-    if (!isVisible || announcements.length === 0 || mediaOpen) return;
+    if (!isVisible || visibleAnnouncements.length === 0 || mediaOpen) return;
 
     const timer = setInterval(() => {
       setProgress((prev) => {
@@ -197,11 +207,11 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
     }, interval);
 
     return () => clearInterval(timer);
-  }, [isVisible, currentIndex, announcements.length, mediaOpen]);
+  }, [isVisible, currentIndex, visibleAnnouncements.length, mediaOpen]);
 
   const handleNext = () => {
     setMediaOpen(false);
-    if (currentIndex < announcements.length - 1) {
+    if (currentIndex < visibleAnnouncements.length - 1) {
       setCurrentIndex((prev) => prev + 1);
       setProgress(0);
     } else {
@@ -218,8 +228,14 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
   };
 
   const handleClose = () => setIsVisible(false);
+  const handleDismissForever = () => {
+    const next = [...dismissedIds, visibleAnnouncements[currentIndex].id];
+    setDismissedIds(next);
+    localStorage.setItem("geepay-dismissed-announcements", JSON.stringify(next));
+    setIsVisible(false);
+  };
 
-  const current = announcements[currentIndex];
+  const current = visibleAnnouncements[currentIndex];
 
   if (!current || !isVisible) return null;
 
@@ -309,7 +325,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
 
                 <div className="flex-1 min-w-0 pr-8">
                   <h4 className="font-bold text-sm text-foreground leading-tight">{current.title}</h4>
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{current.content}</p>
+                   <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap max-h-32 overflow-y-auto">{current.content}</p>
 
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
                     {hasMedia && (
@@ -335,6 +351,12 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
                         Learn More →
                       </button>
                     )}
+                    <button
+                      onClick={handleDismissForever}
+                      className="text-xs text-muted-foreground hover:text-foreground underline"
+                    >
+                      Do not show again
+                    </button>
                   </div>
                 </div>
 
@@ -355,7 +377,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
                 />
               </div>
 
-              {announcements.length > 1 && (
+              {visibleAnnouncements.length > 1 && (
                 <div className="flex items-center justify-between px-4 py-2">
                   <button
                     onClick={handlePrev}
@@ -365,7 +387,7 @@ export default function AnnouncementSlide({ announcements }: AnnouncementSlidePr
                     <ChevronLeft className="w-4 h-4 text-muted-foreground" />
                   </button>
                   <div className="flex gap-1">
-                    {announcements.map((_, i) => (
+                     {visibleAnnouncements.map((_, i) => (
                       <button
                         key={i}
                         onClick={() => { setCurrentIndex(i); setProgress(0); }}

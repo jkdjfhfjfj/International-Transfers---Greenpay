@@ -7,6 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
 import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, ArrowRightLeft } from "lucide-react";
+import { PINModal } from "@/components/pin-modal";
 
 const COIN_COLORS: Record<string, { accent: string; tint: string }> = {
   BTC: { accent: '#f97316', tint: 'rgba(249,115,22,0.10)' },
@@ -48,6 +49,8 @@ export default function CryptoPage() {
   const [transferDestination, setTransferDestination] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [copied, setCopied] = useState<string | null>(null);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
+  const [pendingSecurityAction, setPendingSecurityAction] = useState<"transfer" | null>(null);
   const { user } = useAuth();
   const { wallets: userWallets } = useWallets();
   const { toast } = useToast();
@@ -121,7 +124,7 @@ export default function CryptoPage() {
   });
 
   const transferMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (security?: { pin?: string; authenticatorCode?: string }) => {
       const sourceReference = transferSource || sourceOptions[0]?.value || "";
       const destinationReference = transferDestination || destinationOptions.find((option) => option.value !== sourceReference)?.value || "";
       const [sourceType, sourceIdOrCoin] = sourceReference.split(":");
@@ -136,9 +139,10 @@ export default function CryptoPage() {
         destinationId: destinationIsCrypto ? undefined : destinationIdOrCoin,
         destinationCoin: destinationIsCrypto ? destinationIdOrCoin : undefined,
         amount: parseFloat(transferAmount),
+        ...security,
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Transfer failed");
+      if (!res.ok) throw Object.assign(new Error(data.message || "Transfer failed"), data);
       return data;
     },
     onSuccess: (data) => {
@@ -154,6 +158,11 @@ export default function CryptoPage() {
       setTransferAmount("");
     },
     onError: (error: any) => {
+      if (error?.requiresPin || error?.requiresAuthenticator) {
+        setPendingSecurityAction("transfer");
+        setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });
+        return;
+      }
       toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
     },
   });
@@ -513,7 +522,7 @@ export default function CryptoPage() {
                   <input type="number" min="0.00000001" step="any" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
                 </div>
                 <button
-                  onClick={() => transferMutation.mutate()}
+                  onClick={() => transferMutation.mutate({})}
                   disabled={!selectedSource || !selectedDestination || !transferAmount || Number(transferAmount) <= 0 || transferMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50"
                 >
@@ -564,6 +573,25 @@ export default function CryptoPage() {
           )}
         </AnimatePresence>
       </div>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => {
+          setSecurityPrompt(null);
+          setPendingSecurityAction(null);
+        }}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Confirm crypto transfer"
+        description="Verify your transaction security settings before moving funds."
+        onSuccess={(pin, authenticatorCode) => {
+          setSecurityPrompt(null);
+          if (pendingSecurityAction === "transfer") {
+            transferMutation.mutate({ pin, authenticatorCode });
+          }
+          setPendingSecurityAction(null);
+        }}
+        isLoading={transferMutation.isPending}
+      />
     </div>
   );
 }

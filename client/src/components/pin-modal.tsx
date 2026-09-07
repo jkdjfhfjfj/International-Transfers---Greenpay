@@ -8,10 +8,12 @@ import { Lock } from "lucide-react";
 interface PINModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (pin: string) => void;
+  onSuccess: (pin: string, authenticatorCode?: string) => void;
   isLoading?: boolean;
   title?: string;
   description?: string;
+  requiresPin?: boolean;
+  requiresAuthenticator?: boolean;
 }
 
 export function PINModal({
@@ -20,13 +22,16 @@ export function PINModal({
   onSuccess,
   isLoading = false,
   title = "Enter PIN",
-  description = "Enter your 4-digit PIN to complete this transaction"
+  description = "Enter your 4-digit PIN to complete this transaction",
+  requiresPin = true,
+  requiresAuthenticator = false,
 }: PINModalProps) {
   const [pin, setPin] = useState("");
+  const [authenticatorCode, setAuthenticatorCode] = useState("");
   const { toast } = useToast();
 
   const handleSubmit = () => {
-    if (pin.length !== 4) {
+    if (requiresPin && pin.length !== 4) {
       toast({
         title: "Invalid PIN",
         description: "PIN must be 4 digits",
@@ -35,7 +40,7 @@ export function PINModal({
       return;
     }
 
-    if (!/^\d{4}$/.test(pin)) {
+    if (requiresPin && !/^\d{4}$/.test(pin)) {
       toast({
         title: "Invalid PIN",
         description: "PIN must contain only numbers",
@@ -44,12 +49,23 @@ export function PINModal({
       return;
     }
 
-    onSuccess(pin);
+    if (requiresAuthenticator && !/^\d{6}$/.test(authenticatorCode)) {
+      toast({
+        title: "Authenticator code required",
+        description: "Enter the current 6-digit code from your authenticator app.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    onSuccess(pin, authenticatorCode || undefined);
     setPin("");
+    setAuthenticatorCode("");
   };
 
   const handleClose = () => {
     setPin("");
+    setAuthenticatorCode("");
     onClose();
   };
 
@@ -81,6 +97,19 @@ export function PINModal({
             }}
           />
 
+          {requiresAuthenticator && (
+            <Input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit authenticator code"
+              maxLength={6}
+              value={authenticatorCode}
+              onChange={(e) => setAuthenticatorCode(e.target.value.replace(/[^0-9]/g, ""))}
+              className="text-center tracking-widest"
+            />
+          )}
+
           <div className="flex gap-2">
             <Button
               variant="outline"
@@ -92,7 +121,7 @@ export function PINModal({
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={pin.length !== 4 || isLoading}
+              disabled={(requiresPin && pin.length !== 4) || (requiresAuthenticator && authenticatorCode.length !== 6) || isLoading}
               className="flex-1"
             >
               {isLoading ? "Verifying..." : "Verify PIN"}

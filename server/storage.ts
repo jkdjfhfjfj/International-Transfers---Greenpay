@@ -270,6 +270,7 @@ export class MemStorage implements IStorage {
   private kycDocuments: Map<string, KycDocument> = new Map();
   private virtualCards: Map<string, VirtualCard> = new Map();
   private transactions: Map<string, Transaction> = new Map();
+  private withdrawalEvents: Map<string, WithdrawalEvent> = new Map();
   private paymentRequests: Map<string, PaymentRequest> = new Map();
   private recipients: Map<string, Recipient> = new Map();
   private conversations: Map<string, Conversation> = new Map();
@@ -1420,6 +1421,29 @@ export class DatabaseStorage implements IStorage {
   async updateWithdrawalRequest(id: string, updates: Partial<Transaction>): Promise<Transaction | undefined> {
     // Withdrawal requests are stored as transactions with type "withdraw"
     return this.updateTransaction(id, updates);
+  }
+
+  async createWithdrawalEvent(event: InsertWithdrawalEvent): Promise<WithdrawalEvent> {
+    const id = randomUUID();
+    const created: WithdrawalEvent = {
+      ...event,
+      id,
+      description: event.description ?? null,
+      provider: event.provider ?? null,
+      providerReference: event.providerReference ?? null,
+      retryCount: event.retryCount ?? 0,
+      refundStatus: event.refundStatus ?? "not_applicable",
+      metadata: event.metadata ?? null,
+      createdAt: new Date(),
+    };
+    this.withdrawalEvents.set(id, created);
+    return created;
+  }
+
+  async getWithdrawalEvents(transactionId: string): Promise<WithdrawalEvent[]> {
+    return Array.from(this.withdrawalEvents.values())
+      .filter((event) => event.transactionId === transactionId)
+      .sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
   }
 
   // Payment Request operations

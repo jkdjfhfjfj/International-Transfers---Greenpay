@@ -20,6 +20,7 @@ const WITHDRAWAL_FEE_CURRENCIES = [
 interface SystemSettings {
   fees?: {
     transfer_fee: string;
+    exchange_fee_rate: string;
     exchange_rate_margin: string;
     virtual_card_fee: string;
     withdrawal_fee: string;
@@ -71,6 +72,7 @@ export default function AdminSystemSettingsPage() {
 
   // Fees state
   const [transferFee, setTransferFee] = useState("");
+  const [exchangeFeeRate, setExchangeFeeRate] = useState("");
   const [exchangeMargin, setExchangeMargin] = useState("");
   const [cardFee, setCardFee] = useState("");
   const [withdrawalFee, setWithdrawalFee] = useState("");
@@ -147,6 +149,7 @@ export default function AdminSystemSettingsPage() {
   useEffect(() => {
     if (settingsData) {
       setTransferFee(settingsData.fees?.transfer_fee || "");
+      setExchangeFeeRate(settingsData.fees?.exchange_fee_rate || "");
       setExchangeMargin(settingsData.fees?.exchange_rate_margin || "");
       setCardFee(settingsData.fees?.virtual_card_fee || "");
       setWithdrawalFee(settingsData.fees?.withdrawal_fee || "");
@@ -207,6 +210,7 @@ export default function AdminSystemSettingsPage() {
     mutationFn: async () => {
       const requests = [
         apiRequest("PUT", "/api/admin/settings/transfer_fee", { value: transferFee, category: "fees" }),
+        apiRequest("PUT", "/api/admin/settings/exchange_fee_rate", { value: exchangeFeeRate, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/exchange_rate_margin", { value: exchangeMargin, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/virtual_card_fee", { value: cardFee, category: "fees" }),
         apiRequest("PUT", "/api/admin/settings/withdrawal_fee", { value: withdrawalFee, category: "fees" }),
@@ -388,6 +392,11 @@ export default function AdminSystemSettingsPage() {
                   <div className="space-y-2">
                     <Label className="text-sm">Transfer Fee (%)</Label>
                     <Input value={transferFee} onChange={(e) => setTransferFee(e.target.value)} placeholder="2.50" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Exchange / Wallet Transfer Fee (%)</Label>
+                    <Input value={exchangeFeeRate} onChange={(e) => setExchangeFeeRate(e.target.value)} placeholder="1.50" className="rounded-xl" />
+                    <p className="text-xs text-muted-foreground">Applied consistently to exchanges, dashboard transfers, and crypto wallet/card transfers.</p>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-sm">Exchange Rate Margin (%)</Label>

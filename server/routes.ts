@@ -96,6 +96,55 @@ async function getEnabledCurrencyCodes(): Promise<string[]> {
   }
 }
 
+async function getConfiguredFeeRate(key: string, fallbackPercent: number): Promise<number> {
+  try {
+    const setting = await storage.getSystemSetting("fees", key);
+    const raw = (setting as any)?.value;
+    const value = Number(typeof raw === "object" && raw !== null ? raw.value : raw);
+    return Number.isFinite(value) && value >= 0 ? value / 100 : fallbackPercent / 100;
+  } catch {
+    return fallbackPercent / 100;
+  }
+}
+
+async function getTransactionFeeRate(): Promise<number> {
+  const configured = await getConfiguredFeeRate("exchange_fee_rate", Number.NaN);
+  if (Number.isFinite(configured)) return configured;
+  return getConfiguredFeeRate("transfer_fee", 1.5);
+}
+
+async function verifyTransactionSecurity(
+  userId: string,
+  credentials: { pin?: string; authenticatorCode?: string },
+) {
+  const user = await storage.getUser(userId);
+  if (!user) return { ok: false, status: 404, message: "User not found" };
+  const settings = await storage.getSystemSettings();
+  const settingValue = (key: string) => {
+    const raw = settings.find((setting) => setting.key === key)?.value as any;
+    return String(raw?.value ?? raw).toLowerCase() === "true";
+  };
+  const pinRequired = Boolean(user.pinEnabled) || settingValue("pin_required");
+  const authenticatorRequired = Boolean(user.twoFactorEnabled) || settingValue("two_factor_required");
+  if (pinRequired) {
+    if (!user.pinCode) return { ok: false, status: 400, message: "Set up your PIN before making transactions" };
+    if (!credentials.pin) return { ok: false, status: 400, requiresPin: true, message: "PIN required" };
+    if (!(await bcrypt.compare(credentials.pin, user.pinCode))) {
+      return { ok: false, status: 401, message: "Invalid PIN" };
+    }
+  }
+  if (authenticatorRequired) {
+    if (!user.twoFactorSecret) return { ok: false, status: 400, message: "Set up your authenticator before making transactions" };
+    if (!credentials.authenticatorCode) {
+      return { ok: false, status: 400, requiresAuthenticator: true, message: "Authenticator code required" };
+    }
+    if (!twoFactorService.verifyToken(user.twoFactorSecret, credentials.authenticatorCode)) {
+      return { ok: false, status: 401, message: "Invalid authenticator code" };
+    }
+  }
+  return { ok: true };
+}
+
 async function getUserWallet(userId: string, currency: unknown) {
   const code = normalizeCurrency(currency);
   const [wallet] = await db
@@ -2851,6 +2900,37 @@ p{color:#6b7280;font-size:14px;}</style>
       const phoneToUse = phone || user.phone;
       if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
 
+      const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
+      if (String(gatewaySetting?.value || "payhero").toLowerCase() === "nexuspay") {
+        const reference = `DEP-NEXUS-${Date.now()}-${userId.slice(-6)}`;
+        const result = await nexusPayService.checkout({
+          amount: parseFloat(amount),
+          currency: "USD",
+          channel: "mobile_money",
+          phone: phoneToUse,
+          email: user.email,
+          description: "M-Pesa deposit via Makamesco Nexus Pay",
+        });
+        await db.insert(transactions).values({
+          userId,
+          type: "deposit",
+          amount: parseFloat(amount).toFixed(2),
+          currency: "USD",
+          status: "pending",
+          description: "M-Pesa deposit via Makamesco Nexus Pay",
+          fee: "0.00",
+          reference: result.reference || reference,
+          metadata: { paymentMethod: "mpesa", gateway: "nexuspay", redirectUrl: result.redirectUrl } as any,
+        });
+        return res.json({
+          success: true,
+          gateway: "nexuspay",
+          reference: result.reference || reference,
+          redirectUrl: result.redirectUrl,
+          message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
+        });
+      }
+
       let exchangeRate = 129;
       try {
         const rateService = await createExchangeRateService();
@@ -5069,6 +5149,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Security: use authenticated session user ID, not request body
       const payerUserId = sessionUserId;
+      const security = await verifyTransactionSecurity(payerUserId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       // Process payment
       const transaction = await storage.createTransaction({
@@ -5148,6 +5230,8 @@ p{color:#6b7280;font-size:14px;}</style>
       if (payer.id === requester.id) {
         return res.status(400).json({ message: "You cannot pay your own payment request" });
       }
+      const security = await verifyTransactionSecurity(sessionUserId, req.body || {});
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       const amount = Number(paymentRequest.amount);
       const currency = normalizeCurrency(paymentRequest.currency);
@@ -8324,6 +8408,8 @@ p{color:#6b7280;font-size:14px;}</style>
       // Get settings from database first, fallback to environment
       const channelIdSetting = await storage.getSystemSetting("payhero", "channel_id");
       const providerSetting = await storage.getSystemSetting("payhero", "provider");
+      const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
+      const nexusApiKeySetting = await storage.getSystemSetting("payment", "nexuspay_api_key");
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       
       // Parse JSON values from database and prioritize database over env variables
@@ -8334,6 +8420,8 @@ p{color:#6b7280;font-size:14px;}</style>
       const settings = {
         channelId,
         provider: providerSetting?.value || "m-pesa",
+        defaultGateway: gatewaySetting?.value || "payhero",
+        nexuspayConfigured: Boolean(nexusApiKeySetting?.value || process.env.NEXUSPAY_API_KEY),
         cardPrice: cardPriceSetting?.value || "60.00",
         username: process.env.PAYHERO_USERNAME ? "****" : "",
         password: process.env.PAYHERO_PASSWORD ? "****" : "",
@@ -8348,7 +8436,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.put("/api/admin/payhero-settings", async (req, res) => {
     try {
-      const { channelId, provider, cardPrice } = req.body;
+      const { channelId, provider, cardPrice, defaultGateway, nexuspayApiKey } = req.body;
       
       console.log('Admin updated PayHero settings:', { channelId, provider, cardPrice });
       
@@ -8359,6 +8447,22 @@ p{color:#6b7280;font-size:14px;}</style>
         value: channelId,
         description: "PayHero payment channel ID"
       });
+
+      await storage.setSystemSetting({
+        category: "payment",
+        key: "default_gateway",
+        value: defaultGateway || "payhero",
+        description: "Default deposit/payment gateway",
+      });
+      if (nexuspayApiKey) {
+        await storage.setSystemSetting({
+          category: "payment",
+          key: "nexuspay_api_key",
+          value: nexuspayApiKey,
+          description: "Makamesco Nexus Pay API key",
+        });
+        process.env.NEXUSPAY_API_KEY = nexuspayApiKey;
+      }
       
       await storage.setSystemSetting({
         category: "payhero",
@@ -9062,7 +9166,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // User-to-user transfer endpoint with real-time balance updates
   app.post("/api/transfer", requireAuth, async (req, res) => {
     try {
-      const { fromUserId, toUserId, amount, currency, description, pin } = req.body;
+      const { fromUserId, toUserId, amount, currency, description, pin, authenticatorCode } = req.body;
       
       console.log('=== TRANSFER DEBUG ===');
       console.log('Request Body:', { fromUserId, toUserId, amount, currency });
@@ -9091,23 +9195,16 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Check PIN if required by admin settings OR if user has it enabled
-      const settings = await storage.getSystemSettings();
-      const pinRequiredByAdmin = settings.some(s => s.key === "pin_required" && s.value === "true");
-      
-      if ((pinRequiredByAdmin || fromUser.pinEnabled) && fromUser.pinCode) {
-        if (!pin) {
-          return res.status(400).json({ message: "PIN required", requiresPin: true });
-        }
-        
-        // Verify PIN
-        const isPinValid = await bcrypt.compare(pin, fromUser.pinCode);
-        if (!isPinValid) {
-          return res.status(401).json({ message: "Invalid PIN", success: false });
-        }
+      if ((req.session as any).userId !== fromUserId) {
+        return res.status(403).json({ message: "You can only send money from your own account" });
       }
+      const security = await verifyTransactionSecurity(fromUserId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       const transferCurrency = normalizeCurrency(currency);
+      const feeRate = await getTransactionFeeRate();
+      const feeAmount = transferAmount * feeRate;
+      const senderDebit = transferAmount + feeAmount;
       const senderWallet = await getUserWallet(fromUserId, transferCurrency);
       const recipientWallet = await ensureUserWallet(toUserId, transferCurrency);
       if (!senderWallet || !recipientWallet) {
@@ -9116,13 +9213,13 @@ p{color:#6b7280;font-size:14px;}</style>
       const senderBalance = walletAvailableBalance(senderWallet);
       const recipientBalance = walletAvailableBalance(recipientWallet);
 
-      if (senderBalance < transferAmount) {
-        console.error('[Transfer] Insufficient balance:', { senderBalance, transferAmount });
+      if (senderBalance < senderDebit) {
+        console.error('[Transfer] Insufficient balance:', { senderBalance, senderDebit });
         return res.status(400).json({ message: "Insufficient balance" });
       }
 
       // Calculate new balances - simple arithmetic
-      const senderNewBalance = senderBalance - transferAmount;
+      const senderNewBalance = senderBalance - senderDebit;
       const recipientNewBalance = recipientBalance + transferAmount;
       
       console.log('[Transfer] Balance calculation:', { 
@@ -9149,7 +9246,7 @@ p{color:#6b7280;font-size:14px;}</style>
         recipient: toUser.fullName,
         recipientEmail: toUser.email,
         transferId: transferId,
-        fee: '0'
+        fee: feeAmount.toFixed(2)
       });
 
       // Recipient transaction (credit)
@@ -9170,7 +9267,7 @@ p{color:#6b7280;font-size:14px;}</style>
       // the sender's available balance during concurrent transfers.
       try {
         await applyLedgerEntry({
-          walletId: senderWallet.id, userId: fromUserId, currency: transferCurrency, amount: -transferAmount,
+          walletId: senderWallet.id, userId: fromUserId, currency: transferCurrency, amount: -senderDebit,
           entryType: "user_transfer", idempotencyKey: `transfer:${transferId}:debit`,
           transactionId: senderTransaction.id, description: description || `Transfer to ${toUser.fullName}`,
         });
@@ -9499,6 +9596,18 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('System settings error:', error);
       res.status(500).json({ message: "Failed to load system settings" });
+    }
+  });
+
+  app.get("/api/transaction-fees", requireAuth, async (_req, res) => {
+    try {
+      res.json({
+        exchangeFeeRate: await getTransactionFeeRate(),
+        transferFeeRate: await getConfiguredFeeRate("transfer_fee", 0),
+      });
+    } catch (error) {
+      console.error("Transaction fee settings error:", error);
+      res.status(500).json({ message: "Failed to load transaction fees" });
     }
   });
 
@@ -12676,7 +12785,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
         destinationId,
         destinationCoin,
         amount,
+        pin,
+        authenticatorCode,
       } = req.body;
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
       const sourceKinds = ["wallet", "card", "crypto"];
       const destinationKinds = ["wallet", "card", "crypto"];
       if (!sourceKinds.includes(sourceType) || !destinationKinds.includes(destinationType)) {
@@ -12684,6 +12797,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       if (sourceType === destinationType && sourceId && sourceId === destinationId && sourceCoin === destinationCoin) {
         return res.status(400).json({ message: "Source and destination must be different" });
+      }
+      if (
+        sourceType === "crypto" &&
+        destinationType === "crypto" &&
+        normalizeCurrency(sourceCoin) === normalizeCurrency(destinationCoin)
+      ) {
+        return res.status(400).json({ message: "Choose different crypto assets" });
       }
       const sourceAmount = Number(amount);
       if (!Number.isFinite(sourceAmount) || sourceAmount <= 0) {
@@ -12733,14 +12853,17 @@ Sitemap: https://geepay.us/sitemap.xml`;
           ? 1
           : await exchangeRateService.getExchangeRate(sourceWallet.currency, "USD");
       if (!sourceRate || !Number.isFinite(sourceRate)) return res.status(503).json({ message: "Source conversion rate unavailable" });
-      const usdValue = sourceType === "crypto" ? sourceAmount * sourceRate : sourceAmount * sourceRate;
-
       const destinationRate = destinationType === "crypto"
         ? await getCryptoPrice(destinationCoinCode!)
         : destinationType === "card"
           ? 1
           : await exchangeRateService.getExchangeRate("USD", destinationWallet.currency);
       if (!destinationRate || !Number.isFinite(destinationRate)) return res.status(503).json({ message: "Destination conversion rate unavailable" });
+      const feeRate = await getTransactionFeeRate();
+      const feeAmount = sourceAmount * feeRate;
+      const grossUsdValue = sourceAmount * sourceRate;
+      const feeUsdValue = feeAmount * sourceRate;
+      const usdValue = Math.max(0, grossUsdValue - feeUsdValue);
       const destinationAmount = destinationType === "crypto"
         ? usdValue / destinationRate
         : destinationType === "card"
@@ -12751,13 +12874,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
       let sourceDebited = false;
       try {
         if (sourceType === "crypto") {
-          await adjustCryptoWalletBalance(userId, sourceCoinCode!, -sourceAmount);
+          await adjustCryptoWalletBalance(userId, sourceCoinCode!, -(sourceAmount + feeAmount));
         } else if (sourceType === "wallet") {
           await applyLedgerEntry({
             walletId: sourceWallet.id,
             userId,
             currency: normalizeCurrency(sourceWallet.currency),
-            amount: -sourceAmount,
+            amount: -(sourceAmount + feeAmount),
             entryType: "internal_transfer",
             idempotencyKey: `${reference}:source`,
             description: `Transfer from ${sourceWallet.currency} wallet`,
@@ -12767,7 +12890,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
             cardId: sourceCard.id,
             userId,
             currency: "USD",
-            amount: -sourceAmount,
+            amount: -(sourceAmount + feeAmount),
             entryType: "internal_transfer",
             idempotencyKey: `${reference}:source`,
             description: "Transfer from virtual card",
@@ -12802,13 +12925,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
         if (sourceDebited) {
           try {
             if (sourceType === "crypto") {
-              await adjustCryptoWalletBalance(userId, sourceCoinCode!, sourceAmount);
+              await adjustCryptoWalletBalance(userId, sourceCoinCode!, sourceAmount + feeAmount);
             } else if (sourceType === "wallet") {
               await applyLedgerEntry({
                 walletId: sourceWallet.id,
                 userId,
                 currency: normalizeCurrency(sourceWallet.currency),
-                amount: sourceAmount,
+                amount: sourceAmount + feeAmount,
                 entryType: "internal_transfer_rollback",
                 idempotencyKey: `${reference}:rollback`,
                 description: "Rollback failed internal transfer",
@@ -12818,7 +12941,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
                 cardId: sourceCard.id,
                 userId,
                 currency: "USD",
-                amount: sourceAmount,
+                amount: sourceAmount + feeAmount,
                 entryType: "internal_transfer_rollback",
                 idempotencyKey: `${reference}:rollback`,
                 description: "Rollback failed internal transfer",
@@ -12836,6 +12959,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         type: "transfer",
         amount: sourceAmount.toFixed(8),
         currency: sourceType === "crypto" ? sourceCoinCode! : sourceType === "card" ? "USD" : normalizeCurrency(sourceWallet.currency),
+        fee: feeAmount.toFixed(8),
         status: "completed",
         description: `Transfer ${sourceType} → ${destinationType}`,
         reference,
@@ -12849,6 +12973,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
           destinationCoin: destinationCoinCode,
           destinationAmount: destinationAmount.toFixed(8),
           usdValue: usdValue.toFixed(2),
+          feeRate: feeRate.toFixed(6),
+          feeUsdValue: feeUsdValue.toFixed(2),
         } as any,
       });
 
@@ -12886,8 +13012,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/crypto/deposit", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { coin, amount, network } = req.body;
+      const { coin, amount, network, pin, authenticatorCode } = req.body;
       if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
@@ -12935,8 +13063,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/crypto/withdraw", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { coin, amount, toAddress } = req.body;
+      const { coin, amount, toAddress, pin, authenticatorCode } = req.body;
       if (!coin || !amount || !toAddress) return res.status(400).json({ message: "coin, amount, and toAddress required" });
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
@@ -12990,8 +13120,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/crypto/buy-card", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { coin } = req.body;
+      const { coin, pin, authenticatorCode } = req.body;
       if (!coin) return res.status(400).json({ message: "coin required" });
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       const rate = await getCryptoPrice(String(coin));
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
@@ -13533,8 +13665,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/exchange/swap", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const { fromWalletId, toWalletId, amount } = req.body;
+      const { fromWalletId, toWalletId, amount, pin, authenticatorCode } = req.body;
       if (!fromWalletId || !toWalletId || !amount) return res.status(400).json({ message: "fromWalletId, toWalletId, and amount are required" });
+      const security = await verifyTransactionSecurity((req.session as any).userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
       const fromAmt = parseFloat(amount);
       if (fromAmt <= 0) return res.status(400).json({ message: "Amount must be > 0" });
       const userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
@@ -13547,7 +13681,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
-      const FEE_RATE = 0.015;
+      const FEE_RATE = await getTransactionFeeRate();
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;
       const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;

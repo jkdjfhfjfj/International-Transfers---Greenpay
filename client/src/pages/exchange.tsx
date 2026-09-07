@@ -10,6 +10,7 @@ import { useWallets, useWalletExchange } from "@/hooks/use-wallets";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ArrowLeft, ArrowRight, ArrowLeftRight, RefreshCw, Loader2, CheckCircle2, ChevronDown } from "lucide-react";
+import { PINModal } from "@/components/pin-modal";
 
 const CURRENCY_FLAGS: Record<string, string> = {
   USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
@@ -31,9 +32,14 @@ export default function ExchangePage() {
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [rateLoading, setRateLoading] = useState(false);
   const [success, setSuccess] = useState<any>(null);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const { toast } = useToast();
   const { wallets, isLoading } = useWallets();
   const { exchange, isExchanging } = useWalletExchange();
+  const { data: feeSettings } = useQuery<{ exchangeFeeRate?: number }>({
+    queryKey: ["/api/transaction-fees"],
+    queryFn: async () => (await apiRequest("GET", "/api/transaction-fees")).json(),
+  });
 
   const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);
 
@@ -63,7 +69,7 @@ export default function ExchangePage() {
   }, [fromWallet?.currency, toWallet?.currency]);
 
   const amountNum = parseFloat(amount) || 0;
-  const FEE_RATE = 0.015;
+  const FEE_RATE = Number(feeSettings?.exchangeFeeRate ?? 0.015);
   const feeNum = amountNum * FEE_RATE;
   const netAmount = amountNum - feeNum;
   const receiveAmount = exchangeRate ? netAmount * exchangeRate : 0;
@@ -78,7 +84,7 @@ export default function ExchangePage() {
     setSuccess(null);
   };
 
-  const handleExchange = async () => {
+  const handleExchange = async (security?: { pin?: string; authenticatorCode?: string }) => {
     if (!fromWalletId || !toWalletId) {
       toast({ title: "Select wallets", description: "Choose source and destination wallets", variant: "destructive" });
       return;
@@ -92,11 +98,15 @@ export default function ExchangePage() {
       return;
     }
     try {
-      const result = await exchange({ fromWalletId, toWalletId, amount: amountNum });
+      const result = await exchange({ fromWalletId, toWalletId, amount: amountNum, ...security } as any);
       setSuccess(result);
       setAmount("");
       toast({ title: "Exchange successful!", description: `${result.fromAmount} ${result.fromCurrency} → ${parseFloat(result.toAmount).toFixed(4)} ${result.toCurrency}` });
     } catch (e: any) {
+      if (e?.requiresPin || e?.requiresAuthenticator) {
+        setSecurityPrompt({ pin: Boolean(e.requiresPin), authenticator: Boolean(e.requiresAuthenticator) });
+        return;
+      }
       toast({ title: "Exchange failed", description: e.message, variant: "destructive" });
     }
   };
@@ -286,8 +296,8 @@ export default function ExchangePage() {
                     <span>{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(amountNum, 4)} {fromWallet?.currency}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
-                    <span>Fee (1.5%)</span>
-                    <span>−{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(feeNum, 4)} {fromWallet?.currency}</span>
+                    <span>Exchange fee</span>
+                    <span>−{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(feeNum, 4)} {fromWallet?.currency} ({(FEE_RATE * 100).toFixed(2)}%)</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Net amount</span>
@@ -305,7 +315,7 @@ export default function ExchangePage() {
               )}
 
               <p className="text-center text-xs text-muted-foreground pb-2">
-                Exchange rates are live. 1.5% fee applies to all exchanges.
+                 Exchange rates are live. The configured exchange fee applies to this transaction.
               </p>
             </motion.div>
           )}
@@ -317,7 +327,7 @@ export default function ExchangePage() {
         <div className="fixed bottom-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border md:bottom-0">
           <div className="max-w-lg mx-auto p-4">
             <Button
-              onClick={handleExchange}
+              onClick={() => handleExchange()}
               disabled={isExchanging || !amount || amountNum <= 0 || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
               className="w-full h-13 text-base font-semibold bg-primary hover:bg-primary/90"
               style={{ height: 52 }}
@@ -328,7 +338,20 @@ export default function ExchangePage() {
                 <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
               )}
             </Button>
-          </div>
+      </div>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => setSecurityPrompt(null)}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Confirm exchange"
+        description="Verify your transaction security settings to complete this exchange."
+        onSuccess={(pin, authenticatorCode) => {
+          setSecurityPrompt(null);
+          void handleExchange({ pin, authenticatorCode });
+        }}
+        isLoading={isExchanging}
+      />
         </div>
       )}
     </div>

@@ -27,6 +27,7 @@ export function TalkToUs() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [remainingRequests, setRemainingRequests] = useState<number>(5);
+  const [buttonOffset, setButtonOffset] = useState({ x: 0, y: 0 });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const whatsappLink = `https://wa.me/14704657028?text=${encodeURIComponent("Hi, I need support with Geepay")}`;
@@ -258,6 +259,13 @@ export function TalkToUs() {
       <motion.button
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
+        drag
+        dragMomentum={false}
+        onDragEnd={(_, info) => setButtonOffset((previous) => ({
+          x: previous.x + info.offset.x,
+          y: previous.y + info.offset.y,
+        }))}
+        style={{ x: buttonOffset.x, y: buttonOffset.y, touchAction: "none" }}
         onClick={() => {
           if (aiOpen) {
             setAiOpen(false);
@@ -266,7 +274,7 @@ export function TalkToUs() {
             setMenuOpen(prev => !prev);
           }
         }}
-        className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 md:bottom-6"
+        className="fixed bottom-[6.75rem] right-4 z-50 flex items-center gap-2 bg-gradient-to-r from-emerald-500 to-green-600 text-white px-4 py-3 rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing md:bottom-6"
       >
         <motion.div
           animate={{ rotate: menuOpen ? 180 : 0 }}

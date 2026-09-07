@@ -7,8 +7,16 @@ export const useFCM = () => {
   useEffect(() => {
     const initializeFCM = async () => {
       try {
-        // Only run in Capacitor native app context
-        if (typeof window === 'undefined' || !(window as any).Capacitor) return;
+        if (typeof window === 'undefined') return;
+
+        // Browser notifications use the persisted notification feed in App.tsx.
+        // Ask once after login so account activity can appear outside the tab.
+        if (!(window as any).Capacitor) {
+          if ("Notification" in window && Notification.permission === "default") {
+            await Notification.requestPermission();
+          }
+          return;
+        }
 
         // Use indirect import path to avoid Vite pre-bundling the native package
         const pkgName = ['@capacitor', 'push-notifications'].join('/');

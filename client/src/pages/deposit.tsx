@@ -127,6 +127,10 @@ export default function DepositPage() {
       return data;
     },
     onSuccess: (data) => {
+      if (data.redirectUrl) {
+        window.location.href = data.redirectUrl;
+        return;
+      }
       setMpesaRef(data.reference);
       setMpesaStatus("pending");
       toast({ title: "STK Push Sent", description: data.message });

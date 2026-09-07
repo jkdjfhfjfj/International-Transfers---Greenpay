@@ -320,6 +320,9 @@ async function alterMissingColumns() {
     `CREATE INDEX IF NOT EXISTS ledger_entries_wallet_idx ON ledger_entries(wallet_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS ledger_entries_virtual_account_idx ON ledger_entries(virtual_account_id, created_at)`,
     `CREATE INDEX IF NOT EXISTS ledger_entries_card_idx ON ledger_entries(card_id, created_at)`,
+    // Older Render databases may have ledger entries without the currency
+    // column. Ledger writes require it, so add it before any opening entries.
+    `ALTER TABLE ledger_entries ADD COLUMN IF NOT EXISTS currency TEXT DEFAULT 'USD'`,
     // Seed one immutable opening entry for each existing cached balance. This
     // makes the migration lossless while all future changes use the ledger.
     `INSERT INTO ledger_entries (user_id, currency, wallet_id, amount, entry_type, idempotency_key, description)

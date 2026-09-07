@@ -13,6 +13,7 @@ import { WavyHeader } from "@/components/wavy-header";
 import BottomNavigation from "@/components/bottom-navigation";
 import { Plus, Copy, ExternalLink, Send, Inbox, Check, Clock, XCircle, ArrowRight } from "lucide-react";
 import { mockCurrencies } from "@/lib/mock-data";
+import { PINModal } from "@/components/pin-modal";
 
 type TabType = "sent" | "received";
 
@@ -39,6 +40,11 @@ export default function PaymentRequestsPage() {
   const [activeTab, setActiveTab] = useState<TabType>("sent");
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [confirmation, setConfirmation] = useState<
+    { kind: "create" } | { kind: "accept"; id: string } | null
+  >(null);
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
+  const [pendingPayment, setPendingPayment] = useState<string | null>(null);
   const [newRequest, setNewRequest] = useState({
     toEmail: "",
     toPhone: "",
@@ -86,17 +92,24 @@ export default function PaymentRequestsPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleAction = async (id: string, action: "accept" | "decline" | "cancel") => {
+  const handleAction = async (id: string, action: "accept" | "decline" | "cancel", security?: { pin?: string; authenticatorCode?: string }) => {
     try {
       const response = await fetch(`/api/payment-requests/${id}/${action}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(security || {}),
       });
       if (response.ok) {
         toast({ title: `Request ${action}ed`, description: `Payment request has been ${action}ed.` });
         window.location.reload();
       } else {
-        toast({ title: "Error", description: "Action failed", variant: "destructive" });
+        const error = await response.json().catch(() => ({}));
+        if (error.requiresPin || error.requiresAuthenticator) {
+          setPendingPayment(id);
+          setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });
+          return;
+        }
+        toast({ title: "Error", description: error.message || "Action failed", variant: "destructive" });
       }
     } catch {
       toast({ title: "Error", description: "Action failed", variant: "destructive" });
@@ -188,7 +201,7 @@ export default function PaymentRequestsPage() {
                 <div className="flex space-x-2 pt-2">
                   <Button variant="outline" onClick={() => setShowCreateDialog(false)} className="flex-1">Cancel</Button>
                   <Button
-                    onClick={handleCreateRequest}
+                    onClick={() => setConfirmation({ kind: "create" })}
                     disabled={!newRequest.amount || (!newRequest.toEmail && !newRequest.toPhone)}
                     className="flex-1"
                   >
@@ -357,7 +370,7 @@ export default function PaymentRequestsPage() {
                       <Button
                         size="sm"
                         className="flex-1 bg-primary hover:bg-primary/90"
-                        onClick={() => handleAction(req.id, "accept")}
+                        onClick={() => setConfirmation({ kind: "accept", id: req.id })}
                       >
                         Pay Now <ArrowRight className="w-3 h-3 ml-1" />
                       </Button>
@@ -381,6 +394,52 @@ export default function PaymentRequestsPage() {
           </motion.div>
         </AnimatePresence>
       </div>
+      {confirmation && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+            <h3 className="text-lg font-semibold">
+              {confirmation.kind === "create" ? "Confirm payment request" : "Confirm payment"}
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {confirmation.kind === "create"
+                ? `Send a request for ${newRequest.amount || "0"} ${newRequest.currency}?`
+                : "This will debit your selected wallet and pay the request."}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <Button variant="outline" className="flex-1" onClick={() => setConfirmation(null)}>Cancel</Button>
+              <Button
+                className="flex-1"
+                onClick={() => {
+                  const next = confirmation;
+                  setConfirmation(null);
+                  if (next.kind === "create") void handleCreateRequest();
+                  else void handleAction(next.id, "accept");
+                }}
+              >
+                Confirm
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => {
+          setSecurityPrompt(null);
+          setPendingPayment(null);
+        }}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Confirm payment"
+        description="Verify your transaction security settings to pay this request."
+        onSuccess={(pin, authenticatorCode) => {
+          if (!pendingPayment) return;
+          const id = pendingPayment;
+          setSecurityPrompt(null);
+          setPendingPayment(null);
+          void handleAction(id, "accept", { pin, authenticatorCode });
+        }}
+      />
       <BottomNavigation />
     </div>
   );

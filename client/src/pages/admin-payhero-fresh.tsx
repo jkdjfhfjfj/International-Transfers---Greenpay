@@ -15,6 +15,8 @@ interface PayHeroData {
   username?: string;
   password?: string;
   provider?: string;
+  defaultGateway?: string;
+  nexuspayConfigured?: boolean;
   cardPrice?: string;
 }
 
@@ -26,6 +28,8 @@ export default function AdminPayHeroSettingsPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [cardPrice, setCardPrice] = useState("");
+  const [defaultGateway, setDefaultGateway] = useState("payhero");
+  const [nexuspayApiKey, setNexuspayApiKey] = useState("");
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -40,6 +44,7 @@ export default function AdminPayHeroSettingsPage() {
       setChannelId(String(data.channelId || ""));
       setUsername(String(data.username || ""));
       setCardPrice(String(data.cardPrice || ""));
+      setDefaultGateway(String(data.defaultGateway || "payhero"));
     }
   }, [data]);
 
@@ -50,12 +55,15 @@ export default function AdminPayHeroSettingsPage() {
         username,
         password: password || undefined,
         cardPrice,
+        defaultGateway,
+        nexuspayApiKey: nexuspayApiKey || undefined,
       });
       return r.json();
     },
     onSuccess: () => {
       toast({ title: "Saved", description: "PayHero settings updated successfully." });
       setPassword("");
+      setNexuspayApiKey("");
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
     onError: () => toast({ title: "Error", description: "Failed to save PayHero settings.", variant: "destructive" }),
@@ -138,6 +146,38 @@ export default function AdminPayHeroSettingsPage() {
             <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">
               <Save className="w-4 h-4 mr-2" />
               {mutation.isPending ? "Saving..." : "Save PayHero Configuration"}
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle>Default payment gateway</CardTitle>
+            <CardDescription>Choose which configured provider handles new M-Pesa/card deposits.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <select
+              value={defaultGateway}
+              onChange={(event) => setDefaultGateway(event.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
+            >
+              <option value="payhero">PayHero</option>
+              <option value="nexuspay">Makamesco Nexus Pay</option>
+            </select>
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Makamesco Nexus Pay API key</Label>
+              <Input
+                value={nexuspayApiKey}
+                onChange={(event) => setNexuspayApiKey(event.target.value)}
+                type="password"
+                placeholder={data?.nexuspayConfigured ? "Configured — enter only to replace" : "Paste the Nexus Pay API key"}
+                className="rounded-xl"
+              />
+              <p className="text-xs text-gray-500">Stored in the database and never shown back in full.</p>
+            </div>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} variant="outline" className="w-full rounded-xl">
+              <Save className="w-4 h-4 mr-2" />
+              Save gateway selection
             </Button>
           </CardContent>
         </Card>
