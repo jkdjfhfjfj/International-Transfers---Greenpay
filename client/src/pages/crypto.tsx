@@ -95,6 +95,9 @@ export default function CryptoPage() {
   const [transferDestination, setTransferDestination] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [transferReview, setTransferReview] = useState(false);
+  const [depositReview, setDepositReview] = useState(false);
+  const [withdrawReview, setWithdrawReview] = useState(false);
+  const [selectedDepositAddress, setSelectedDepositAddress] = useState<any | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingSecurityAction, setPendingSecurityAction] = useState<SecurityAction | null>(null);
@@ -451,7 +454,7 @@ export default function CryptoPage() {
                      </div>
                      <div>
                        <p className="text-muted-foreground">Live rate</p>
-                        <p className="font-medium text-foreground">1 {wallet.coin} = ${(rates[wallet.coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        <p className="font-medium text-foreground">1 {wallet.coin} = {formatUsdPrice(rates[wallet.coin])}</p>
                         {usdToLocalRate > 0 && localCurrency !== "USD" && (
                           <p className="text-[10px] text-muted-foreground">
                             ≈ {localCurrency} {(Number(rates[wallet.coin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}
@@ -582,6 +585,13 @@ export default function CryptoPage() {
                         {addr.notes && (
                           <p className="text-[11px] text-muted-foreground italic">{addr.notes}</p>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDepositAddress(addr)}
+                          className="w-full rounded-xl border border-primary/20 bg-primary/5 py-2 text-xs font-semibold text-primary"
+                        >
+                          View deposit details and QR
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -605,7 +615,7 @@ export default function CryptoPage() {
                 </div>
 
                 <button
-                  onClick={() => depositMutation.mutate({ coin: selectedCoin, amount: depositAmount })}
+                  onClick={() => setDepositReview(true)}
                   disabled={!depositAmount || parseFloat(depositAmount) <= 0 || depositMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
@@ -677,7 +687,7 @@ export default function CryptoPage() {
                 </div>
 
                 <button
-                  onClick={() => withdrawMutation.mutate({ coin: selectedCoin, amount: withdrawAmount, toAddress: withdrawAddress })}
+                  onClick={() => setWithdrawReview(true)}
                   disabled={!withdrawAmount || !withdrawAddress || parseFloat(withdrawAmount) <= 0 || withdrawMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
@@ -804,6 +814,95 @@ export default function CryptoPage() {
                  <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setTransferReview(false)}>Edit</button>
                  <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={transferMutation.isPending} onClick={() => transferMutation.mutate({})}>
                    {transferMutation.isPending ? "Transferring…" : "Confirm transfer"}
+                 </button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+       <AnimatePresence>
+         {selectedDepositAddress && (
+           <motion.div
+             className="fixed inset-0 z-[150] flex items-end bg-black/50"
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             onClick={() => setSelectedDepositAddress(null)}
+           >
+             <motion.div
+               className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+               initial={{ y: "100%" }}
+               animate={{ y: 0 }}
+               exit={{ y: "100%" }}
+               transition={{ type: "spring", damping: 28, stiffness: 280 }}
+               onClick={(event) => event.stopPropagation()}
+             >
+               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+               <div className="flex items-center justify-between">
+                 <div>
+                   <p className="text-lg font-bold">{selectedCoin} deposit</p>
+                   <p className="text-xs text-muted-foreground">{selectedDepositAddress.networkLabel || selectedDepositAddress.network}</p>
+                 </div>
+                 <button className="text-sm text-muted-foreground" onClick={() => setSelectedDepositAddress(null)}>Close</button>
+               </div>
+               {selectedDepositAddress.qrCodeUrl && (
+                 <div className="mt-5 flex justify-center rounded-2xl bg-white p-4">
+                   <img src={selectedDepositAddress.qrCodeUrl} alt={`${selectedCoin} deposit QR code`} className="h-52 w-52 object-contain" />
+                 </div>
+               )}
+               <p className="mt-4 text-xs text-muted-foreground">Deposit address</p>
+               <p className="mt-1 break-all rounded-xl bg-muted p-3 font-mono text-xs">{selectedDepositAddress.address}</p>
+               <div className="mt-3 flex gap-2">
+                 <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => copyToClipboard(selectedDepositAddress.address, "sheet-address")}>
+                   {copied === "sheet-address" ? "Copied" : "Copy address"}
+                 </button>
+                 {selectedDepositAddress.memo && (
+                   <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground" onClick={() => copyToClipboard(selectedDepositAddress.memo, "sheet-memo")}>
+                     {copied === "sheet-memo" ? "Memo copied" : "Copy memo"}
+                   </button>
+                 )}
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+       <AnimatePresence>
+         {depositReview && (
+           <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDepositReview(false)}>
+             <motion.div className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+               <p className="text-lg font-bold">Confirm deposit instructions</p>
+               <p className="mt-1 text-xs text-muted-foreground">The selected admin address and network will be shown after confirmation.</p>
+               <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
+                 <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(depositAmount)} {selectedCoin}</span></div>
+                 <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{formatUsdValue(Number(depositAmount || 0) * Number(rates[selectedCoin] || 0))}</span></div>
+               </div>
+               <div className="mt-5 flex gap-2">
+                 <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setDepositReview(false)}>Edit</button>
+                 <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground" onClick={() => { setDepositReview(false); depositMutation.mutate({ coin: selectedCoin, amount: depositAmount }); }}>
+                   Generate instructions
+                 </button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+       <AnimatePresence>
+         {withdrawReview && (
+           <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setWithdrawReview(false)}>
+             <motion.div className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+               <p className="text-lg font-bold">Confirm withdrawal</p>
+               <p className="mt-1 text-xs text-muted-foreground">Review the destination carefully. The withdrawal will still require your PIN or authenticator.</p>
+               <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
+                 <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(withdrawAmount)} {selectedCoin}</span></div>
+                 <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{formatUsdValue(Number(withdrawAmount || 0) * Number(rates[selectedCoin] || 0))}</span></div>
+                 <p className="mt-3 break-all font-mono text-xs text-muted-foreground">{withdrawAddress}</p>
+               </div>
+               <div className="mt-5 flex gap-2">
+                 <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setWithdrawReview(false)}>Edit</button>
+                 <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground" onClick={() => { setWithdrawReview(false); withdrawMutation.mutate({ coin: selectedCoin, amount: withdrawAmount, toAddress: withdrawAddress }); }}>
+                   Continue
                  </button>
                </div>
              </motion.div>

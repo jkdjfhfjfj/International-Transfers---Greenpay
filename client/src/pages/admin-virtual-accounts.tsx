@@ -91,11 +91,11 @@ function EmailTemplateConfig() {
     onError: () => toast({ title: "Save failed", variant: "destructive" }),
   });
 
-  if (isLoading) return <div className="p-5 text-sm text-slate-400">Loading templates…</div>;
+  if (isLoading) return <div className="p-5 text-sm text-muted-foreground">Loading templates…</div>;
 
   return (
     <div className="p-5 space-y-3">
-      <p className="text-xs text-slate-500">Configure Mailtrap template UUIDs. Changes take effect immediately — all emails use the updated UUID.</p>
+      <p className="text-xs text-muted-foreground">Configure Mailtrap template UUIDs. Changes take effect immediately — all emails use the updated UUID.</p>
       <div className="grid md:grid-cols-2 gap-3">
         {EMAIL_TEMPLATE_KEYS.map(({ key, label }) => {
           const current = (uuids?.templates?.[key]?.uuid) || "";
@@ -104,11 +104,11 @@ function EmailTemplateConfig() {
           const value = draft !== undefined ? draft : current;
           return (
             <div key={key} className="space-y-1">
-              <Label className="text-xs font-medium text-slate-700 flex items-center gap-1.5">
+              <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
                 {label}
-                {isCustom && <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full font-semibold">Custom</span>}
+                {isCustom && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">Custom</span>}
               </Label>
-              <p className="text-[10px] text-slate-500">
+              <p className="text-[10px] text-muted-foreground">
                 Required: {(uuids?.templates?.[key]?.requiredParameters || []).join(", ") || "none"}
               </p>
               <div className="flex gap-1.5">
@@ -137,9 +137,9 @@ function EmailTemplateConfig() {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  if (status === "approved") return <Badge className="bg-emerald-100 text-emerald-700 border-0 gap-1"><CheckCircle2 className="w-3 h-3" />Approved</Badge>;
-  if (status === "rejected") return <Badge className="bg-red-100 text-red-700 border-0 gap-1"><XCircle className="w-3 h-3" />Rejected</Badge>;
-  return <Badge className="bg-amber-100 text-amber-700 border-0 gap-1"><Clock className="w-3 h-3" />Pending</Badge>;
+  if (status === "approved") return <Badge className="bg-primary/10 text-primary border-0 gap-1"><CheckCircle2 className="w-3 h-3" />Approved</Badge>;
+  if (status === "rejected") return <Badge className="bg-destructive/10 text-destructive border-0 gap-1"><XCircle className="w-3 h-3" />Rejected</Badge>;
+  return <Badge className="bg-muted text-muted-foreground border-0 gap-1"><Clock className="w-3 h-3" />Pending</Badge>;
 }
 
 export default function AdminVirtualAccountsPage() {
@@ -235,18 +235,18 @@ export default function AdminVirtualAccountsPage() {
       <div className="max-w-5xl space-y-6">
 
         {/* ── Settings panel ─────────────────────────────────────────────── */}
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b flex items-center gap-2">
-            <Building2 className="w-5 h-5 text-emerald-600" />
-            <h2 className="font-semibold text-slate-800">Bank account settings</h2>
-            <p className="text-sm text-slate-400 ml-1">— configure details sent to approved users</p>
+            <Building2 className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold text-foreground">Bank account settings</h2>
+            <p className="text-sm text-muted-foreground ml-1">— configure details sent to approved users</p>
           </div>
 
           {/* Enabled virtual-account currencies */}
           <div className="p-5 border-b space-y-3">
             <div>
-              <p className="text-sm font-semibold text-slate-700">Currencies available to users</p>
-              <p className="text-xs text-slate-400">Only enabled currencies appear in the application form.</p>
+              <p className="text-sm font-semibold text-foreground">Currencies available to users</p>
+              <p className="text-xs text-muted-foreground">Only enabled currencies appear in the application form.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {allCurrencies.map(c => (
@@ -260,8 +260,8 @@ export default function AdminVirtualAccountsPage() {
                   }}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
                     supportedCurrencies.includes(c)
-                      ? "border-emerald-300 bg-emerald-50 text-emerald-700"
-                      : "border-slate-200 bg-white text-slate-400"
+                       ? "border-primary/30 bg-primary/10 text-primary"
+                       : "border-border bg-card text-muted-foreground"
                   }`}
                 >
                   {CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"} {c}
@@ -271,7 +271,7 @@ export default function AdminVirtualAccountsPage() {
           </div>
 
           {/* Currency tabs */}
-          <div className="flex border-b bg-slate-50">
+          <div className="flex border-b border-border bg-muted/50">
             {supportedCurrencies.map(c => (
               <button
                 key={c}
@@ -279,14 +279,14 @@ export default function AdminVirtualAccountsPage() {
                 className={[
                   "flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors",
                   currency === c
-                    ? "border-emerald-500 text-emerald-700 bg-white"
-                    : "border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/60",
+                     ? "border-primary text-primary bg-card"
+                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/60",
                 ].join(" ")}
               >
                 <span>{CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"}</span>
                 <span>{c}</span>
                 {settings.find((s: any) => s.currency === c) && (
-                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-primary" />
                 )}
               </button>
             ))}
@@ -294,7 +294,7 @@ export default function AdminVirtualAccountsPage() {
 
           <div className="p-5 space-y-4">
             {saveError && (
-              <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <div className="flex gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span>{saveError}</span>
               </div>
@@ -303,10 +303,10 @@ export default function AdminVirtualAccountsPage() {
             <div className="grid md:grid-cols-2 gap-4">
               {SETTINGS_FIELDS.map(f => (
                 <div key={f.key} className={f.multiline ? "md:col-span-2" : ""}>
-                  <Label className="text-sm font-medium text-slate-700 mb-1 block">
+                  <Label className="text-sm font-medium text-foreground mb-1 block">
                     {f.label}
                     {!f.optional && <span className="text-red-500 ml-0.5">*</span>}
-                    {f.optional && <span className="text-slate-400 font-normal ml-1">(optional)</span>}
+                    {f.optional && <span className="text-muted-foreground font-normal ml-1">(optional)</span>}
                   </Label>
                   {f.multiline ? (
                     <Textarea
@@ -340,31 +340,31 @@ export default function AdminVirtualAccountsPage() {
         </div>
 
         {/* ── Email Template Config ──────────────────────────────────────── */}
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b flex items-center gap-2">
             <FileText className="w-5 h-5 text-violet-500" />
-            <h2 className="font-semibold text-slate-800">Email Template UUIDs</h2>
-            <p className="text-sm text-slate-400 ml-1">— Mailtrap template UUIDs for virtual account emails</p>
+            <h2 className="font-semibold text-foreground">Email Template UUIDs</h2>
+            <p className="text-sm text-muted-foreground ml-1">— Mailtrap template UUIDs for virtual account emails</p>
           </div>
           <EmailTemplateConfig />
         </div>
 
         {/* ── Applications ───────────────────────────────────────────────── */}
-        <div className="bg-white border rounded-2xl shadow-sm overflow-hidden">
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-slate-500" />
-              <h2 className="font-semibold text-slate-800">Applications</h2>
+              <FileText className="w-5 h-5 text-muted-foreground" />
+              <h2 className="font-semibold text-foreground">Applications</h2>
             </div>
             <Badge variant="secondary">{applications.length}</Badge>
           </div>
 
           {isLoading ? (
-            <div className="p-10 flex justify-center">
-              <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+              <div className="p-10 flex justify-center">
+               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
             </div>
           ) : applications.length === 0 ? (
-            <div className="p-10 text-center text-slate-400 text-sm">No applications yet.</div>
+            <div className="p-10 text-center text-muted-foreground text-sm">No applications yet.</div>
           ) : (
             <div className="divide-y">
               {applications.map((item: any) => {
@@ -376,32 +376,32 @@ export default function AdminVirtualAccountsPage() {
                 return (
                   <div key={app.id}>
                     <div
-                      className="flex items-center gap-3 px-5 py-4 hover:bg-slate-50 cursor-pointer"
+                      className="flex items-center gap-3 px-5 py-4 hover:bg-muted/50 cursor-pointer"
                       onClick={() => setExpandedApp(isOpen ? null : app.id)}
                     >
                       {/* avatar */}
-                      <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                        <User className="w-4 h-4 text-emerald-600" />
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4 text-primary" />
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-slate-800 text-sm truncate">
+                        <p className="font-medium text-foreground text-sm truncate">
                           {user?.fullName || user?.email || app.userId}
                         </p>
-                        <p className="text-xs text-slate-400">
+                        <p className="text-xs text-muted-foreground">
                           {user?.email} &nbsp;·&nbsp; {app.currency} account
                         </p>
                       </div>
 
                       <StatusBadge status={app.status} />
 
-                      <button className="text-slate-400 ml-2">
+                      <button className="text-muted-foreground ml-2">
                         {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                       </button>
                     </div>
 
                     {isOpen && (
-                      <div className="px-5 pb-5 space-y-4 bg-slate-50 border-t">
+                      <div className="px-5 pb-5 space-y-4 bg-muted/30 border-t border-border">
                         {/* Application details */}
                         <div className="grid sm:grid-cols-2 gap-3 pt-4">
                           {[
@@ -413,19 +413,19 @@ export default function AdminVirtualAccountsPage() {
                             ["Expected senders", app.expectedSenders || "—"],
                             ["Applied on",       app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"],
                           ].map(([label, value]) => (
-                            <div key={label as string} className="bg-white rounded-xl border p-3">
-                              <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-0.5">{label}</p>
-                              <p className="text-sm text-slate-700 font-medium">{value}</p>
+                            <div key={label as string} className="bg-card rounded-xl border border-border p-3">
+                              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-0.5">{label}</p>
+                              <p className="text-sm text-foreground font-medium">{value}</p>
                             </div>
                           ))}
                         </div>
 
                         {account && (
-                          <div className="bg-white rounded-xl border p-4 space-y-3">
+                          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="text-sm font-semibold text-slate-700">Account balance controls</p>
-                                <p className="text-xs text-slate-400">Ledger-backed balance and hold management</p>
+                                <p className="text-sm font-semibold text-foreground">Account balance controls</p>
+                                <p className="text-xs text-muted-foreground">Ledger-backed balance and hold management</p>
                               </div>
                               <StatusBadge status={account.isActive ? "approved" : "rejected"} />
                             </div>
@@ -435,15 +435,15 @@ export default function AdminVirtualAccountsPage() {
                                 ["On hold", account.holdAmount],
                                 ["Available", account.availableBalance ?? Math.max(0, Number(account.balance || 0) - Number(account.holdAmount || 0))],
                               ].map(([label, value]) => (
-                                <div key={label as string} className="rounded-lg bg-slate-50 p-2">
-                                  <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
-                                  <p className="font-bold text-sm text-slate-700">{Number(value || 0).toFixed(2)} {account.currency}</p>
+                                <div key={label as string} className="rounded-lg bg-muted p-2">
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                                  <p className="font-bold text-sm text-foreground">{Number(value || 0).toFixed(2)} {account.currency}</p>
                                 </div>
                               ))}
                             </div>
                             <div className="grid sm:grid-cols-2 gap-3">
                               <div className="space-y-2">
-                                <Label className="text-xs text-slate-500">Credit or debit</Label>
+                                <Label className="text-xs text-muted-foreground">Credit or debit</Label>
                                 <div className="flex gap-2">
                                   <Input
                                     type="number"
@@ -471,7 +471,7 @@ export default function AdminVirtualAccountsPage() {
                                 </div>
                               </div>
                               <div className="space-y-2">
-                                <Label className="text-xs text-slate-500">Set held amount</Label>
+                                <Label className="text-xs text-muted-foreground">Set held amount</Label>
                                 <div className="flex gap-2">
                                   <Input
                                     type="number"
@@ -497,11 +497,11 @@ export default function AdminVirtualAccountsPage() {
 
                         {/* Declarations */}
                         {app.declarations && (
-                          <div className="bg-white rounded-xl border p-3">
-                            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-2">Compliance declarations</p>
+                          <div className="bg-card rounded-xl border border-border p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-2">Compliance declarations</p>
                             <div className="grid sm:grid-cols-2 gap-1">
                               {Object.entries(app.declarations).map(([k, v]) => (
-                                <div key={k} className={`flex items-center gap-1.5 text-xs ${v ? "text-emerald-700" : "text-red-600"}`}>
+                                <div key={k} className={`flex items-center gap-1.5 text-xs ${v ? "text-primary" : "text-destructive"}`}>
                                   {v ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
                                   {k.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}
                                 </div>
@@ -524,9 +524,9 @@ export default function AdminVirtualAccountsPage() {
                         )}
 
                         {app.adminNotes && (
-                          <div className="bg-white rounded-xl border p-3">
-                            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-medium mb-1">Admin notes</p>
-                            <p className="text-sm text-slate-700">{app.adminNotes}</p>
+                          <div className="bg-card rounded-xl border border-border p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Admin notes</p>
+                            <p className="text-sm text-foreground">{app.adminNotes}</p>
                           </div>
                         )}
 
@@ -536,7 +536,7 @@ export default function AdminVirtualAccountsPage() {
                             <Button
                               onClick={() => reviewMutation.mutate({ id: app.id, status: "approved" })}
                               disabled={reviewMutation.isPending}
-                              className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
+                              className="gap-1.5"
                             >
                               <Check className="w-4 h-4" /> Approve
                             </Button>
@@ -544,7 +544,7 @@ export default function AdminVirtualAccountsPage() {
                               variant="outline"
                               onClick={() => reviewMutation.mutate({ id: app.id, status: "rejected", adminNotes: rejectNotes[app.id] })}
                               disabled={reviewMutation.isPending}
-                              className="gap-1.5 text-red-600 border-red-200 hover:bg-red-50"
+                              className="gap-1.5 text-destructive border-destructive/20 hover:bg-destructive/5"
                             >
                               <X className="w-4 h-4" /> Reject
                             </Button>

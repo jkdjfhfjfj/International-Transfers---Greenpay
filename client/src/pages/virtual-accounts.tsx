@@ -89,6 +89,7 @@ export default function VirtualAccountsPage() {
   });
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingTransfer, setPendingTransfer] = useState<{ accountId: string; amount: number } | null>(null);
+  const [showAccountDetails, setShowAccountDetails] = useState(false);
 
   const { data, isLoading } = useQuery<{ applications: Application[]; supportedCurrencies: string[] }>({
     queryKey: ["/api/virtual-accounts"],
@@ -213,25 +214,18 @@ export default function VirtualAccountsPage() {
         </div>
       </div>
 
-      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
-        {ACCOUNT_FIELDS.map(({ key, label }) => {
-          const val = app.accountDetails?.[key];
-          if (!val) return null;
-          return (
-            <div key={key} className="flex items-center justify-between px-4 py-3 border-b last:border-0 gap-3">
-              <span className="text-xs text-muted-foreground shrink-0 w-32">{label}</span>
-              <div className="flex items-center gap-2 min-w-0 ml-auto">
-                <span className="font-mono text-sm text-foreground truncate">{val}</span>
-                <button
-                  onClick={() => copy(val)}
-                  className="text-muted-foreground hover:text-primary transition-colors shrink-0"
-                >
-                  <Copy className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      <div className="bg-card rounded-2xl border border-border shadow-sm p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Deposit details</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+              {app.accountDetails?.bankName || "Configured bank"} · {app.accountDetails?.accountNumber || "Account number available"}
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setShowAccountDetails(true)}>
+            View details
+          </Button>
+        </div>
       </div>
 
       {app.accountDetails?.paymentInstructions && (
@@ -506,6 +500,57 @@ export default function VirtualAccountsPage() {
           <StatusCard app={selectedApp} />
         ) : null}
       </main>
+      <AnimatePresence>
+        {showAccountDetails && selectedApp?.accountDetails && (
+          <motion.div
+            className="fixed inset-0 z-[160] flex items-end bg-black/50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowAccountDetails(false)}
+          >
+            <motion.div
+              className="max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-lg font-bold">How to receive {currency}</p>
+                  <p className="text-xs text-muted-foreground">Use these details for incoming payments.</p>
+                </div>
+                <button className="text-sm text-muted-foreground" onClick={() => setShowAccountDetails(false)}>Close</button>
+              </div>
+              <div className="mt-5 overflow-hidden rounded-2xl border border-border bg-card">
+                {ACCOUNT_FIELDS.map(({ key, label }) => {
+                  const val = selectedApp.accountDetails?.[key];
+                  if (!val) return null;
+                  return (
+                    <div key={key} className="flex items-center justify-between gap-3 border-b border-border px-4 py-3 last:border-0">
+                      <span className="w-32 shrink-0 text-xs text-muted-foreground">{label}</span>
+                      <div className="ml-auto flex min-w-0 items-center gap-2">
+                        <span className="truncate font-mono text-sm text-foreground">{val}</span>
+                        <button onClick={() => copy(val)} className="shrink-0 text-muted-foreground hover:text-primary">
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {selectedApp.accountDetails.paymentInstructions && (
+                <div className="mt-4 rounded-2xl border border-border bg-muted p-4 text-sm">
+                  <p className="font-semibold text-foreground">Payment instructions</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{selectedApp.accountDetails.paymentInstructions}</p>
+                </div>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <PINModal
         isOpen={!!securityPrompt}
         onClose={() => { setSecurityPrompt(null); setPendingTransfer(null); }}
