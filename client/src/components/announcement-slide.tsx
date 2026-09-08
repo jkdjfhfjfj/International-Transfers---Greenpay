@@ -273,9 +273,9 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -120, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="fixed top-4 left-4 right-4 z-[100] max-w-md mx-auto"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
-            <div className="relative bg-white dark:bg-zinc-900 shadow-2xl rounded-2xl border border-primary/10 overflow-hidden">
+            <div className="relative w-full max-w-md bg-card shadow-2xl rounded-2xl border border-primary/10 overflow-hidden">
               {hasMedia && (
                 <div
                   className="relative w-full cursor-pointer overflow-hidden"
@@ -356,12 +356,6 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
                         Learn More →
                       </button>
                     )}
-                    <button
-                      onClick={handleDismissForever}
-                      className="text-xs text-muted-foreground hover:text-foreground underline"
-                    >
-                      Do not show again
-                    </button>
                   </div>
                 </div>
 
@@ -411,6 +405,12 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
                   </button>
                 </div>
               )}
+              <button
+                onClick={handleDismissForever}
+                className="w-full border-t border-border px-4 py-3 text-center text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              >
+                Do not show again
+              </button>
             </div>
           </motion.div>
         )}

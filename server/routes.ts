@@ -13274,10 +13274,14 @@ Sitemap: https://geepay.us/sitemap.xml`;
         newWallets.push(w);
       }
 
+      const formatUsdBalance = (value: number) => {
+        if (!Number.isFinite(value)) return "0.00";
+        return Math.abs(value) > 0 && Math.abs(value) < 0.01 ? value.toFixed(8) : value.toFixed(2);
+      };
       const allWallets = [...wallets, ...newWallets].map((w: any) => ({
         ...w,
         usdRate: priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1,
-        usdBalance: (parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1)).toFixed(2),
+        usdBalance: formatUsdBalance(parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1)),
       }));
 
       res.json({ wallets: allWallets, ...priceSnapshot });
@@ -13516,6 +13520,15 @@ Sitemap: https://geepay.us/sitemap.xml`;
         sourceCoin: sourceCoinCode,
         destinationAmount,
         destinationCoin: destinationCoinCode,
+        sourceCurrency: sourceType === "crypto" ? sourceCoinCode : sourceType === "card" ? "USD" : normalizeCurrency(sourceWallet.currency),
+        destinationCurrency: destinationType === "crypto" ? destinationCoinCode : destinationType === "card" ? "USD" : normalizeCurrency(destinationWallet.currency),
+        sourceRate,
+        destinationRate,
+        rate: destinationAmount / Math.max(sourceAmount - feeAmount, Number.EPSILON),
+        fee: feeAmount,
+        feeRate,
+        grossUsdValue,
+        netUsdValue: usdValue,
         usdValue,
       });
     } catch (error: any) {

@@ -22,6 +22,16 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   USD: '$', KES: 'KSh', UGX: 'UGX', GHS: '₵', NGN: '₦',
   ZAR: 'R', TZS: 'TSh', XOF: 'CFA', CDF: 'FC', XAF: 'FCFA',
   RWF: 'RF', SLE: 'Le', ZMW: 'ZK', EUR: '€', GBP: '£',
+  BTC: '₿', ETH: 'Ξ', USDT: '₮', USDC: '◎', SOL: '◎', XRP: '✕',
+  BNB: '◆', ADA: '₳', DOGE: 'Ð', TRX: 'T',
+};
+
+const CRYPTO_CURRENCIES = new Set(["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"]);
+const formatExchangeAmount = (value: unknown, currency?: string) => {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0";
+  const decimals = CRYPTO_CURRENCIES.has(String(currency || "").toUpperCase()) || (Math.abs(amount) > 0 && Math.abs(amount) < 1) ? 8 : 4;
+  return amount.toLocaleString(undefined, { minimumFractionDigits: decimals === 8 && amount > 0 && amount < 1 ? 4 : 0, maximumFractionDigits: decimals });
 };
 
 export default function ExchangePage() {
@@ -32,41 +42,90 @@ export default function ExchangePage() {
   const [exchangeRate, setExchangeRate] = useState<number | null>(null);
   const [rateLoading, setRateLoading] = useState(false);
   const [success, setSuccess] = useState<any>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const { toast } = useToast();
   const { wallets, isLoading } = useWallets();
   const { exchange, isExchanging } = useWalletExchange();
+  const { data: cryptoData, isLoading: cryptoLoading } = useQuery({
+    queryKey: ["/api/crypto/wallets"],
+    queryFn: async () => (await apiRequest("GET", "/api/crypto/wallets")).json(),
+  });
+  const { data: fiatRatesData } = useQuery({
+    queryKey: ["/api/exchange-rates/USD"],
+    queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
+    refetchInterval: 30_000,
+    staleTime: 30_000,
+  });
   const { data: feeSettings } = useQuery<{ exchangeFeeRate?: number }>({
     queryKey: ["/api/transaction-fees"],
     queryFn: async () => (await apiRequest("GET", "/api/transaction-fees")).json(),
   });
 
   const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);
+  const cryptoWallets: any[] = (cryptoData as any)?.wallets || [];
+  const cryptoRates: Record<string, number> = (cryptoData as any)?.rates || {};
+  const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
+  const activeAccounts: any[] = [
+    ...activeWallets.map(wallet => ({ ...wallet, kind: "wallet" })),
+    ...cryptoWallets.map(wallet => ({
+      ...wallet,
+      id: `crypto:${wallet.coin}`,
+      kind: "crypto",
+      currency: wallet.coin,
+      availableBalance: Number(wallet.balance || 0),
+      isActive: true,
+      isSuspended: false,
+    })),
+  ];
+
+  const getUsdRate = (account: any): number => {
+    if (!account) return 0;
+    if (account.kind === "crypto") return Number(cryptoRates[account.currency] || 0);
+    if (account.currency === "USD") return 1;
+    const usdToCurrency = Number(fiatRates[account.currency] || 0);
+    return usdToCurrency > 0 ? 1 / usdToCurrency : 0;
+  };
+
+  const getUnitsPerUsd = (account: any): number => {
+    if (!account) return 0;
+    if (account.kind === "crypto") {
+      const usdRate = getUsdRate(account);
+      return usdRate > 0 ? 1 / usdRate : 0;
+    }
+    if (account.currency === "USD") return 1;
+    return Number(fiatRates[account.currency] || 0);
+  };
 
   useEffect(() => {
-    if (activeWallets.length >= 2 && !fromWalletId) {
-      const def = activeWallets.find(w => w.isDefault) || activeWallets[0];
+    if (activeAccounts.length >= 2 && !fromWalletId) {
+      const def = activeAccounts.find(w => w.isDefault) || activeAccounts[0];
       setFromWalletId(def.id);
-      const other = activeWallets.find(w => w.id !== def.id);
+      const other = activeAccounts.find(w => w.id !== def.id);
       if (other) setToWalletId(other.id);
     }
-  }, [activeWallets.length]);
+  }, [activeAccounts.length, fromWalletId]);
 
-  const fromWallet = activeWallets.find(w => w.id === fromWalletId);
-  const toWallet = activeWallets.find(w => w.id === toWalletId);
+  const fromWallet = activeAccounts.find(w => w.id === fromWalletId);
+  const toWallet = activeAccounts.find(w => w.id === toWalletId);
 
   useEffect(() => {
     if (!fromWallet || !toWallet || fromWallet.currency === toWallet.currency) { setExchangeRate(null); return; }
     setRateLoading(true);
+    const hasCrypto = fromWallet.kind === "crypto" || toWallet.kind === "crypto";
+    if (hasCrypto) {
+      const sourceUsdRate = getUsdRate(fromWallet);
+      const destinationUnitsPerUsd = getUnitsPerUsd(toWallet);
+      setExchangeRate(sourceUsdRate > 0 && destinationUnitsPerUsd > 0 ? sourceUsdRate * destinationUnitsPerUsd : null);
+      setRateLoading(false);
+      return;
+    }
     apiRequest("GET", `/api/exchange-rates/${fromWallet.currency}`)
       .then(r => r.json())
-      .then(data => {
-        const rate = data?.rates?.[toWallet.currency] || data?.rate;
-        setExchangeRate(rate || null);
-      })
+      .then(data => setExchangeRate(data?.rates?.[toWallet.currency] || data?.rate || null))
       .catch(() => setExchangeRate(null))
       .finally(() => setRateLoading(false));
-  }, [fromWallet?.currency, toWallet?.currency]);
+  }, [fromWallet?.currency, toWallet?.currency, fromWallet?.kind, toWallet?.kind, cryptoData, fiatRatesData]);
 
   const amountNum = parseFloat(amount) || 0;
   const FEE_RATE = Number(feeSettings?.exchangeFeeRate ?? 0.015);
@@ -97,8 +156,38 @@ export default function ExchangePage() {
       toast({ title: "Insufficient balance", description: `Available: ${CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}${formatNumber(fromBalance)}`, variant: "destructive" });
       return;
     }
+    if (!security && !confirmOpen) {
+      setConfirmOpen(true);
+      return;
+    }
+    setConfirmOpen(false);
     try {
-      const result = await exchange({ fromWalletId, toWalletId, amount: amountNum, ...security } as any);
+      let result: any;
+      if (fromWallet.kind === "crypto" || toWallet.kind === "crypto") {
+        const response = await apiRequest("POST", "/api/crypto/transfer", {
+          sourceType: fromWallet.kind,
+          sourceId: fromWallet.kind === "crypto" ? undefined : fromWallet.id,
+          sourceCoin: fromWallet.kind === "crypto" ? fromWallet.currency : undefined,
+          destinationType: toWallet.kind,
+          destinationId: toWallet.kind === "crypto" ? undefined : toWallet.id,
+          destinationCoin: toWallet.kind === "crypto" ? toWallet.currency : undefined,
+          amount: amountNum,
+          ...security,
+        });
+        const data = await response.json();
+        if (!response.ok) throw Object.assign(new Error(data.message || "Exchange failed"), data);
+        result = {
+          ...data,
+          fromAmount: amountNum,
+          fromCurrency: fromWallet.currency,
+          toAmount: data.destinationAmount,
+          toCurrency: toWallet.currency,
+          rate: data.rate,
+          fee: data.fee,
+        };
+      } else {
+        result = await exchange({ fromWalletId, toWalletId, amount: amountNum, ...security } as any);
+      }
       setSuccess(result);
       setAmount("");
       toast({ title: "Exchange successful!", description: `${result.fromAmount} ${result.fromCurrency} → ${parseFloat(result.toAmount).toFixed(4)} ${result.toCurrency}` });
@@ -108,8 +197,10 @@ export default function ExchangePage() {
         setLocation("/settings");
         return;
       }
-      if (e?.requiresPin || e?.requiresAuthenticator) {
-        setSecurityPrompt({ pin: Boolean(e.requiresPin), authenticator: Boolean(e.requiresAuthenticator) });
+      const requiresPin = Boolean(e?.requiresPin ?? e?.securityOptions?.pin);
+      const requiresAuthenticator = Boolean(e?.requiresAuthenticator ?? e?.securityOptions?.authenticator);
+      if (requiresPin || requiresAuthenticator || /pin or authenticator|required/i.test(e?.message || "")) {
+        setSecurityPrompt({ pin: requiresPin || !requiresAuthenticator, authenticator: requiresAuthenticator });
         return;
       }
       toast({ title: "Exchange failed", description: e.message, variant: "destructive" });
@@ -124,7 +215,7 @@ export default function ExchangePage() {
     );
   }
 
-  if (activeWallets.length < 2) {
+  if (!cryptoLoading && activeAccounts.length < 2) {
     return (
       <div className="min-h-screen bg-background pb-20">
         <WavyHeader size="sm" />
@@ -133,7 +224,7 @@ export default function ExchangePage() {
             <ArrowLeftRight className="w-8 h-8 text-muted-foreground" />
           </div>
           <h2 className="text-lg font-bold mb-2">Two Wallets Needed</h2>
-          <p className="text-sm text-muted-foreground mb-6">You need at least two active wallets to exchange currencies. Add another wallet in Settings.</p>
+          <p className="text-sm text-muted-foreground mb-6">You need at least two active wallets or crypto accounts to exchange currencies. Add another wallet in Settings or fund a crypto wallet.</p>
           <div className="flex gap-3 justify-center">
             <Button variant="outline" onClick={() => setLocation("/dashboard")}>
               <ArrowLeft className="w-4 h-4 mr-2" /> Dashboard
@@ -213,9 +304,9 @@ export default function ExchangePage() {
                       onChange={e => { setFromWalletId(e.target.value); setAmount(""); setSuccess(null); }}
                       className="h-12 pl-3 pr-8 rounded-xl border border-border bg-background text-sm font-semibold appearance-none cursor-pointer"
                     >
-                      {activeWallets.filter(w => w.id !== toWalletId).map(w => (
+                   {activeAccounts.filter(w => w.id !== toWalletId).map(w => (
                         <option key={w.id} value={w.id}>
-                          {CURRENCY_FLAGS[w.currency]} {w.currency}
+                         {CURRENCY_FLAGS[w.currency] || "◈"} {w.currency}
                         </option>
                       ))}
                     </select>
@@ -268,7 +359,7 @@ export default function ExchangePage() {
                   <div className="flex-1">
                     <div className="h-12 px-3 rounded-xl bg-muted/40 flex items-center">
                       <span className="text-xl font-bold text-muted-foreground">
-                        {receiveAmount > 0 ? formatNumber(receiveAmount, 4) : "0.0000"}
+                       {receiveAmount > 0 ? formatExchangeAmount(receiveAmount, toWallet?.currency) : "0"}
                       </span>
                     </div>
                   </div>
@@ -278,9 +369,9 @@ export default function ExchangePage() {
                       onChange={e => { setToWalletId(e.target.value); setAmount(""); setSuccess(null); }}
                       className="h-12 pl-3 pr-8 rounded-xl border border-border bg-background text-sm font-semibold appearance-none cursor-pointer"
                     >
-                      {activeWallets.filter(w => w.id !== fromWalletId).map(w => (
+                       {activeAccounts.filter(w => w.id !== fromWalletId).map(w => (
                         <option key={w.id} value={w.id}>
-                          {CURRENCY_FLAGS[w.currency]} {w.currency}
+                         {CURRENCY_FLAGS[w.currency] || "◈"} {w.currency}
                         </option>
                       ))}
                     </select>

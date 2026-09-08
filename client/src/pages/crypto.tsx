@@ -15,6 +15,12 @@ const COIN_COLORS: Record<string, { accent: string; tint: string }> = {
   ETH: { accent: '#6366f1', tint: 'rgba(99,102,241,0.10)' },
   USDT: { accent: '#16a34a', tint: 'rgba(22,163,74,0.10)' },
   USDC: { accent: '#2563eb', tint: 'rgba(37,99,235,0.10)' },
+  SOL: { accent: '#7c3aed', tint: 'rgba(124,58,237,0.10)' },
+  XRP: { accent: '#475569', tint: 'rgba(71,85,105,0.10)' },
+  BNB: { accent: '#ca8a04', tint: 'rgba(202,138,4,0.10)' },
+  ADA: { accent: '#2563eb', tint: 'rgba(37,99,235,0.10)' },
+  DOGE: { accent: '#a16207', tint: 'rgba(161,98,7,0.10)' },
+  TRX: { accent: '#dc2626', tint: 'rgba(220,38,38,0.10)' },
 };
 
 const COIN_ICONS: Record<string, string> = {
@@ -22,6 +28,12 @@ const COIN_ICONS: Record<string, string> = {
   ETH: "Ξ",
   USDT: "₮",
   USDC: "◎",
+  SOL: "◎",
+  XRP: "✕",
+  BNB: "◆",
+  ADA: "₳",
+  DOGE: "Ð",
+  TRX: "T",
 };
 
 const COIN_NAMES: Record<string, string> = {
@@ -29,6 +41,12 @@ const COIN_NAMES: Record<string, string> = {
   ETH: "Ethereum",
   USDT: "Tether USD",
   USDC: "USD Coin",
+  SOL: "Solana",
+  XRP: "XRP",
+  BNB: "BNB",
+  ADA: "Cardano",
+  DOGE: "Dogecoin",
+  TRX: "TRON",
 };
 
 const COIN_NETWORKS: Record<string, string> = {
@@ -37,6 +55,24 @@ const COIN_NETWORKS: Record<string, string> = {
   USDT: "TRON (TRC-20)",
   USDC: "Ethereum (ERC-20)",
 };
+
+const POPULAR_COINS = ["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"];
+
+function formatCryptoAmount(value: unknown, decimals = 8): string {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "0";
+  return amount.toLocaleString(undefined, {
+    minimumFractionDigits: amount > 0 && amount < 1 ? Math.min(4, decimals) : 0,
+    maximumFractionDigits: decimals,
+  });
+}
+
+function formatUsdValue(value: unknown): string {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount)) return "$0.00";
+  if (amount !== 0 && Math.abs(amount) < 0.01) return `$${amount.toFixed(6)}`;
+  return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 type Tab = "wallets" | "popular" | "deposit" | "withdraw" | "transfer" | "history";
 
@@ -53,6 +89,7 @@ export default function CryptoPage() {
   const [copied, setCopied] = useState<string | null>(null);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingSecurityAction, setPendingSecurityAction] = useState<"transfer" | null>(null);
+  const [selectedPopularCoin, setSelectedPopularCoin] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { wallets: userWallets } = useWallets();
@@ -99,6 +136,14 @@ export default function CryptoPage() {
       const res = await apiRequest("GET", "/api/crypto/deposit-addresses");
       return res.json();
     },
+  });
+
+  const { data: fiatRatesData } = useQuery({
+    queryKey: ["/api/exchange-rates/USD"],
+    enabled: !!user?.id,
+    queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
+    refetchInterval: 30_000,
+    staleTime: 30_000,
   });
 
   const { data: historyData, isLoading: historyLoading } = useQuery({
@@ -166,7 +211,7 @@ export default function CryptoPage() {
     onSuccess: (data) => {
       toast({
         title: "Transfer completed",
-        description: `${Number(data.sourceAmount).toFixed(8)} ${data.sourceCoin || "fiat"} moved successfully.`,
+        description: `${formatCryptoAmount(data.sourceAmount)} ${data.sourceCoin || "fiat"} moved successfully.`,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/wallets"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
@@ -182,9 +227,11 @@ export default function CryptoPage() {
         setLocation("/settings");
         return;
       }
-      if (error?.requiresPin || error?.requiresAuthenticator) {
+      const requiresPin = Boolean(error?.requiresPin ?? error?.securityOptions?.pin);
+      const requiresAuthenticator = Boolean(error?.requiresAuthenticator ?? error?.securityOptions?.authenticator);
+      if (requiresPin || requiresAuthenticator || /pin or authenticator|required/i.test(error?.message || "")) {
         setPendingSecurityAction("transfer");
-        setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });
+        setSecurityPrompt({ pin: requiresPin || !requiresAuthenticator, authenticator: requiresAuthenticator });
         return;
       }
       toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
@@ -196,6 +243,9 @@ export default function CryptoPage() {
   const changes24h: Record<string, number> = (walletsData as any)?.changes24h || {};
   const priceSource = (walletsData as any)?.source || "fallback";
   const priceFetchedAt = (walletsData as any)?.fetchedAt;
+  const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
+  const localCurrency = String((user as any)?.defaultCurrency || "KES").toUpperCase();
+  const usdToLocalRate = localCurrency === "USD" ? 1 : Number(fiatRates[localCurrency] || 0);
   const availableUsdBalance = Number(userWallets.find(wallet => wallet.currency === "USD")?.availableBalance ?? 0);
   const history: any[] = (historyData as any)?.transactions || [];
   const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
@@ -225,6 +275,42 @@ export default function CryptoPage() {
   const selectedWallet = wallets.find(w => w.coin === selectedCoin);
   const selectedCoinAddresses = addressesByCoin[selectedCoin] || [];
   const totalUsdValue = wallets.reduce((s, w) => s + parseFloat(w.usdBalance || "0"), 0);
+
+  const getTransferAsset = (reference: string) => {
+    const [kind, value] = reference.split(":");
+    if (kind === "crypto") {
+      const wallet = wallets.find((item) => item.coin === value);
+      return { kind, currency: value, usdRate: Number(rates[value] || 0), balance: Number(wallet?.balance || 0) };
+    }
+    if (kind === "wallet") {
+      const wallet = userWallets.find((item) => item.id === value);
+      const currency = String(wallet?.currency || "USD").toUpperCase();
+      return {
+        kind,
+        currency,
+        usdRate: currency === "USD" ? 1 : Number(fiatRates[currency] ? 1 / fiatRates[currency] : 0),
+        balance: Number(wallet?.availableBalance || 0),
+      };
+    }
+    return { kind: "card", currency: "USD", usdRate: 1, balance: 0 };
+  };
+
+  const transferSourceAsset = getTransferAsset(selectedSource);
+  const transferDestinationAsset = getTransferAsset(selectedDestination);
+  const transferAmountNumber = Number(transferAmount || 0);
+  const transferFeeAmount = transferAmountNumber * transferFeeRate;
+  const transferGrossUsd = transferAmountNumber * transferSourceAsset.usdRate;
+  const transferNetUsd = Math.max(0, transferGrossUsd - transferFeeAmount * transferSourceAsset.usdRate);
+  const transferDestinationPerUsd = transferDestinationAsset.kind === "crypto"
+    ? (transferDestinationAsset.usdRate ? 1 / transferDestinationAsset.usdRate : 0)
+    : transferDestinationAsset.currency === "USD"
+      ? 1
+      : Number(fiatRates[transferDestinationAsset.currency] || 0);
+  const transferQuoteAmount = transferNetUsd * transferDestinationPerUsd;
+  const transferQuoteRate = transferAmountNumber > 0
+    ? transferQuoteAmount / transferAmountNumber
+    : 0;
+  const sourceAvailableBalance = transferSourceAsset.balance;
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -293,7 +379,7 @@ export default function CryptoPage() {
               {walletsLoading ? (
                 <div className="text-center py-10 text-muted-foreground text-sm">Loading wallets...</div>
               ) : wallets.map((wallet: any) => {
-                const coinMeta = COIN_COLORS[wallet.coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
+                const coinMeta = { accent: "hsl(var(--primary))", tint: "hsl(var(--primary) / 0.10)" };
                 return (
                 <motion.div
                   key={wallet.id}
@@ -314,8 +400,8 @@ export default function CryptoPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-foreground">{parseFloat(wallet.balance || "0").toFixed(6)}</p>
-                       <p className="text-xs text-muted-foreground">≈ ${wallet.usdBalance}</p>
+                      <p className="font-bold text-foreground">{formatCryptoAmount(wallet.balance)}</p>
+                       <p className="text-xs text-muted-foreground">≈ {formatUsdValue(wallet.usdBalance)}</p>
                        {typeof changes24h[wallet.coin] === "number" && (
                          <p className={`text-[10px] ${changes24h[wallet.coin] >= 0 ? "text-green-600" : "text-red-500"}`}>
                            {changes24h[wallet.coin] >= 0 ? "+" : ""}{changes24h[wallet.coin].toFixed(2)}% today
@@ -343,7 +429,12 @@ export default function CryptoPage() {
                      </div>
                      <div>
                        <p className="text-muted-foreground">Live rate</p>
-                       <p className="font-medium text-foreground">1 {wallet.coin} = ${(rates[wallet.coin] || 1).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        <p className="font-medium text-foreground">1 {wallet.coin} = ${(rates[wallet.coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+                        {usdToLocalRate > 0 && localCurrency !== "USD" && (
+                          <p className="text-[10px] text-muted-foreground">
+                            ≈ {localCurrency} {(Number(rates[wallet.coin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </p>
+                        )}
                      </div>
                      <div>
                        <p className="text-muted-foreground">USD value</p>
@@ -374,16 +465,20 @@ export default function CryptoPage() {
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {["BTC", "ETH", "USDT", "USDC"].map((coin) => {
+                   {POPULAR_COINS.map((coin) => {
                     const change = changes24h[coin];
                     const meta = COIN_COLORS[coin];
                     return (
-                      <button key={coin} onClick={() => { setSelectedCoin(coin); setActiveTab("wallets"); }} className="w-full flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 text-left hover:bg-muted transition-colors">
+                       <button key={coin} onClick={() => setSelectedPopularCoin(coin)} className="w-full flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 text-left hover:bg-muted transition-colors">
                         <span className="flex items-center gap-3">
                           <span className="w-9 h-9 rounded-xl flex items-center justify-center font-bold" style={{ background: meta?.tint, color: meta?.accent }}>{COIN_ICONS[coin]}</span>
                           <span><span className="block font-semibold text-sm">{COIN_NAMES[coin]}</span><span className="block text-xs text-muted-foreground">{coin}</span></span>
                         </span>
-                        <span className="text-right"><span className="block font-bold text-sm">${Number(rates[coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span><span className={`block text-[11px] ${Number(change) >= 0 ? "text-green-600" : "text-red-500"}`}>{typeof change === "number" ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}</span></span>
+                         <span className="text-right">
+                           <span className="block font-bold text-sm">${Number(rates[coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+                           {usdToLocalRate > 0 && localCurrency !== "USD" && <span className="block text-[10px] text-muted-foreground">{localCurrency} {(Number(rates[coin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>}
+                           <span className={`block text-[11px] ${Number(change) >= 0 ? "text-green-600" : "text-red-500"}`}>{typeof change === "number" ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}</span>
+                         </span>
                       </button>
                     );
                   })}
@@ -600,16 +695,27 @@ export default function CryptoPage() {
                     {destinationOptions.filter((option) => option.value !== selectedSource).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </div>
-                <div className="space-y-2">
+                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Amount in source account</label>
                   <input type="number" min="0.00000001" step="any" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
+                   <div className="flex items-center justify-between text-xs text-muted-foreground">
+                     <span>Available: <strong className="text-foreground">{formatCryptoAmount(sourceAvailableBalance)} {transferSourceAsset.currency}</strong></span>
+                     <button type="button" className="text-primary font-semibold" onClick={() => setTransferAmount(String(sourceAvailableBalance))}>Use max</button>
+                   </div>
                 </div>
                 {transferReview && (
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2 text-sm">
-                    <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{Number(transferAmount).toFixed(8)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Configured fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{transferFee.toFixed(8)}</span></div>
-                    <div className="flex justify-between font-semibold border-t border-primary/10 pt-2"><span>Total debited</span><span>{(Number(transferAmount) + transferFee).toFixed(8)}</span></div>
-                    <p className="text-xs text-muted-foreground">The destination amount is calculated using the current exchange rate. Review the source and destination before confirming.</p>
+                     <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{formatCryptoAmount(transferAmountNumber)} {transferSourceAsset.currency}</span></div>
+                     <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{formatCryptoAmount(transferFee)} {transferSourceAsset.currency}</span></div>
+                     {transferQuoteRate > 0 && (
+                       <>
+                         <div className="flex justify-between"><span className="text-muted-foreground">Rate quote</span><span>1 {transferSourceAsset.currency} = {transferQuoteRate < 0.01 ? transferQuoteRate.toFixed(8) : transferQuoteRate.toFixed(4)} {transferDestinationAsset.currency}</span></div>
+                         <div className="flex justify-between"><span className="text-muted-foreground">USD value after fee</span><span>${transferNetUsd.toFixed(2)}</span></div>
+                         <div className="flex justify-between font-semibold"><span>You receive</span><span>{formatCryptoAmount(transferQuoteAmount)} {transferDestinationAsset.currency}</span></div>
+                       </>
+                     )}
+                     <div className="flex justify-between font-semibold border-t border-primary/10 pt-2"><span>Total debited</span><span>{formatCryptoAmount(transferAmountNumber + transferFee)} {transferSourceAsset.currency}</span></div>
+                     <p className="text-xs text-muted-foreground">Quote uses the live crypto USD price and the current USD/{localCurrency} rate. The final server quote is locked when you confirm.</p>
                   </div>
                 )}
                 <button
@@ -639,7 +745,7 @@ export default function CryptoPage() {
               ) : history.map((tx: any) => (
                 <motion.div key={tx.id} whileHover={{ scale: 1.01 }} className="bg-card border border-border rounded-xl p-3.5 elevation-1">
                   <div className="flex items-start gap-3">
-                    <div className={`w-10 h-10 rounded-full bg-gradient-to-r ${COIN_COLORS[tx.coin] || "from-gray-400 to-gray-500"} flex items-center justify-center text-white font-bold text-sm shrink-0`}>
+                    <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                       {COIN_ICONS[tx.coin] || tx.coin[0]}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -650,8 +756,8 @@ export default function CryptoPage() {
                           <span className={`text-xs font-medium capitalize ${tx.status === "completed" ? "text-green-600" : tx.status === "failed" ? "text-red-500" : "text-yellow-600"}`}>{tx.status}</span>
                         </div>
                       </div>
-                      <p className="text-sm font-semibold text-primary mt-0.5">{parseFloat(tx.amount).toFixed(6)} {tx.coin}</p>
-                      <p className="text-xs text-muted-foreground">≈ ${tx.usdValue} USD</p>
+                      <p className="text-sm font-semibold text-primary mt-0.5">{formatCryptoAmount(tx.amount)} {tx.coin}</p>
+                      <p className="text-xs text-muted-foreground">≈ {formatUsdValue(tx.usdValue)} USD</p>
                       {tx.status !== "completed" && tx.requiredConfirmations > 0 && (
                         <p className="text-xs text-muted-foreground mt-1">{tx.confirmations}/{tx.requiredConfirmations} confirmations</p>
                       )}
@@ -686,6 +792,55 @@ export default function CryptoPage() {
         }}
         isLoading={transferMutation.isPending}
       />
+      <AnimatePresence>
+        {selectedPopularCoin && (
+          <motion.div
+            className="fixed inset-0 z-[140] flex items-end bg-black/50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedPopularCoin(null)}
+          >
+            <motion.div
+              className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 280 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-lg font-bold">{COIN_NAMES[selectedPopularCoin]} <span className="text-muted-foreground">{selectedPopularCoin}</span></p>
+                  <p className="text-sm text-muted-foreground">Live market quote</p>
+                </div>
+                <div className="rounded-2xl bg-primary/10 px-4 py-2 text-right text-primary">
+                  <p className="font-bold">{formatUsdValue(rates[selectedPopularCoin])}</p>
+                  <p className="text-[11px]">per {selectedPopularCoin}</p>
+                </div>
+              </div>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-muted/60 p-3">
+                  <p className="text-xs text-muted-foreground">24h change</p>
+                  <p className={`mt-1 font-semibold ${Number(changes24h[selectedPopularCoin]) >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    {typeof changes24h[selectedPopularCoin] === "number" ? `${changes24h[selectedPopularCoin] >= 0 ? "+" : ""}${changes24h[selectedPopularCoin].toFixed(2)}%` : "—"}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-muted/60 p-3">
+                  <p className="text-xs text-muted-foreground">{localCurrency} reference</p>
+                  <p className="mt-1 font-semibold">{usdToLocalRate > 0 ? `${localCurrency} ${(Number(rates[selectedPopularCoin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}` : "Loading…"}</p>
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">Quotes use the live USD crypto price and the current USD/{localCurrency} rate. The final conversion is recalculated at confirmation.</p>
+              <div className="mt-5 flex gap-2">
+                <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setSelectedPopularCoin(null)}>Close</button>
+                <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground" onClick={() => { setSelectedPopularCoin(null); setActiveTab("transfer"); }}>Convert</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

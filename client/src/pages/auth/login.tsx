@@ -249,7 +249,7 @@ export default function LoginPage() {
                 whileHover={{ scale: 1.02 }}
                 onClick={() => {
                   // Trigger OTP
-                  const response = apiRequest("POST", "/api/auth/send-otp", { userId: tempLoginData.userId });
+                  const response = apiRequest("POST", "/api/auth/resend-otp", { userId: tempLoginData.userId });
                   response.then(async (res) => {
                     const data = await res.json();
                     localStorage.setItem("otpUserId", tempLoginData.userId);

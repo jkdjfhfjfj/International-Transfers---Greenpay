@@ -24,6 +24,7 @@ import {
 import { WavyHeader } from "@/components/wavy-header";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
+import { PINModal } from "@/components/pin-modal";
 
 const currencyMeta: Record<string, { flag: string; name: string; enabled: boolean }> = {
   USD: { flag: "🇺🇸", name: "US Dollar",        enabled: true  },
@@ -86,6 +87,8 @@ export default function VirtualAccountsPage() {
     notUsCitizen: false, notPoliticallyExposed: false, beneficialOwner: false,
     truthfulInformation: false, acceptsTerms: false,
   });
+  const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
+  const [pendingTransfer, setPendingTransfer] = useState<{ accountId: string; amount: number } | null>(null);
 
   const { data, isLoading } = useQuery<{ applications: Application[]; supportedCurrencies: string[] }>({
     queryKey: ["/api/virtual-accounts"],
@@ -132,10 +135,10 @@ export default function VirtualAccountsPage() {
 
   const [transferAmount, setTransferAmount] = useState("");
   const transferMutation = useMutation({
-    mutationFn: async ({ accountId, amount }: { accountId: string; amount: number }) => {
-      const response = await apiRequest("POST", `/api/virtual-accounts/${accountId}/transfer`, { amount });
+    mutationFn: async ({ accountId, amount, pin, authenticatorCode }: { accountId: string; amount: number; pin?: string; authenticatorCode?: string }) => {
+      const response = await apiRequest("POST", `/api/virtual-accounts/${accountId}/transfer`, { amount, pin, authenticatorCode });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.message || "Transfer failed");
+      if (!response.ok) throw Object.assign(new Error(result.message || "Transfer failed"), result);
       return result;
     },
     onSuccess: () => {
@@ -144,7 +147,20 @@ export default function VirtualAccountsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/virtual-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
     },
-    onError: (error: any) => toast({ title: "Transfer failed", description: error.message, variant: "destructive" }),
+    onError: (error: any) => {
+      if (error?.requiresSetup) {
+        toast({ title: "Security setup required", description: "Set up a PIN or authenticator in Settings before moving funds.", variant: "destructive" });
+        return;
+      }
+      const requiresPin = Boolean(error?.requiresPin ?? error?.securityOptions?.pin);
+      const requiresAuthenticator = Boolean(error?.requiresAuthenticator ?? error?.securityOptions?.authenticator);
+      if (requiresPin || requiresAuthenticator) {
+        setPendingTransfer((current) => current || null);
+        setSecurityPrompt({ pin: requiresPin, authenticator: requiresAuthenticator });
+        return;
+      }
+      toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
+    },
   });
 
   const step1Valid = form.sourceOfIncome.trim().length >= 2
@@ -166,12 +182,12 @@ export default function VirtualAccountsPage() {
             "hover:shadow-md cursor-pointer",
             currency === code
               ? "border-emerald-500 bg-emerald-50 shadow-sm"
-              : "border-transparent bg-white shadow-sm",
+              : "border-transparent bg-card shadow-sm",
           ].join(" ")}
         >
           <div className="text-2xl mb-1">{meta.flag}</div>
-          <div className="font-bold text-sm text-slate-800">{code}</div>
-          <div className="text-[10px] text-slate-400 mt-0.5">{meta.name}</div>
+          <div className="font-bold text-sm text-foreground">{code}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">{meta.name}</div>
           {currency === code && (
             <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500" />
           )}
@@ -197,18 +213,18 @@ export default function VirtualAccountsPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div className="bg-card rounded-2xl border border-border shadow-sm overflow-hidden">
         {ACCOUNT_FIELDS.map(({ key, label }) => {
           const val = app.accountDetails?.[key];
           if (!val) return null;
           return (
             <div key={key} className="flex items-center justify-between px-4 py-3 border-b last:border-0 gap-3">
-              <span className="text-xs text-slate-500 shrink-0 w-32">{label}</span>
+              <span className="text-xs text-muted-foreground shrink-0 w-32">{label}</span>
               <div className="flex items-center gap-2 min-w-0 ml-auto">
-                <span className="font-mono text-sm text-slate-800 truncate">{val}</span>
+                <span className="font-mono text-sm text-foreground truncate">{val}</span>
                 <button
                   onClick={() => copy(val)}
-                  className="text-slate-400 hover:text-emerald-600 transition-colors shrink-0"
+                  className="text-muted-foreground hover:text-primary transition-colors shrink-0"
                 >
                   <Copy className="w-4 h-4" />
                 </button>
@@ -231,20 +247,20 @@ export default function VirtualAccountsPage() {
           ["On hold", held],
           ["Available", available],
         ].map(([label, value]) => (
-          <div key={label as string} className="rounded-xl border bg-white p-3">
-            <p className="text-[10px] uppercase tracking-wide text-slate-400">{label}</p>
-            <p className="mt-1 font-bold text-slate-800">{Number(value).toFixed(2)} {currency}</p>
+          <div key={label as string} className="rounded-xl border border-border bg-card p-3">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-1 font-bold text-foreground">{Number(value).toFixed(2)} {currency}</p>
           </div>
         ))}
       </div>
 
       {account && account.isActive && (
-        <div className="rounded-2xl border bg-white p-4 space-y-3">
+        <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
             <Wallet className="w-4 h-4 text-emerald-600" />
             <p className="font-semibold text-sm">Move funds to your wallet</p>
           </div>
-          <p className="text-xs text-slate-500">Only your available virtual-account balance can be transferred.</p>
+          <p className="text-xs text-muted-foreground">Only your available virtual-account balance can be transferred.</p>
           <div className="flex gap-2">
             <Input
               type="number"
@@ -256,7 +272,11 @@ export default function VirtualAccountsPage() {
             />
             <Button
               disabled={transferMutation.isPending || !transferAmount || Number(transferAmount) <= 0 || Number(transferAmount) > available}
-              onClick={() => transferMutation.mutate({ accountId: account.id, amount: Number(transferAmount) })}
+              onClick={() => {
+                const next = { accountId: account.id, amount: Number(transferAmount) };
+                setPendingTransfer(next);
+                transferMutation.mutate(next);
+              }}
               className="shrink-0 gap-1"
             >
               <ArrowRightLeft className="w-4 h-4" /> Transfer
@@ -447,7 +467,7 @@ export default function VirtualAccountsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-28 md:pb-10">
+    <div className="min-h-screen bg-background text-foreground pb-28 md:pb-10">
       <WavyHeader size="sm" />
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
@@ -457,8 +477,8 @@ export default function VirtualAccountsPage() {
             <Building2 className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h1 className="font-bold text-slate-900">Virtual Accounts</h1>
-        <p className="text-xs text-slate-500">Receive payments in your configured currencies</p>
+            <h1 className="font-bold text-foreground">Virtual Accounts</h1>
+        <p className="text-xs text-muted-foreground">Receive payments in your configured currencies</p>
           </div>
         </div>
 
@@ -478,6 +498,21 @@ export default function VirtualAccountsPage() {
           <StatusCard app={selectedApp} />
         ) : null}
       </main>
+      <PINModal
+        isOpen={!!securityPrompt}
+        onClose={() => { setSecurityPrompt(null); setPendingTransfer(null); }}
+        requiresPin={securityPrompt?.pin}
+        requiresAuthenticator={securityPrompt?.authenticator}
+        title="Confirm virtual-account transfer"
+        description="Verify your PIN or authenticator to move funds into your wallet."
+        onSuccess={(pin, authenticatorCode) => {
+          const next = pendingTransfer;
+          setSecurityPrompt(null);
+          setPendingTransfer(null);
+          if (next) transferMutation.mutate({ ...next, pin, authenticatorCode });
+        }}
+        isLoading={transferMutation.isPending}
+      />
     </div>
   );
 }

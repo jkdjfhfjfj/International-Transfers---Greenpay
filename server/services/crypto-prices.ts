@@ -4,25 +4,39 @@ import { apiConfigurations } from "@shared/schema";
 import { db, pool } from "../db";
 
 export const SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"] as const;
+export const POPULAR_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"] as const;
 export type SupportedCryptoCoin = (typeof SUPPORTED_CRYPTO_COINS)[number];
+export type CryptoPriceCoin = (typeof POPULAR_CRYPTO_COINS)[number];
 
-const COINGECKO_IDS: Record<SupportedCryptoCoin, string> = {
+const COINGECKO_IDS: Record<CryptoPriceCoin, string> = {
   BTC: "bitcoin",
   ETH: "ethereum",
   USDT: "tether",
   USDC: "usd-coin",
+  SOL: "solana",
+  XRP: "ripple",
+  BNB: "binancecoin",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  TRX: "tron",
 };
 
-const FALLBACK_PRICES: Record<SupportedCryptoCoin, number> = {
+const FALLBACK_PRICES: Record<CryptoPriceCoin, number> = {
   BTC: 65000,
   ETH: 3200,
   USDT: 1,
   USDC: 1,
+  SOL: 150,
+  XRP: 0.55,
+  BNB: 600,
+  ADA: 0.45,
+  DOGE: 0.12,
+  TRX: 0.12,
 };
 
 export type CryptoPriceSnapshot = {
-  prices: Record<SupportedCryptoCoin, number>;
-  changes24h: Partial<Record<SupportedCryptoCoin, number>>;
+  prices: Record<CryptoPriceCoin, number>;
+  changes24h: Partial<Record<CryptoPriceCoin, number>>;
   fetchedAt: string;
   source: "coingecko" | "binance" | "coincap" | "cryptocompare" | "cache" | "fallback";
   stale: boolean;
@@ -32,7 +46,7 @@ let cachedSnapshot: CryptoPriceSnapshot | null = null;
 let requestInFlight: Promise<CryptoPriceSnapshot> | null = null;
 const CACHE_TTL_MS = 60_000;
 
-async function getFallbackPrices(): Promise<Record<SupportedCryptoCoin, number>> {
+async function getFallbackPrices(): Promise<Record<CryptoPriceCoin, number>> {
   const prices = { ...FALLBACK_PRICES };
   if (!pool) return prices;
   try {
@@ -40,8 +54,8 @@ async function getFallbackPrices(): Promise<Record<SupportedCryptoCoin, number>>
       `SELECT key, value FROM system_settings WHERE category = 'crypto_price_fallback'`,
     );
     for (const row of result.rows) {
-      const coin = String(row.key || "").toUpperCase() as SupportedCryptoCoin;
-      if (!SUPPORTED_CRYPTO_COINS.includes(coin)) continue;
+      const coin = String(row.key || "").toUpperCase() as CryptoPriceCoin;
+      if (!POPULAR_CRYPTO_COINS.includes(coin)) continue;
       const raw = row.value;
       const value = Number(typeof raw === "object" && raw !== null ? raw.value : String(raw ?? "").replace(/^"|"$/g, ""));
       if (Number.isFinite(value) && value > 0) prices[coin] = value;
@@ -86,8 +100,8 @@ async function getEnabledProviders(): Promise<Set<string>> {
 }
 
 function makeSnapshot(
-  prices: Record<SupportedCryptoCoin, number>,
-  changes24h: Partial<Record<SupportedCryptoCoin, number>>,
+  prices: Record<CryptoPriceCoin, number>,
+  changes24h: Partial<Record<CryptoPriceCoin, number>>,
   source: CryptoPriceSnapshot["source"],
 ): CryptoPriceSnapshot {
   return {
@@ -100,7 +114,7 @@ function makeSnapshot(
 }
 
 async function fetchCoinGecko(apiKey?: string): Promise<CryptoPriceSnapshot> {
-  const ids = SUPPORTED_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
+  const ids = POPULAR_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
   const response = await fetch(
     `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
     { headers: apiKey ? { "x-cg-demo-api-key": apiKey } : undefined },
@@ -114,9 +128,9 @@ async function fetchCoinGecko(apiKey?: string): Promise<CryptoPriceSnapshot> {
     { usd?: number; usd_24h_change?: number }
   >;
   const prices = { ...FALLBACK_PRICES };
-  const changes24h: Partial<Record<SupportedCryptoCoin, number>> = {};
+  const changes24h: Partial<Record<CryptoPriceCoin, number>> = {};
 
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const quote = payload[COINGECKO_IDS[coin]];
     if (!quote || typeof quote.usd !== "number" || !Number.isFinite(quote.usd)) {
       throw new Error(`CoinGecko did not return a valid ${coin} price`);
@@ -131,16 +145,27 @@ async function fetchCoinGecko(apiKey?: string): Promise<CryptoPriceSnapshot> {
 }
 
 async function fetchCoinCap(apiKey?: string): Promise<CryptoPriceSnapshot> {
-  const response = await fetch("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
+  const response = await fetch(`https://api.coincap.io/v2/assets?ids=${POPULAR_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",")}`, {
     headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
   });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);
   const payload = (await response.json()) as { data?: Array<{ id: string; priceUsd?: string; changePercent24Hr?: string }> };
   const rows = new Map((payload.data || []).map((row) => [row.id, row]));
-  const ids: Record<SupportedCryptoCoin, string> = { BTC: "bitcoin", ETH: "ethereum", USDT: "tether", USDC: "usd-coin" };
+  const ids: Record<CryptoPriceCoin, string> = {
+    BTC: "bitcoin",
+    ETH: "ethereum",
+    USDT: "tether",
+    USDC: "usd-coin",
+    SOL: "solana",
+    XRP: "xrp",
+    BNB: "binance-coin",
+    ADA: "cardano",
+    DOGE: "dogecoin",
+    TRX: "tron",
+  };
   const prices = { ...FALLBACK_PRICES };
-  const changes24h: Partial<Record<SupportedCryptoCoin, number>> = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  const changes24h: Partial<Record<CryptoPriceCoin, number>> = {};
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const row = rows.get(ids[coin]);
     const price = Number(row?.priceUsd);
     if (!Number.isFinite(price)) throw new Error(`CoinCap did not return a valid ${coin} price`);
@@ -152,7 +177,9 @@ async function fetchCoinCap(apiKey?: string): Promise<CryptoPriceSnapshot> {
 }
 
 async function fetchBinance(apiKey?: string): Promise<CryptoPriceSnapshot> {
-  const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
+  const symbols = POPULAR_CRYPTO_COINS
+    .filter((coin) => coin !== "USDT" && coin !== "USDC")
+    .map((coin) => `${coin}USDT`);
   const response = await fetch(
     `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
     { headers: apiKey ? { "X-MBX-APIKEY": apiKey } : undefined },
@@ -160,16 +187,18 @@ async function fetchBinance(apiKey?: string): Promise<CryptoPriceSnapshot> {
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
   const payload = (await response.json()) as Array<{ symbol: string; lastPrice?: string; priceChangePercent?: string }>;
   const rows = new Map(payload.map((row) => [row.symbol, row]));
-  const prices = {
-    BTC: Number(rows.get("BTCUSDT")?.lastPrice),
-    ETH: Number(rows.get("ETHUSDT")?.lastPrice),
-    USDT: Number(rows.get("USDTUSDT")?.lastPrice) || 1,
-    USDC: Number(rows.get("USDCUSDT")?.lastPrice) || 1,
-  } as Record<SupportedCryptoCoin, number>;
-  if (!Number.isFinite(prices.BTC) || !Number.isFinite(prices.ETH)) throw new Error("Binance did not return all required prices");
-  const changes24h: Partial<Record<SupportedCryptoCoin, number>> = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
-    const change = Number(rows.get(`${coin}USDT`)?.priceChangePercent);
+  const prices = { ...FALLBACK_PRICES } as Record<CryptoPriceCoin, number>;
+  const changes24h: Partial<Record<CryptoPriceCoin, number>> = {};
+  for (const coin of POPULAR_CRYPTO_COINS) {
+    if (coin === "USDT" || coin === "USDC") {
+      prices[coin] = 1;
+      continue;
+    }
+    const row = rows.get(`${coin}USDT`);
+    const price = Number(row?.lastPrice);
+    if (!Number.isFinite(price)) throw new Error(`Binance did not return a valid ${coin} price`);
+    prices[coin] = price;
+    const change = Number(row?.priceChangePercent);
     if (Number.isFinite(change)) changes24h[coin] = change;
   }
   return makeSnapshot(prices, changes24h, "binance");
@@ -177,14 +206,14 @@ async function fetchBinance(apiKey?: string): Promise<CryptoPriceSnapshot> {
 
 async function fetchCryptoCompare(apiKey?: string): Promise<CryptoPriceSnapshot> {
   const response = await fetch(
-    "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,USDT,USDC&tsyms=USD",
+    `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${POPULAR_CRYPTO_COINS.join(",")}&tsyms=USD`,
     { headers: apiKey ? { authorization: `Apikey ${apiKey}` } : undefined },
   );
   if (!response.ok) throw new Error(`CryptoCompare returned HTTP ${response.status}`);
   const payload = (await response.json()) as { RAW?: Record<string, { USD?: { PRICE?: number; CHANGEPCT24HOUR?: number } }> };
   const prices = { ...FALLBACK_PRICES };
-  const changes24h: Partial<Record<SupportedCryptoCoin, number>> = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  const changes24h: Partial<Record<CryptoPriceCoin, number>> = {};
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const quote = payload.RAW?.[coin]?.USD;
     if (!quote || !Number.isFinite(quote.PRICE)) throw new Error(`CryptoCompare did not return a valid ${coin} price`);
     prices[coin] = quote.PRICE!;
@@ -256,8 +285,8 @@ export async function getCryptoPrices(): Promise<CryptoPriceSnapshot> {
 }
 
 export async function getCryptoPrice(coin: string): Promise<number | undefined> {
-  const normalizedCoin = coin.trim().toUpperCase() as SupportedCryptoCoin;
-  if (!SUPPORTED_CRYPTO_COINS.includes(normalizedCoin)) return undefined;
+  const normalizedCoin = coin.trim().toUpperCase() as CryptoPriceCoin;
+  if (!POPULAR_CRYPTO_COINS.includes(normalizedCoin)) return undefined;
   const snapshot = await getCryptoPrices();
   return snapshot.prices[normalizedCoin];
 }

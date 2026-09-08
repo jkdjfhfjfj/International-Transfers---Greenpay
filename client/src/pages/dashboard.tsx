@@ -400,7 +400,7 @@ export default function DashboardPage() {
             <motion.button
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation('/exchange')}
-               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-primary-foreground/20 bg-primary-foreground/90 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary-foreground"
+              className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/20"
             >
               <ArrowLeftRight className="w-3 h-3" />
               Exchange
