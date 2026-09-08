@@ -98,6 +98,7 @@ export default function CryptoPage() {
   const [depositReview, setDepositReview] = useState(false);
   const [withdrawReview, setWithdrawReview] = useState(false);
   const [selectedDepositAddress, setSelectedDepositAddress] = useState<any | null>(null);
+  const [depositInstructions, setDepositInstructions] = useState<any | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingSecurityAction, setPendingSecurityAction] = useState<SecurityAction | null>(null);
@@ -189,8 +190,20 @@ export default function CryptoPage() {
       const res = await apiRequest("POST", "/api/crypto/deposit", { coin, amount: parseFloat(amount), ...security });
       return res.json();
     },
-    onSuccess: (data) => {
-      toast({ title: "Deposit Initiated", description: data.message });
+    onSuccess: (data, variables) => {
+      const address = (addressesByCoin[variables.coin] || []).find((item: any) => item.address === data.depositAddress)
+        || (addressesByCoin[variables.coin] || [])[0];
+      setDepositInstructions({
+        ...address,
+        address: data.depositAddress || address?.address,
+        memo: data.memo || address?.memo,
+        network: data.network || address?.network,
+        networkLabel: data.networkLabel || address?.networkLabel,
+        message: data.message,
+        amount: variables.amount,
+        coin: variables.coin,
+      });
+      toast({ title: "Deposit instructions ready", description: "Use the details below to send your crypto." });
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions"] });
       setDepositAmount("");
     },
@@ -337,6 +350,10 @@ export default function CryptoPage() {
     ? transferQuoteAmount / transferAmountNumber
     : 0;
   const sourceAvailableBalance = transferSourceAsset.balance;
+  const transferQuoteReady = transferAmountNumber > 0
+    && transferSourceAsset.usdRate > 0
+    && transferDestinationPerUsd > 0;
+  const formatTransferUsd = (value: number) => transferQuoteReady ? formatUsdValue(value) : "Rate unavailable";
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -468,7 +485,11 @@ export default function CryptoPage() {
                      </div>
                      <div>
                        <p className="text-muted-foreground">Last updated</p>
-                       <p className="font-medium text-foreground">{wallet.updatedAt ? new Date(wallet.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Just now"}</p>
+                        <p className="font-medium text-foreground">
+                          {priceFetchedAt
+                            ? new Date(priceFetchedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                            : walletsFetching ? "Updating…" : "Just now"}
+                        </p>
                      </div>
                    </div>
                 </motion.div>
@@ -613,7 +634,11 @@ export default function CryptoPage() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{selectedCoin}</span>
                   </div>
                   {depositAmount && (
-                   <p className="text-xs text-muted-foreground">≈ {formatUsdValue(parseFloat(depositAmount || "0") * (rates[selectedCoin] || 1))} USD</p>
+                    <p className="text-xs text-muted-foreground">
+                      ≈ {Number(rates[selectedCoin]) > 0
+                        ? `${formatUsdValue(parseFloat(depositAmount || "0") * Number(rates[selectedCoin]))} USD`
+                        : "Rate unavailable until live prices load"}
+                    </p>
                   )}
                 </div>
 
@@ -810,8 +835,10 @@ export default function CryptoPage() {
                  <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{formatCryptoAmount(transferAmountNumber)} {transferSourceAsset.currency}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{formatCryptoAmount(transferFee)} {transferSourceAsset.currency}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>1 {transferSourceAsset.currency} = {transferQuoteRate < 0.01 ? transferQuoteRate.toFixed(8) : transferQuoteRate.toFixed(4)} {transferDestinationAsset.currency}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Source value</span><span>{formatTransferUsd(transferGrossUsd)}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{formatCryptoAmount(transferDestinationAsset.balance)} {transferDestinationAsset.currency}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">You receive</span><span>{formatCryptoAmount(transferQuoteAmount)} {transferDestinationAsset.currency}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">You receive (USD)</span><span>{formatTransferUsd(transferNetUsd)}</span></div>
                  <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total debited</span><span>{formatCryptoAmount(transferAmountNumber + transferFee)} {transferSourceAsset.currency}</span></div>
                </div>
                <p className="mt-3 text-xs text-muted-foreground">The final server quote is recalculated when you confirm.</p>
@@ -863,7 +890,7 @@ export default function CryptoPage() {
            </motion.div>
          )}
        </AnimatePresence>
-       <AnimatePresence>
+        <AnimatePresence>
          {selectedDepositAddress && (
            <motion.div
              className="fixed inset-0 z-[150] flex items-end bg-black/50"
@@ -909,6 +936,76 @@ export default function CryptoPage() {
            </motion.div>
          )}
        </AnimatePresence>
+        <AnimatePresence>
+          {depositInstructions && (
+            <motion.div
+              className="fixed inset-0 z-[170] flex items-end bg-black/50"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDepositInstructions(null)}
+            >
+              <motion.div
+                className="bottom-sheet-safe w-full rounded-t-3xl bg-background p-5 shadow-2xl"
+                initial={{ y: "100%" }}
+                animate={{ y: 0 }}
+                exit={{ y: "100%" }}
+                transition={{ type: "spring", damping: 28, stiffness: 280 }}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+                <div className="flex items-start gap-3">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <ArrowDownToLine className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold">Send your deposit</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Send exactly {formatCryptoAmount(depositInstructions.amount)} {depositInstructions.coin} on the {depositInstructions.networkLabel || depositInstructions.network || "selected"} network.
+                    </p>
+                  </div>
+                </div>
+                {depositInstructions.qrCodeUrl && (
+                  <div className="mt-4 flex justify-center rounded-2xl bg-white p-3">
+                    <img src={depositInstructions.qrCodeUrl} alt={`${depositInstructions.coin} deposit QR code`} className="h-48 w-48 object-contain" />
+                  </div>
+                )}
+                <div className="mt-4 rounded-2xl bg-muted p-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Deposit address</p>
+                  <p className="mt-1 break-all font-mono text-xs text-foreground">{depositInstructions.address || "Address unavailable"}</p>
+                  <button
+                    className="mt-2 text-xs font-semibold text-primary"
+                    onClick={() => depositInstructions.address && copyToClipboard(depositInstructions.address, "instructions-address")}
+                  >
+                    {copied === "instructions-address" ? "Address copied" : "Copy address"}
+                  </button>
+                </div>
+                {depositInstructions.memo && (
+                  <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/20">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">Memo / tag required</p>
+                    <p className="mt-1 break-all font-mono text-sm font-bold text-amber-900 dark:text-amber-200">{depositInstructions.memo}</p>
+                    <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-400">Include this memo or your funds may not be credited.</p>
+                  </div>
+                )}
+                {depositInstructions.notes && <p className="mt-3 text-xs italic text-muted-foreground">{depositInstructions.notes}</p>}
+                <div className="sticky bottom-0 -mx-5 mt-5 flex gap-2 border-t border-border bg-background/95 px-5 pt-4 backdrop-blur">
+                  <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setDepositInstructions(null)}>Close</button>
+                  <button
+                    className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground"
+                    onClick={() => {
+                      setDepositInstructions(null);
+                      setActiveTab("history");
+                      queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions"] });
+                      toast({ title: "Deposit reported", description: "Your deposit is pending blockchain confirmation." });
+                    }}
+                  >
+                    I have deposited
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
        <AnimatePresence>
          {depositReview && (
            <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDepositReview(false)}>
@@ -918,7 +1015,7 @@ export default function CryptoPage() {
                <p className="mt-1 text-xs text-muted-foreground">The selected admin address and network will be shown after confirmation.</p>
                <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
                  <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(depositAmount)} {selectedCoin}</span></div>
-                 <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{formatUsdValue(Number(depositAmount || 0) * Number(rates[selectedCoin] || 0))}</span></div>
+                  <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{Number(rates[selectedCoin]) > 0 ? formatUsdValue(Number(depositAmount || 0) * Number(rates[selectedCoin])) : "Rate unavailable"}</span></div>
                </div>
                <div className="mt-5 flex gap-2">
                  <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setDepositReview(false)}>Edit</button>
@@ -939,7 +1036,7 @@ export default function CryptoPage() {
                <p className="mt-1 text-xs text-muted-foreground">Review the destination carefully. The withdrawal will still require your PIN or authenticator.</p>
                <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
                  <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(withdrawAmount)} {selectedCoin}</span></div>
-                 <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{formatUsdValue(Number(withdrawAmount || 0) * Number(rates[selectedCoin] || 0))}</span></div>
+                  <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{Number(rates[selectedCoin]) > 0 ? formatUsdValue(Number(withdrawAmount || 0) * Number(rates[selectedCoin])) : "Rate unavailable"}</span></div>
                  <p className="mt-3 break-all font-mono text-xs text-muted-foreground">{withdrawAddress}</p>
                </div>
                <div className="mt-5 flex gap-2">

@@ -306,24 +306,29 @@ export default function VirtualAccountsPage() {
   const StatusCard = ({ app }: { app: Application }) => {
     const isPending  = app.status === "pending";
     const isRejected = app.status === "rejected";
+    const isApproved = app.status === "approved";
     return (
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         className={[
           "rounded-2xl border p-5 flex gap-4 items-start",
            isPending  ? "bg-muted border-border"  : "",
-           isRejected ? "bg-destructive/5 border-destructive/20" : "",
+            isRejected ? "bg-destructive/5 border-destructive/20" : "",
+            isApproved ? "bg-primary/5 border-primary/20" : "",
         ].join(" ")}
       >
         {isPending  && <Clock      className="w-8 h-8 text-primary mt-0.5 shrink-0" />}
         {isRejected && <XCircle    className="w-8 h-8 text-destructive mt-0.5 shrink-0" />}
+        {isApproved && <CheckCircle2 className="w-8 h-8 text-primary mt-0.5 shrink-0" />}
         <div className="space-y-1">
           <p className="font-semibold text-foreground">
-            {isPending  ? "Application under review"    : "Application not approved"}
+            {isPending ? "Application under review" : isApproved ? "Application approved" : "Application not approved"}
           </p>
           <p className="text-sm text-muted-foreground">
             {isPending
               ? "Our compliance team is reviewing your request. This typically takes 1–3 business days."
-              : "Your application was not approved at this time."}
+              : isApproved
+                ? "Your account details are being prepared. They will appear here as soon as setup is complete."
+                : "Your application was not approved at this time."}
           </p>
           {isRejected && app.adminNotes && (
             <p className="text-sm text-destructive mt-2 font-medium">{app.adminNotes}</p>

@@ -8,8 +8,9 @@ import { formatNumber } from "@/lib/formatters";
 import { useWallets, useWalletExchange } from "@/hooks/use-wallets";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, ArrowRight, ArrowLeftRight, RefreshCw, Loader2, CheckCircle2, ChevronDown } from "lucide-react";
+import { ArrowLeft, ArrowLeftRight, RefreshCw, Loader2, CheckCircle2, ChevronDown } from "lucide-react";
 import { PINModal } from "@/components/pin-modal";
+import { WavyHeader } from "@/components/wavy-header";
 
 const CURRENCY_FLAGS: Record<string, string> = {
   USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
@@ -25,11 +26,10 @@ const CURRENCY_SYMBOLS: Record<string, string> = {
   BNB: '◆', ADA: '₳', DOGE: 'Ð', TRX: 'T',
 };
 
-const CRYPTO_CURRENCIES = new Set(["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"]);
 const formatExchangeAmount = (value: unknown, currency?: string) => {
   const amount = Number(value || 0);
   if (!Number.isFinite(amount)) return "0";
-  const decimals = CRYPTO_CURRENCIES.has(String(currency || "").toUpperCase()) || (Math.abs(amount) > 0 && Math.abs(amount) < 1) ? 8 : 4;
+  const decimals = (Math.abs(amount) > 0 && Math.abs(amount) < 1) ? 8 : 4;
   return amount.toLocaleString(undefined, { minimumFractionDigits: decimals === 8 && amount > 0 && amount < 1 ? 4 : 0, maximumFractionDigits: decimals });
 };
 
@@ -46,10 +46,6 @@ export default function ExchangePage() {
   const { toast } = useToast();
   const { wallets, isLoading } = useWallets();
   const { exchange, isExchanging } = useWalletExchange();
-  const { data: cryptoData, isLoading: cryptoLoading } = useQuery({
-    queryKey: ["/api/crypto/wallets"],
-    queryFn: async () => (await apiRequest("GET", "/api/crypto/wallets")).json(),
-  });
   const { data: fiatRatesData } = useQuery({
     queryKey: ["/api/exchange-rates/USD"],
     queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
@@ -62,39 +58,11 @@ export default function ExchangePage() {
   });
 
   const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);
-  const cryptoWallets: any[] = (cryptoData as any)?.wallets || [];
-  const cryptoRates: Record<string, number> = (cryptoData as any)?.rates || {};
   const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
-  const activeAccounts: any[] = [
-    ...activeWallets.map(wallet => ({ ...wallet, kind: "wallet" })),
-    ...cryptoWallets.map(wallet => ({
-      ...wallet,
-      id: `crypto:${wallet.coin}`,
-      kind: "crypto",
-      currency: wallet.coin,
-      availableBalance: Number(wallet.balance || 0),
-      isActive: true,
-      isSuspended: false,
-    })),
-  ];
-
-  const getUsdRate = (account: any): number => {
-    if (!account) return 0;
-    if (account.kind === "crypto") return Number(cryptoRates[account.currency] || 0);
-    if (account.currency === "USD") return 1;
-    const usdToCurrency = Number(fiatRates[account.currency] || 0);
-    return usdToCurrency > 0 ? 1 / usdToCurrency : 0;
-  };
-
-  const getUnitsPerUsd = (account: any): number => {
-    if (!account) return 0;
-    if (account.kind === "crypto") {
-      const usdRate = getUsdRate(account);
-      return usdRate > 0 ? 1 / usdRate : 0;
-    }
-    if (account.currency === "USD") return 1;
-    return Number(fiatRates[account.currency] || 0);
-  };
+  // Crypto conversion lives in the dedicated Crypto/Transfer screens. Keep
+  // Exchange focused on fiat wallets so the quote and balances share one
+  // currency source and never silently fall back to zero.
+  const activeAccounts: any[] = activeWallets.map(wallet => ({ ...wallet, kind: "wallet" }));
 
   useEffect(() => {
     if (activeAccounts.length >= 2 && !fromWalletId) {
@@ -111,26 +79,19 @@ export default function ExchangePage() {
   useEffect(() => {
     if (!fromWallet || !toWallet || fromWallet.currency === toWallet.currency) { setExchangeRate(null); return; }
     setRateLoading(true);
-    const hasCrypto = fromWallet.kind === "crypto" || toWallet.kind === "crypto";
-    if (hasCrypto) {
-      const sourceUsdRate = getUsdRate(fromWallet);
-      const destinationUnitsPerUsd = getUnitsPerUsd(toWallet);
-      setExchangeRate(sourceUsdRate > 0 && destinationUnitsPerUsd > 0 ? sourceUsdRate * destinationUnitsPerUsd : null);
-      setRateLoading(false);
-      return;
-    }
     apiRequest("GET", `/api/exchange-rates/${fromWallet.currency}`)
       .then(r => r.json())
       .then(data => setExchangeRate(data?.rates?.[toWallet.currency] || data?.rate || null))
       .catch(() => setExchangeRate(null))
       .finally(() => setRateLoading(false));
-  }, [fromWallet?.currency, toWallet?.currency, fromWallet?.kind, toWallet?.kind, cryptoData, fiatRatesData]);
+  }, [fromWallet?.currency, toWallet?.currency, fiatRatesData]);
 
   const amountNum = parseFloat(amount) || 0;
   const FEE_RATE = Number(feeSettings?.exchangeFeeRate ?? 0.015);
   const feeNum = amountNum * FEE_RATE;
   const netAmount = amountNum - feeNum;
-  const receiveAmount = exchangeRate ? netAmount * exchangeRate : 0;
+  const quoteReady = Number.isFinite(exchangeRate) && Number(exchangeRate) > 0;
+  const receiveAmount = quoteReady ? netAmount * Number(exchangeRate) : 0;
 
   const fromBalance = fromWallet ? Number(fromWallet.availableBalance ?? 0) : 0;
 
@@ -155,38 +116,17 @@ export default function ExchangePage() {
       toast({ title: "Insufficient balance", description: `Available: ${CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}${formatNumber(fromBalance)}`, variant: "destructive" });
       return;
     }
+    if (!quoteReady) {
+      toast({ title: "Rate unavailable", description: "Wait for the live conversion rate before confirming.", variant: "destructive" });
+      return;
+    }
     if (!security && !confirmOpen) {
       setConfirmOpen(true);
       return;
     }
     setConfirmOpen(false);
     try {
-      let result: any;
-      if (fromWallet.kind === "crypto" || toWallet.kind === "crypto") {
-        const response = await apiRequest("POST", "/api/crypto/transfer", {
-          sourceType: fromWallet.kind,
-          sourceId: fromWallet.kind === "crypto" ? undefined : fromWallet.id,
-          sourceCoin: fromWallet.kind === "crypto" ? fromWallet.currency : undefined,
-          destinationType: toWallet.kind,
-          destinationId: toWallet.kind === "crypto" ? undefined : toWallet.id,
-          destinationCoin: toWallet.kind === "crypto" ? toWallet.currency : undefined,
-          amount: amountNum,
-          ...security,
-        });
-        const data = await response.json();
-        if (!response.ok) throw Object.assign(new Error(data.message || "Exchange failed"), data);
-        result = {
-          ...data,
-          fromAmount: amountNum,
-          fromCurrency: fromWallet.currency,
-          toAmount: data.destinationAmount,
-          toCurrency: toWallet.currency,
-          rate: data.rate,
-          fee: data.fee,
-        };
-      } else {
-        result = await exchange({ fromWalletId, toWalletId, amount: amountNum, ...security } as any);
-      }
+      const result = await exchange({ fromWalletId, toWalletId, amount: amountNum, ...security } as any);
       setSuccess(result);
       setAmount("");
       toast({ title: "Exchange successful!", description: `${result.fromAmount} ${result.fromCurrency} → ${parseFloat(result.toAmount).toFixed(4)} ${result.toCurrency}` });
@@ -214,7 +154,7 @@ export default function ExchangePage() {
     );
   }
 
-  if (!cryptoLoading && activeAccounts.length < 2) {
+  if (activeAccounts.length < 2) {
     return (
       <div className="min-h-screen bg-background bottom-nav-safe">
         <WavyHeader size="sm" />
@@ -222,8 +162,8 @@ export default function ExchangePage() {
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
             <ArrowLeftRight className="w-8 h-8 text-muted-foreground" />
           </div>
-          <h2 className="text-lg font-bold mb-2">Two Wallets Needed</h2>
-          <p className="text-sm text-muted-foreground mb-6">You need at least two active wallets or crypto accounts to exchange currencies. Add another wallet in Settings or fund a crypto wallet.</p>
+          <h2 className="text-lg font-bold mb-2">Two Fiat Wallets Needed</h2>
+          <p className="text-sm text-muted-foreground mb-6">You need at least two active fiat wallets to exchange currencies. Add another fiat wallet in Settings to continue.</p>
           <div className="flex gap-3 justify-center">
             <Button variant="outline" onClick={() => setLocation("/dashboard")}>
               <ArrowLeft className="w-4 h-4 mr-2" /> Dashboard
@@ -237,6 +177,11 @@ export default function ExchangePage() {
 
   return (
     <div className="min-h-screen bg-background bottom-nav-safe">
+      <WavyHeader
+        size="sm"
+        title={success ? "Exchange complete" : "Exchange"}
+        subtitle={success ? "Your conversion was completed successfully" : "Convert between your fiat wallets"}
+      />
       <div className="max-w-lg mx-auto p-4 space-y-4">
         <AnimatePresence mode="wait">
           {success ? (
@@ -244,8 +189,9 @@ export default function ExchangePage() {
               key="success"
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-card border border-green-200 dark:border-green-800 rounded-2xl p-6 text-center space-y-4"
+              className="relative overflow-hidden bg-card rounded-3xl p-6 text-center space-y-4 shadow-lg shadow-green-900/10"
             >
+              <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-500 via-green-400 to-lime-400" />
               <div className="w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center mx-auto">
                 <CheckCircle2 className="w-8 h-8 text-green-600" />
               </div>
@@ -351,8 +297,8 @@ export default function ExchangePage() {
                 <div className="flex gap-3">
                   <div className="flex-1">
                     <div className="h-12 px-3 rounded-xl bg-muted/40 flex items-center">
-                      <span className="text-xl font-bold text-muted-foreground">
-                       {receiveAmount > 0 ? formatExchangeAmount(receiveAmount, toWallet?.currency) : "0"}
+                       <span className={`text-xl font-bold ${amountNum > 0 && !quoteReady ? "text-muted-foreground" : "text-foreground"}`}>
+                        {amountNum <= 0 ? "0" : quoteReady ? formatExchangeAmount(receiveAmount, toWallet?.currency) : "Loading…"}
                       </span>
                     </div>
                   </div>
@@ -374,7 +320,7 @@ export default function ExchangePage() {
               </div>
 
               {/* Fee breakdown */}
-              {amountNum > 0 && exchangeRate && (
+               {amountNum > 0 && quoteReady && (
                 <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -394,7 +340,7 @@ export default function ExchangePage() {
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Rate</span>
-                    <span>1 {fromWallet?.currency} = {exchangeRate.toFixed(4)} {toWallet?.currency}</span>
+                    <span>1 {fromWallet?.currency} = {Number(exchangeRate).toFixed(4)} {toWallet?.currency}</span>
                   </div>
                   <div className="border-t border-border pt-1.5 flex justify-between font-semibold text-foreground">
                     <span>You receive</span>
@@ -417,7 +363,7 @@ export default function ExchangePage() {
           <div className="max-w-lg mx-auto p-4">
             <Button
               onClick={() => handleExchange()}
-              disabled={isExchanging || !amount || amountNum <= 0 || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
+               disabled={isExchanging || !amount || amountNum <= 0 || !quoteReady || !fromWalletId || !toWalletId || fromWalletId === toWalletId}
               className="w-full h-13 text-base font-semibold bg-primary hover:bg-primary/90"
               style={{ height: 52 }}
             >
@@ -432,14 +378,14 @@ export default function ExchangePage() {
       )}
 
       {confirmOpen && (
-         <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-4 md:items-center">
+         <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-0 md:items-center md:p-4">
             <div className="bottom-sheet-safe w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 md:hidden" />
              <h3 className="text-lg font-bold">Confirm exchange</h3>
              <p className="mt-2 text-sm text-muted-foreground">
                Exchange {formatExchangeAmount(amountNum, fromWallet?.currency)} {fromWallet?.currency} for approximately {formatExchangeAmount(receiveAmount, toWallet?.currency)} {toWallet?.currency}?
              </p>
-             <div className="mt-5 flex gap-2">
+              <div className="sticky bottom-0 -mx-5 mt-5 flex gap-2 border-t border-border bg-card/95 px-5 pt-4 backdrop-blur">
                <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)}>Cancel</Button>
                <Button className="flex-1" onClick={() => void handleExchange()}>Confirm</Button>
              </div>

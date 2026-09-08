@@ -1130,6 +1130,22 @@ async function alterMissingColumns() {
       expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
+    // Older databases may have announcement consumers without the table
+    // itself. Create the additive parent table before its dismissal FK.
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      type TEXT DEFAULT 'announcement',
+      image_url TEXT,
+      action_url TEXT,
+      is_active BOOLEAN DEFAULT true,
+      priority INTEGER DEFAULT 0,
+      starts_at TIMESTAMP DEFAULT NOW(),
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
     `CREATE TABLE IF NOT EXISTS announcement_dismissals (
       user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       announcement_id VARCHAR NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
@@ -1228,8 +1244,6 @@ async function alterMissingColumns() {
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
-    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
-    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
     `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
     `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
@@ -1324,6 +1338,8 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS virtual_accounts_user_currency_idx ON virtual_accounts(user_id, currency)`,
+    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
+    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     // Append-only ledger for wallets, virtual accounts, and virtual cards.
     `CREATE TABLE IF NOT EXISTS ledger_entries (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -8764,10 +8780,16 @@ async function registerRoutes(app2) {
     try {
       const status = req.body.status;
       if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const [existingApplication] = await db.select().from(virtualAccountApplications).where(eq3(virtualAccountApplications.id, req.params.id));
+      if (!existingApplication) return res.status(404).json({ message: "Application not found" });
+      const [accountSettings] = await db.select().from(virtualAccountSettings).where(eq3(virtualAccountSettings.currency, existingApplication.currency));
+      if (status === "approved" && (!accountSettings || !accountSettings.isActive)) {
+        return res.status(400).json({ message: `Configure and activate ${existingApplication.currency} account details before approving applications.` });
+      }
       const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(eq3(virtualAccountApplications.id, req.params.id)).returning();
       if (!application) return res.status(404).json({ message: "Application not found" });
       const [user] = await db.select().from(users).where(eq3(users.id, application.userId));
-      const [account] = await db.select().from(virtualAccountSettings).where(eq3(virtualAccountSettings.currency, application.currency));
+      const account = accountSettings;
       if (status === "approved") {
         await pool.query(
           `INSERT INTO virtual_accounts (user_id, application_id, currency)
@@ -20003,6 +20025,9 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
+      if (!Number.isFinite(rate) || rate <= 0) {
+        return res.status(400).json({ message: "A live exchange rate is not available for these currencies. Please try again." });
+      }
       const FEE_RATE = await getTransactionFeeRate();
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;

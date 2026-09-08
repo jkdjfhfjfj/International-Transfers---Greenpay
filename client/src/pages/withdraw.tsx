@@ -781,20 +781,12 @@ export default function WithdrawPage() {
             </div>
           )}
 
-          <div className="mt-5 flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setPendingWithdrawal(null)}
-              disabled={withdrawMutation.isPending}
-            >
-              Go back
-            </Button>
+          <div className="sticky bottom-0 -mx-5 mt-5 flex border-t border-border bg-background/95 px-5 pt-4 backdrop-blur">
             <Button
               type="button"
               onClick={() => pendingWithdrawal && withdrawMutation.mutate(pendingWithdrawal)}
               disabled={withdrawMutation.isPending}
-              className="bg-primary"
+              className="w-full bg-primary"
             >
               {withdrawMutation.isPending ? "Submitting..." : "Confirm withdrawal"}
             </Button>

@@ -784,10 +784,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const status = req.body.status;
       if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+      const [existingApplication] = await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.id, req.params.id));
+      if (!existingApplication) return res.status(404).json({ message: "Application not found" });
+      const [accountSettings] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, existingApplication.currency));
+      if (status === "approved" && (!accountSettings || !accountSettings.isActive)) {
+        return res.status(400).json({ message: `Configure and activate ${existingApplication.currency} account details before approving applications.` });
+      }
       const [application] = await db.update(virtualAccountApplications).set({ status, adminNotes: req.body.adminNotes || null, reviewedBy: req.session.admin.id, reviewedAt: new Date(), updatedAt: new Date() }).where(eq(virtualAccountApplications.id, req.params.id)).returning();
       if (!application) return res.status(404).json({ message: "Application not found" });
       const [user] = await db.select().from(users).where(eq(users.id, application.userId));
-      const [account] = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.currency, application.currency));
+      const account = accountSettings;
       if (status === "approved") {
         await pool.query(
           `INSERT INTO virtual_accounts (user_id, application_id, currency)
@@ -14386,6 +14392,9 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
+       if (!Number.isFinite(rate) || rate <= 0) {
+         return res.status(400).json({ message: "A live exchange rate is not available for these currencies. Please try again." });
+       }
       const FEE_RATE = await getTransactionFeeRate();
       const fee = fromAmt * FEE_RATE;
       const toAmount = (fromAmt - fee) * rate;

@@ -40,6 +40,7 @@ interface CryptoAddress {
   network: string;
   networkLabel: string;
   address: string;
+  qrCodeUrl?: string;
   memo?: string;
   minDeposit?: string;
   notes?: string;
@@ -553,6 +554,11 @@ export default function DepositPage() {
                             <p className="font-mono text-xs bg-muted rounded-lg p-2.5 flex-1 break-all text-foreground">{addr.address}</p>
                             <CopyButton text={addr.address} label="Copy" />
                           </div>
+                          {addr.qrCodeUrl && (
+                            <div className="flex justify-center rounded-xl bg-white p-3">
+                              <img src={addr.qrCodeUrl} alt={`${selectedCoin} deposit QR code`} className="h-36 w-36 object-contain" />
+                            </div>
+                          )}
                           {addr.memo && (
                             <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-lg p-2">
                               <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 shrink-0">MEMO REQUIRED</span>

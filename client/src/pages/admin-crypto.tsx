@@ -376,6 +376,12 @@ function AddressManagement() {
                     )}
                   </div>
                   <p className="font-mono text-xs break-all text-muted-foreground">{addr.address}</p>
+                   {addr.qrCodeUrl && (
+                     <div className="mt-2 flex items-center gap-2">
+                       <img src={addr.qrCodeUrl} alt={`${addr.coin} QR preview`} className="h-14 w-14 rounded-lg bg-white object-contain p-1" />
+                       <span className="text-[11px] text-muted-foreground">QR visible to users</span>
+                     </div>
+                   )}
                   {addr.memo && <p className="text-xs mt-1"><span className="font-semibold text-orange-600">Memo:</span> <span className="font-mono">{addr.memo}</span></p>}
                   {addr.minDeposit && parseFloat(addr.minDeposit) > 0 && <p className="text-xs text-muted-foreground mt-1">Min deposit: {addr.minDeposit} {addr.coin}</p>}
                   {addr.notes && <p className="text-xs italic text-muted-foreground mt-1">{addr.notes}</p>}

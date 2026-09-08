@@ -134,6 +134,22 @@ async function alterMissingColumns() {
       expires_at TIMESTAMP,
       created_at TIMESTAMP DEFAULT NOW()
     )`,
+    // Older databases may have announcement consumers without the table
+    // itself. Create the additive parent table before its dismissal FK.
+    `CREATE TABLE IF NOT EXISTS announcements (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      type TEXT DEFAULT 'announcement',
+      image_url TEXT,
+      action_url TEXT,
+      is_active BOOLEAN DEFAULT true,
+      priority INTEGER DEFAULT 0,
+      starts_at TIMESTAMP DEFAULT NOW(),
+      expires_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
     `CREATE TABLE IF NOT EXISTS announcement_dismissals (
       user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       announcement_id VARCHAR NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
@@ -232,8 +248,6 @@ async function alterMissingColumns() {
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
-    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
-    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
     `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
     `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
@@ -329,6 +343,8 @@ async function alterMissingColumns() {
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
     `CREATE INDEX IF NOT EXISTS virtual_accounts_user_currency_idx ON virtual_accounts(user_id, currency)`,
+    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
+    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     // Append-only ledger for wallets, virtual accounts, and virtual cards.
     `CREATE TABLE IF NOT EXISTS ledger_entries (
       id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),

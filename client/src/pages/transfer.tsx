@@ -105,6 +105,7 @@ export default function TransferPage() {
     : destinationAsset.currency === "USD" ? 1 : Number(fiatRates[destinationAsset.currency] || 0);
   const receiveAmount = netUsd * destinationPerUsd;
   const quoteRate = transferAmount > 0 ? receiveAmount / transferAmount : 0;
+  const quoteReady = transferAmount > 0 && sourceAsset.usdRate > 0 && destinationPerUsd > 0;
 
   const transferMutation = useMutation({
     mutationFn: async (security?: { pin?: string; authenticatorCode?: string }) => {
@@ -209,9 +210,10 @@ export default function TransferPage() {
               <input
                  type="text"
                  inputMode="decimal"
-                 pattern="[0-9]*[.]?[0-9]*"
-                min="0.00000001"
-                step="any"
+                 autoComplete="off"
+                 autoCorrect="off"
+                 autoCapitalize="none"
+                 enterKeyHint="done"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
                 placeholder="0.00"
@@ -268,15 +270,17 @@ export default function TransferPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Source available</span><span>{sourceAsset.balance.toLocaleString()} {sourceAsset.currency}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{transferAmount.toFixed(8)} {sourceAsset.currency}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(feeRate * 100).toFixed(2)}%)</span><span>{fee.toFixed(8)} {sourceAsset.currency}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>1 {sourceAsset.currency} = {quoteRate < 0.01 ? quoteRate.toFixed(8) : quoteRate.toFixed(4)} {destinationAsset.currency}</span></div>
+               <div className="flex justify-between"><span className="text-muted-foreground">Source value</span><span>{quoteReady ? `$${(transferAmount * sourceAsset.usdRate).toFixed(2)}` : "Rate unavailable"}</span></div>
+               <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>{quoteReady ? `1 ${sourceAsset.currency} = ${quoteRate < 0.01 ? quoteRate.toFixed(8) : quoteRate.toFixed(4)} ${destinationAsset.currency}` : "Loading rate…"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{destinationAsset.balance.toLocaleString()} {destinationAsset.currency}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">You receive</span><span>{receiveAmount.toFixed(8)} {destinationAsset.currency}</span></div>
+               <div className="flex justify-between"><span className="text-muted-foreground">You receive</span><span>{quoteReady ? `${receiveAmount.toFixed(8)} ${destinationAsset.currency}` : "Rate unavailable"}</span></div>
+               <div className="flex justify-between"><span className="text-muted-foreground">You receive (USD)</span><span>{quoteReady ? `$${netUsd.toFixed(2)}` : "Rate unavailable"}</span></div>
               <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total debited</span><span>{(transferAmount + fee).toFixed(8)} {sourceAsset.currency}</span></div>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">The final server quote is recalculated when you confirm.</p>
             <div className="mt-5 flex gap-2">
               <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setReview(false)}>Edit</button>
-              <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={transferMutation.isPending} onClick={() => transferMutation.mutate({})}>
+               <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={transferMutation.isPending || !quoteReady} onClick={() => transferMutation.mutate({})}>
                 {transferMutation.isPending ? "Transferring…" : "Confirm transfer"}
               </button>
             </div>
