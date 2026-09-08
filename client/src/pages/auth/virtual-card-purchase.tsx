@@ -372,8 +372,8 @@ export default function VirtualCardPurchasePage() {
                     <p className="text-xs text-muted-foreground mb-2">
                       Use a live CoinGecko price to calculate the exact amount.
                     </p>
-                    <div className="flex items-center gap-2 text-xs">
-                      <span className="material-icons text-primary text-xs">currency_bitcoin</span>
+                  <div className="flex items-center gap-2 text-xs">
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[11px] font-bold">₿</span>
                       <span className="text-muted-foreground">BTC, ETH, USDT, or USDC</span>
                     </div>
                   </div>
@@ -407,7 +407,7 @@ export default function VirtualCardPurchasePage() {
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-muted/50 p-4 rounded-xl border border-border text-left space-y-3"
+                className="bg-primary/5 dark:bg-primary/10 p-4 rounded-xl border border-primary/20 text-left space-y-3"
               >
                 <h4 className="font-semibold flex items-center">
                   <span className="material-icons text-primary mr-2 text-sm">payments</span>
@@ -464,7 +464,7 @@ export default function VirtualCardPurchasePage() {
                 </div>
                 <Button
                   onClick={() => cryptoCardPurchase.mutate()}
-                  className="w-full"
+                  className="w-full bg-primary hover:bg-primary/90"
                   disabled={!cryptoRate || cryptoCardPurchase.isPending}
                 >
                   {cryptoCardPurchase.isPending ? "Preparing..." : `Start ${cryptoCoin} payment`}

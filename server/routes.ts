@@ -5212,11 +5212,11 @@ p{color:#6b7280;font-size:14px;}</style>
             await db.update(wallets).set({ isDefault: true, updatedAt: new Date() }).where(eq(wallets.id, matchingWallet.id));
           } else {
             // Create wallet for the selected currency if it doesn't exist
-            const enabledSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
-            const enabled = (enabledSetting.rows[0]?.value?.replace(/['"]/g, '') || "USD,KES").split(",");
-            if (enabled.includes(defaultCurrency)) {
+            const supportedCurrencies = NEXUSPAY_CURRENCIES.map(c => c.code);
+            const normalizedDefault = normalizeCurrency(defaultCurrency);
+            if (supportedCurrencies.includes(normalizedDefault)) {
               await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
-              await db.insert(wallets).values({ userId, currency: defaultCurrency, isDefault: true, isActive: true });
+              await db.insert(wallets).values({ userId, currency: normalizedDefault, isDefault: true, isActive: true });
             }
           }
         } catch (walletSyncErr) {
@@ -14089,7 +14089,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const enabled = await getEnabledCurrencyCodes();
       const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
       const defaultCurrency = (defSetting.rows[0]?.value || "USD").replace(/['"]/g, '').trim();
-      const currencies = NEXUSPAY_CURRENCIES.filter(c => enabled.includes(c.code));
+      // User-facing currency selectors should expose the complete NexusPay catalog.
+      // Keep `enabled` in the response for admin/configuration consumers, but do not
+      // hide supported currencies because an older external-DB setting is incomplete.
+      const currencies = NEXUSPAY_CURRENCIES;
       res.json({ currencies, defaultCurrency, enabled });
     } catch (e: any) {
       res.json({ currencies: NEXUSPAY_CURRENCIES, defaultCurrency: "USD", enabled: NEXUSPAY_CURRENCIES.map(c => c.code) });

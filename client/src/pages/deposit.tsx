@@ -115,7 +115,10 @@ export default function DepositPage() {
   });
 
   const methods = config?.methods || {};
-  const isEnabled = (m: string) => methods[`${m}_enabled`] === "true";
+  const isEnabled = (m: string) => {
+    const value = methods[`${m}_enabled`];
+    return value === true || String(value).replace(/['"]/g, "").toLowerCase() === "true";
+  };
   const configuredGateway = String(methods.default_gateway || "payhero").toLowerCase();
   const isMakamescoKesDeposit = selectedMethod === "nexuspay"
     && nexusCurrency === "KES"
@@ -124,8 +127,12 @@ export default function DepositPage() {
     ? Math.round(parseFloat(amount) * Number(config?.usdToKesRate || 129))
     : 0;
 
-  const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card"] as const).filter(m => isEnabled(m));
-  const nexuspayEnabled = isEnabled("global");
+  const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).filter(m =>
+    m === "nexuspay" ? true : isEnabled(m)
+  );
+  // NexusPay is the live multi-currency gateway and must not be shown as "Coming Soon"
+  // when an older external-DB settings row is missing or still has the legacy flag.
+  const nexuspayEnabled = true;
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {

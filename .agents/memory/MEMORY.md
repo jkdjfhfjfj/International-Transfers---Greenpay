@@ -2,3 +2,4 @@
 - [Safe schema changes](safe-schema-changes.md) — never approve an unrelated destructive Drizzle diff; isolate additive changes and leave production migration to publish.
 - [Legacy migration ordering](legacy-migration-ordering.md) — add missing columns before backfills; one old table shape must not prevent later additive repairs.
 - [WebAuthn trust boundary](webauthn-trust-boundary.md) — credential IDs are identifiers only; login requires a server challenge and verified assertion signature.
+- [External settings normalization](external-settings-normalization.md) — external Neon system-setting values may be JSON-quoted; normalize before comparing currencies or feature flags.

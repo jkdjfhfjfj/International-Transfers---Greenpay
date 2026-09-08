@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
-import { WavyHeader } from "@/components/wavy-header";
 import { useWallets, useWalletExchange } from "@/hooks/use-wallets";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -238,13 +237,7 @@ export default function ExchangePage() {
 
   return (
     <div className="min-h-screen bg-background pb-40">
-      <WavyHeader size="sm" />
-
       <div className="max-w-lg mx-auto p-4 space-y-4">
-        <div className="flex items-center gap-2">
-          <h1 className="font-bold text-lg">Exchange</h1>
-        </div>
-
         <AnimatePresence mode="wait">
           {success ? (
             <motion.div
@@ -418,9 +411,9 @@ export default function ExchangePage() {
         </AnimatePresence>
       </div>
 
-      {/* Fixed bottom Exchange button — Android style, above bottom nav */}
+      {/* Fixed bottom Exchange button — Android style, always above mobile navigation */}
       {!success && (
-        <div className="fixed bottom-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-sm border-t border-border md:bottom-0">
+        <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:bottom-0">
           <div className="max-w-lg mx-auto p-4">
             <Button
               onClick={() => handleExchange()}
@@ -434,8 +427,10 @@ export default function ExchangePage() {
                 <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
               )}
             </Button>
-      </div>
-       {confirmOpen && (
+        </div>
+      )}
+
+      {confirmOpen && (
          <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-4 md:items-center">
            <div className="w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 md:hidden" />
@@ -449,8 +444,9 @@ export default function ExchangePage() {
              </div>
            </div>
          </div>
-       )}
-       <PINModal
+      )}
+
+      <PINModal
         isOpen={!!securityPrompt}
         onClose={() => setSecurityPrompt(null)}
         requiresPin={securityPrompt?.pin}
@@ -463,8 +459,6 @@ export default function ExchangePage() {
         }}
         isLoading={isExchanging}
       />
-        </div>
-      )}
     </div>
   );
 }

@@ -149,7 +149,10 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Do not dump system settings or API-key configuration into logs/WebSocket activity.
+      // The endpoint is still available to the app; only its sensitive response is omitted.
+      const shouldLogResponse = path !== "/api/system-settings";
+      if (capturedJsonResponse && shouldLogResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
@@ -171,7 +174,7 @@ app.use((req, res, next) => {
             path,
             statusCode: res.statusCode,
             duration,
-            response: capturedJsonResponse
+            response: shouldLogResponse ? capturedJsonResponse : undefined
           }
         ));
       }

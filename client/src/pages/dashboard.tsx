@@ -401,6 +401,7 @@ export default function DashboardPage() {
               whileTap={{ scale: 0.95 }}
               onClick={() => setLocation('/exchange')}
               className="flex-1 flex items-center justify-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+              title="Exchange between wallets"
             >
               <ArrowLeftRight className="w-3 h-3" />
               Exchange

@@ -123,6 +123,7 @@ export default function PaymentRequestsPage() {
         }
         if (error.requiresPin || error.requiresAuthenticator) {
           setPendingPayment(id);
+          setConfirmation(null);
           setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });
           return;
         }
@@ -418,7 +419,7 @@ export default function PaymentRequestsPage() {
           </motion.div>
         </AnimatePresence>
       </div>
-      {confirmation && (
+      {confirmation && !securityPrompt && (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
             <h3 className="text-lg font-semibold">

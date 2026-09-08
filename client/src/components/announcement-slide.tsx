@@ -275,17 +275,16 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
             className="fixed inset-0 z-[100] flex items-center justify-center p-4"
           >
-            <div className="relative w-full max-w-md bg-card shadow-2xl rounded-2xl border border-primary/10 overflow-hidden">
+            <div className="relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-primary/10 bg-card shadow-2xl">
               {hasMedia && (
                 <div
-                  className="relative w-full cursor-pointer overflow-hidden"
-                  style={{ height: mediaIsVideo ? 180 : 150 }}
+                  className="relative flex h-[min(46vh,360px)] w-full cursor-pointer items-center justify-center overflow-hidden bg-muted/30"
                   onClick={() => setMediaOpen(true)}
                 >
                   {mediaIsVideo ? (
                     <video
                       src={current.imageUrl}
-                      className="w-full h-full object-cover"
+                      className="h-full w-full bg-black/5 object-contain"
                       muted
                       playsInline
                     />
@@ -293,7 +292,7 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
                     <img
                       src={current.imageUrl}
                       alt={current.title}
-                      className="w-full h-full object-cover"
+                      className="h-full w-full object-contain"
                     />
                   )}
                   <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
@@ -407,7 +406,7 @@ export default function AnnouncementSlide({ announcements, userId }: Announcemen
               )}
               <button
                 onClick={handleDismissForever}
-                className="w-full border-t border-border px-4 py-3 text-center text-xs font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+                   className="mx-4 mb-4 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-center text-xs font-semibold text-primary transition-colors hover:bg-primary/10"
               >
                 Do not show again
               </button>

@@ -76,7 +76,7 @@ export function PINModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="z-[220] sm:max-w-md">
+      <DialogContent className="z-[300] sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Lock className="w-5 h-5" />
