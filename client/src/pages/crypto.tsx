@@ -648,7 +648,7 @@ export default function CryptoPage() {
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <ArrowDownToLine className="w-4 h-4" />
-                  {depositMutation.isPending ? "Generating..." : "Generate Deposit Instructions"}
+                  {depositMutation.isPending ? "Preparing..." : "Review deposit"}
                 </button>
               </div>
             </motion.div>
@@ -753,7 +753,18 @@ export default function CryptoPage() {
                 </div>
                  <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Amount in source account</label>
-                  <input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="none"
+                    enterKeyHint="done"
+                    value={transferAmount}
+                    onChange={(event) => setTransferAmount(event.target.value)}
+                    placeholder="0.00"
+                    className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background"
+                  />
                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                      <span>Available: <strong className="text-foreground">{formatCryptoAmount(sourceAvailableBalance)} {transferSourceAsset.currency}</strong></span>
                      <button type="button" className="text-primary font-semibold" onClick={() => setTransferAmount(String(sourceAvailableBalance))}>Use max</button>
@@ -1011,8 +1022,8 @@ export default function CryptoPage() {
            <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDepositReview(false)}>
               <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
-               <p className="text-lg font-bold">Confirm deposit instructions</p>
-               <p className="mt-1 text-xs text-muted-foreground">The selected admin address and network will be shown after confirmation.</p>
+                <p className="text-lg font-bold">Review deposit</p>
+                <p className="mt-1 text-xs text-muted-foreground">Your admin-configured address and network will be shown after confirmation. No new address is generated.</p>
                <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
                  <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(depositAmount)} {selectedCoin}</span></div>
                   <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{Number(rates[selectedCoin]) > 0 ? formatUsdValue(Number(depositAmount || 0) * Number(rates[selectedCoin])) : "Rate unavailable"}</span></div>
@@ -1020,7 +1031,7 @@ export default function CryptoPage() {
                <div className="mt-5 flex gap-2">
                  <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setDepositReview(false)}>Edit</button>
                  <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground" onClick={() => { setDepositReview(false); depositMutation.mutate({ coin: selectedCoin, amount: depositAmount }); }}>
-                   Generate instructions
+                    Show deposit instructions
                  </button>
                </div>
              </motion.div>

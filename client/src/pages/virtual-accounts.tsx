@@ -169,33 +169,49 @@ export default function VirtualAccountsPage() {
     && form.monthlyVolume.trim().length > 0
     && form.purpose.trim().length >= 5;
   const step2Valid = Object.values(declarations).every(Boolean);
+  const accountStatusLabel = !selectedApp
+    ? "Not applied"
+    : selectedApp.status === "approved"
+      ? "Active"
+      : selectedApp.status === "pending"
+        ? "Under review"
+        : "Action needed";
 
   // ─── Currency selector ────────────────────────────────────────────────────
   const CurrencySelector = (
-    <div className="grid grid-cols-3 gap-2">
-      {supportedCurrencies.map((code) => {
-        const meta = currencyMeta[code] || { flag: "🌍", name: code, enabled: true };
-        return (
-        <button
-          key={code}
-          onClick={() => { setCurrency(code); setApplying(false); setStep(1); }}
-          className={[
-            "relative rounded-2xl border-2 p-3 text-left transition-all",
-            "hover:shadow-md cursor-pointer",
-            currency === code
-               ? "border-primary bg-primary/5 shadow-sm"
-              : "border-transparent bg-card shadow-sm",
-          ].join(" ")}
-        >
-          <div className="text-2xl mb-1">{meta.flag}</div>
-          <div className="font-bold text-sm text-foreground">{code}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">{meta.name}</div>
-          {currency === code && (
-            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary" />
-          )}
-        </button>
-        );
-      })}
+    <div className="rounded-3xl border border-border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Choose an account</p>
+          <p className="text-xs text-muted-foreground">Select the currency you want to receive.</p>
+        </div>
+        <Badge variant="secondary">{currency}</Badge>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        {supportedCurrencies.map((code) => {
+          const meta = currencyMeta[code] || { flag: "🌍", name: code, enabled: true };
+          return (
+          <button
+            key={code}
+            onClick={() => { setCurrency(code); setApplying(false); setStep(1); }}
+            className={[
+              "relative rounded-2xl border-2 p-3 text-left transition-all",
+              "hover:shadow-md cursor-pointer",
+              currency === code
+                 ? "border-primary bg-primary/5 shadow-sm"
+                : "border-transparent bg-muted/40",
+            ].join(" ")}
+          >
+            <div className="text-2xl mb-1">{meta.flag}</div>
+            <div className="font-bold text-sm text-foreground">{code}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5">{meta.name}</div>
+            {currency === code && (
+              <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
+            )}
+          </button>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -260,9 +276,10 @@ export default function VirtualAccountsPage() {
             <Input
                type="text"
                inputMode="decimal"
-               pattern="[0-9]*[.]?[0-9]*"
-              min="0.01"
-              step="0.01"
+               autoComplete="off"
+               autoCorrect="off"
+               autoCapitalize="none"
+               enterKeyHint="done"
               value={transferAmount}
               onChange={e => setTransferAmount(e.target.value)}
               placeholder={`Amount in ${currency}`}
@@ -409,6 +426,14 @@ export default function VirtualAccountsPage() {
             </motion.div>
           ) : (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
+               <div className="rounded-2xl bg-primary/5 border border-primary/20 p-3">
+                 <p className="text-xs font-semibold text-primary">Review your {currency} application</p>
+                 <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                   <div><span className="text-muted-foreground">Income source</span><p className="font-medium text-foreground">{form.sourceOfIncome}</p></div>
+                   <div><span className="text-muted-foreground">Monthly volume</span><p className="font-medium text-foreground">{form.monthlyVolume}</p></div>
+                   <div className="col-span-2"><span className="text-muted-foreground">Purpose</span><p className="font-medium text-foreground">{form.purpose}</p></div>
+                 </div>
+               </div>
                <p className="text-sm font-medium text-foreground mb-2">Compliance declarations</p>
                <p className="text-xs leading-relaxed text-muted-foreground mb-3">
                  These confirmations help us meet banking-partner requirements. Select each statement only if it is accurate for you.
@@ -494,13 +519,26 @@ export default function VirtualAccountsPage() {
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
         {/* Page heading */}
-        <div className="flex items-center gap-3 pt-1">
-          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-            <Building2 className="w-5 h-5 text-white" />
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-700 via-green-600 to-lime-500 p-5 text-white shadow-lg shadow-green-900/10">
+          <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" />
+          <div className="relative flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15">
+                <Building2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="font-bold">Virtual Accounts</h1>
+                <p className="text-xs text-white/75">Receive payments in configured currencies</p>
+              </div>
+            </div>
+            <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-semibold">{accountStatusLabel}</span>
           </div>
-          <div>
-            <h1 className="font-bold text-foreground">Virtual Accounts</h1>
-        <p className="text-xs text-muted-foreground">Receive payments in your configured currencies</p>
+          <div className="relative mt-5 flex items-end justify-between">
+            <div>
+              <p className="text-xs text-white/70">Selected account</p>
+              <p className="mt-1 text-2xl font-bold">{selectedCurrencyMeta.flag} {currency}</p>
+            </div>
+            <p className="max-w-[150px] text-right text-xs leading-relaxed text-white/75">{selectedCurrencyMeta.name}</p>
           </div>
         </div>
 
@@ -515,9 +553,9 @@ export default function VirtualAccountsPage() {
         ) : applying || (!selectedApp && !applying) ? (
           applying ? ApplicationForm : NoApplication
         ) : selectedApp?.status === "approved" && selectedApp.accountDetails ? (
-          <ApprovedCard app={selectedApp} />
+          ApprovedCard({ app: selectedApp })
         ) : selectedApp ? (
-          <StatusCard app={selectedApp} />
+          StatusCard({ app: selectedApp })
         ) : null}
       </main>
       <AnimatePresence>
