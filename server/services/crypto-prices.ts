@@ -145,7 +145,7 @@ async function fetchCoinGecko(apiKey?: string): Promise<CryptoPriceSnapshot> {
 }
 
 async function fetchCoinCap(apiKey?: string): Promise<CryptoPriceSnapshot> {
-  const response = await fetch(`https://api.coincap.io/v2/assets?ids=${POPULAR_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",")}`, {
+  const response = await fetch(`https://api.coincap.io/v2/assets?ids=${POPULAR_CRYPTO_COINS.map((coin) => coin === "BNB" ? "binance-coin" : COINGECKO_IDS[coin]).join(",")}`, {
     headers: apiKey ? { authorization: `Bearer ${apiKey}` } : undefined,
   });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);

@@ -389,15 +389,15 @@ export default function ExchangePage() {
                 >
                   <div className="flex justify-between text-muted-foreground">
                     <span>Exchange amount</span>
-                    <span>{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(amountNum, 4)} {fromWallet?.currency}</span>
+                    <span>{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatExchangeAmount(amountNum, fromWallet?.currency)} {fromWallet?.currency}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Exchange fee</span>
-                    <span>−{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatNumber(feeNum, 4)} {fromWallet?.currency} ({(FEE_RATE * 100).toFixed(2)}%)</span>
+                    <span>−{CURRENCY_SYMBOLS[fromWallet?.currency || ''] || ''}{formatExchangeAmount(feeNum, fromWallet?.currency)} {fromWallet?.currency} ({(FEE_RATE * 100).toFixed(2)}%)</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Net amount</span>
-                    <span>{formatNumber(netAmount, 4)} {fromWallet?.currency}</span>
+                    <span>{formatExchangeAmount(netAmount, fromWallet?.currency)} {fromWallet?.currency}</span>
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Rate</span>
@@ -405,7 +405,7 @@ export default function ExchangePage() {
                   </div>
                   <div className="border-t border-border pt-1.5 flex justify-between font-semibold text-foreground">
                     <span>You receive</span>
-                    <span>{CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatNumber(receiveAmount, 4)} {toWallet?.currency}</span>
+                    <span>{CURRENCY_SYMBOLS[toWallet?.currency || ''] || ''}{formatExchangeAmount(receiveAmount, toWallet?.currency)} {toWallet?.currency}</span>
                   </div>
                 </motion.div>
               )}
@@ -435,7 +435,22 @@ export default function ExchangePage() {
               )}
             </Button>
       </div>
-      <PINModal
+       {confirmOpen && (
+         <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-4 md:items-center">
+           <div className="w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
+             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 md:hidden" />
+             <h3 className="text-lg font-bold">Confirm exchange</h3>
+             <p className="mt-2 text-sm text-muted-foreground">
+               Exchange {formatExchangeAmount(amountNum, fromWallet?.currency)} {fromWallet?.currency} for approximately {formatExchangeAmount(receiveAmount, toWallet?.currency)} {toWallet?.currency}?
+             </p>
+             <div className="mt-5 flex gap-2">
+               <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+               <Button className="flex-1" onClick={() => void handleExchange()}>Confirm</Button>
+             </div>
+           </div>
+         </div>
+       )}
+       <PINModal
         isOpen={!!securityPrompt}
         onClose={() => setSecurityPrompt(null)}
         requiresPin={securityPrompt?.pin}

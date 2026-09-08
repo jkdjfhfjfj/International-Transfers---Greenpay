@@ -303,10 +303,10 @@ export default function VirtualAccountsPage() {
         {isPending  && <Clock      className="w-8 h-8 text-amber-500 mt-0.5 shrink-0" />}
         {isRejected && <XCircle    className="w-8 h-8 text-red-500 mt-0.5 shrink-0" />}
         <div className="space-y-1">
-          <p className="font-semibold text-slate-800">
+          <p className="font-semibold text-foreground">
             {isPending  ? "Application under review"    : "Application not approved"}
           </p>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             {isPending
               ? "Our compliance team is reviewing your request. This typically takes 1–3 business days."
               : "Your application was not approved at this time."}
@@ -328,14 +328,14 @@ export default function VirtualAccountsPage() {
   const ApplicationForm = (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
       {/* progress */}
-      <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3">
-        <div className="flex items-center justify-between text-xs text-slate-500">
-          <span className="font-medium text-slate-700">
+      <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-3">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">
             Step {step} of 2 — {step === 1 ? "Funding profile" : "Compliance declarations"}
           </span>
           <span>{step === 1 ? "50%" : "100%"}</span>
         </div>
-        <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
             className="h-full bg-emerald-500 rounded-full transition-all duration-500"
             style={{ width: step === 1 ? "50%" : "100%" }}
@@ -350,7 +350,7 @@ export default function VirtualAccountsPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
+      <div className="bg-card rounded-2xl border border-border shadow-sm p-4 space-y-4">
         <AnimatePresence mode="wait">
           {step === 1 ? (
             <motion.div key="step1" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-4">
@@ -380,7 +380,7 @@ export default function VirtualAccountsPage() {
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-sm font-medium">Expected senders <span className="text-slate-400 font-normal">(optional)</span></Label>
+                <Label className="text-sm font-medium">Expected senders <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
                   value={form.expectedSenders}
                   onChange={e => setForm({ ...form, expectedSenders: e.target.value })}
@@ -390,18 +390,18 @@ export default function VirtualAccountsPage() {
             </motion.div>
           ) : (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-              <p className="text-sm font-medium text-slate-700 mb-2">Please confirm all declarations to continue</p>
+              <p className="text-sm font-medium text-foreground mb-2">Please confirm all declarations to continue</p>
               {DECLARATIONS.map(([key, label]) => (
                 <label key={key} className={[
                   "flex gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-colors",
-                  (declarations as any)[key] ? "border-emerald-300 bg-emerald-50" : "border-slate-200 hover:bg-slate-50",
+                  (declarations as any)[key] ? "border-primary/30 bg-primary/5" : "border-border hover:bg-muted",
                 ].join(" ")}>
                   <Checkbox
                     checked={(declarations as any)[key]}
                     onCheckedChange={v => setDeclarations({ ...declarations, [key]: !!v })}
                     className="mt-0.5 shrink-0"
                   />
-                  <span className="text-slate-700 leading-relaxed">{label}</span>
+                  <span className="text-foreground leading-relaxed">{label}</span>
                 </label>
               ))}
               <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 flex gap-2 text-xs text-emerald-800">
@@ -442,20 +442,20 @@ export default function VirtualAccountsPage() {
   // ─── No application yet ───────────────────────────────────────────────────
   const NoApplication = (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl border shadow-sm p-6 text-center space-y-4"
+      className="bg-card rounded-2xl border border-border shadow-sm p-6 text-center space-y-4"
     >
       <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
         <Building2 className="w-7 h-7 text-emerald-600" />
       </div>
       <div>
-        <p className="font-bold text-slate-800">Apply for a {currency} account</p>
-        <p className="text-sm text-slate-500 mt-1">
+        <p className="font-bold text-foreground">Apply for a {currency} account</p>
+        <p className="text-sm text-muted-foreground mt-1">
           Get dedicated {selectedCurrencyMeta.name} bank details to receive international payments.
         </p>
       </div>
-      <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         {["Dedicated IBAN / account number", "Multi-currency support", "Compliance-backed", "Fast approval"].map(f => (
-          <div key={f} className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-3 py-2">
+          <div key={f} className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> {f}
           </div>
         ))}
@@ -487,7 +487,7 @@ export default function VirtualAccountsPage() {
 
         {/* Content */}
         {isLoading ? (
-          <div className="bg-white rounded-2xl border shadow-sm p-8 flex justify-center">
+          <div className="bg-card rounded-2xl border border-border shadow-sm p-8 flex justify-center">
             <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : applying || (!selectedApp && !applying) ? (

@@ -1,18 +1,11 @@
-import OpenAI from "openai";
-
 export class OpenAIService {
-  private openai: OpenAI;
+  private apiKey: string;
 
   constructor() {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
+    this.apiKey = process.env.GROQ_API_KEY || "";
+    if (!this.apiKey) {
       console.warn('⚠️ Groq API key not configured');
     }
-
-    this.openai = new OpenAI({
-      apiKey: apiKey || '',
-      baseURL: 'https://api.groq.com/openai/v1',
-    });
   }
 
   async generateResponse(
@@ -35,18 +28,27 @@ You MUST only answer questions related to Geepay's features and services:
 If asked about unrelated topics, politely redirect the user.
 `;
 
-      const response = await this.openai.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages.map(msg => ({
-            role: msg.role === 'assistant' ? 'assistant' : 'user' as const,
-            content: msg.content
-          }))
-        ],
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages.map(msg => ({
+              role: msg.role === "assistant" ? "assistant" : "user",
+              content: msg.content,
+            })),
+          ],
+        }),
       });
 
-      return response.choices[0]?.message?.content || 'Unable to generate response';
+      if (!response.ok) throw new Error(`Groq request failed with HTTP ${response.status}`);
+      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
+      return data.choices?.[0]?.message?.content || 'Unable to generate response';
     } catch (error) {
       console.error('Groq AI API error:', error);
       throw error;

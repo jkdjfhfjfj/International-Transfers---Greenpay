@@ -10,19 +10,6 @@ import { WavyHeader } from "@/components/wavy-header";
 import { Copy, Check, ArrowDownToLine, ArrowUpFromLine, CreditCard, RefreshCw, Clock, CheckCircle2, XCircle, AlertCircle, ArrowRightLeft } from "lucide-react";
 import { PINModal } from "@/components/pin-modal";
 
-const COIN_COLORS: Record<string, { accent: string; tint: string }> = {
-  BTC: { accent: '#f97316', tint: 'rgba(249,115,22,0.10)' },
-  ETH: { accent: '#6366f1', tint: 'rgba(99,102,241,0.10)' },
-  USDT: { accent: '#16a34a', tint: 'rgba(22,163,74,0.10)' },
-  USDC: { accent: '#2563eb', tint: 'rgba(37,99,235,0.10)' },
-  SOL: { accent: '#7c3aed', tint: 'rgba(124,58,237,0.10)' },
-  XRP: { accent: '#475569', tint: 'rgba(71,85,105,0.10)' },
-  BNB: { accent: '#ca8a04', tint: 'rgba(202,138,4,0.10)' },
-  ADA: { accent: '#2563eb', tint: 'rgba(37,99,235,0.10)' },
-  DOGE: { accent: '#a16207', tint: 'rgba(161,98,7,0.10)' },
-  TRX: { accent: '#dc2626', tint: 'rgba(220,38,38,0.10)' },
-};
-
 const COIN_ICONS: Record<string, string> = {
   BTC: "₿",
   ETH: "Ξ",
@@ -467,11 +454,10 @@ export default function CryptoPage() {
                 <div className="space-y-2">
                    {POPULAR_COINS.map((coin) => {
                     const change = changes24h[coin];
-                    const meta = COIN_COLORS[coin];
                     return (
                        <button key={coin} onClick={() => setSelectedPopularCoin(coin)} className="w-full flex items-center justify-between rounded-xl bg-muted/50 px-3 py-3 text-left hover:bg-muted transition-colors">
                         <span className="flex items-center gap-3">
-                          <span className="w-9 h-9 rounded-xl flex items-center justify-center font-bold" style={{ background: meta?.tint, color: meta?.accent }}>{COIN_ICONS[coin]}</span>
+                           <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-primary/10 text-primary font-bold">{COIN_ICONS[coin]}</span>
                           <span><span className="block font-semibold text-sm">{COIN_NAMES[coin]}</span><span className="block text-xs text-muted-foreground">{coin}</span></span>
                         </span>
                          <span className="text-right">
@@ -500,17 +486,12 @@ export default function CryptoPage() {
                   <label className="text-sm font-medium text-muted-foreground">Select Coin</label>
                   <div className="grid grid-cols-4 gap-2">
                     {["BTC", "ETH", "USDT", "USDC"].map(coin => {
-                      const cm = COIN_COLORS[coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
                       const active = selectedCoin === coin;
                       return (
                         <button
                           key={coin}
                           onClick={() => setSelectedCoin(coin)}
-                          className="py-2 rounded-xl text-sm font-bold transition-all"
-                          style={active
-                            ? { background: cm.accent, color: '#fff' }
-                            : { background: cm.tint, color: cm.accent }
-                          }
+                          className={`py-2 rounded-xl text-sm font-bold transition-all ${active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}
                         >
                           {coin}
                         </button>
@@ -546,6 +527,11 @@ export default function CryptoPage() {
                           </button>
                         </div>
                         <p className="font-mono text-xs break-all bg-background rounded p-2">{addr.address}</p>
+                        {addr.qrCodeUrl && (
+                          <div className="flex justify-center rounded-xl bg-white p-3">
+                            <img src={addr.qrCodeUrl} alt={`${selectedCoin} deposit QR code`} className="h-36 w-36 object-contain" />
+                          </div>
+                        )}
                         {addr.memo && (
                           <div className="flex items-center gap-2 text-xs">
                             <span className="font-semibold text-orange-600 dark:text-orange-400">Memo/Tag:</span>
@@ -608,17 +594,12 @@ export default function CryptoPage() {
                   <label className="text-sm font-medium text-muted-foreground">Select Coin</label>
                   <div className="grid grid-cols-4 gap-2">
                     {["BTC", "ETH", "USDT", "USDC"].map(coin => {
-                      const cm = COIN_COLORS[coin] || { accent: '#475569', tint: 'rgba(71,85,105,0.10)' };
                       const active = selectedCoin === coin;
                       return (
                         <button
                           key={coin}
                           onClick={() => setSelectedCoin(coin)}
-                          className="py-2 rounded-xl text-sm font-bold transition-all"
-                          style={active
-                            ? { background: cm.accent, color: '#fff' }
-                            : { background: cm.tint, color: cm.accent }
-                          }
+                          className={`py-2 rounded-xl text-sm font-bold transition-all ${active ? "bg-primary text-primary-foreground" : "bg-primary/10 text-primary"}`}
                         >
                           {coin}
                         </button>

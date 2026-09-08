@@ -433,6 +433,20 @@ function AddressManagement() {
             <div>
               <Label>QR Code URL (optional)</Label>
               <Input value={form.qrCodeUrl} onChange={(e) => setForm({ ...form, qrCodeUrl: e.target.value })} placeholder="https://..." data-testid="input-qr" />
+              <Input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="mt-2"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = () => setForm((current: any) => ({ ...current, qrCodeUrl: String(reader.result || "") }));
+                  reader.readAsDataURL(file);
+                }}
+                data-testid="input-qr-upload"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">Paste a hosted image URL or upload a QR image. It will be shown on the user deposit sheet.</p>
             </div>
             <div>
               <Label>Minimum Deposit</Label>
