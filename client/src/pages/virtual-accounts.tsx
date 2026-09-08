@@ -185,7 +185,18 @@ export default function VirtualAccountsPage() {
           <p className="text-sm font-semibold text-foreground">Choose an account</p>
           <p className="text-xs text-muted-foreground">Select the currency you want to receive.</p>
         </div>
-        <Badge variant="secondary">{currency}</Badge>
+        <select
+          value={currency}
+          onChange={(event) => { setCurrency(event.target.value); setApplying(false); setStep(1); }}
+          aria-label="Choose virtual account currency"
+          className="h-9 rounded-xl border border-primary/20 bg-primary/5 px-3 text-sm font-bold text-primary outline-none focus:ring-2 focus:ring-primary/30"
+        >
+          {supportedCurrencies.map((code) => (
+            <option key={code} value={code}>
+              {(currencyMeta[code] || { flag: "🌍" }).flag} {code}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {supportedCurrencies.map((code) => {
@@ -453,7 +464,7 @@ export default function VirtualAccountsPage() {
               ))}
               <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex gap-2 text-xs text-foreground">
                 <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Approved users see admin-configured account details after compliance review.</span>
+                 <span>Approved users see their account details after compliance review.</span>
               </div>
             </motion.div>
           )}

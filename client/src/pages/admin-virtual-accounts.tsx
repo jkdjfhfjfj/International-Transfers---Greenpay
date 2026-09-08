@@ -165,6 +165,9 @@ export default function AdminVirtualAccountsPage() {
 
   const setting = settings.find((s: any) => s.currency === currency) || {};
   const get = (k: string) => draft[k] ?? setting[k] ?? "";
+  const pendingApplications = applications.filter((item: any) => (item.application ?? item).status === "pending").length;
+  const approvedApplications = applications.filter((item: any) => (item.application ?? item).status === "approved").length;
+  const activeSettings = settings.filter((item: any) => item.isActive).length;
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -243,6 +246,31 @@ export default function AdminVirtualAccountsPage() {
   return (
     <AdminShell title="Virtual Accounts">
       <div className="max-w-5xl space-y-6">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-green-700 to-lime-600 p-5 text-white shadow-lg shadow-green-900/10">
+          <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/10" />
+          <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                <p className="text-sm font-semibold text-white/80">Virtual account operations</p>
+              </div>
+              <h1 className="mt-2 text-2xl font-bold">Configure, review, and manage accounts</h1>
+              <p className="mt-1 max-w-xl text-sm text-white/75">Keep receiving details current, review compliance applications, and control balances from one workspace.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                ["Pending", pendingApplications],
+                ["Approved", approvedApplications],
+                ["Configured", activeSettings],
+              ].map(([label, value]) => (
+                <div key={label as string} className="rounded-2xl bg-white/12 px-3 py-2 backdrop-blur">
+                  <p className="text-lg font-bold">{value}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-white/70">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
         {/* ── Settings panel ─────────────────────────────────────────────── */}
         <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
@@ -281,6 +309,20 @@ export default function AdminVirtualAccountsPage() {
           </div>
 
           {/* Currency tabs */}
+           <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/50 px-5 py-3">
+             <div>
+               <p className="text-xs font-semibold text-foreground">Editing receiving details</p>
+               <p className="text-[11px] text-muted-foreground">Choose a currency to update its user-facing account details.</p>
+             </div>
+             <select
+               value={currency}
+               onChange={e => { setCurrency(e.target.value); setDraft({}); setSaveError(""); }}
+               aria-label="Choose currency to edit"
+               className="h-9 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+             >
+               {supportedCurrencies.map(c => <option key={c} value={c}>{CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"} {c}</option>)}
+             </select>
+           </div>
           <div className="flex border-b border-border bg-muted/50">
             {supportedCurrencies.map(c => (
               <button
