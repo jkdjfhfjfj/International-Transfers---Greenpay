@@ -21,6 +21,11 @@ const COIN_ICONS: Record<string, string> = {
   ADA: "₳",
   DOGE: "Ð",
   TRX: "T",
+  LTC: "Ł",
+  AVAX: "A",
+  LINK: "⬡",
+  DOT: "●",
+  SHIB: "🐕",
 };
 
 const COIN_NAMES: Record<string, string> = {
@@ -34,6 +39,11 @@ const COIN_NAMES: Record<string, string> = {
   ADA: "Cardano",
   DOGE: "Dogecoin",
   TRX: "TRON",
+  LTC: "Litecoin",
+  AVAX: "Avalanche",
+  LINK: "Chainlink",
+  DOT: "Polkadot",
+  SHIB: "Shiba Inu",
 };
 
 const COIN_NETWORKS: Record<string, string> = {
@@ -43,7 +53,7 @@ const COIN_NETWORKS: Record<string, string> = {
   USDC: "Ethereum (ERC-20)",
 };
 
-const POPULAR_COINS = ["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"];
+const POPULAR_COINS = ["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX", "LTC", "AVAX", "LINK", "DOT", "SHIB"];
 
 function formatCryptoAmount(value: unknown, decimals = 8): string {
   const amount = Number(value || 0);
@@ -57,11 +67,23 @@ function formatCryptoAmount(value: unknown, decimals = 8): string {
 function formatUsdValue(value: unknown): string {
   const amount = Number(value || 0);
   if (!Number.isFinite(amount)) return "$0.00";
-  if (amount !== 0 && Math.abs(amount) < 0.01) return `$${amount.toFixed(6)}`;
+  if (amount !== 0 && Math.abs(amount) < 0.01) return `$${amount.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}`;
+  return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function formatUsdPrice(value: unknown): string {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount === 0) return "$0.00";
+  if (Math.abs(amount) < 0.01) return `$${amount.toFixed(8).replace(/0+$/, "").replace(/\.$/, "")}`;
+  if (Math.abs(amount) < 1) return `$${amount.toFixed(4)}`;
   return `$${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 type Tab = "wallets" | "popular" | "deposit" | "withdraw" | "transfer" | "history";
+type SecurityAction =
+  | { kind: "deposit"; payload: { coin: string; amount: string } }
+  | { kind: "withdraw"; payload: { coin: string; amount: string; toAddress: string } }
+  | { kind: "transfer" };
 
 export default function CryptoPage() {
   const [activeTab, setActiveTab] = useState<Tab>("wallets");
@@ -75,7 +97,7 @@ export default function CryptoPage() {
   const [transferReview, setTransferReview] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
-  const [pendingSecurityAction, setPendingSecurityAction] = useState<"transfer" | null>(null);
+  const [pendingSecurityAction, setPendingSecurityAction] = useState<SecurityAction | null>(null);
   const [selectedPopularCoin, setSelectedPopularCoin] = useState<string | null>(null);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
@@ -142,9 +164,25 @@ export default function CryptoPage() {
     },
   });
 
+  const openSecurityPrompt = (error: any, action: SecurityAction) => {
+    if (error?.requiresSetup) {
+      toast({ title: "Security setup required", description: "Set up a PIN or authenticator before making crypto transactions." });
+      setLocation("/settings");
+      return true;
+    }
+    const requiresPin = Boolean(error?.requiresPin ?? error?.securityOptions?.pin);
+    const requiresAuthenticator = Boolean(error?.requiresAuthenticator ?? error?.securityOptions?.authenticator);
+    if (requiresPin || requiresAuthenticator || /pin or authenticator|required/i.test(error?.message || "")) {
+      setPendingSecurityAction(action);
+      setSecurityPrompt({ pin: requiresPin || !requiresAuthenticator, authenticator: requiresAuthenticator });
+      return true;
+    }
+    return false;
+  };
+
   const depositMutation = useMutation({
-    mutationFn: async ({ coin, amount }: { coin: string; amount: string }) => {
-      const res = await apiRequest("POST", "/api/crypto/deposit", { coin, amount: parseFloat(amount) });
+    mutationFn: async ({ coin, amount, security }: { coin: string; amount: string; security?: { pin?: string; authenticatorCode?: string } }) => {
+      const res = await apiRequest("POST", "/api/crypto/deposit", { coin, amount: parseFloat(amount), ...security });
       return res.json();
     },
     onSuccess: (data) => {
@@ -152,14 +190,15 @@ export default function CryptoPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions"] });
       setDepositAmount("");
     },
-    onError: (err: any) => {
+    onError: (err: any, variables) => {
+      if (openSecurityPrompt(err, { kind: "deposit", payload: { coin: variables.coin, amount: variables.amount } })) return;
       toast({ title: "Error", description: err?.message || "Failed to initiate deposit", variant: "destructive" });
     },
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: async ({ coin, amount, toAddress }: { coin: string; amount: string; toAddress: string }) => {
-      const res = await apiRequest("POST", "/api/crypto/withdraw", { coin, amount: parseFloat(amount), toAddress });
+    mutationFn: async ({ coin, amount, toAddress, security }: { coin: string; amount: string; toAddress: string; security?: { pin?: string; authenticatorCode?: string } }) => {
+      const res = await apiRequest("POST", "/api/crypto/withdraw", { coin, amount: parseFloat(amount), toAddress, ...security });
       return res.json();
     },
     onSuccess: (data) => {
@@ -168,7 +207,8 @@ export default function CryptoPage() {
       setWithdrawAmount("");
       setWithdrawAddress("");
     },
-    onError: (err: any) => {
+    onError: (err: any, variables) => {
+      if (openSecurityPrompt(err, { kind: "withdraw", payload: { coin: variables.coin, amount: variables.amount, toAddress: variables.toAddress } })) return;
       toast({ title: "Error", description: err?.message || "Failed to process withdrawal", variant: "destructive" });
     },
   });
@@ -209,24 +249,13 @@ export default function CryptoPage() {
       setTransferReview(false);
     },
     onError: (error: any) => {
-      if (error?.requiresSetup) {
-        toast({ title: "Security setup required", description: "Set up a PIN or authenticator before making crypto transactions." });
-        setLocation("/settings");
-        return;
-      }
-      const requiresPin = Boolean(error?.requiresPin ?? error?.securityOptions?.pin);
-      const requiresAuthenticator = Boolean(error?.requiresAuthenticator ?? error?.securityOptions?.authenticator);
-      if (requiresPin || requiresAuthenticator || /pin or authenticator|required/i.test(error?.message || "")) {
-        setPendingSecurityAction("transfer");
-        setSecurityPrompt({ pin: requiresPin || !requiresAuthenticator, authenticator: requiresAuthenticator });
-        return;
-      }
+      if (openSecurityPrompt(error, { kind: "transfer" })) return;
       toast({ title: "Transfer failed", description: error.message, variant: "destructive" });
     },
   });
 
   const wallets: any[] = (walletsData as any)?.wallets || [];
-  const rates: Record<string, number> = (walletsData as any)?.rates || {};
+  const rates: Record<string, number> = (walletsData as any)?.prices || (walletsData as any)?.rates || {};
   const changes24h: Record<string, number> = (walletsData as any)?.changes24h || {};
   const priceSource = (walletsData as any)?.source || "fallback";
   const priceFetchedAt = (walletsData as any)?.fetchedAt;
@@ -279,7 +308,13 @@ export default function CryptoPage() {
         balance: Number(wallet?.availableBalance || 0),
       };
     }
-    return { kind: "card", currency: "USD", usdRate: 1, balance: 0 };
+    const card = cards.find((item) => item.id === value);
+    return {
+      kind: "card",
+      currency: "USD",
+      usdRate: 1,
+      balance: Number(card?.availableBalance ?? card?.balance ?? 0),
+    };
   };
 
   const transferSourceAsset = getTransferAsset(selectedSource);
@@ -425,7 +460,7 @@ export default function CryptoPage() {
                      </div>
                      <div>
                        <p className="text-muted-foreground">USD value</p>
-                       <p className="font-medium text-foreground">${Number(wallet.usdBalance || 0).toFixed(2)}</p>
+                        <p className="font-medium text-foreground">{formatUsdValue(wallet.usdBalance)}</p>
                      </div>
                      <div>
                        <p className="text-muted-foreground">Last updated</p>
@@ -461,8 +496,8 @@ export default function CryptoPage() {
                           <span><span className="block font-semibold text-sm">{COIN_NAMES[coin]}</span><span className="block text-xs text-muted-foreground">{coin}</span></span>
                         </span>
                          <span className="text-right">
-                           <span className="block font-bold text-sm">${Number(rates[coin] || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                           {usdToLocalRate > 0 && localCurrency !== "USD" && <span className="block text-[10px] text-muted-foreground">{localCurrency} {(Number(rates[coin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>}
+                            <span className="block font-bold text-sm">{formatUsdPrice(rates[coin])}</span>
+                            {usdToLocalRate > 0 && localCurrency !== "USD" && <span className="block text-[10px] text-muted-foreground">{localCurrency} {(Number(rates[coin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 6 })}</span>}
                            <span className={`block text-[11px] ${Number(change) >= 0 ? "text-green-600" : "text-red-500"}`}>{typeof change === "number" ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}</span>
                          </span>
                       </button>
@@ -476,9 +511,9 @@ export default function CryptoPage() {
           {/* DEPOSIT TAB */}
           {activeTab === "deposit" && (
             <motion.div key="deposit" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 flex gap-2">
-                <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-blue-700 dark:text-blue-300">Send crypto to your wallet address. Funds will be credited after the required number of blockchain confirmations.</p>
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex gap-2">
+                <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">Send crypto to your wallet address. Funds will be credited after the required number of blockchain confirmations.</p>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 space-y-4">
@@ -501,8 +536,8 @@ export default function CryptoPage() {
                 </div>
 
                 {selectedCoinAddresses.length === 0 ? (
-                  <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-3 text-center">
-                    <p className="text-xs text-yellow-700 dark:text-yellow-300">No {selectedCoin} deposit addresses are currently available. Please check back shortly or contact support.</p>
+                    <div className="bg-muted border border-border rounded-xl p-3 text-center">
+                     <p className="text-xs text-muted-foreground">No {selectedCoin} deposit addresses are currently available. Please check back shortly or contact support.</p>
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -534,7 +569,7 @@ export default function CryptoPage() {
                         )}
                         {addr.memo && (
                           <div className="flex items-center gap-2 text-xs">
-                            <span className="font-semibold text-orange-600 dark:text-orange-400">Memo/Tag:</span>
+                            <span className="font-semibold text-primary">Memo/Tag:</span>
                             <span className="font-mono">{addr.memo}</span>
                             <button
                               onClick={() => copyToClipboard(addr.memo, `memo-${addr.id}`)}
@@ -565,7 +600,7 @@ export default function CryptoPage() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{selectedCoin}</span>
                   </div>
                   {depositAmount && (
-                    <p className="text-xs text-muted-foreground">≈ ${(parseFloat(depositAmount || "0") * (rates[selectedCoin] || 1)).toFixed(2)} USD</p>
+                   <p className="text-xs text-muted-foreground">≈ {formatUsdValue(parseFloat(depositAmount || "0") * (rates[selectedCoin] || 1))} USD</p>
                   )}
                 </div>
 
@@ -584,9 +619,9 @@ export default function CryptoPage() {
           {/* WITHDRAW TAB */}
           {activeTab === "withdraw" && (
             <motion.div key="withdraw" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
-              <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl p-3 flex gap-2">
-                <AlertCircle className="w-4 h-4 text-orange-600 dark:text-orange-400 shrink-0 mt-0.5" />
-                <p className="text-xs text-orange-700 dark:text-orange-300">Withdrawals are deducted from your USD wallet balance at current exchange rates. Processing takes 30–60 minutes.</p>
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 flex gap-2">
+                <AlertCircle className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-xs text-muted-foreground">Withdrawals are deducted from your crypto balance at the current exchange rate. Processing takes 30–60 minutes.</p>
               </div>
 
               <div className="bg-card border border-border rounded-xl p-4 space-y-4">
@@ -621,7 +656,7 @@ export default function CryptoPage() {
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">{selectedCoin}</span>
                   </div>
                   {withdrawAmount && (
-                    <p className="text-xs text-muted-foreground">≈ ${(parseFloat(withdrawAmount || "0") * (rates[selectedCoin] || 1)).toFixed(2)} USD will be deducted</p>
+                     <p className="text-xs text-muted-foreground">≈ {formatUsdValue(parseFloat(withdrawAmount || "0") * (rates[selectedCoin] || 1))} USD will be deducted</p>
                   )}
                 </div>
 
@@ -684,31 +719,13 @@ export default function CryptoPage() {
                      <button type="button" className="text-primary font-semibold" onClick={() => setTransferAmount(String(sourceAvailableBalance))}>Use max</button>
                    </div>
                 </div>
-                {transferReview && (
-                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 space-y-2 text-sm">
-                     <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{formatCryptoAmount(transferAmountNumber)} {transferSourceAsset.currency}</span></div>
-                     <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{formatCryptoAmount(transferFee)} {transferSourceAsset.currency}</span></div>
-                     {transferQuoteRate > 0 && (
-                       <>
-                         <div className="flex justify-between"><span className="text-muted-foreground">Rate quote</span><span>1 {transferSourceAsset.currency} = {transferQuoteRate < 0.01 ? transferQuoteRate.toFixed(8) : transferQuoteRate.toFixed(4)} {transferDestinationAsset.currency}</span></div>
-                         <div className="flex justify-between"><span className="text-muted-foreground">USD value after fee</span><span>${transferNetUsd.toFixed(2)}</span></div>
-                         <div className="flex justify-between font-semibold"><span>You receive</span><span>{formatCryptoAmount(transferQuoteAmount)} {transferDestinationAsset.currency}</span></div>
-                       </>
-                     )}
-                     <div className="flex justify-between font-semibold border-t border-primary/10 pt-2"><span>Total debited</span><span>{formatCryptoAmount(transferAmountNumber + transferFee)} {transferSourceAsset.currency}</span></div>
-                     <p className="text-xs text-muted-foreground">Quote uses the live crypto USD price and the current USD/{localCurrency} rate. The final server quote is locked when you confirm.</p>
-                  </div>
-                )}
                 <button
-                  onClick={() => transferReview ? transferMutation.mutate({}) : setTransferReview(true)}
+                   onClick={() => setTransferReview(true)}
                   disabled={!selectedSource || !selectedDestination || !transferAmount || Number(transferAmount) <= 0 || transferMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50"
                 >
-                  {transferMutation.isPending ? "Transferring..." : transferReview ? "Confirm transfer" : "Review transfer"}
+                   {transferMutation.isPending ? "Transferring..." : "Review transfer"}
                 </button>
-                {transferReview && !transferMutation.isPending && (
-                  <button onClick={() => setTransferReview(false)} className="w-full py-2 text-sm text-muted-foreground">Edit transfer</button>
-                )}
               </div>
             </motion.div>
           )}
@@ -754,7 +771,46 @@ export default function CryptoPage() {
           )}
         </AnimatePresence>
       </div>
-      <PINModal
+       <AnimatePresence>
+         {transferReview && (
+           <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setTransferReview(false)}>
+             <motion.div
+               className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+               initial={{ y: "100%" }}
+               animate={{ y: 0 }}
+               exit={{ y: "100%" }}
+               transition={{ type: "spring", damping: 28, stiffness: 280 }}
+               onClick={(event) => event.stopPropagation()}
+             >
+               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+               <div className="flex items-center justify-between mb-4">
+                 <div>
+                   <p className="text-lg font-bold">Review transfer</p>
+                   <p className="text-xs text-muted-foreground">{transferSourceAsset.currency} → {transferDestinationAsset.currency}</p>
+                 </div>
+                 <ArrowRightLeft className="w-5 h-5 text-primary" />
+               </div>
+               <div className="space-y-2 rounded-2xl bg-muted/60 p-4 text-sm">
+                 <div className="flex justify-between"><span className="text-muted-foreground">Source available</span><span>{formatCryptoAmount(sourceAvailableBalance)} {transferSourceAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{formatCryptoAmount(transferAmountNumber)} {transferSourceAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{formatCryptoAmount(transferFee)} {transferSourceAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>1 {transferSourceAsset.currency} = {transferQuoteRate < 0.01 ? transferQuoteRate.toFixed(8) : transferQuoteRate.toFixed(4)} {transferDestinationAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{formatCryptoAmount(transferDestinationAsset.balance)} {transferDestinationAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">You receive</span><span>{formatCryptoAmount(transferQuoteAmount)} {transferDestinationAsset.currency}</span></div>
+                 <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total debited</span><span>{formatCryptoAmount(transferAmountNumber + transferFee)} {transferSourceAsset.currency}</span></div>
+               </div>
+               <p className="mt-3 text-xs text-muted-foreground">The final server quote is recalculated when you confirm.</p>
+               <div className="mt-5 flex gap-2">
+                 <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setTransferReview(false)}>Edit</button>
+                 <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={transferMutation.isPending} onClick={() => transferMutation.mutate({})}>
+                   {transferMutation.isPending ? "Transferring…" : "Confirm transfer"}
+                 </button>
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
+       </AnimatePresence>
+       <PINModal
         isOpen={!!securityPrompt}
         onClose={() => {
           setSecurityPrompt(null);
@@ -762,16 +818,16 @@ export default function CryptoPage() {
         }}
         requiresPin={securityPrompt?.pin}
         requiresAuthenticator={securityPrompt?.authenticator}
-        title="Confirm crypto transfer"
-        description="Verify your transaction security settings before moving funds."
+         title="Confirm crypto transaction"
+         description="Verify your PIN or authenticator before completing this crypto transaction."
         onSuccess={(pin, authenticatorCode) => {
           setSecurityPrompt(null);
-          if (pendingSecurityAction === "transfer") {
-            transferMutation.mutate({ pin, authenticatorCode });
-          }
+           if (pendingSecurityAction?.kind === "transfer") transferMutation.mutate({ pin, authenticatorCode });
+           if (pendingSecurityAction?.kind === "deposit") depositMutation.mutate({ ...pendingSecurityAction.payload, security: { pin, authenticatorCode } });
+           if (pendingSecurityAction?.kind === "withdraw") withdrawMutation.mutate({ ...pendingSecurityAction.payload, security: { pin, authenticatorCode } });
           setPendingSecurityAction(null);
         }}
-        isLoading={transferMutation.isPending}
+         isLoading={transferMutation.isPending || depositMutation.isPending || withdrawMutation.isPending}
       />
       <AnimatePresence>
         {selectedPopularCoin && (
@@ -797,7 +853,7 @@ export default function CryptoPage() {
                   <p className="text-sm text-muted-foreground">Live market quote</p>
                 </div>
                 <div className="rounded-2xl bg-primary/10 px-4 py-2 text-right text-primary">
-                  <p className="font-bold">{formatUsdValue(rates[selectedPopularCoin])}</p>
+                   <p className="font-bold">{formatUsdPrice(rates[selectedPopularCoin])}</p>
                   <p className="text-[11px]">per {selectedPopularCoin}</p>
                 </div>
               </div>
@@ -810,7 +866,7 @@ export default function CryptoPage() {
                 </div>
                 <div className="rounded-2xl bg-muted/60 p-3">
                   <p className="text-xs text-muted-foreground">{localCurrency} reference</p>
-                  <p className="mt-1 font-semibold">{usdToLocalRate > 0 ? `${localCurrency} ${(Number(rates[selectedPopularCoin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}` : "Loading…"}</p>
+                   <p className="mt-1 font-semibold">{usdToLocalRate > 0 ? `${localCurrency} ${(Number(rates[selectedPopularCoin] || 0) * usdToLocalRate).toLocaleString(undefined, { maximumFractionDigits: 6 })}` : "Loading…"}</p>
                 </div>
               </div>
               <p className="mt-4 text-xs text-muted-foreground">Quotes use the live USD crypto price and the current USD/{localCurrency} rate. The final conversion is recalculated at confirmation.</p>

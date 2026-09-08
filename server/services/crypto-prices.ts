@@ -4,7 +4,10 @@ import { apiConfigurations } from "@shared/schema";
 import { db, pool } from "../db";
 
 export const SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"] as const;
-export const POPULAR_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX"] as const;
+export const POPULAR_CRYPTO_COINS = [
+  "BTC", "ETH", "USDT", "USDC", "SOL", "XRP", "BNB", "ADA", "DOGE", "TRX",
+  "LTC", "AVAX", "LINK", "DOT", "SHIB",
+] as const;
 export type SupportedCryptoCoin = (typeof SUPPORTED_CRYPTO_COINS)[number];
 export type CryptoPriceCoin = (typeof POPULAR_CRYPTO_COINS)[number];
 
@@ -19,6 +22,11 @@ const COINGECKO_IDS: Record<CryptoPriceCoin, string> = {
   ADA: "cardano",
   DOGE: "dogecoin",
   TRX: "tron",
+  LTC: "litecoin",
+  AVAX: "avalanche-2",
+  LINK: "chainlink",
+  DOT: "polkadot",
+  SHIB: "shiba-inu",
 };
 
 const FALLBACK_PRICES: Record<CryptoPriceCoin, number> = {
@@ -32,6 +40,11 @@ const FALLBACK_PRICES: Record<CryptoPriceCoin, number> = {
   ADA: 0.45,
   DOGE: 0.12,
   TRX: 0.12,
+  LTC: 75,
+  AVAX: 35,
+  LINK: 14,
+  DOT: 6,
+  SHIB: 0.00002,
 };
 
 export type CryptoPriceSnapshot = {
@@ -162,6 +175,11 @@ async function fetchCoinCap(apiKey?: string): Promise<CryptoPriceSnapshot> {
     ADA: "cardano",
     DOGE: "dogecoin",
     TRX: "tron",
+    LTC: "litecoin",
+    AVAX: "avalanche",
+    LINK: "chainlink",
+    DOT: "polkadot",
+    SHIB: "shiba-inu",
   };
   const prices = { ...FALLBACK_PRICES };
   const changes24h: Partial<Record<CryptoPriceCoin, number>> = {};

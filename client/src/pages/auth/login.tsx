@@ -37,6 +37,31 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
 
+  const requestOtpMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("POST", "/api/auth/resend-otp", { userId });
+      const data = await response.json();
+      if (!response.ok) throw Object.assign(new Error(data.message || "Failed to send OTP"), data);
+      return data;
+    },
+    onSuccess: (data) => {
+      if (!tempLoginData) return;
+      localStorage.setItem("otpUserId", tempLoginData.userId);
+      localStorage.setItem("otpPhone", tempLoginData.phone || "");
+      localStorage.setItem("otpSentVia", data.sentVia || tempLoginData.sentVia || "");
+      localStorage.setItem("otpEmail", tempLoginData.email || "");
+      // Clear the PIN branch before navigating so a stale overlay cannot
+      // intercept the OTP verification page when the user returns.
+      setRequiresPin(false);
+      setAuthMethod("otp");
+      setTempLoginData(null);
+      setLocation("/auth/otp-verification");
+    },
+    onError: (error: any) => {
+      toast({ title: "OTP unavailable", description: error.message || "Failed to send OTP", variant: "destructive" });
+    },
+  });
+
   useEffect(() => {
     if (window.PublicKeyCredential) {
       setBiometricSupported(true);
@@ -247,26 +272,14 @@ export default function LoginPage() {
 
               <motion.button
                 whileHover={{ scale: 1.02 }}
-                onClick={() => {
-                  // Trigger OTP
-                  const response = apiRequest("POST", "/api/auth/resend-otp", { userId: tempLoginData.userId });
-                  response.then(async (res) => {
-                    const data = await res.json();
-                    localStorage.setItem("otpUserId", tempLoginData.userId);
-                    localStorage.setItem("otpPhone", tempLoginData.phone);
-                    localStorage.setItem("otpSentVia", data.sentVia || "");
-                    localStorage.setItem("otpEmail", tempLoginData.email || "");
-                    setLocation("/auth/otp-verification");
-                  }).catch(() => {
-                    toast({ title: "Error", description: "Failed to send OTP", variant: "destructive" });
-                  });
-                }}
+                  onClick={() => requestOtpMutation.mutate(tempLoginData.userId)}
+                  disabled={requestOtpMutation.isPending}
                 className="w-full p-4 border border-border rounded-lg bg-card hover:bg-muted transition-colors text-left"
               >
                 <div className="flex items-center">
                   <span className="material-icons text-secondary mr-3">mail</span>
                   <div>
-                    <p className="font-semibold">Use OTP Code</p>
+                    <p className="font-semibold">{requestOtpMutation.isPending ? "Sending code…" : "Use OTP Code"}</p>
                     <p className="text-sm text-muted-foreground">6-digit code via SMS/Email</p>
                   </div>
                 </div>

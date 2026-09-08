@@ -40,6 +40,11 @@ export default function TransferPage() {
     enabled: !!user?.id,
     queryFn: async () => (await apiRequest("GET", "/api/transaction-fees")).json(),
   });
+  const { data: fiatRatesData } = useQuery({
+    queryKey: ["/api/exchange-rates/USD"],
+    enabled: !!user?.id,
+    queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
+  });
 
   const cryptoWallets: any[] = (cryptoData as any)?.wallets || [];
   const cards: any[] = ((cardData as any)?.cards || []).filter((card: any) => card.status === "active");
@@ -64,6 +69,42 @@ export default function TransferPage() {
     : destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
   const feeRate = Number((feeData as any)?.exchangeFeeRate || 0);
   const fee = Number(amount || 0) * feeRate;
+  const cryptoPrices: Record<string, number> = (cryptoData as any)?.prices || (cryptoData as any)?.rates || {};
+  const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
+
+  const getAsset = (reference: string) => {
+    const [kind, value] = reference.split(":");
+    if (kind === "crypto") {
+      const wallet = cryptoWallets.find((item) => item.coin === value);
+      return {
+        kind,
+        currency: value,
+        usdRate: Number(cryptoPrices[value] || wallet?.usdRate || 0),
+        balance: Number(wallet?.balance || 0),
+      };
+    }
+    if (kind === "wallet") {
+      const wallet = userWallets.find((item) => item.id === value);
+      const currency = String(wallet?.currency || "USD").toUpperCase();
+      return {
+        kind,
+        currency,
+        usdRate: currency === "USD" ? 1 : Number(fiatRates[currency] ? 1 / fiatRates[currency] : 0),
+        balance: Number(wallet?.availableBalance ?? wallet?.balance ?? 0),
+      };
+    }
+    const card = cards.find((item) => item.id === value);
+    return { kind: "card", currency: "USD", usdRate: 1, balance: Number(card?.availableBalance ?? card?.balance ?? 0) };
+  };
+  const sourceAsset = getAsset(selectedSource);
+  const destinationAsset = getAsset(selectedDestination);
+  const transferAmount = Number(amount || 0);
+  const netUsd = Math.max(0, transferAmount * sourceAsset.usdRate - fee * sourceAsset.usdRate);
+  const destinationPerUsd = destinationAsset.kind === "crypto"
+    ? (destinationAsset.usdRate ? 1 / destinationAsset.usdRate : 0)
+    : destinationAsset.currency === "USD" ? 1 : Number(fiatRates[destinationAsset.currency] || 0);
+  const receiveAmount = netUsd * destinationPerUsd;
+  const quoteRate = transferAmount > 0 ? receiveAmount / transferAmount : 0;
 
   const transferMutation = useMutation({
     mutationFn: async (security?: { pin?: string; authenticatorCode?: string }) => {
@@ -104,8 +145,11 @@ export default function TransferPage() {
         setLocation("/settings");
         return;
       }
-      if (error?.requiresPin || error?.requiresAuthenticator) {
-        setSecurityPrompt({ pin: Boolean(error.requiresPin), authenticator: Boolean(error.requiresAuthenticator) });
+      if (error?.requiresPin || error?.requiresAuthenticator || /pin or authenticator|required/i.test(error?.message || "")) {
+        setSecurityPrompt({
+          pin: Boolean(error.requiresPin) || !Boolean(error.requiresAuthenticator),
+          authenticator: Boolean(error.requiresAuthenticator),
+        });
         return;
       }
       toast({ title: "Transfer failed", description: error?.message || "Unable to complete this transfer.", variant: "destructive" });
@@ -175,15 +219,6 @@ export default function TransferPage() {
           </div>
         </motion.div>
 
-        {review && (
-          <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 space-y-2 text-sm">
-            <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{Number(amount).toFixed(8)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Transfer fee</span><span>{fee.toFixed(8)}</span></div>
-            <div className="flex justify-between font-semibold border-t border-primary/10 pt-2"><span>Total debited</span><span>{(Number(amount) + fee).toFixed(8)}</span></div>
-            <p className="text-xs text-muted-foreground pt-1">Review both accounts before confirming. Transfers may not be reversible.</p>
-          </div>
-        )}
-
         {!sourceOptions.length && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 p-4 text-sm text-amber-700 dark:text-amber-300">
             No active accounts are available for transfer.
@@ -192,17 +227,56 @@ export default function TransferPage() {
 
         <div className="space-y-2">
           <button
-            onClick={() => review ? transferMutation.mutate({}) : setReview(true)}
+            onClick={() => setReview(true)}
             disabled={!canReview || transferMutation.isPending}
             className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
           >
-            {transferMutation.isPending ? "Transferring..." : review ? "Confirm transfer" : "Review transfer"}
+            {transferMutation.isPending ? "Transferring..." : "Review transfer"}
           </button>
-          {review && !transferMutation.isPending && (
-            <button onClick={() => setReview(false)} className="w-full py-2 text-sm text-muted-foreground">Edit transfer</button>
-          )}
         </div>
       </main>
+
+      {review && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[160] flex items-end bg-black/50"
+          onClick={() => setReview(false)}
+        >
+          <motion.div
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-lg font-bold">Review transfer</p>
+                <p className="text-xs text-muted-foreground">{sourceAsset.currency} → {destinationAsset.currency}</p>
+              </div>
+              <ArrowRightLeft className="w-5 h-5 text-primary" />
+            </div>
+            <div className="space-y-2 rounded-2xl bg-muted/60 p-4 text-sm">
+              <div className="flex justify-between"><span className="text-muted-foreground">Source available</span><span>{sourceAsset.balance.toLocaleString()} {sourceAsset.currency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{transferAmount.toFixed(8)} {sourceAsset.currency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(feeRate * 100).toFixed(2)}%)</span><span>{fee.toFixed(8)} {sourceAsset.currency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>1 {sourceAsset.currency} = {quoteRate < 0.01 ? quoteRate.toFixed(8) : quoteRate.toFixed(4)} {destinationAsset.currency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{destinationAsset.balance.toLocaleString()} {destinationAsset.currency}</span></div>
+              <div className="flex justify-between"><span className="text-muted-foreground">You receive</span><span>{receiveAmount.toFixed(8)} {destinationAsset.currency}</span></div>
+              <div className="flex justify-between border-t border-border pt-2 font-semibold"><span>Total debited</span><span>{(transferAmount + fee).toFixed(8)} {sourceAsset.currency}</span></div>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">The final server quote is recalculated when you confirm.</p>
+            <div className="mt-5 flex gap-2">
+              <button className="flex-1 rounded-xl border border-border py-3 text-sm font-semibold" onClick={() => setReview(false)}>Edit</button>
+              <button className="flex-1 rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50" disabled={transferMutation.isPending} onClick={() => transferMutation.mutate({})}>
+                {transferMutation.isPending ? "Transferring…" : "Confirm transfer"}
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
 
       <PINModal
         isOpen={!!securityPrompt}

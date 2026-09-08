@@ -56,6 +56,8 @@ export default function OtpVerificationPage() {
     onSuccess: (data) => {
       localStorage.removeItem("otpUserId");
       localStorage.removeItem("otpPhone");
+      localStorage.removeItem("otpEmail");
+      localStorage.removeItem("otpSentVia");
 
       login(data.user);
 

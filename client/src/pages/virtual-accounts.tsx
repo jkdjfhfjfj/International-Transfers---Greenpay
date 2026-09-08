@@ -181,7 +181,7 @@ export default function VirtualAccountsPage() {
             "relative rounded-2xl border-2 p-3 text-left transition-all",
             "hover:shadow-md cursor-pointer",
             currency === code
-              ? "border-emerald-500 bg-emerald-50 shadow-sm"
+               ? "border-primary bg-primary/5 shadow-sm"
               : "border-transparent bg-card shadow-sm",
           ].join(" ")}
         >
@@ -189,7 +189,7 @@ export default function VirtualAccountsPage() {
           <div className="font-bold text-sm text-foreground">{code}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">{meta.name}</div>
           {currency === code && (
-            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500" />
+            <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-primary" />
           )}
         </button>
         );
@@ -205,11 +205,11 @@ export default function VirtualAccountsPage() {
     const available = Number(account?.availableBalance ?? Math.max(0, balance - held));
     return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
-      <div className="flex items-center gap-2 rounded-2xl bg-emerald-50 border border-emerald-200 px-4 py-3">
-        <CheckCircle2 className="text-emerald-600 w-5 h-5 shrink-0" />
+      <div className="flex items-center gap-2 rounded-2xl bg-primary/5 border border-primary/20 px-4 py-3">
+        <CheckCircle2 className="text-primary w-5 h-5 shrink-0" />
         <div>
-          <p className="font-semibold text-emerald-800 text-sm">Your {currency} account is ready</p>
-          <p className="text-xs text-emerald-600">Use these details to receive {currency} payments</p>
+          <p className="font-semibold text-foreground text-sm">Your {currency} account is ready</p>
+          <p className="text-xs text-muted-foreground">Use these details to receive {currency} payments</p>
         </div>
       </div>
 
@@ -235,7 +235,7 @@ export default function VirtualAccountsPage() {
       </div>
 
       {app.accountDetails?.paymentInstructions && (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-2xl border border-border bg-muted p-4 text-sm text-foreground">
           <p className="font-semibold mb-1">Payment instructions</p>
           <p className="text-xs leading-relaxed">{app.accountDetails.paymentInstructions}</p>
         </div>
@@ -257,7 +257,7 @@ export default function VirtualAccountsPage() {
       {account && account.isActive && (
         <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <Wallet className="w-4 h-4 text-emerald-600" />
+            <Wallet className="w-4 h-4 text-primary" />
             <p className="font-semibold text-sm">Move funds to your wallet</p>
           </div>
           <p className="text-xs text-muted-foreground">Only your available virtual-account balance can be transferred.</p>
@@ -282,6 +282,14 @@ export default function VirtualAccountsPage() {
               <ArrowRightLeft className="w-4 h-4" /> Transfer
             </Button>
           </div>
+           {transferAmount && Number(transferAmount) > 0 && (
+             <div className="grid grid-cols-2 gap-2 rounded-xl bg-muted p-3 text-xs">
+               <div><span className="text-muted-foreground">Available</span><p className="font-semibold text-foreground">{available.toFixed(2)} {currency}</p></div>
+               <div><span className="text-muted-foreground">Fee</span><p className="font-semibold text-foreground">0.00 {currency}</p></div>
+               <div><span className="text-muted-foreground">Rate</span><p className="font-semibold text-foreground">1 {currency} = 1 {currency}</p></div>
+               <div><span className="text-muted-foreground">You receive</span><p className="font-semibold text-primary">{Math.min(Number(transferAmount), available).toFixed(2)} {currency}</p></div>
+             </div>
+           )}
         </div>
       )}
     </motion.div>
@@ -296,12 +304,12 @@ export default function VirtualAccountsPage() {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
         className={[
           "rounded-2xl border p-5 flex gap-4 items-start",
-          isPending  ? "bg-amber-50 border-amber-200"  : "",
-          isRejected ? "bg-red-50 border-red-200"      : "",
+           isPending  ? "bg-muted border-border"  : "",
+           isRejected ? "bg-destructive/5 border-destructive/20" : "",
         ].join(" ")}
       >
-        {isPending  && <Clock      className="w-8 h-8 text-amber-500 mt-0.5 shrink-0" />}
-        {isRejected && <XCircle    className="w-8 h-8 text-red-500 mt-0.5 shrink-0" />}
+        {isPending  && <Clock      className="w-8 h-8 text-primary mt-0.5 shrink-0" />}
+        {isRejected && <XCircle    className="w-8 h-8 text-destructive mt-0.5 shrink-0" />}
         <div className="space-y-1">
           <p className="font-semibold text-foreground">
             {isPending  ? "Application under review"    : "Application not approved"}
@@ -312,7 +320,7 @@ export default function VirtualAccountsPage() {
               : "Your application was not approved at this time."}
           </p>
           {isRejected && app.adminNotes && (
-            <p className="text-sm text-red-700 mt-2 font-medium">{app.adminNotes}</p>
+            <p className="text-sm text-destructive mt-2 font-medium">{app.adminNotes}</p>
           )}
           {isRejected && (
             <Button size="sm" className="mt-3" onClick={() => setApplying(true)}>
@@ -337,14 +345,14 @@ export default function VirtualAccountsPage() {
         </div>
         <div className="h-1.5 rounded-full bg-muted overflow-hidden">
           <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+             className="h-full bg-primary rounded-full transition-all duration-500"
             style={{ width: step === 1 ? "50%" : "100%" }}
           />
         </div>
       </div>
 
       {formError && (
-        <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+        <div className="flex gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{formError}</span>
         </div>
@@ -404,7 +412,7 @@ export default function VirtualAccountsPage() {
                   <span className="text-foreground leading-relaxed">{label}</span>
                 </label>
               ))}
-              <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3 flex gap-2 text-xs text-emerald-800">
+              <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 flex gap-2 text-xs text-foreground">
                 <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
                 <span>Approved users see admin-configured account details after compliance review.</span>
               </div>
@@ -444,8 +452,8 @@ export default function VirtualAccountsPage() {
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
       className="bg-card rounded-2xl border border-border shadow-sm p-6 text-center space-y-4"
     >
-      <div className="w-14 h-14 rounded-full bg-emerald-50 flex items-center justify-center mx-auto">
-        <Building2 className="w-7 h-7 text-emerald-600" />
+      <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+        <Building2 className="w-7 h-7 text-primary" />
       </div>
       <div>
         <p className="font-bold text-foreground">Apply for a {currency} account</p>
@@ -456,7 +464,7 @@ export default function VirtualAccountsPage() {
       <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
         {["Dedicated IBAN / account number", "Multi-currency support", "Compliance-backed", "Fast approval"].map(f => (
           <div key={f} className="flex items-center gap-1.5 rounded-lg bg-muted px-3 py-2">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" /> {f}
+            <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" /> {f}
           </div>
         ))}
       </div>
@@ -473,7 +481,7 @@ export default function VirtualAccountsPage() {
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
         {/* Page heading */}
         <div className="flex items-center gap-3 pt-1">
-          <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
             <Building2 className="w-5 h-5 text-white" />
           </div>
           <div>
@@ -488,7 +496,7 @@ export default function VirtualAccountsPage() {
         {/* Content */}
         {isLoading ? (
           <div className="bg-card rounded-2xl border border-border shadow-sm p-8 flex justify-center">
-            <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : applying || (!selectedApp && !applying) ? (
           applying ? ApplicationForm : NoApplication

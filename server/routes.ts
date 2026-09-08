@@ -895,7 +895,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           reference, description: `Transfer from ${account.currency} virtual account`,
           metadata: { source: "virtual_account", virtualAccountId: account.id, walletId: wallet.id },
         });
-        res.json({ transaction, virtualAccountBalance: debit.availableBalance, walletBalance: credit.availableBalance });
+        res.json({
+          transaction,
+          virtualAccountBalance: debit.availableBalance,
+          walletBalance: credit.availableBalance,
+          amountDebited: amount,
+          amountCredited: amount,
+          fee: 0,
+          rate: 1,
+        });
       } catch (creditError) {
         await applyLedgerEntry({
           virtualAccountId: account.id, userId, currency: account.currency, amount,
@@ -1467,6 +1475,15 @@ p{color:#6b7280;font-size:14px;}</style>
         // Let users with a configured second factor choose it instead of
         // receiving a new OTP. OTP remains available as the fallback.
         if (hasPin || hasAuthenticator) {
+          // Keep the pending login server-side while the user chooses PIN or
+          // OTP. This prevents OTP verification from relying on a client
+          // supplied user ID when both methods are available.
+          (req.session as any).pendingLoginUserId = user.id;
+          (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+          (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
+          await new Promise<void>((resolve, reject) => {
+            req.session.save((saveErr) => saveErr ? reject(saveErr) : resolve());
+          });
           return res.json({
             requiresPin: hasPin,
             requiresAuthenticator: hasAuthenticator,
@@ -1689,7 +1706,8 @@ p{color:#6b7280;font-size:14px;}</style>
       if (result.email) sentMethods.push('Email');
       
       res.json({ 
-        message: `New OTP sent via ${sentMethods.join(', ')}`
+        message: `New OTP sent via ${sentMethods.join(', ')}`,
+        sentVia: sentMethods.length > 0 ? sentMethods.join(" and ") : "SMS, WhatsApp or Email",
       });
     } catch (error) {
       console.error('Resend OTP error:', error);
@@ -13276,7 +13294,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
       const formatUsdBalance = (value: number) => {
         if (!Number.isFinite(value)) return "0.00";
-        return Math.abs(value) > 0 && Math.abs(value) < 0.01 ? value.toFixed(8) : value.toFixed(2);
+        if (value !== 0 && Math.abs(value) < 0.01) {
+          // Keep small holdings visible instead of rounding them to $0.00.
+          return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "") || "0";
+        }
+        return value.toFixed(2);
       };
       const allWallets = [...wallets, ...newWallets].map((w: any) => ({
         ...w,
@@ -13284,7 +13306,9 @@ Sitemap: https://geepay.us/sitemap.xml`;
         usdBalance: formatUsdBalance(parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin as keyof typeof priceSnapshot.prices] || 1)),
       }));
 
-      res.json({ wallets: allWallets, ...priceSnapshot });
+      // Keep both names for older clients while the canonical price field
+      // remains `prices` in the snapshot service.
+      res.json({ wallets: allWallets, ...priceSnapshot, rates: priceSnapshot.prices });
     } catch (error) {
       console.error("Crypto wallets error:", error);
       res.status(500).json({ message: "Failed to fetch crypto wallets" });
