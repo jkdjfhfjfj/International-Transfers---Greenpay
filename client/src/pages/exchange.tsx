@@ -427,6 +427,7 @@ export default function ExchangePage() {
                 <>Exchange {fromWallet?.currency} → {toWallet?.currency}</>
               )}
             </Button>
+          </div>
         </div>
       )}
 
