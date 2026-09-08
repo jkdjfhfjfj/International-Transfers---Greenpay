@@ -1023,7 +1023,7 @@ export default function CryptoPage() {
               <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
                 <p className="text-lg font-bold">Review deposit</p>
-                <p className="mt-1 text-xs text-muted-foreground">Your admin-configured address and network will be shown after confirmation. No new address is generated.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Your dedicated deposit address and network will be shown after confirmation. No new address is generated.</p>
                <div className="mt-4 rounded-2xl bg-muted p-4 text-sm">
                  <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span>{formatCryptoAmount(depositAmount)} {selectedCoin}</span></div>
                   <div className="mt-2 flex justify-between"><span className="text-muted-foreground">Estimated value</span><span>{Number(rates[selectedCoin]) > 0 ? formatUsdValue(Number(depositAmount || 0) * Number(rates[selectedCoin])) : "Rate unavailable"}</span></div>
