@@ -315,11 +315,11 @@ export default function VirtualCardPage() {
                 </button>
                 <button onClick={() => setPaymentMethod('crypto')}
                   className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                    paymentMethod === 'crypto' ? 'bg-orange-500 text-white' : 'bg-background text-muted-foreground hover:bg-muted'
+                    paymentMethod === 'crypto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
                   }`} data-testid="button-payment-crypto"
                 >
                   Crypto
-                  {paymentMethod === 'crypto' && <span className="text-[9px] text-orange-100">₿ ETH USDT</span>}
+                  {paymentMethod === 'crypto' && <span className="text-[9px] text-primary-foreground/80">₿ ETH USDT</span>}
                 </button>
               </div>
 
@@ -354,9 +354,9 @@ export default function VirtualCardPage() {
                 </div>
               ) : (
                 <div className="space-y-3 text-left">
-                  <div className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 p-4 rounded-xl space-y-3">
-                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">Pay with Crypto</p>
-                    <p className="text-xs text-orange-700 dark:text-orange-300">Purchase your virtual card using Bitcoin, Ethereum, or stablecoins. Your card will be activated after payment confirmation.</p>
+                  <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 p-4 rounded-xl space-y-3">
+                    <p className="text-sm font-semibold text-primary">Pay with Crypto</p>
+                    <p className="text-xs text-muted-foreground">Purchase your virtual card using Bitcoin, Ethereum, or stablecoins. Your card will be activated after payment confirmation.</p>
                     <div className="grid grid-cols-2 gap-2">
                       {[
                         { coin: "BTC", label: "Bitcoin", icon: "₿", eq: `${(parseFloat(currentCardPrice) / 65000).toFixed(6)} BTC` },
@@ -364,8 +364,8 @@ export default function VirtualCardPage() {
                         { coin: "USDT", label: "Tether", icon: "₮", eq: `${currentCardPrice} USDT` },
                         { coin: "USDC", label: "USD Coin", icon: "◎", eq: `${currentCardPrice} USDC` },
                       ].map(c => (
-                        <div key={c.coin} className="bg-white dark:bg-orange-900/30 rounded-xl p-3 text-center border border-orange-200 dark:border-orange-700">
-                          <p className="text-xl font-bold text-orange-600">{c.icon}</p>
+                        <div key={c.coin} className="bg-background rounded-xl p-3 text-center border border-primary/20">
+                          <p className="text-xl font-bold text-primary">{c.icon}</p>
                           <p className="text-xs font-semibold">{c.label}</p>
                           <p className="text-[10px] text-muted-foreground">{c.eq}</p>
                         </div>
@@ -373,7 +373,7 @@ export default function VirtualCardPage() {
                     </div>
                   </div>
                   <Button
-                    className="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-6"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl py-6"
                     onClick={() => setLocation('/crypto')}
                     data-testid="button-goto-crypto"
                   >

@@ -2,7 +2,7 @@ import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRightLeft } from "lucide-react";
+import { ArrowRightLeft, ChevronDown } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PINModal } from "@/components/pin-modal";
@@ -159,7 +159,7 @@ export default function TransferPage() {
   const canReview = Boolean(selectedSource && selectedDestination && amount && Number(amount) > 0);
 
   return (
-    <div className="min-h-screen bg-background pb-32">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader />
       <main className="max-w-md mx-auto p-4 space-y-4">
         <motion.div
@@ -215,6 +215,10 @@ export default function TransferPage() {
                 placeholder="0.00"
                 className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background"
               />
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Available: <strong className="text-foreground">{sourceAsset.balance.toLocaleString(undefined, { maximumFractionDigits: 8 })} {sourceAsset.currency}</strong></span>
+                <button type="button" className="font-semibold text-primary" onClick={() => setAmount(String(sourceAsset.balance))}>Use max</button>
+              </div>
             </label>
           </div>
         </motion.div>
@@ -247,7 +251,7 @@ export default function TransferPage() {
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+             className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />

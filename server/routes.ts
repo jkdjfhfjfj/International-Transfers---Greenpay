@@ -867,6 +867,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) { res.status(400).json({ message: error?.message || "Failed to update virtual-account balance" }); }
   });
 
+  app.put("/api/admin/virtual-accounts/:id/status", requireAdminAuth, async (req: any, res) => {
+    try {
+      const status = String(req.body.status || "").toLowerCase();
+      if (!["active", "suspended", "revoked"].includes(status)) {
+        return res.status(400).json({ message: "Status must be active, suspended, or revoked" });
+      }
+      const isActive = status === "active";
+      const [account] = await db.update(virtualAccounts)
+        .set({ isActive, updatedAt: new Date() })
+        .where(eq(virtualAccounts.id, req.params.id))
+        .returning();
+      if (!account) return res.status(404).json({ message: "Virtual account not found" });
+      const user = await db.query.users.findFirst({ where: eq(users.id, account.userId) });
+      if (user) {
+        await storage.createNotification({
+          userId: user.id,
+          title: `${account.currency} virtual account ${status}`,
+          message: status === "active"
+            ? "Your virtual account has been reactivated."
+            : `Your virtual account has been ${status}. Contact support if you need help.`,
+          type: status === "active" ? "success" : "warning",
+          isGlobal: false,
+          actionUrl: "/virtual-accounts",
+        });
+      }
+      res.json({ account, status });
+    } catch (error: any) {
+      res.status(500).json({ message: error?.message || "Failed to update virtual-account status" });
+    }
+  });
+
   app.post("/api/virtual-accounts/:id/transfer", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;

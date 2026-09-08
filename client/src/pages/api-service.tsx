@@ -177,7 +177,7 @@ export default function APIServicePage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader
         
         

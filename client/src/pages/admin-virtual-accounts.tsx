@@ -230,6 +230,16 @@ export default function AdminVirtualAccountsPage() {
     onError: (e: any) => toast({ title: "Hold update failed", description: e.message, variant: "destructive" }),
   });
 
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "active" | "suspended" | "revoked" }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/status`, { status })).json(),
+    onSuccess: (_, variables) => {
+      toast({ title: `Virtual account ${variables.status}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Status update failed", description: e.message, variant: "destructive" }),
+  });
+
   return (
     <AdminShell title="Virtual Accounts">
       <div className="max-w-5xl space-y-6">
@@ -429,6 +439,36 @@ export default function AdminVirtualAccountsPage() {
                               </div>
                               <StatusBadge status={account.isActive ? "approved" : "rejected"} />
                             </div>
+                             <div className="flex flex-wrap gap-2">
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 disabled={statusMutation.isPending || account.isActive}
+                                 onClick={() => statusMutation.mutate({ id: account.id, status: "active" })}
+                               >
+                                 Reactivate
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 disabled={statusMutation.isPending || !account.isActive}
+                                 onClick={() => statusMutation.mutate({ id: account.id, status: "suspended" })}
+                               >
+                                 Suspend
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="destructive"
+                                 disabled={statusMutation.isPending || !account.isActive}
+                                 onClick={() => {
+                                   if (window.confirm("Revoke this virtual account? The user will no longer be able to use it.")) {
+                                     statusMutation.mutate({ id: account.id, status: "revoked" });
+                                   }
+                                 }}
+                               >
+                                 Revoke
+                               </Button>
+                             </div>
                             <div className="grid grid-cols-3 gap-2">
                               {[
                                 ["Balance", account.balance],

@@ -236,7 +236,7 @@ export default function ExchangePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-40">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <div className="max-w-lg mx-auto p-4 space-y-4">
         <AnimatePresence mode="wait">
           {success ? (
@@ -413,7 +413,7 @@ export default function ExchangePage() {
 
       {/* Fixed bottom Exchange button — Android style, always above mobile navigation */}
       {!success && (
-        <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:bottom-0">
+         <div className="fixed bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] left-0 right-0 z-40 border-t border-border bg-background/95 backdrop-blur-sm md:bottom-0">
           <div className="max-w-lg mx-auto p-4">
             <Button
               onClick={() => handleExchange()}
@@ -433,7 +433,7 @@ export default function ExchangePage() {
 
       {confirmOpen && (
          <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-4 md:items-center">
-           <div className="w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
+            <div className="bottom-sheet-safe w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 md:hidden" />
              <h3 className="text-lg font-bold">Confirm exchange</h3>
              <p className="mt-2 text-sm text-muted-foreground">

@@ -317,9 +317,9 @@ export default function LoginPage() {
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 }}
-              className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mx-auto mb-4"
+              className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4"
             >
-              <span className="material-icons text-white text-2xl">attach_money</span>
+              <img src="/greenpay-logo.png" alt="Geepay" className="h-12 w-8 object-contain" />
             </motion.div>
             <h2 className="text-2xl font-bold mb-2">Welcome Back</h2>
             <p className="text-muted-foreground">Sign in to your Geepay account</p>

@@ -426,7 +426,7 @@ export default function WithdrawPage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.35 }}
-              className="bg-gradient-to-br from-orange-500/10 via-yellow-500/10 to-green-500/10 border border-primary/20 rounded-xl p-4 elevation-1"
+              className="bg-gradient-to-br from-primary/10 via-emerald-500/10 to-teal-500/10 border border-primary/20 rounded-xl p-4 elevation-1"
             >
               <button
                 type="button"
@@ -434,7 +434,7 @@ export default function WithdrawPage() {
                 className="w-full flex items-center text-left group"
                 data-testid="button-crypto-withdraw"
               >
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-amber-500 rounded-xl flex items-center justify-center mr-4 shadow-md group-hover:scale-105 transition-transform">
+                <div className="w-12 h-12 bg-gradient-to-br from-primary to-emerald-600 rounded-xl flex items-center justify-center mr-4 shadow-md group-hover:scale-105 transition-transform">
                   <Bitcoin className="w-6 h-6 text-white" />
                 </div>
                 <div className="flex-1">
@@ -710,7 +710,7 @@ export default function WithdrawPage() {
       <Dialog open={!!pendingWithdrawal} onOpenChange={(open) => {
         if (!open && !withdrawMutation.isPending) setPendingWithdrawal(null);
       }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="bottom-sheet-safe max-w-md max-h-[calc(100dvh-var(--bottom-nav-height))] rounded-t-3xl sm:rounded-2xl">
           <DialogHeader>
             <DialogTitle>Confirm withdrawal</DialogTitle>
             <DialogDescription>

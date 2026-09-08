@@ -287,7 +287,7 @@ function AppContent() {
                 registration.showNotification(item.title, {
                   body: item.message,
                   tag: String(item.id),
-                  icon: "/favicon.png",
+                  icon: "/greenpay-logo.png",
                   data: { actionUrl: item.actionUrl || "/" },
                 }),
               ),

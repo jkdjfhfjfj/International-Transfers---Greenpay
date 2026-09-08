@@ -160,6 +160,10 @@ export default function SplashPage() {
           </motion.button>
         </div>
       </motion.div>
+      <div className="absolute left-6 top-6 z-20 flex items-center gap-2">
+        <img src="/greenpay-logo.png" alt="Geepay" className="h-12 w-8 object-contain drop-shadow-md" />
+        <span className="text-lg font-bold text-white">Geepay</span>
+      </div>
 
       {/* Slide Container */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 relative z-10 overflow-hidden pt-0 mt-0">

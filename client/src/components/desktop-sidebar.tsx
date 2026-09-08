@@ -48,8 +48,8 @@ export default function DesktopSidebar() {
       {/* Logo */}
       <div className="p-5 border-b border-border/40">
         <button onClick={() => setLocation("/dashboard")} className="flex items-center gap-3 group">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 flex items-center justify-center shadow-md group-hover:shadow-emerald-200 transition-shadow">
-            <span className="text-white font-extrabold text-base">G</span>
+          <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shadow-md group-hover:shadow-emerald-200 transition-shadow">
+            <img src="/greenpay-logo.png" alt="" className="h-8 w-6 object-contain" />
           </div>
           <div>
             <p className="font-bold text-base text-foreground leading-tight">Geepay</p>

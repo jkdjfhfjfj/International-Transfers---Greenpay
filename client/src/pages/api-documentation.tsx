@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { WavyHeader } from "@/components/wavy-header";
+import BottomNavigation from "@/components/bottom-navigation";
 import { Download, Copy, Play, Check, Globe, Zap, Shield, Code2, Eye, EyeOff, ExternalLink, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -76,7 +77,7 @@ export default function APIDocumentationPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader size="sm" />
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
@@ -779,6 +780,7 @@ try {
           </div>
         </motion.div>
       </div>
+      <BottomNavigation />
     </div>
   );
 }

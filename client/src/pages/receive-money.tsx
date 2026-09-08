@@ -63,7 +63,7 @@ export default function ReceiveMoneyPage() {
     },
   });
 
-  const { data: receivedRequests = { requests: [] }, isError: receivedRequestsError } = useQuery({
+  const { data: receivedRequestsData, isError: receivedRequestsError } = useQuery({
     queryKey: ["/api/payment-requests-received"],
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/payment-requests-received");
@@ -71,6 +71,9 @@ export default function ReceiveMoneyPage() {
     },
     enabled: !!user?.id,
   });
+  const receivedRequests = Array.isArray(receivedRequestsData)
+    ? { requests: receivedRequestsData }
+    : { requests: receivedRequestsData?.requests || receivedRequestsData?.paymentRequests || [] };
 
   const payRequestMutation = useMutation({
     mutationFn: async ({ requestId, security }: { requestId: string; security?: { pin?: string; authenticatorCode?: string } }) => {
@@ -202,7 +205,7 @@ export default function ReceiveMoneyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
+    <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -553,9 +556,10 @@ export default function ReceiveMoneyPage() {
           )}
         </motion.div>
       </div>
-      {paymentToConfirm && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+       {paymentToConfirm && (
+         <div className="fixed inset-0 z-[120] flex items-end bg-black/50" onClick={() => setPaymentToConfirm(null)}>
+           <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background p-6 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
             <h3 className="text-lg font-semibold">Confirm payment</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Pay {paymentToConfirm.currency} {paymentToConfirm.amount} from your wallet?
@@ -580,7 +584,7 @@ export default function ReceiveMoneyPage() {
                 {payRequestMutation.isPending ? "Paying..." : "Confirm & Pay"}
               </Button>
             </div>
-          </div>
+           </motion.div>
         </div>
       )}
       <PINModal

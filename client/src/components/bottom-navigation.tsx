@@ -61,9 +61,9 @@ export default function BottomNavigation() {
       style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
       data-testid="bottom-navigation"
     >
-      <div
+       <div
         className="bg-background/95 border-t border-border shadow-[0_-4px_18px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:shadow-[0_-4px_18px_rgba(0,0,0,0.28)]"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)', minHeight: 'var(--bottom-nav-height)' }}
       >
         <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 72 }}>
           {navItems.map((item) => {

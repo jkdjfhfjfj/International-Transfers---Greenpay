@@ -469,7 +469,7 @@ export default function VirtualAccountsPage() {
   );
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-28 md:pb-10">
+    <div className="min-h-screen bg-background text-foreground bottom-nav-safe md:pb-10">
       <WavyHeader size="sm" />
 
       <main className="max-w-2xl mx-auto px-4 pt-4 space-y-4">
@@ -510,7 +510,7 @@ export default function VirtualAccountsPage() {
             onClick={() => setShowAccountDetails(false)}
           >
             <motion.div
-              className="max-h-[85vh] w-full overflow-y-auto rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+              className="bottom-sheet-safe max-h-[calc(100dvh-var(--bottom-nav-height))] w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}

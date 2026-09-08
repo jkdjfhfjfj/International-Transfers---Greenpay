@@ -102,6 +102,7 @@ export default function CryptoPage() {
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const [pendingSecurityAction, setPendingSecurityAction] = useState<SecurityAction | null>(null);
   const [selectedPopularCoin, setSelectedPopularCoin] = useState<string | null>(null);
+  const [selectedCryptoTransaction, setSelectedCryptoTransaction] = useState<any | null>(null);
   const [, setLocation] = useLocation();
   const { user } = useAuth();
   const { wallets: userWallets } = useWallets();
@@ -361,7 +362,7 @@ export default function CryptoPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background pb-36">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader size="sm" />
 
       <div className="p-4 space-y-4">
@@ -751,7 +752,7 @@ export default function CryptoPage() {
                   <p className="text-muted-foreground mt-3 text-sm">No crypto transactions yet</p>
                 </div>
               ) : history.map((tx: any) => (
-                <motion.div key={tx.id} whileHover={{ scale: 1.01 }} className="bg-card border border-border rounded-xl p-3.5 elevation-1">
+                <motion.div key={tx.id} whileHover={{ scale: 1.01 }} onClick={() => setSelectedCryptoTransaction(tx)} className="bg-card border border-border rounded-xl p-3.5 elevation-1 cursor-pointer active:scale-[0.99]">
                   <div className="flex items-start gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                       {COIN_ICONS[tx.coin] || tx.coin[0]}
@@ -785,7 +786,7 @@ export default function CryptoPage() {
          {transferReview && (
            <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setTransferReview(false)}>
              <motion.div
-               className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+                className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl"
                initial={{ y: "100%" }}
                animate={{ y: 0 }}
                exit={{ y: "100%" }}
@@ -819,6 +820,44 @@ export default function CryptoPage() {
              </motion.div>
            </motion.div>
          )}
+         {selectedCryptoTransaction && (
+           <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedCryptoTransaction(null)}>
+             <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+               <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+               <div className="flex items-center justify-between border-b border-border pb-3">
+                 <div>
+                   <p className="text-lg font-semibold capitalize">{selectedCryptoTransaction.type?.replaceAll("_", " ")}</p>
+                   <p className="text-xs text-muted-foreground">{selectedCryptoTransaction.coin}</p>
+                 </div>
+                 <button onClick={() => setSelectedCryptoTransaction(null)} className="rounded-full p-2 hover:bg-muted" aria-label="Close transaction details">×</button>
+               </div>
+               <div className="mt-4 rounded-xl bg-primary/5 p-4 text-center">
+                 <p className="text-2xl font-bold text-primary">{formatCryptoAmount(selectedCryptoTransaction.amount)} {selectedCryptoTransaction.coin}</p>
+                 <p className="text-sm text-muted-foreground">≈ {formatUsdValue(selectedCryptoTransaction.usdValue)} USD</p>
+               </div>
+               <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                 <div><p className="text-xs text-muted-foreground">Status</p><p className="font-medium capitalize">{selectedCryptoTransaction.status}</p></div>
+                 <div><p className="text-xs text-muted-foreground">Created</p><p className="font-medium">{new Date(selectedCryptoTransaction.createdAt).toLocaleString()}</p></div>
+                 <div><p className="text-xs text-muted-foreground">Confirmations</p><p className="font-medium">{selectedCryptoTransaction.confirmations ?? 0}/{selectedCryptoTransaction.requiredConfirmations ?? "—"}</p></div>
+                 <div><p className="text-xs text-muted-foreground">Fee</p><p className="font-medium">{selectedCryptoTransaction.fee ?? selectedCryptoTransaction.networkFee ?? "—"} {selectedCryptoTransaction.coin}</p></div>
+               </div>
+               <div className="mt-4 space-y-3 text-sm">
+                 {[
+                   ["Network", selectedCryptoTransaction.network],
+                   ["From address", selectedCryptoTransaction.fromAddress],
+                   ["To address", selectedCryptoTransaction.toAddress],
+                   ["Transaction hash", selectedCryptoTransaction.txHash || selectedCryptoTransaction.transactionHash],
+                   ["Reference", selectedCryptoTransaction.reference || selectedCryptoTransaction.id],
+                 ].filter(([, value]) => value).map(([label, value]) => (
+                   <div key={label} className="border-b border-border pb-2">
+                     <p className="text-xs text-muted-foreground">{label}</p>
+                     <p className="break-all font-mono text-xs">{String(value)}</p>
+                   </div>
+                 ))}
+               </div>
+             </motion.div>
+           </motion.div>
+         )}
        </AnimatePresence>
        <AnimatePresence>
          {selectedDepositAddress && (
@@ -830,7 +869,7 @@ export default function CryptoPage() {
              onClick={() => setSelectedDepositAddress(null)}
            >
              <motion.div
-               className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+                className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl"
                initial={{ y: "100%" }}
                animate={{ y: 0 }}
                exit={{ y: "100%" }}
@@ -869,7 +908,7 @@ export default function CryptoPage() {
        <AnimatePresence>
          {depositReview && (
            <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDepositReview(false)}>
-             <motion.div className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+              <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
                <p className="text-lg font-bold">Confirm deposit instructions</p>
                <p className="mt-1 text-xs text-muted-foreground">The selected admin address and network will be shown after confirmation.</p>
@@ -890,7 +929,7 @@ export default function CryptoPage() {
        <AnimatePresence>
          {withdrawReview && (
            <motion.div className="fixed inset-0 z-[160] flex items-end bg-black/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setWithdrawReview(false)}>
-             <motion.div className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+              <motion.div className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
                <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
                <p className="text-lg font-bold">Confirm withdrawal</p>
                <p className="mt-1 text-xs text-muted-foreground">Review the destination carefully. The withdrawal will still require your PIN or authenticator.</p>
@@ -938,7 +977,7 @@ export default function CryptoPage() {
             onClick={() => setSelectedPopularCoin(null)}
           >
             <motion.div
-              className="w-full rounded-t-3xl bg-background border-t border-border p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl"
+              className="bottom-sheet-safe w-full rounded-t-3xl bg-background border-t border-border p-5 shadow-2xl"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
