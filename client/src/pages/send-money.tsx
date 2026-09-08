@@ -242,7 +242,7 @@ export default function SendMoneyPage() {
   // Check if user has virtual card requirement (use real card data, not just user flag)
   if (!cardLoading && !hasActiveCard) {
     return (
-      <div className="min-h-screen bg-background pb-20 md:pb-6">
+      <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
         <WavyHeader  size="sm" />
 
         <div className="flex items-center justify-center p-4">
@@ -485,7 +485,7 @@ export default function SendMoneyPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
+    <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -533,8 +533,9 @@ export default function SendMoneyPage() {
 
       {/* PIN Modal */}
       {showTransferConfirmation && pendingTransferData && selectedGreenPayUser && (
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-2xl bg-background p-6 shadow-2xl">
+         <div className="fixed inset-0 z-[120] flex items-end bg-black/50" onClick={() => setShowTransferConfirmation(false)}>
+           <motion.div className="bottom-sheet-safe w-full max-w-md rounded-t-3xl bg-background p-6 shadow-2xl" initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} onClick={(event) => event.stopPropagation()}>
+             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
             <h3 className="text-lg font-semibold">Confirm transfer</h3>
             <p className="mt-2 text-sm text-muted-foreground">
               Send {getCurrencySymbol(transferCurrency)}{transferAmount} to {selectedGreenPayUser.fullName}?
@@ -549,9 +550,9 @@ export default function SendMoneyPage() {
               <Button className="flex-1" onClick={confirmGreenPayTransfer}>
                 Confirm and send
               </Button>
-            </div>
-          </div>
-        </div>
+             </div>
+           </motion.div>
+           </div>
       )}
       <PINModal
         isOpen={!!securityPrompt}

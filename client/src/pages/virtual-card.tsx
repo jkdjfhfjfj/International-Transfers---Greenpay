@@ -288,7 +288,7 @@ export default function VirtualCardPage() {
                 <p className="text-xs text-muted-foreground text-center font-medium">Trusted partners in your country</p>
                 <div className="flex items-center justify-center gap-4">
                   <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm"><SiVisa className="w-9 h-6 text-blue-600" /></div>
-                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm"><SiMastercard className="w-7 h-7 text-orange-500" /></div>
+                  <div className="flex items-center gap-1.5 bg-muted px-3 py-2 rounded-lg shadow-sm"><SiMastercard className="w-7 h-7 text-primary" /></div>
                   <div className="flex items-center gap-1.5 bg-muted px-4 py-2 rounded-lg shadow-sm">
                     <span className="font-extrabold text-sm tracking-tight">
                       <span className="text-[#4caf50]">M</span><span className="text-[#e03a3e]">-Pesa</span>

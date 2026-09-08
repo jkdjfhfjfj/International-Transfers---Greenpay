@@ -113,9 +113,6 @@ export function WavyHeader({
               <span className="material-icons" style={{ fontSize: 20 }}>arrow_back</span>
             </motion.button>
           )}
-          {!onBack && (
-            <img src="/greenpay-logo.png" alt="Geepay" className="h-10 w-7 object-contain drop-shadow-sm" />
-          )}
           {icon && <div className="mr-2">{icon}</div>}
         </div>
 

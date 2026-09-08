@@ -602,7 +602,9 @@ export default function CryptoPage() {
                   <label className="text-sm font-medium text-muted-foreground">Amount to Deposit ({selectedCoin})</label>
                   <div className="relative">
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9]*[.]?[0-9]*"
                       value={depositAmount}
                       onChange={e => setDepositAmount(e.target.value)}
                       placeholder={`0.00000000`}
@@ -658,7 +660,9 @@ export default function CryptoPage() {
                   <label className="text-sm font-medium text-muted-foreground">Amount ({selectedCoin})</label>
                   <div className="relative">
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
+                      pattern="[0-9]*[.]?[0-9]*"
                       value={withdrawAmount}
                       onChange={e => setWithdrawAmount(e.target.value)}
                       placeholder="0.00000000"
@@ -724,7 +728,7 @@ export default function CryptoPage() {
                 </div>
                  <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Amount in source account</label>
-                  <input type="number" min="0.00000001" step="any" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
+                  <input type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={transferAmount} onChange={(event) => setTransferAmount(event.target.value)} placeholder="0.00" className="w-full border border-border rounded-xl px-4 py-3 text-sm bg-background" />
                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                      <span>Available: <strong className="text-foreground">{formatCryptoAmount(sourceAvailableBalance)} {transferSourceAsset.currency}</strong></span>
                      <button type="button" className="text-primary font-semibold" onClick={() => setTransferAmount(String(sourceAvailableBalance))}>Use max</button>

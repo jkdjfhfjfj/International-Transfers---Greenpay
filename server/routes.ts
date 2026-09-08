@@ -875,7 +875,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       const isActive = status === "active";
       const [account] = await db.update(virtualAccounts)
-        .set({ isActive, updatedAt: new Date() })
+        .set({ isActive, status, updatedAt: new Date() })
         .where(eq(virtualAccounts.id, req.params.id))
         .returning();
       if (!account) return res.status(404).json({ message: "Virtual account not found" });

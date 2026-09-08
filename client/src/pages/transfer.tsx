@@ -207,7 +207,9 @@ export default function TransferPage() {
             <label className="block space-y-1.5">
               <span className="text-sm font-medium text-muted-foreground">Amount</span>
               <input
-                type="number"
+                 type="text"
+                 inputMode="decimal"
+                 pattern="[0-9]*[.]?[0-9]*"
                 min="0.00000001"
                 step="any"
                 value={amount}

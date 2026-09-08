@@ -70,6 +70,8 @@ export default function ReceiveMoneyPage() {
       return response.json();
     },
     enabled: !!user?.id,
+    refetchInterval: 10000,
+    refetchOnWindowFocus: true,
   });
   const receivedRequests = Array.isArray(receivedRequestsData)
     ? { requests: receivedRequestsData }

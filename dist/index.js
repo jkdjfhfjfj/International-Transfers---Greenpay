@@ -975,6 +975,7 @@ var init_schema = __esm({
       balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
       holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
       isActive: boolean("is_active").default(true),
+      status: text("status").notNull().default("active"),
       createdAt: timestamp("created_at").defaultNow(),
       updatedAt: timestamp("updated_at").defaultNow()
     });
@@ -1227,6 +1228,8 @@ async function alterMissingColumns() {
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
+    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
     `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
     `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
@@ -1316,6 +1319,7 @@ async function alterMissingColumns() {
       balance DECIMAL(18,4) DEFAULT 0.0000,
       hold_amount DECIMAL(18,4) DEFAULT 0.0000,
       is_active BOOLEAN DEFAULT true,
+      status TEXT NOT NULL DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
@@ -3283,6 +3287,7 @@ var init_mailtrap = __esm({
       pin_changed: "",
       security_settings_changed: "",
       virtual_account_approved: "",
+      virtual_account_rejected: "",
       beneficiary_added: "",
       beneficiary_updated: "",
       beneficiary_deleted: "",
@@ -3296,7 +3301,12 @@ var init_mailtrap = __esm({
       otp: ["first_name", "last_name", "otp"],
       password_reset: ["first_name", "last_name", "reset_code"],
       welcome: ["first_name", "last_name"],
+      kyc_submitted: ["first_name", "last_name"],
+      kyc_verified: ["first_name", "last_name"],
       login_alert: ["first_name", "last_name", "location", "ip_address", "device"],
+      fund_receipt: ["first_name", "last_name", "amount", "currency", "sender"],
+      card_activation: ["first_name", "last_name", "card_last_four"],
+      transaction_export: ["first_name", "last_name"],
       beneficiary_added: ["first_name", "beneficiary_name", "beneficiary_type", "beneficiary_reference"],
       beneficiary_updated: ["first_name", "beneficiary_name", "beneficiary_type", "beneficiary_reference"],
       beneficiary_deleted: ["first_name", "beneficiary_name", "beneficiary_reference"],
@@ -3316,7 +3326,30 @@ var init_mailtrap = __esm({
       security_alert: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
       password_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
       pin_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
-      security_settings_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"]
+      security_settings_changed: ["first_name", "last_name", "security_event", "description", "date", "ip_address", "action_url"],
+      virtual_account_approved: [
+        "first_name",
+        "last_name",
+        "currency",
+        "application_id",
+        "account_name",
+        "bank_name",
+        "account_number",
+        "routing_number",
+        "sort_code",
+        "iban",
+        "swift_code",
+        "bank_address",
+        "beneficiary_address",
+        "payment_instructions"
+      ],
+      virtual_account_rejected: [
+        "first_name",
+        "last_name",
+        "currency",
+        "application_id",
+        "payment_instructions"
+      ]
     };
     MailtrapService = class {
       apiKey = null;
@@ -3472,8 +3505,12 @@ var init_mailtrap = __esm({
           currency,
           transaction_type: typeLabel,
           transaction_id: transactionId,
+          reference: transactionId,
+          fee: "0.00",
+          total: amount,
           status: "Completed",
-          date: date || (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })
+          date: date || (/* @__PURE__ */ new Date()).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }),
+          description: typeLabel
         });
       }
       async sendTransactionActivity(toEmail, firstName, lastName, transaction) {
@@ -7699,18 +7736,13 @@ async function optionalApiKey(req, res, next) {
 }
 
 // server/services/ai.ts
-import OpenAI from "openai";
 var OpenAIService = class {
-  openai;
+  apiKey;
   constructor() {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
+    this.apiKey = process.env.GROQ_API_KEY || "";
+    if (!this.apiKey) {
       console.warn("\u26A0\uFE0F Groq API key not configured");
     }
-    this.openai = new OpenAI({
-      apiKey: apiKey || "",
-      baseURL: "https://api.groq.com/openai/v1"
-    });
   }
   async generateResponse(messages2) {
     try {
@@ -7729,17 +7761,26 @@ You MUST only answer questions related to Geepay's features and services:
 
 If asked about unrelated topics, politely redirect the user.
 `;
-      const response = await this.openai.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...messages2.map((msg) => ({
-            role: msg.role === "assistant" ? "assistant" : "user",
-            content: msg.content
-          }))
-        ]
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages: [
+            { role: "system", content: systemPrompt },
+            ...messages2.map((msg) => ({
+              role: msg.role === "assistant" ? "assistant" : "user",
+              content: msg.content
+            }))
+          ]
+        })
       });
-      return response.choices[0]?.message?.content || "Unable to generate response";
+      if (!response.ok) throw new Error(`Groq request failed with HTTP ${response.status}`);
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content || "Unable to generate response";
     } catch (error) {
       console.error("Groq AI API error:", error);
       throw error;
@@ -7833,17 +7874,56 @@ init_schema();
 init_db();
 import fetch9 from "node-fetch";
 var SUPPORTED_CRYPTO_COINS = ["BTC", "ETH", "USDT", "USDC"];
+var POPULAR_CRYPTO_COINS = [
+  "BTC",
+  "ETH",
+  "USDT",
+  "USDC",
+  "SOL",
+  "XRP",
+  "BNB",
+  "ADA",
+  "DOGE",
+  "TRX",
+  "LTC",
+  "AVAX",
+  "LINK",
+  "DOT",
+  "SHIB"
+];
 var COINGECKO_IDS = {
   BTC: "bitcoin",
   ETH: "ethereum",
   USDT: "tether",
-  USDC: "usd-coin"
+  USDC: "usd-coin",
+  SOL: "solana",
+  XRP: "ripple",
+  BNB: "binancecoin",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  TRX: "tron",
+  LTC: "litecoin",
+  AVAX: "avalanche-2",
+  LINK: "chainlink",
+  DOT: "polkadot",
+  SHIB: "shiba-inu"
 };
 var FALLBACK_PRICES = {
   BTC: 65e3,
   ETH: 3200,
   USDT: 1,
-  USDC: 1
+  USDC: 1,
+  SOL: 150,
+  XRP: 0.55,
+  BNB: 600,
+  ADA: 0.45,
+  DOGE: 0.12,
+  TRX: 0.12,
+  LTC: 75,
+  AVAX: 35,
+  LINK: 14,
+  DOT: 6,
+  SHIB: 2e-5
 };
 var cachedSnapshot = null;
 var requestInFlight = null;
@@ -7857,7 +7937,7 @@ async function getFallbackPrices() {
     );
     for (const row of result.rows) {
       const coin = String(row.key || "").toUpperCase();
-      if (!SUPPORTED_CRYPTO_COINS.includes(coin)) continue;
+      if (!POPULAR_CRYPTO_COINS.includes(coin)) continue;
       const raw = row.value;
       const value = Number(typeof raw === "object" && raw !== null ? raw.value : String(raw ?? "").replace(/^"|"$/g, ""));
       if (Number.isFinite(value) && value > 0) prices[coin] = value;
@@ -7903,7 +7983,7 @@ function makeSnapshot(prices, changes24h, source) {
   };
 }
 async function fetchCoinGecko(apiKey) {
-  const ids = SUPPORTED_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
+  const ids = POPULAR_CRYPTO_COINS.map((coin) => COINGECKO_IDS[coin]).join(",");
   const response = await fetch9(
     `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
     { headers: apiKey ? { "x-cg-demo-api-key": apiKey } : void 0 }
@@ -7914,7 +7994,7 @@ async function fetchCoinGecko(apiKey) {
   const payload = await response.json();
   const prices = { ...FALLBACK_PRICES };
   const changes24h = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const quote = payload[COINGECKO_IDS[coin]];
     if (!quote || typeof quote.usd !== "number" || !Number.isFinite(quote.usd)) {
       throw new Error(`CoinGecko did not return a valid ${coin} price`);
@@ -7927,16 +8007,32 @@ async function fetchCoinGecko(apiKey) {
   return makeSnapshot(prices, changes24h, "coingecko");
 }
 async function fetchCoinCap(apiKey) {
-  const response = await fetch9("https://api.coincap.io/v2/assets?ids=bitcoin,ethereum,tether,usd-coin", {
+  const response = await fetch9(`https://api.coincap.io/v2/assets?ids=${POPULAR_CRYPTO_COINS.map((coin) => coin === "BNB" ? "binance-coin" : COINGECKO_IDS[coin]).join(",")}`, {
     headers: apiKey ? { authorization: `Bearer ${apiKey}` } : void 0
   });
   if (!response.ok) throw new Error(`CoinCap returned HTTP ${response.status}`);
   const payload = await response.json();
   const rows = new Map((payload.data || []).map((row) => [row.id, row]));
-  const ids = { BTC: "bitcoin", ETH: "ethereum", USDT: "tether", USDC: "usd-coin" };
+  const ids = {
+    BTC: "bitcoin",
+    ETH: "ethereum",
+    USDT: "tether",
+    USDC: "usd-coin",
+    SOL: "solana",
+    XRP: "xrp",
+    BNB: "binance-coin",
+    ADA: "cardano",
+    DOGE: "dogecoin",
+    TRX: "tron",
+    LTC: "litecoin",
+    AVAX: "avalanche",
+    LINK: "chainlink",
+    DOT: "polkadot",
+    SHIB: "shiba-inu"
+  };
   const prices = { ...FALLBACK_PRICES };
   const changes24h = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const row = rows.get(ids[coin]);
     const price = Number(row?.priceUsd);
     if (!Number.isFinite(price)) throw new Error(`CoinCap did not return a valid ${coin} price`);
@@ -7947,7 +8043,7 @@ async function fetchCoinCap(apiKey) {
   return makeSnapshot(prices, changes24h, "coincap");
 }
 async function fetchBinance(apiKey) {
-  const symbols = ["BTCUSDT", "ETHUSDT", "USDTUSDT", "USDCUSDT"];
+  const symbols = POPULAR_CRYPTO_COINS.filter((coin) => coin !== "USDT" && coin !== "USDC").map((coin) => `${coin}USDT`);
   const response = await fetch9(
     `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(symbols))}`,
     { headers: apiKey ? { "X-MBX-APIKEY": apiKey } : void 0 }
@@ -7955,30 +8051,32 @@ async function fetchBinance(apiKey) {
   if (!response.ok) throw new Error(`Binance returned HTTP ${response.status}`);
   const payload = await response.json();
   const rows = new Map(payload.map((row) => [row.symbol, row]));
-  const prices = {
-    BTC: Number(rows.get("BTCUSDT")?.lastPrice),
-    ETH: Number(rows.get("ETHUSDT")?.lastPrice),
-    USDT: Number(rows.get("USDTUSDT")?.lastPrice) || 1,
-    USDC: Number(rows.get("USDCUSDT")?.lastPrice) || 1
-  };
-  if (!Number.isFinite(prices.BTC) || !Number.isFinite(prices.ETH)) throw new Error("Binance did not return all required prices");
+  const prices = { ...FALLBACK_PRICES };
   const changes24h = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
-    const change = Number(rows.get(`${coin}USDT`)?.priceChangePercent);
+  for (const coin of POPULAR_CRYPTO_COINS) {
+    if (coin === "USDT" || coin === "USDC") {
+      prices[coin] = 1;
+      continue;
+    }
+    const row = rows.get(`${coin}USDT`);
+    const price = Number(row?.lastPrice);
+    if (!Number.isFinite(price)) throw new Error(`Binance did not return a valid ${coin} price`);
+    prices[coin] = price;
+    const change = Number(row?.priceChangePercent);
     if (Number.isFinite(change)) changes24h[coin] = change;
   }
   return makeSnapshot(prices, changes24h, "binance");
 }
 async function fetchCryptoCompare(apiKey) {
   const response = await fetch9(
-    "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=BTC,ETH,USDT,USDC&tsyms=USD",
+    `https://min-api.cryptocompare.com/data/pricemultifull?fsyms=${POPULAR_CRYPTO_COINS.join(",")}&tsyms=USD`,
     { headers: apiKey ? { authorization: `Apikey ${apiKey}` } : void 0 }
   );
   if (!response.ok) throw new Error(`CryptoCompare returned HTTP ${response.status}`);
   const payload = await response.json();
   const prices = { ...FALLBACK_PRICES };
   const changes24h = {};
-  for (const coin of SUPPORTED_CRYPTO_COINS) {
+  for (const coin of POPULAR_CRYPTO_COINS) {
     const quote = payload.RAW?.[coin]?.USD;
     if (!quote || !Number.isFinite(quote.PRICE)) throw new Error(`CryptoCompare did not return a valid ${coin} price`);
     prices[coin] = quote.PRICE;
@@ -8039,7 +8137,7 @@ async function getCryptoPrices() {
 }
 async function getCryptoPrice(coin) {
   const normalizedCoin = coin.trim().toUpperCase();
-  if (!SUPPORTED_CRYPTO_COINS.includes(normalizedCoin)) return void 0;
+  if (!POPULAR_CRYPTO_COINS.includes(normalizedCoin)) return void 0;
   const snapshot = await getCryptoPrices();
   return snapshot.prices[normalizedCoin];
 }
@@ -8699,18 +8797,11 @@ async function registerRoutes(app2) {
       if (user && status === "rejected") {
         await storage.createNotification({ userId: user.id, title: `${application.currency} Virtual Account Application`, message: req.body.adminNotes || "Your virtual account application was not approved at this time. You may re-apply.", type: "error", isGlobal: false, actionUrl: "/virtual-accounts" });
         const { mailtrapService: mailtrapService3 } = await Promise.resolve().then(() => (init_mailtrap(), mailtrap_exports));
-        mailtrapService3.sendVirtualAccountApproved(user.email, firstName, rest.join(" "), {
+        mailtrapService3.sendAccountAction(user.email, "virtual_account_rejected", {
+          first_name: firstName,
+          last_name: rest.join(" "),
           currency: application.currency,
           application_id: application.id,
-          account_name: "N/A",
-          bank_name: "",
-          account_number: "",
-          routing_number: "",
-          sort_code: "",
-          iban: "",
-          swift_code: "",
-          bank_address: "",
-          beneficiary_address: "",
           payment_instructions: `Your ${application.currency} virtual account application was not approved. Reason: ${req.body.adminNotes || "Please contact support for details."}`
         }).catch(console.error);
       }
@@ -8758,6 +8849,31 @@ async function registerRoutes(app2) {
       res.status(400).json({ message: error?.message || "Failed to update virtual-account balance" });
     }
   });
+  app2.put("/api/admin/virtual-accounts/:id/status", requireAdminAuth, async (req, res) => {
+    try {
+      const status = String(req.body.status || "").toLowerCase();
+      if (!["active", "suspended", "revoked"].includes(status)) {
+        return res.status(400).json({ message: "Status must be active, suspended, or revoked" });
+      }
+      const isActive = status === "active";
+      const [account] = await db.update(virtualAccounts).set({ isActive, status, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(virtualAccounts.id, req.params.id)).returning();
+      if (!account) return res.status(404).json({ message: "Virtual account not found" });
+      const user = await db.query.users.findFirst({ where: eq3(users.id, account.userId) });
+      if (user) {
+        await storage.createNotification({
+          userId: user.id,
+          title: `${account.currency} virtual account ${status}`,
+          message: status === "active" ? "Your virtual account has been reactivated." : `Your virtual account has been ${status}. Contact support if you need help.`,
+          type: status === "active" ? "success" : "warning",
+          isGlobal: false,
+          actionUrl: "/virtual-accounts"
+        });
+      }
+      res.json({ account, status });
+    } catch (error) {
+      res.status(500).json({ message: error?.message || "Failed to update virtual-account status" });
+    }
+  });
   app2.post("/api/virtual-accounts/:id/transfer", requireAuth, async (req, res) => {
     try {
       const userId = req.session.userId;
@@ -8799,7 +8915,15 @@ async function registerRoutes(app2) {
           description: `Transfer from ${account.currency} virtual account`,
           metadata: { source: "virtual_account", virtualAccountId: account.id, walletId: wallet.id }
         });
-        res.json({ transaction, virtualAccountBalance: debit.availableBalance, walletBalance: credit.availableBalance });
+        res.json({
+          transaction,
+          virtualAccountBalance: debit.availableBalance,
+          walletBalance: credit.availableBalance,
+          amountDebited: amount,
+          amountCredited: amount,
+          fee: 0,
+          rate: 1
+        });
       } catch (creditError) {
         await applyLedgerEntry({
           virtualAccountId: account.id,
@@ -9260,6 +9384,12 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       if (messagesConfigured) {
         if (hasPin || hasAuthenticator) {
+          req.session.pendingLoginUserId = user.id;
+          req.session.loginIp = req.ip || req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+          req.session.loginLocation = req.headers["cf-ipcountry"] || "Unknown Location";
+          await new Promise((resolve, reject) => {
+            req.session.save((saveErr) => saveErr ? reject(saveErr) : resolve());
+          });
           return res.json({
             requiresPin: hasPin,
             requiresAuthenticator: hasAuthenticator,
@@ -9431,7 +9561,8 @@ p{color:#6b7280;font-size:14px;}</style>
       if (result.whatsapp) sentMethods.push("WhatsApp");
       if (result.email) sentMethods.push("Email");
       res.json({
-        message: `New OTP sent via ${sentMethods.join(", ")}`
+        message: `New OTP sent via ${sentMethods.join(", ")}`,
+        sentVia: sentMethods.length > 0 ? sentMethods.join(" and ") : "SMS, WhatsApp or Email"
       });
     } catch (error) {
       console.error("Resend OTP error:", error);
@@ -12278,11 +12409,11 @@ p{color:#6b7280;font-size:14px;}</style>
             await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
             await db.update(wallets).set({ isDefault: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq3(wallets.id, matchingWallet.id));
           } else {
-            const enabledSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'enabled_currencies' LIMIT 1`);
-            const enabled = (enabledSetting.rows[0]?.value?.replace(/['"]/g, "") || "USD,KES").split(",");
-            if (enabled.includes(defaultCurrency)) {
+            const supportedCurrencies = NEXUSPAY_CURRENCIES.map((c) => c.code);
+            const normalizedDefault = normalizeCurrency(defaultCurrency);
+            if (supportedCurrencies.includes(normalizedDefault)) {
               await db.update(wallets).set({ isDefault: false }).where(eq3(wallets.userId, userId));
-              await db.insert(wallets).values({ userId, currency: defaultCurrency, isDefault: true, isActive: true });
+              await db.insert(wallets).values({ userId, currency: normalizedDefault, isDefault: true, isActive: true });
             }
           }
         } catch (walletSyncErr) {
@@ -18939,12 +19070,19 @@ Sitemap: https://geepay.us/sitemap.xml`;
         }).returning();
         newWallets.push(w);
       }
+      const formatUsdBalance = (value) => {
+        if (!Number.isFinite(value)) return "0.00";
+        if (value !== 0 && Math.abs(value) < 0.01) {
+          return value.toFixed(12).replace(/0+$/, "").replace(/\.$/, "") || "0";
+        }
+        return value.toFixed(2);
+      };
       const allWallets = [...wallets2, ...newWallets].map((w) => ({
         ...w,
         usdRate: priceSnapshot.prices[w.coin] || 1,
-        usdBalance: (parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin] || 1)).toFixed(2)
+        usdBalance: formatUsdBalance(parseFloat(w.balance || "0") * (priceSnapshot.prices[w.coin] || 1))
       }));
-      res.json({ wallets: allWallets, ...priceSnapshot });
+      res.json({ wallets: allWallets, ...priceSnapshot, rates: priceSnapshot.prices });
     } catch (error) {
       console.error("Crypto wallets error:", error);
       res.status(500).json({ message: "Failed to fetch crypto wallets" });
@@ -19151,6 +19289,15 @@ Sitemap: https://geepay.us/sitemap.xml`;
         sourceCoin: sourceCoinCode,
         destinationAmount,
         destinationCoin: destinationCoinCode,
+        sourceCurrency: sourceType === "crypto" ? sourceCoinCode : sourceType === "card" ? "USD" : normalizeCurrency(sourceWallet.currency),
+        destinationCurrency: destinationType === "crypto" ? destinationCoinCode : destinationType === "card" ? "USD" : normalizeCurrency(destinationWallet.currency),
+        sourceRate,
+        destinationRate,
+        rate: destinationAmount / Math.max(sourceAmount - feeAmount, Number.EPSILON),
+        fee: feeAmount,
+        feeRate,
+        grossUsdValue,
+        netUsdValue: usdValue,
         usdValue
       });
     } catch (error) {
@@ -19623,7 +19770,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const enabled = await getEnabledCurrencyCodes();
       const defSetting = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
       const defaultCurrency = (defSetting.rows[0]?.value || "USD").replace(/['"]/g, "").trim();
-      const currencies = NEXUSPAY_CURRENCIES.filter((c) => enabled.includes(c.code));
+      const currencies = NEXUSPAY_CURRENCIES;
       res.json({ currencies, defaultCurrency, enabled });
     } catch (e) {
       res.json({ currencies: NEXUSPAY_CURRENCIES, defaultCurrency: "USD", enabled: NEXUSPAY_CURRENCIES.map((c) => c.code) });
@@ -20421,7 +20568,8 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path4.startsWith("/api")) {
       let logLine = `${req.method} ${path4} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      const shouldLogResponse = path4 !== "/api/system-settings";
+      if (capturedJsonResponse && shouldLogResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
       if (logLine.length > 500) {
@@ -20439,7 +20587,7 @@ app.use((req, res, next) => {
             path: path4,
             statusCode: res.statusCode,
             duration,
-            response: capturedJsonResponse
+            response: shouldLogResponse ? capturedJsonResponse : void 0
           }
         ));
       }

@@ -16,7 +16,6 @@ import { useWallets } from "@/hooks/use-wallets";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import { Building2, Smartphone, Wallet, Bitcoin, Info, CheckCircle, ChevronRight, Bookmark, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PINModal } from "@/components/pin-modal";
 
 const withdrawSchema = z.object({
@@ -214,7 +213,7 @@ export default function WithdrawPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
+    <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -707,16 +706,29 @@ export default function WithdrawPage() {
         </Form>
       </div>
 
-      <Dialog open={!!pendingWithdrawal} onOpenChange={(open) => {
-        if (!open && !withdrawMutation.isPending) setPendingWithdrawal(null);
-      }}>
-        <DialogContent className="bottom-sheet-safe max-w-md max-h-[calc(100dvh-var(--bottom-nav-height))] rounded-t-3xl sm:rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>Confirm withdrawal</DialogTitle>
-            <DialogDescription>
-              Review all details carefully. Your wallet will be placed on hold only after you confirm.
-            </DialogDescription>
-          </DialogHeader>
+      {pendingWithdrawal && (
+        <motion.div
+          className="fixed inset-0 z-[160] flex items-end bg-black/50"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={() => !withdrawMutation.isPending && setPendingWithdrawal(null)}
+        >
+          <motion.div
+            className="bottom-sheet-safe w-full rounded-t-3xl border-t border-border bg-background p-5 shadow-2xl"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 280 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30" />
+            <div className="mb-4">
+              <h2 className="text-lg font-bold">Confirm withdrawal</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Review all details carefully. Your wallet will be placed on hold only after you confirm.
+              </p>
+            </div>
 
           {pendingWithdrawal && (
             <div className="space-y-4">
@@ -769,7 +781,7 @@ export default function WithdrawPage() {
             </div>
           )}
 
-          <DialogFooter className="gap-2 sm:gap-2">
+          <div className="mt-5 flex gap-2">
             <Button
               type="button"
               variant="outline"
@@ -786,9 +798,10 @@ export default function WithdrawPage() {
             >
               {withdrawMutation.isPending ? "Submitting..." : "Confirm withdrawal"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+          </motion.div>
+        </motion.div>
+      )}
       <PINModal
         isOpen={!!securityPrompt}
         onClose={() => setSecurityPrompt(null)}

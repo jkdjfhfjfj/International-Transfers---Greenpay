@@ -47,6 +47,7 @@ type Application = {
     holdAmount: string | number;
     availableBalance: string | number;
     isActive: boolean;
+    status?: string;
   } | null;
 };
 
@@ -255,9 +256,11 @@ export default function VirtualAccountsPage() {
             <p className="font-semibold text-sm">Move funds to your wallet</p>
           </div>
           <p className="text-xs text-muted-foreground">Only your available virtual-account balance can be transferred.</p>
-          <div className="flex gap-2">
+           <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] gap-2">
             <Input
-              type="number"
+               type="text"
+               inputMode="decimal"
+               pattern="[0-9]*[.]?[0-9]*"
               min="0.01"
               step="0.01"
               value={transferAmount}
@@ -274,6 +277,15 @@ export default function VirtualAccountsPage() {
               className="shrink-0 gap-1"
             >
               <ArrowRightLeft className="w-4 h-4" /> Transfer
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="shrink-0"
+              disabled={transferMutation.isPending || available <= 0}
+              onClick={() => setTransferAmount(available.toFixed(2))}
+            >
+              Max
             </Button>
           </div>
            {transferAmount && Number(transferAmount) > 0 && (
@@ -392,7 +404,10 @@ export default function VirtualAccountsPage() {
             </motion.div>
           ) : (
             <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-3">
-              <p className="text-sm font-medium text-foreground mb-2">Please confirm all declarations to continue</p>
+               <p className="text-sm font-medium text-foreground mb-2">Compliance declarations</p>
+               <p className="text-xs leading-relaxed text-muted-foreground mb-3">
+                 These confirmations help us meet banking-partner requirements. Select each statement only if it is accurate for you.
+               </p>
               {DECLARATIONS.map(([key, label]) => (
                 <label key={key} className={[
                   "flex gap-3 rounded-xl border p-3 text-sm cursor-pointer transition-colors",

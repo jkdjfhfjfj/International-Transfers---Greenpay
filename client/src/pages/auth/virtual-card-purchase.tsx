@@ -259,7 +259,7 @@ export default function VirtualCardPurchasePage() {
                 <SiVisa className="w-8 h-5 text-blue-600" />
               </div>
               <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
-                <SiMastercard className="w-6 h-6 text-orange-500" />
+                <SiMastercard className="w-6 h-6 text-primary" />
               </div>
               <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
                 <span className="material-icons text-primary text-sm">security</span>
@@ -343,7 +343,7 @@ export default function VirtualCardPurchasePage() {
                         Pay via M-Pesa paybill and contact support for activation
                       </p>
                       <div className="flex items-center gap-2 text-xs">
-                        <span className="material-icons text-amber-500 text-xs">schedule</span>
+                        <span className="material-icons text-primary text-xs">schedule</span>
                         <span className="text-muted-foreground">Requires manual activation</span>
                       </div>
                     </div>
@@ -427,8 +427,8 @@ export default function VirtualCardPurchasePage() {
                     <span className="font-semibold">{(kesAmountData as any)?.kesAmount ? `KES ${(kesAmountData as any).kesAmount.toLocaleString()}` : "KES 7,740"}</span>
                   </div>
                 </div>
-                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
+                  <p className="text-xs text-primary">
                     <span className="material-icons text-xs mr-1 align-middle">info</span>
                     After payment, contact support with your M-Pesa confirmation message to activate your card.
                   </p>

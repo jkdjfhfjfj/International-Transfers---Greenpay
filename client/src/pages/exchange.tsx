@@ -208,7 +208,7 @@ export default function ExchangePage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background pb-20 flex items-center justify-center">
+      <div className="min-h-screen bg-background bottom-nav-safe flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -216,7 +216,7 @@ export default function ExchangePage() {
 
   if (!cryptoLoading && activeAccounts.length < 2) {
     return (
-      <div className="min-h-screen bg-background pb-20">
+      <div className="min-h-screen bg-background bottom-nav-safe">
         <WavyHeader size="sm" />
         <div className="max-w-lg mx-auto p-6 text-center py-16">
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">

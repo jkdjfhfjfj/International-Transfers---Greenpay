@@ -277,7 +277,7 @@ export default function DepositPage() {
 
   if (configLoading) {
     return (
-      <div className="min-h-screen bg-background pb-20 md:pb-6">
+      <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
         <WavyHeader size="sm" />
         <div className="p-6 flex items-center justify-center h-64">
           <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -287,7 +287,7 @@ export default function DepositPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
+    <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader size="sm" />
 
       <div className="p-4 space-y-4 max-w-lg mx-auto">

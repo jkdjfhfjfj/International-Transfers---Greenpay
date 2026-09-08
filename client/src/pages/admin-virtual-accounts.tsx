@@ -437,7 +437,7 @@ export default function AdminVirtualAccountsPage() {
                                 <p className="text-sm font-semibold text-foreground">Account balance controls</p>
                                 <p className="text-xs text-muted-foreground">Ledger-backed balance and hold management</p>
                               </div>
-                              <StatusBadge status={account.isActive ? "approved" : "rejected"} />
+                               <StatusBadge status={account.status || (account.isActive ? "active" : "suspended")} />
                             </div>
                              <div className="flex flex-wrap gap-2">
                                <Button

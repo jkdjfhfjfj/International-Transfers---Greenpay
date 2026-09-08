@@ -971,6 +971,7 @@ export const virtualAccounts = pgTable("virtual_accounts", {
   balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
   holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
   isActive: boolean("is_active").default(true),
+  status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

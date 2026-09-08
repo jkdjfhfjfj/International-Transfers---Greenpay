@@ -232,6 +232,8 @@ async function alterMissingColumns() {
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS suspend_reason TEXT`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE wallets ADD COLUMN IF NOT EXISTS withdrawal_hold_amount DECIMAL(18,4) DEFAULT 0.0000`,
+    `ALTER TABLE virtual_accounts ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active'`,
+    `UPDATE virtual_accounts SET status = CASE WHEN COALESCE(is_active, true) THEN 'active' ELSE 'suspended' END WHERE status IS NULL`,
     `UPDATE wallets SET is_active = true WHERE is_active IS NULL`,
     `UPDATE wallets SET is_default = false WHERE is_default IS NULL`,
     `UPDATE wallets SET hold_amount = 0.0000 WHERE hold_amount IS NULL`,
@@ -322,6 +324,7 @@ async function alterMissingColumns() {
       balance DECIMAL(18,4) DEFAULT 0.0000,
       hold_amount DECIMAL(18,4) DEFAULT 0.0000,
       is_active BOOLEAN DEFAULT true,
+      status TEXT NOT NULL DEFAULT 'active',
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
