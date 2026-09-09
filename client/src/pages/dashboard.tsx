@@ -91,6 +91,22 @@ export default function DashboardPage() {
     enabled: !!user?.id,
   });
 
+  const { data: cryptoWalletData } = useQuery({
+    queryKey: ["/api/crypto/wallets"],
+    enabled: !!user?.id,
+    queryFn: async () => (await apiRequest("GET", "/api/crypto/wallets")).json(),
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
+  const { data: virtualAccountData } = useQuery({
+    queryKey: ["/api/virtual-accounts"],
+    enabled: !!user?.id,
+    queryFn: async () => (await apiRequest("GET", "/api/virtual-accounts")).json(),
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+  });
+
   // Get current card price from system settings
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
@@ -125,56 +141,113 @@ export default function DashboardPage() {
   // Get exchange rates for display
   const rates = (exchangeRates as any)?.rates || {};
   const defaultCurrency = String(user?.defaultCurrency || "USD").toUpperCase();
+  type NetWorthSummary = {
+    usd: number;
+    defaultValue: number;
+    hasUnpricedAsset: boolean;
+  };
+  const netWorth: NetWorthSummary = { usd: 0, defaultValue: 0, hasUnpricedAsset: false };
 
-  const netWorth = userWallets
+  const addUsdAsset = (summary: NetWorthSummary, rawValue: unknown) => {
+    const usdValue = Number(rawValue);
+    if (!Number.isFinite(usdValue) || usdValue <= 0) return;
+    summary.usd += usdValue;
+    if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
+      summary.defaultValue += usdValue * Number(rates[defaultCurrency]);
+    }
+  };
+
+  const addFiatAsset = (
+    summary: NetWorthSummary,
+    rawCurrency: unknown,
+    rawBalance: unknown,
+  ) => {
+    const currency = String(rawCurrency || "USD").toUpperCase();
+    const balance = Math.max(0, Number(rawBalance));
+    if (!Number.isFinite(balance) || balance <= 0) return;
+
+    if (currency === "USD") {
+      addUsdAsset(summary, balance);
+      return;
+    }
+
+    const usdRate = Number(rates[currency]);
+    if (Number.isFinite(usdRate) && usdRate > 0) {
+      const usdValue = balance / usdRate;
+      if (defaultCurrency === currency) {
+        summary.defaultValue += balance;
+      } else {
+        summary.usd += usdValue;
+        if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
+          summary.defaultValue += usdValue * Number(rates[defaultCurrency]);
+        }
+      }
+      if (defaultCurrency === currency) summary.usd += usdValue;
+    } else {
+      summary.hasUnpricedAsset = true;
+      if (currency === defaultCurrency) summary.defaultValue += balance;
+    }
+  };
+
+  userWallets
     .filter(wallet => wallet.isActive && !wallet.isSuspended)
-    .reduce(
-      (summary, wallet) => {
-        const currency = String(wallet.currency || "").toUpperCase();
-        const balance = Math.max(0, Number(wallet.availableBalance ?? (
-          parseFloat(wallet.balance || "0") -
-          parseFloat(wallet.holdAmount || "0") -
-          parseFloat(wallet.withdrawalHoldAmount || "0")
-        )));
+    .forEach(wallet => addFiatAsset(
+      netWorth,
+      wallet.currency,
+      wallet.availableBalance ?? (
+        parseFloat(wallet.balance || "0") -
+        parseFloat(wallet.holdAmount || "0") -
+        parseFloat(wallet.withdrawalHoldAmount || "0")
+      ),
+    ));
 
-        if (!Number.isFinite(balance) || balance <= 0) return summary;
+  const cryptoWallets = (cryptoWalletData as any)?.wallets || [];
+  cryptoWallets
+    .filter((wallet: any) => wallet.isActive !== false)
+    .forEach((wallet: any) => {
+      const balance = Number(wallet.balance || 0);
+      const usdBalance = Number(wallet.usdBalance);
+      if (Number.isFinite(usdBalance) && usdBalance > 0) {
+        addUsdAsset(netWorth, usdBalance);
+      } else if (balance > 0 && Number(wallet.usdRate) > 0) {
+        addUsdAsset(netWorth, balance * Number(wallet.usdRate));
+      } else if (balance > 0) {
+        netWorth.hasUnpricedAsset = true;
+      }
+    });
 
-        if (currency === "USD") {
-          summary.usd += balance;
-          if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
-            summary.defaultValue += balance * Number(rates[defaultCurrency]);
-          }
-          return summary;
-        }
+  const virtualAccounts = (virtualAccountData as any)?.applications || [];
+  virtualAccounts
+    .filter((application: any) =>
+      application.status === "approved" &&
+      application.virtualAccount &&
+      application.virtualAccount.isActive !== false,
+    )
+    .forEach((application: any) => {
+      addFiatAsset(
+        netWorth,
+        application.currency,
+        application.virtualAccount.availableBalance,
+      );
+    });
 
-        const usdRate = Number(rates[currency]);
-        if (Number.isFinite(usdRate) && usdRate > 0) {
-          // The USD-based endpoint returns how many units of the wallet
-          // currency equal one USD.
-          summary.usd += balance / usdRate;
-          if (defaultCurrency === currency) {
-            summary.defaultValue += balance;
-          } else if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
-            summary.defaultValue += (balance / usdRate) * Number(rates[defaultCurrency]);
-          }
-        } else {
-          summary.hasUnpricedWallet = true;
-          if (currency === defaultCurrency) {
-            summary.defaultValue += balance;
-          }
-        }
+  const virtualCards = (cardData as any)?.cards || ((cardData as any)?.card ? [(cardData as any).card] : []);
+  virtualCards
+    .filter((card: any) => card.status !== "expired")
+    .forEach((card: any) => {
+      addFiatAsset(netWorth, card.currency || "USD", card.availableBalance ?? card.balance);
+    });
 
-        return summary;
-      },
-      { usd: 0, defaultValue: 0, hasUnpricedWallet: false },
-    );
-
-  const canShowFullUsdNetWorth = !netWorth.hasUnpricedWallet;
-  const netWorthCurrency = canShowFullUsdNetWorth ? "USD" : defaultCurrency;
-  const netWorthAmount = canShowFullUsdNetWorth ? netWorth.usd : netWorth.defaultValue;
+  const canShowFullUsdNetWorth = !netWorth.hasUnpricedAsset;
+  const netWorthCurrency = canShowFullUsdNetWorth || defaultCurrency === "USD"
+    ? "USD"
+    : defaultCurrency;
+  const netWorthAmount = canShowFullUsdNetWorth || defaultCurrency === "USD"
+    ? netWorth.usd
+    : netWorth.defaultValue;
   const netWorthLabel = canShowFullUsdNetWorth
     ? "Estimated net worth · USD"
-    : `Estimated net worth · ${defaultCurrency}`;
+    : `Estimated net worth · ${defaultCurrency} · Some asset rates unavailable`;
   
   // Check user status
   const isKYCVerified = user?.kycStatus === 'verified';
@@ -360,7 +433,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-1 flex-shrink-0">
             <div
               className="mr-1 flex max-w-[92px] min-w-0 flex-col items-end"
-              title={`${netWorthLabel}${netWorth.hasUnpricedWallet ? " · Some wallet rates are unavailable" : ""}`}
+              title={netWorthLabel}
               data-testid="dashboard-net-worth"
             >
               <span className="truncate text-[8px] font-semibold uppercase tracking-[0.08em] text-white/65">
