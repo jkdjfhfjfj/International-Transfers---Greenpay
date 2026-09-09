@@ -12,6 +12,7 @@ interface PINModalProps {
   isLoading?: boolean;
   title?: string;
   description?: string;
+  hideHeader?: boolean;
   requiresPin?: boolean;
   requiresAuthenticator?: boolean;
 }
@@ -23,6 +24,7 @@ export function PINModal({
   isLoading = false,
   title = "Enter PIN",
   description = "Enter your 4-digit PIN to complete this transaction",
+  hideHeader = false,
   requiresPin = true,
   requiresAuthenticator = false,
 }: PINModalProps) {
@@ -93,15 +95,19 @@ export function PINModal({
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 sm:hidden" />
-            <div className="mb-4 flex items-center gap-2 text-lg font-semibold">
-              <Lock className="w-5 h-5" />
-              {title}
-            </div>
+            {!hideHeader && (
+              <div className="mb-4 flex items-center gap-2 text-lg font-semibold">
+                <Lock className="w-5 h-5" />
+                {title}
+              </div>
+            )}
 
             <div className="space-y-4 py-1">
-              <p className="text-sm text-muted-foreground text-center">
-                {description}
-              </p>
+              {!hideHeader && (
+                <p className="text-sm text-muted-foreground text-center">
+                  {description}
+                </p>
+              )}
 
               {requiresPin && requiresAuthenticator && (
                 <div className="grid grid-cols-2 gap-2">

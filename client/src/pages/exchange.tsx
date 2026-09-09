@@ -177,11 +177,7 @@ export default function ExchangePage() {
 
   return (
     <div className="min-h-screen bg-background bottom-nav-safe">
-      <WavyHeader
-        size="sm"
-        title={success ? "Exchange complete" : "Exchange"}
-        subtitle={success ? "Your conversion was completed successfully" : "Convert between your fiat wallets"}
-      />
+      <WavyHeader size="sm" />
       <div className="max-w-lg mx-auto p-4 space-y-4">
         <AnimatePresence mode="wait">
           {success ? (
@@ -381,10 +377,9 @@ export default function ExchangePage() {
          <div className="fixed inset-0 z-[180] flex items-end justify-center bg-black/50 p-0 md:items-center md:p-4">
             <div className="bottom-sheet-safe w-full max-w-md rounded-t-3xl md:rounded-2xl bg-card border border-border p-5 shadow-2xl">
              <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 md:hidden" />
-             <h3 className="text-lg font-bold">Confirm exchange</h3>
-             <p className="mt-2 text-sm text-muted-foreground">
+              <div className="rounded-2xl bg-muted/50 px-4 py-3 text-sm text-foreground">
                Exchange {formatExchangeAmount(amountNum, fromWallet?.currency)} {fromWallet?.currency} for approximately {formatExchangeAmount(receiveAmount, toWallet?.currency)} {toWallet?.currency}?
-             </p>
+              </div>
               <div className="sticky bottom-0 -mx-5 mt-5 flex gap-2 border-t border-border bg-card/95 px-5 pt-4 backdrop-blur">
                <Button variant="outline" className="flex-1" onClick={() => setConfirmOpen(false)}>Cancel</Button>
                <Button className="flex-1" onClick={() => void handleExchange()}>Confirm</Button>
@@ -398,8 +393,7 @@ export default function ExchangePage() {
         onClose={() => setSecurityPrompt(null)}
         requiresPin={securityPrompt?.pin}
         requiresAuthenticator={securityPrompt?.authenticator}
-        title="Confirm exchange"
-        description="Verify your transaction security settings to complete this exchange."
+        hideHeader
         onSuccess={(pin, authenticatorCode) => {
           setSecurityPrompt(null);
           void handleExchange({ pin, authenticatorCode });
