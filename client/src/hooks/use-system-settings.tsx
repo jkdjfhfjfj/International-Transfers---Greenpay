@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, setMaintenanceState } from "@/lib/queryClient";
 
 type SettingValue = { value: string };
 
@@ -52,6 +52,17 @@ export function useSystemSettings() {
         const response = await apiRequest("GET", "/api/system-settings");
         const data = await response.json();
         setSettings(data);
+
+        const maintenanceSetting =
+          data?.general?.maintenance_mode?.value ??
+          data?.platform?.maintenance_mode?.value;
+        const maintenanceMessage =
+          data?.general?.maintenance_message?.value ??
+          data?.platform?.maintenance_message?.value;
+        setMaintenanceState({
+          active: String(maintenanceSetting) === "true",
+          message: maintenanceMessage,
+        });
       } catch (error) {
         console.error("Failed to fetch system settings:", error);
       } finally {

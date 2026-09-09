@@ -487,17 +487,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Admin sessions always bypass maintenance. Users may still reach auth and
       // the maintenance-status endpoint so the client can render a useful page.
-      const allowedPaths = [
+      const allowedPaths = new Set([
         '/api/auth/me',
-        '/api/auth/login',
         '/api/auth/logout',
-        '/api/auth/verify-otp',
         '/api/admin/login',
-        '/api/admin/auth/login',
         '/api/system-settings',
         '/health',
-      ];
-      const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path));
+      ]);
+      const isAllowedPath = allowedPaths.has(req.path);
       
       const isApiRequest = req.path.startsWith("/api/");
 

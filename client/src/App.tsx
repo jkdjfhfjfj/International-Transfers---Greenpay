@@ -94,6 +94,7 @@ import AdminWalletsPage from "@/pages/admin-wallets";
 import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
 import { useFCM } from "@/hooks/use-fcm";
 import { useSystemSettings } from "@/hooks/use-system-settings";
+import { useMaintenanceState } from "@/hooks/use-maintenance";
 
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -236,6 +237,7 @@ function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading, user } = useAuth();
   const { getMaintenanceMode } = useSystemSettings();
+  const maintenanceState = useMaintenanceState();
   
   // Initialize FCM push notifications
   useFCM(isAuthenticated);
@@ -305,19 +307,15 @@ function AppContent() {
   // Landing/public pages and admin pages that should not show user widgets
   const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
   const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
-  const isAdminPage = location.startsWith('/admin');
-  const maintenanceRoutes = [
-    '/dashboard', '/transactions', '/virtual-card', '/virtual-accounts',
-    '/settings', '/support', '/live-chat', '/deposit', '/withdraw',
-    '/exchange', '/kyc', '/airtime', '/bills', '/crypto', '/analytics',
-    '/payment-requests', '/receive-money', '/send-money', '/send-amount',
-    '/send-confirm', '/payment-processing', '/payment-success', '/payment-failed',
-  ];
-  const isUserAppRoute = maintenanceRoutes.some(
-    (route) => location === route || location.startsWith(`${route}/`),
-  );
-  const showMaintenance = !isLoading && !isAdminPage && getMaintenanceMode() &&
-    (isAuthenticated || isUserAppRoute);
+  // Keep administrators in the admin panel while maintenance is active.
+  // Every other route is replaced by the maintenance screen once either the
+  // settings endpoint or any maintenance 503 confirms the server state.
+  const isAdminPage =
+    location === "/admin-login" ||
+    location === "/admin" ||
+    location.startsWith("/admin/");
+  const showMaintenance =
+    !isAdminPage && (maintenanceState.active || (!isLoading && getMaintenanceMode()));
 
   const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
 

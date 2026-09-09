@@ -1,6 +1,40 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { apiUrl } from "./api-config";
 
+export interface MaintenanceState {
+  active: boolean;
+  message?: string;
+}
+
+let maintenanceState: MaintenanceState = { active: false };
+const maintenanceListeners = new Set<() => void>();
+
+export function getMaintenanceState(): MaintenanceState {
+  return maintenanceState;
+}
+
+export function subscribeToMaintenance(listener: () => void): () => void {
+  maintenanceListeners.add(listener);
+  return () => maintenanceListeners.delete(listener);
+}
+
+export function setMaintenanceState(next: MaintenanceState): void {
+  const normalized: MaintenanceState = {
+    active: next.active,
+    message: next.message,
+  };
+
+  if (
+    maintenanceState.active === normalized.active &&
+    maintenanceState.message === normalized.message
+  ) {
+    return;
+  }
+
+  maintenanceState = normalized;
+  maintenanceListeners.forEach((listener) => listener());
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -10,6 +44,14 @@ async function throwIfResNotOk(res: Response) {
     } catch {
       // Keep the raw response text in the user-facing error when it is not JSON.
     }
+
+    if (res.status === 503 && details.maintenanceMode === true) {
+      setMaintenanceState({
+        active: true,
+        message: typeof details.message === "string" ? details.message : undefined,
+      });
+    }
+
     throw Object.assign(new Error(`${res.status}: ${details.message || text}`), details);
   }
 }
