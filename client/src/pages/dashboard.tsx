@@ -149,8 +149,8 @@ export default function DashboardPage() {
       icon: Send, 
       label: "Send Money", 
       path: "/send-money", 
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -159,8 +159,8 @@ export default function DashboardPage() {
       icon: Download, 
       label: "Receive", 
       path: "/receive-money", 
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -169,8 +169,8 @@ export default function DashboardPage() {
       icon: Smartphone, 
       label: "Buy Airtime", 
       path: "/airtime", 
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -179,8 +179,8 @@ export default function DashboardPage() {
       icon: Receipt, 
       label: "Pay Bills", 
       path: "/bills", 
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -189,8 +189,8 @@ export default function DashboardPage() {
       icon: TrendingUp, 
       label: "Add Money", 
       path: "/deposit", 
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -199,8 +199,8 @@ export default function DashboardPage() {
       icon: ArrowLeftRight,
       label: "Transfer",
       path: "/transfer",
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -209,8 +209,8 @@ export default function DashboardPage() {
       icon: BarChart3,
       label: "Analytics",
       path: "/analytics",
-      accent: '#16a34a',
-      tint: 'rgba(22,163,74,0.08)',
+       accent: '#0f766e',
+       tint: 'rgba(15,118,110,0.08)',
       disabled: false,
       requiresCard: false
     },
@@ -272,11 +272,11 @@ export default function DashboardPage() {
           </motion.div>
         )}
       </div>
-      {/* Dashboard Header — matches #16a34a meta theme */}
+      {/* Dashboard Header — matches the Geepay teal theme */}
       <div
         className="sticky top-0 z-50"
         style={{
-          background: 'linear-gradient(160deg, #16a34a 0%, #22c55e 100%)',
+          background: 'linear-gradient(160deg, #0f766e 0%, #14b8a6 100%)',
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
           padding: '16px 16px 20px',
@@ -612,38 +612,38 @@ export default function DashboardPage() {
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'credit_card',
                 badge: cardStatus === 'active',
               },
               {
                 id: 'history', label: 'History', path: '/transactions', testId: 'button-transactions',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'receipt_long',
               },
               {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'currency_exchange',
               },
               {
                 id: 'crypto', label: 'Crypto', path: '/crypto', testId: 'button-crypto',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'currency_bitcoin',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'support_agent',
               },
               {
                 id: 'status', label: 'Status', path: '/status', testId: '',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'health_and_safety',
               },
               {
                 id: 'settings', label: 'Settings', path: '/settings', testId: 'button-settings',
-                accent: '#16a34a', tint: 'rgba(22,163,74,0.08)',
+                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
                 icon: 'settings',
               },
             ].map((service, index) => (
@@ -685,11 +685,11 @@ export default function DashboardPage() {
             >
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                style={{ background: 'rgba(22,163,74,0.08)' }}
+                style={{ background: 'rgba(15,118,110,0.08)' }}
               >
-                <Grid className="w-6 h-6" style={{ color: '#16a34a' }} />
+                <Grid className="w-6 h-6" style={{ color: '#0f766e' }} />
               </div>
-              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#16a34a' }}>
+              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#0f766e' }}>
                 More
               </span>
             </motion.button>

@@ -35,16 +35,16 @@ body, html {
 
 :root {
   --bottom-nav-height: 80px;
-  /* Gemini theme palette */
+  /* Geepay user theme palette */
   --background: hsl(210, 40%, 98%);       /* #f8fafc */
   --foreground: hsl(222, 47%, 11%);       /* #0f172a */
   --card: hsl(0, 0%, 100%);
   --card-foreground: hsl(222, 47%, 11%);
   --popover: hsl(0, 0%, 100%);
   --popover-foreground: hsl(222, 47%, 11%);
-  --primary: hsl(161, 90%, 32%);          /* #059669 emerald-600 */
+  --primary: hsl(175, 77%, 26%);          /* #0f766e teal-700 */
   --primary-foreground: hsl(0, 0%, 100%);
-  --secondary: hsl(160, 84%, 39%);        /* #10b981 emerald-500 */
+  --secondary: hsl(173, 80%, 40%);        /* #14b8a6 teal-500 */
   --secondary-foreground: hsl(0, 0%, 100%);
   --muted: hsl(210, 40%, 96%);            /* #f1f5f9 */
   --muted-foreground: hsl(215, 16%, 47%); /* #64748b */
@@ -54,27 +54,30 @@ body, html {
   --destructive-foreground: hsl(0, 0%, 100%);
   --border: hsl(214, 32%, 91%);           /* #e2e8f0 */
   --input: hsl(214, 32%, 91%);
-  --ring: hsl(161, 90%, 32%);
-  --chart-1: hsl(161, 90%, 32%);
-  --chart-2: hsl(160, 84%, 39%);
+  --ring: hsl(175, 77%, 26%);
+  --chart-1: hsl(175, 77%, 26%);
+  --chart-2: hsl(173, 80%, 40%);
   --chart-3: hsl(43, 93%, 56%);
   --chart-4: hsl(147, 79%, 42%);
   --chart-5: hsl(341, 75%, 51%);
   --sidebar: hsl(0, 0%, 100%);
   --sidebar-foreground: hsl(222, 47%, 11%);
-  --sidebar-primary: hsl(161, 90%, 32%);
+  --sidebar-primary: hsl(175, 77%, 26%);
   --sidebar-primary-foreground: hsl(0, 0%, 100%);
   --sidebar-accent: hsl(210, 40%, 96%);
-  --sidebar-accent-foreground: hsl(161, 90%, 32%);
+  --sidebar-accent-foreground: hsl(175, 77%, 26%);
   --sidebar-border: hsl(214, 32%, 91%);
-  --sidebar-ring: hsl(161, 90%, 32%);
+  --sidebar-ring: hsl(175, 77%, 26%);
   --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
   --font-serif: Georgia, serif;
   --font-mono: Menlo, monospace;
   --radius: 12px;
 
-  /* Gemini gradient tokens */
-  --gp-gradient: linear-gradient(135deg, #0f766e 0%, #16a34a 100%);
+  /* Geepay brand tokens */
+  --gp-brand: #0f766e;
+  --gp-brand-rgb: 15, 118, 110;
+  --gp-brand-soft: #14b8a6;
+  --gp-gradient: linear-gradient(135deg, #0f766e 0%, #14b8a6 100%);
   --gp-header-radius: 24px;
 }
 
@@ -85,9 +88,9 @@ body, html {
   --card-foreground: hsl(210, 40%, 95%);
   --popover: hsl(222, 47%, 8%);
   --popover-foreground: hsl(210, 40%, 95%);
-  --primary: hsl(161, 90%, 40%);
+  --primary: hsl(175, 77%, 26%);
   --primary-foreground: hsl(0, 0%, 100%);
-  --secondary: hsl(160, 84%, 39%);
+  --secondary: hsl(173, 80%, 40%);
   --secondary-foreground: hsl(0, 0%, 100%);
   --muted: hsl(222, 47%, 14%);
   --muted-foreground: hsl(215, 16%, 60%);
@@ -97,15 +100,15 @@ body, html {
   --destructive-foreground: hsl(0, 0%, 100%);
   --border: hsl(222, 47%, 18%);
   --input: hsl(222, 47%, 14%);
-  --ring: hsl(161, 90%, 40%);
+  --ring: hsl(175, 77%, 26%);
   --sidebar: hsl(222, 47%, 11%);
   --sidebar-foreground: hsl(210, 40%, 95%);
-  --sidebar-primary: hsl(161, 90%, 40%);
+  --sidebar-primary: hsl(175, 77%, 26%);
   --sidebar-primary-foreground: hsl(0, 0%, 100%);
   --sidebar-accent: hsl(222, 47%, 14%);
-  --sidebar-accent-foreground: hsl(161, 90%, 40%);
+  --sidebar-accent-foreground: hsl(175, 77%, 26%);
   --sidebar-border: hsl(222, 47%, 18%);
-  --sidebar-ring: hsl(161, 90%, 40%);
+  --sidebar-ring: hsl(175, 77%, 26%);
 }
 
 @layer base {
@@ -212,11 +215,54 @@ body, html {
     -webkit-font-smoothing: antialiased;
   }
 
-  /* Gemini gradient header utility */
+  /* Geepay gradient header utility */
   .gp-gradient-header {
     background: var(--gp-gradient);
     border-bottom-left-radius: var(--gp-header-radius);
     border-bottom-right-radius: var(--gp-header-radius);
+  }
+
+  .gp-splash-orb {
+    animation: gp-float 12s ease-in-out infinite;
+  }
+
+  .gp-splash-orb-delayed {
+    animation: gp-float-reverse 15s ease-in-out infinite;
+  }
+
+  .gp-splash-grid {
+    background-image:
+      linear-gradient(rgba(var(--gp-brand-rgb), 0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(var(--gp-brand-rgb), 0.09) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: linear-gradient(to bottom, black, transparent 80%);
+  }
+
+  .gp-splash-ring {
+    animation: gp-pulse-ring 2.8s ease-out infinite;
+  }
+}
+
+@keyframes gp-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(28px, -18px, 0) scale(1.08); }
+}
+
+@keyframes gp-float-reverse {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-24px, 18px, 0) scale(0.94); }
+}
+
+@keyframes gp-pulse-ring {
+  0% { transform: scale(0.82); opacity: 0.5; }
+  70%, 100% { transform: scale(1.45); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-splash-orb,
+  .gp-splash-orb-delayed,
+  .gp-splash-ring {
+    animation: none;
   }
 }
 

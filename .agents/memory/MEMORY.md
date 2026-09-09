@@ -5,3 +5,4 @@
 - [External settings normalization](external-settings-normalization.md) — external Neon system-setting values may be JSON-quoted; normalize before comparing currencies or feature flags.
 - [Mobile sheet safe area](mobile-sheet-safe-area.md) — fixed bottom navigation requires shared sheet height, scroll, and bottom padding; per-page pixel offsets are unreliable.
 - [Maintenance asset bypass](maintenance-asset-bypass.md) — maintenance middleware must block API calls only; blocking app assets causes blank pages, and service-worker updates must not force reload loops.
+- [Dependency firewall install](dependency-firewall-install.md) — a clean checkout can still have incomplete npm dependencies when package-security 403s interrupt installation.

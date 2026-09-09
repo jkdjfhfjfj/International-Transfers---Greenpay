@@ -55,9 +55,9 @@ export function WavyHeader({
   };
 
   const paths = pathMap[size];
-  const GREEN = '#16a34a';
-  const GREEN_MID = 'rgba(22,163,74,0.45)';
-  const GREEN_STROKE = 'rgba(22,163,74,0.55)';
+  const BRAND = '#0f766e';
+  const BRAND_MID = 'rgba(15,118,110,0.45)';
+  const BRAND_STROKE = 'rgba(15,118,110,0.55)';
 
   return (
     <motion.div
@@ -75,8 +75,8 @@ export function WavyHeader({
       >
         <defs>
           <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%"   style={{ stopColor: '#16a34a', stopOpacity: 1 }} />
-            <stop offset="100%" style={{ stopColor: '#22c55e', stopOpacity: 1 }} />
+            <stop offset="0%"   style={{ stopColor: BRAND, stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: '#14b8a6', stopOpacity: 1 }} />
           </linearGradient>
         </defs>
 
@@ -84,12 +84,12 @@ export function WavyHeader({
         <path d={paths.main} fill="url(#waveGrad)" />
 
         {/* Flowing inner wave */}
-        <path d={paths.flowing} fill={GREEN_MID} opacity="0.55" />
+        <path d={paths.flowing} fill={BRAND_MID} opacity="0.55" />
 
         {/* Accent stroke */}
         <path
           d={paths.accent}
-          stroke={GREEN_STROKE}
+          stroke={BRAND_STROKE}
           strokeWidth="2.5"
           fill="none"
           opacity="0.5"

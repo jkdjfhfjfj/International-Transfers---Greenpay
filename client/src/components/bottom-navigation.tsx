@@ -88,7 +88,7 @@ export default function BottomNavigation() {
                       width: 52,
                       height: 52,
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #0f766e 0%, #16a34a 100%)',
+                      background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
                       border: '3px solid var(--background)',
                       boxShadow: '0 6px 20px rgba(5, 150, 105, 0.40)',
                       display: 'flex',
@@ -103,7 +103,7 @@ export default function BottomNavigation() {
                     style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: isActive ? '#059669' : '#64748b',
+                       color: isActive ? '#0f766e' : '#64748b',
                       marginTop: 32,
                       lineHeight: 1,
                     }}
@@ -131,7 +131,7 @@ export default function BottomNavigation() {
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  color: isActive ? '#059669' : '#64748b',
+                   color: isActive ? '#0f766e' : '#64748b',
                   position: 'relative',
                 }}
               >
@@ -148,7 +148,7 @@ export default function BottomNavigation() {
                       width: 4,
                       height: 4,
                       borderRadius: '50%',
-                      background: '#059669',
+                       background: '#0f766e',
                     }}
                   />
                 )}
