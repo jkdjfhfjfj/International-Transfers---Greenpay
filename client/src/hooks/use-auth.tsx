@@ -9,6 +9,7 @@ interface AuthContextType {
   refreshUser: () => Promise<void>;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isImpersonating: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isImpersonating, setIsImpersonating] = useState(false);
 
   useEffect(() => {
     // On boot, verify the stored user against the server session.
@@ -28,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const data = await res.json();
           const freshUser = data.user as User;
           setUser(freshUser);
+          setIsImpersonating(Boolean(data.impersonating));
           setStorageSafe("greenpay_user", freshUser);
           if (freshUser?.darkMode) {
             document.documentElement.classList.add("dark");
@@ -37,6 +40,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Server says no valid session — clear any stale local data
           setUser(null);
+          setIsImpersonating(false);
           localStorage.removeItem("greenpay_user");
         }
       } catch {
@@ -66,7 +70,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
     localStorage.removeItem("greenpay_user");
     // Also tell the server to clear the session
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+      .then((response) => response.json())
+      .then((data) => {
+        setIsImpersonating(false);
+        if (data.impersonationEnded) window.location.assign("/admin/users");
+      })
+      .catch(() => {});
   };
 
   const refreshUser = async () => {
@@ -77,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         const freshUser = data.user as User;
         setUser(freshUser);
+        setIsImpersonating(Boolean(data.impersonating));
         setStorageSafe("greenpay_user", freshUser);
       } else if (res.status === 401) {
         // Session expired or user removed from DB — log out cleanly
@@ -91,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAuthenticated = !!user;
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, refreshUser, isAuthenticated, isLoading }}>
+    <AuthContext.Provider value={{ user, login, logout, refreshUser, isAuthenticated, isLoading, isImpersonating }}>
       {children}
     </AuthContext.Provider>
   );

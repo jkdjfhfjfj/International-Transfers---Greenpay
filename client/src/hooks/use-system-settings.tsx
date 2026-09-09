@@ -59,6 +59,13 @@ function applyThemeColor(value?: string) {
   root.style.setProperty("--gp-gradient", `linear-gradient(135deg, ${color} 0%, ${color} 100%)`);
 }
 
+function isEnabled(value: unknown) {
+  return String(value ?? "")
+    .replace(/^"(.*)"$/, "$1")
+    .trim()
+    .toLowerCase() === "true";
+}
+
 export function useSystemSettings() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,7 +88,7 @@ export function useSystemSettings() {
           data?.general?.maintenance_message?.value ??
           data?.platform?.maintenance_message?.value;
         setMaintenanceState({
-          active: String(maintenanceSetting) === "true",
+          active: isEnabled(maintenanceSetting),
           message: maintenanceMessage,
         });
       } catch (error) {
@@ -102,8 +109,8 @@ export function useSystemSettings() {
 
   const getMaintenanceMode = () => {
     return (
-      settings?.general?.maintenance_mode?.value === 'true' ||
-      settings?.platform?.maintenance_mode?.value === 'true'
+      isEnabled(settings?.general?.maintenance_mode?.value) ||
+      isEnabled(settings?.platform?.maintenance_mode?.value)
     );
   };
 

@@ -83,7 +83,19 @@ export default function BillsPage() {
       if (!response.ok) throw data;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.status === "pending") {
+        toast({
+          title: "Payment submitted for verification",
+          description: "Your wallet was debited and the payment will be updated when the provider responds.",
+        });
+        resetModal();
+        refreshUser();
+        queryClient.invalidateQueries({ queryKey: ["/api/transactions", user?.id] });
+        fetchBillHistory();
+        return;
+      }
+
       setStep(4);
       setTimeout(() => {
         toast({

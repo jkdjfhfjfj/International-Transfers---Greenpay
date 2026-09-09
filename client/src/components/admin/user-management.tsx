@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ import {
   Lock,
   Unlock,
   LogOut,
+  LogIn,
   Bell,
   BellOff,
   Key,
@@ -599,6 +601,7 @@ export default function UserManagement() {
 }
 
 function UserDetailsDialog({ user }: { user: User }) {
+  const [, setLocation] = useLocation();
   // Local copy of user so account actions (suspend/unsuspend/block/unblock) update
   // the dialog immediately without waiting for a background query refetch.
   const [localUser, setLocalUser] = useState<User>(user);
@@ -645,6 +648,30 @@ function UserDetailsDialog({ user }: { user: User }) {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const loginAsUserMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/login-as-user", { userId: user.id });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Unable to login as user");
+      return data;
+    },
+    onSuccess: () => {
+      toast({
+        title: "User session started",
+        description: `You are now viewing ${user.fullName}'s account.`,
+      });
+      setLocation("/dashboard");
+      window.location.reload();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not login as user",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { fullName: string; email: string; phone: string; country: string }) => {
@@ -1135,6 +1162,16 @@ function UserDetailsDialog({ user }: { user: User }) {
           <Button size="sm" variant="outline" onClick={copyUserId} className="h-8 text-xs">
             {copiedId ? <Check className="w-3 h-3 mr-1" /> : <Copy className="w-3 h-3 mr-1" />}
             {copiedId ? "Copied" : "Copy ID"}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            className="h-8 text-xs"
+            onClick={() => loginAsUserMutation.mutate()}
+            disabled={loginAsUserMutation.isPending}
+          >
+            <LogIn className="w-3 h-3 mr-1" />
+            {loginAsUserMutation.isPending ? "Opening..." : "Login as user"}
           </Button>
         </div>
       </div>

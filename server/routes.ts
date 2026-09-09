@@ -328,6 +328,74 @@ async function applyLedgerEntry(params: LedgerTarget & {
   }
 }
 
+async function refundBillPayment(params: {
+  billPaymentId: string;
+  transactionId?: string;
+  reason: string;
+}) {
+  const billPayment = await storage.getBillPayment(params.billPaymentId);
+  if (!billPayment) throw new Error("Bill payment not found");
+
+  const existingMetadata = (billPayment.metadata || {}) as Record<string, unknown>;
+  if (existingMetadata.refundStatus === "completed") return billPayment;
+
+  const refundAmount = Number(billPayment.amount || 0) + Number(billPayment.fee || 0);
+  const wallet = await getUserWallet(billPayment.userId, normalizeCurrency(billPayment.currency || "KES"));
+  if (!wallet) throw new Error("Refund wallet not found");
+
+  await applyLedgerEntry({
+    walletId: wallet.id,
+    userId: billPayment.userId,
+    currency: billPayment.currency || "KES",
+    amount: refundAmount,
+    entryType: "bill_payment_refund",
+    idempotencyKey: `bill-refund:${billPayment.id}`,
+    transactionId: params.transactionId,
+    description: `Refund for failed bill payment ${billPayment.provider}`,
+    metadata: { billPaymentId: billPayment.id, reason: params.reason },
+  });
+
+  const updatedMetadata = {
+    ...existingMetadata,
+    refundStatus: "completed",
+    refundAmount: refundAmount.toFixed(2),
+    refundReason: params.reason,
+    refundedAt: new Date().toISOString(),
+  };
+  const updated = await storage.updateBillPayment(billPayment.id, {
+    status: "failed",
+    metadata: updatedMetadata,
+    updatedAt: new Date(),
+  } as any);
+
+  if (params.transactionId) {
+    await storage.updateTransaction(params.transactionId, {
+      status: "failed",
+      failureReason: params.reason,
+      metadata: {
+        ...(existingMetadata || {}),
+        billPaymentId: billPayment.id,
+        refundStatus: "completed",
+        refundAmount: refundAmount.toFixed(2),
+      },
+      updatedAt: new Date(),
+    } as any);
+  }
+
+  try {
+    await notificationService.sendNotification({
+      title: "Bill Payment Failed & Refunded",
+      body: `Your ${billPayment.provider} bill payment failed. ${billPayment.currency || "KES"} ${refundAmount.toFixed(2)} has been refunded to your wallet.`,
+      userId: billPayment.userId,
+      type: "transaction",
+    });
+  } catch (notificationError) {
+    console.error("Bill refund notification failed:", notificationError);
+  }
+
+  return updated;
+}
+
 async function getLedgerBalance(target: LedgerTarget, fallback = 0) {
   if (!pool) return fallback;
   const [column, id] = target.walletId
@@ -483,7 +551,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const maintenanceSetting =
         await storage.getSystemSetting("general", "maintenance_mode") ||
         await storage.getSystemSetting("platform", "maintenance_mode");
-      const maintenanceEnabled = String(maintenanceSetting?.value) === 'true';
+      const maintenanceEnabled = String(maintenanceSetting?.value ?? "")
+        .replace(/^"(.*)"$/, "$1")
+        .trim()
+        .toLowerCase() === "true";
       
       // Admin sessions always bypass maintenance. Users may still reach auth and
       // the maintenance-status endpoint so the client can render a useful page.
@@ -546,7 +617,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { password, ...userResponse } = user as any;
-      res.json({ user: userResponse });
+      res.json({
+        user: userResponse,
+        impersonating: Boolean(req.session?.admin && req.session?.impersonating),
+      });
     } catch (error) {
       console.error("Auth me error:", error);
       res.status(500).json({ message: "Failed to retrieve session user" });
@@ -555,6 +629,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // User logout — destroy session
   app.post("/api/auth/logout", (req: any, res) => {
+    if (req.session?.admin && req.session?.impersonating) {
+      delete req.session.userId;
+      delete req.session.user;
+      delete req.session.impersonating;
+      return req.session.save((saveError: any) => {
+        if (saveError) {
+          console.error("End impersonation session error:", saveError);
+          return res.status(500).json({ message: "Could not end impersonated session" });
+        }
+        res.json({ message: "Returned to admin session", impersonationEnded: true });
+      });
+    }
+
     req.session.destroy((err: any) => {
       if (err) console.error("Logout session destroy error:", err);
       res.clearCookie("connect.sid");
@@ -4148,6 +4235,9 @@ p{color:#6b7280;font-size:14px;}</style>
 
   // Bill payment endpoint - KPLC, Zuku, StartimesTV, Nairobi Water, etc
   app.post("/api/bills/pay", requireAuth, async (req, res) => {
+    let createdBillPayment: any = null;
+    let createdBillTransaction: any = null;
+    let ledgerDebited = false;
     try {
       const sessionUserId = (req as any).session?.userId;
       const { provider, meterNumber, accountNumber, amount } = req.body;
@@ -4202,6 +4292,7 @@ p{color:#6b7280;font-size:14px;}</style>
         reference: `BP-${Date.now()}`,
         metadata: { meterNumber, accountNumber, provider }
       });
+      createdBillPayment = billPayment;
 
       console.log(`💾 Bill payment created (PENDING): ${billPayment.id}`);
 
@@ -4217,6 +4308,7 @@ p{color:#6b7280;font-size:14px;}</style>
         reference: billPayment.reference,
         metadata: { billPaymentId: billPayment.id, provider }
       });
+      createdBillTransaction = billTransaction;
       await notificationService.sendTransactionNotification(userId, billTransaction);
 
       try {
@@ -4228,6 +4320,7 @@ p{color:#6b7280;font-size:14px;}</style>
       } catch (error: any) {
         return res.status(400).json({ message: error?.message || "Insufficient KES balance" });
       }
+      ledgerDebited = true;
 
       // The amount is debited once and the bill remains pending until provider
       // verification completes. A failed verification must refund this debit.
@@ -4241,6 +4334,17 @@ p{color:#6b7280;font-size:14px;}</style>
       });
     } catch (error) {
       console.error('❌ Bill payment error:', error);
+      if (createdBillPayment && ledgerDebited) {
+        try {
+          await refundBillPayment({
+            billPaymentId: createdBillPayment.id,
+            transactionId: createdBillTransaction?.id,
+            reason: error instanceof Error ? error.message : "Bill provider failed",
+          });
+        } catch (refundError) {
+          console.error("❌ Bill payment refund failed:", refundError);
+        }
+      }
       const errorMessage = error instanceof Error ? error.message : "Error processing bill payment";
       res.status(500).json({ message: errorMessage });
     }
@@ -10637,11 +10741,31 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
       
+      const admin = (req.session as any).admin;
+      (req.session as any).impersonating = {
+        adminId: admin.id,
+        userId: user.id,
+        startedAt: new Date().toISOString(),
+      };
+      (req.session as any).userId = user.id;
+      (req.session as any).user = { id: user.id, email: user.email };
+
+      await storage.createAdminLog({
+        adminId: admin.id,
+        action: "login_as_user",
+        details: `Admin started an impersonated session for ${user.email}`,
+        targetId: user.id,
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((saveError) => saveError ? reject(saveError) : resolve());
+      });
+
       console.log('Admin logging in as user:', user.email);
-      
-      // Create session for the user (simulate login)
+
       res.json({
         success: true,
+        impersonating: true,
         user: {
           id: user.id,
           fullName: user.fullName,
@@ -10659,6 +10783,33 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('Admin login as user error:', error);
       res.status(500).json({ message: "Error logging in as user" });
+    }
+  });
+
+  app.post("/api/admin/stop-impersonation", requireAdminAuth, async (req, res) => {
+    try {
+      const impersonation = (req.session as any).impersonating;
+      delete (req.session as any).impersonating;
+      delete (req.session as any).userId;
+      delete (req.session as any).user;
+
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((saveError) => saveError ? reject(saveError) : resolve());
+      });
+
+      if (impersonation?.userId) {
+        await storage.createAdminLog({
+          adminId: (req.session as any).admin?.id || impersonation.adminId,
+          action: "stop_impersonation",
+          details: "Admin ended an impersonated user session",
+          targetId: impersonation.userId,
+        });
+      }
+
+      res.json({ success: true, message: "Returned to admin session" });
+    } catch (error) {
+      console.error("Stop impersonation error:", error);
+      res.status(500).json({ message: "Could not end impersonated session" });
     }
   });
 

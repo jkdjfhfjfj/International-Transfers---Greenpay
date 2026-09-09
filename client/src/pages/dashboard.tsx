@@ -44,6 +44,14 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const { wallets: userWallets, isLoading: walletsLoading } = useWallets();
 
+  useEffect(() => {
+    const openRates = () => {
+      setShowMoreMenu(true);
+    };
+    window.addEventListener("open-rates-sheet", openRates);
+    return () => window.removeEventListener("open-rates-sheet", openRates);
+  }, []);
+
   const addWalletMutation = useMutation({
     mutationFn: async (currency: string) => {
       const r = await apiRequest("POST", "/api/wallets", { currency });

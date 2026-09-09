@@ -263,6 +263,22 @@ export default function BottomNavigation() {
               <span className="text-xs font-medium text-muted-foreground">{isDark ? "On" : "Off"}</span>
             </button>
             <button
+              onClick={() => {
+                setMenuOpen(false);
+                window.dispatchEvent(new CustomEvent("open-rates-sheet"));
+              }}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border p-4 text-left transition-colors hover:bg-muted"
+              data-testid="button-rates"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <TrendingUp className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold">Rates</span>
+                <span className="block text-xs text-muted-foreground">View live exchange rates</span>
+              </span>
+            </button>
+            <button
               onClick={() => { setMenuOpen(false); setLocation("/settings"); }}
               className="flex w-full items-center gap-3 rounded-2xl border border-border p-4 text-left transition-colors hover:bg-muted"
             >
