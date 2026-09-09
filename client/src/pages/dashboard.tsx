@@ -124,6 +124,57 @@ export default function DashboardPage() {
   
   // Get exchange rates for display
   const rates = (exchangeRates as any)?.rates || {};
+  const defaultCurrency = String(user?.defaultCurrency || "USD").toUpperCase();
+
+  const netWorth = userWallets
+    .filter(wallet => wallet.isActive && !wallet.isSuspended)
+    .reduce(
+      (summary, wallet) => {
+        const currency = String(wallet.currency || "").toUpperCase();
+        const balance = Math.max(0, Number(wallet.availableBalance ?? (
+          parseFloat(wallet.balance || "0") -
+          parseFloat(wallet.holdAmount || "0") -
+          parseFloat(wallet.withdrawalHoldAmount || "0")
+        )));
+
+        if (!Number.isFinite(balance) || balance <= 0) return summary;
+
+        if (currency === "USD") {
+          summary.usd += balance;
+          if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
+            summary.defaultValue += balance * Number(rates[defaultCurrency]);
+          }
+          return summary;
+        }
+
+        const usdRate = Number(rates[currency]);
+        if (Number.isFinite(usdRate) && usdRate > 0) {
+          // The USD-based endpoint returns how many units of the wallet
+          // currency equal one USD.
+          summary.usd += balance / usdRate;
+          if (defaultCurrency === currency) {
+            summary.defaultValue += balance;
+          } else if (defaultCurrency !== "USD" && Number(rates[defaultCurrency]) > 0) {
+            summary.defaultValue += (balance / usdRate) * Number(rates[defaultCurrency]);
+          }
+        } else {
+          summary.hasUnpricedWallet = true;
+          if (currency === defaultCurrency) {
+            summary.defaultValue += balance;
+          }
+        }
+
+        return summary;
+      },
+      { usd: 0, defaultValue: 0, hasUnpricedWallet: false },
+    );
+
+  const canShowFullUsdNetWorth = !netWorth.hasUnpricedWallet;
+  const netWorthCurrency = canShowFullUsdNetWorth ? "USD" : defaultCurrency;
+  const netWorthAmount = canShowFullUsdNetWorth ? netWorth.usd : netWorth.defaultValue;
+  const netWorthLabel = canShowFullUsdNetWorth
+    ? "Estimated net worth · USD"
+    : `Estimated net worth · ${defaultCurrency}`;
   
   // Check user status
   const isKYCVerified = user?.kycStatus === 'verified';
@@ -307,6 +358,18 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            <div
+              className="mr-1 flex max-w-[92px] min-w-0 flex-col items-end"
+              title={`${netWorthLabel}${netWorth.hasUnpricedWallet ? " · Some wallet rates are unavailable" : ""}`}
+              data-testid="dashboard-net-worth"
+            >
+              <span className="truncate text-[8px] font-semibold uppercase tracking-[0.08em] text-white/65">
+                Net worth
+              </span>
+              <span className="max-w-full truncate text-[11px] font-bold text-white">
+                {getCurrencySymbol(netWorthCurrency)}{formatNumber(netWorthAmount)}
+              </span>
+            </div>
             <Notifications />
             <motion.button
               whileTap={{ scale: 0.92 }}
