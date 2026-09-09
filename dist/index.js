@@ -1192,6 +1192,7 @@ async function alterMissingColumns() {
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT TRUE`,
     `UPDATE users SET password_set = FALSE WHERE google_id IS NOT NULL AND password_set IS DISTINCT FROM FALSE`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
@@ -8532,7 +8533,9 @@ async function registerRoutes(app2) {
         "/health"
       ];
       const isAllowedPath = allowedPaths.some((path4) => req.path.startsWith(path4));
-      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
+      const isApiRequest = req.path.startsWith("/api/");
+      const acceptsHtml = String(req.headers.accept || "").includes("text/html");
+      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && (isApiRequest || !acceptsHtml)) {
         const messageSetting = await storage.getSystemSetting("general", "maintenance_message") || await storage.getSystemSetting("platform", "maintenance_message");
         return res.status(503).json({
           message: messageSetting?.value || "System is under maintenance. Please try again later.",
@@ -14794,7 +14797,7 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Failed to fetch app download links" });
     }
   });
-  app2.get("/api/admin/settings", async (req, res) => {
+  app2.get("/api/admin/settings", requireAdminAuth, async (req, res) => {
     try {
       const settings = await storage.getSystemSettings();
       res.json({ settings });
@@ -14803,7 +14806,7 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(500).json({ message: "Failed to fetch system settings" });
     }
   });
-  app2.put("/api/admin/settings/:key", async (req, res) => {
+  app2.put("/api/admin/settings/:key", requireAdminAuth, async (req, res) => {
     try {
       const { key } = req.params;
       const { value } = req.body;

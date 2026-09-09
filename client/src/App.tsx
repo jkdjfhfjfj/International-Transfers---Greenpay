@@ -324,7 +324,7 @@ function AppContent() {
   // Only show user widgets on authenticated non-admin pages where they won't cover message composers
   const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage && !isSupportComposerPage;
 
-  const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage;
+  const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage && !showMaintenance;
 
   return (
     <TooltipProvider>
@@ -334,9 +334,9 @@ function AppContent() {
       <div className={showAppShell ? "md:pl-64" : ""}>
         {showMaintenance ? <MaintenancePage /> : <Router />}
       </div>
-      {!isAdminPage && <BottomNavigation />}
-      {!isAdminPage && <PWAInstallPrompt />}
-      {shouldShowWidgets && <TalkToUs />}
+      {!isAdminPage && !showMaintenance && <BottomNavigation />}
+      {!isAdminPage && !showMaintenance && <PWAInstallPrompt />}
+      {shouldShowWidgets && !showMaintenance && <TalkToUs />}
     </TooltipProvider>
   );
 }

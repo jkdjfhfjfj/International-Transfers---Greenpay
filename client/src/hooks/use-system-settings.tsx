@@ -1,14 +1,32 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
+type SettingValue = { value: string };
+
 interface SystemSettings {
   general?: {
     maintenance_mode?: { value: string };
     maintenance_message?: { value: string };
+    maintenance_title?: { value: string };
+    maintenance_estimated_time?: { value: string };
+    maintenance_affected_services?: { value: string };
+    maintenance_severity?: { value: string };
+    maintenance_started_at?: { value: string };
+    maintenance_status_label?: { value: string };
+    support_email?: { value: string };
+    [key: string]: SettingValue | undefined;
   };
   platform?: {
     maintenance_mode?: { value: string };
     maintenance_message?: { value: string };
+    maintenance_title?: { value: string };
+    maintenance_estimated_time?: { value: string };
+    maintenance_affected_services?: { value: string };
+    maintenance_severity?: { value: string };
+    maintenance_started_at?: { value: string };
+    maintenance_status_label?: { value: string };
+    support_email?: { value: string };
+    [key: string]: SettingValue | undefined;
   };
   security?: {
     pin_required?: { value: string };
@@ -65,6 +83,33 @@ export function useSystemSettings() {
     );
   };
 
+  const getMaintenanceValue = (key: string, fallback = "") => {
+    const generalValue = settings?.general?.[key]?.value;
+    const platformValue = settings?.platform?.[key]?.value;
+    return generalValue || platformValue || fallback;
+  };
+
+  const getMaintenanceTitle = () =>
+    getMaintenanceValue("maintenance_title", "We’ll be back shortly");
+
+  const getMaintenanceEstimatedTime = () =>
+    getMaintenanceValue("maintenance_estimated_time", "We expect to be back soon");
+
+  const getMaintenanceAffectedServices = () =>
+    getMaintenanceValue(
+      "maintenance_affected_services",
+      "Wallets and transfers\nDeposits and withdrawals\nCrypto services",
+    );
+
+  const getMaintenanceSeverity = () =>
+    getMaintenanceValue("maintenance_severity", "moderate");
+
+  const getMaintenanceStartedAt = () =>
+    getMaintenanceValue("maintenance_started_at", "");
+
+  const getMaintenanceStatusLabel = () =>
+    getMaintenanceValue("maintenance_status_label", "Maintenance in progress");
+
   const getPinRequired = () => {
     return settings?.security?.pin_required?.value === 'true';
   };
@@ -79,6 +124,12 @@ export function useSystemSettings() {
     isLoaded: !isLoading,
     getMaintenanceMode,
     getMaintenanceMessage,
+    getMaintenanceTitle,
+    getMaintenanceEstimatedTime,
+    getMaintenanceAffectedServices,
+    getMaintenanceSeverity,
+    getMaintenanceStartedAt,
+    getMaintenanceStatusLabel,
     getPinRequired,
     getTwoFactorRequired,
   };

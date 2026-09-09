@@ -499,7 +499,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       ];
       const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path));
       
-      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin) {
+      const isApiRequest = req.path.startsWith("/api/");
+      const acceptsHtml = String(req.headers.accept || "").includes("text/html");
+
+      // Keep API consumers on a useful machine-readable 503, but allow normal
+      // browser navigation to reach the React maintenance screen. Returning
+      // JSON for a document request makes users see the raw response body.
+      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && (isApiRequest || !acceptsHtml)) {
         const messageSetting =
           await storage.getSystemSetting("general", "maintenance_message") ||
           await storage.getSystemSetting("platform", "maintenance_message");
@@ -8148,7 +8154,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // System Settings Management
-  app.get("/api/admin/settings", async (req, res) => {
+  app.get("/api/admin/settings", requireAdminAuth, async (req, res) => {
     try {
       const settings = await storage.getSystemSettings();
       res.json({ settings });
@@ -8158,7 +8164,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.put("/api/admin/settings/:key", async (req, res) => {
+  app.put("/api/admin/settings/:key", requireAdminAuth, async (req, res) => {
     try {
       const { key } = req.params;
       const { value } = req.body;

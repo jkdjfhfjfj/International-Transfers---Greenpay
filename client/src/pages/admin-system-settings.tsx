@@ -9,8 +9,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download, Gift } from "lucide-react";
+import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download, Gift, AlertTriangle } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const WITHDRAWAL_FEE_CURRENCIES = [
   "USD", "KES", "UGX", "GHS", "NGN", "ZAR", "TZS", "XOF",
@@ -48,7 +49,13 @@ interface SystemSettings {
     default_currency: string;
     session_timeout: string;
     terms_url: string;
+    maintenance_title: string;
     maintenance_message: string;
+    maintenance_estimated_time: string;
+    maintenance_affected_services: string;
+    maintenance_severity: string;
+    maintenance_started_at: string;
+    maintenance_status_label: string;
     maintenance_mode: boolean;
   };
   whatsapp?: {
@@ -102,7 +109,13 @@ export default function AdminSystemSettingsPage() {
   const [currency, setCurrency] = useState("");
   const [sessionTimeout, setSessionTimeout] = useState("");
   const [termsUrl, setTermsUrl] = useState("");
+  const [maintenanceTitle, setMaintenanceTitle] = useState("");
   const [maintenanceMsg, setMaintenanceMsg] = useState("");
+  const [maintenanceEstimatedTime, setMaintenanceEstimatedTime] = useState("");
+  const [maintenanceAffectedServices, setMaintenanceAffectedServices] = useState("");
+  const [maintenanceSeverity, setMaintenanceSeverity] = useState("moderate");
+  const [maintenanceStartedAt, setMaintenanceStartedAt] = useState("");
+  const [maintenanceStatusLabel, setMaintenanceStatusLabel] = useState("Maintenance in progress");
   const [maintenance, setMaintenance] = useState(false);
 
   // WhatsApp state
@@ -180,7 +193,13 @@ export default function AdminSystemSettingsPage() {
       setCurrency(settingsData.general?.default_currency || "");
       setSessionTimeout(settingsData.general?.session_timeout || "");
       setTermsUrl(settingsData.general?.terms_url || "");
+      setMaintenanceTitle(settingsData.general?.maintenance_title || "");
       setMaintenanceMsg(settingsData.general?.maintenance_message || "");
+      setMaintenanceEstimatedTime(settingsData.general?.maintenance_estimated_time || "");
+      setMaintenanceAffectedServices(settingsData.general?.maintenance_affected_services || "");
+      setMaintenanceSeverity(settingsData.general?.maintenance_severity || "moderate");
+      setMaintenanceStartedAt(settingsData.general?.maintenance_started_at || "");
+      setMaintenanceStatusLabel(settingsData.general?.maintenance_status_label || "Maintenance in progress");
       setMaintenance(settingsData.general?.maintenance_mode || false);
 
       setWaPhoneId(settingsData.whatsapp?.phone_number_id || "");
@@ -279,7 +298,13 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/default_currency", { value: String(currency), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/session_timeout", { value: String(sessionTimeout), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/terms_url", { value: String(termsUrl), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_title", { value: String(maintenanceTitle), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_message", { value: String(maintenanceMsg), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_estimated_time", { value: String(maintenanceEstimatedTime), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_affected_services", { value: String(maintenanceAffectedServices), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_severity", { value: String(maintenanceSeverity), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_started_at", { value: String(maintenanceStartedAt), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_status_label", { value: String(maintenanceStatusLabel), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_mode", { value: String(maintenance), category: "general" }),
       ];
       const results = await Promise.all(requests);
@@ -388,7 +413,7 @@ export default function AdminSystemSettingsPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label className="text-sm">Transfer Fee (%)</Label>
                     <Input value={transferFee} onChange={(e) => setTransferFee(e.target.value)} placeholder="2.50" className="rounded-xl" />
@@ -578,10 +603,57 @@ export default function AdminSystemSettingsPage() {
                     <Label className="text-sm">Terms URL</Label>
                     <Input value={termsUrl} onChange={(e) => setTermsUrl(e.target.value)} placeholder="https://..." className="rounded-xl" />
                   </div>
-                  <div className="space-y-2 col-span-2">
-                    <Label className="text-sm">Maintenance Message</Label>
-                    <Input value={maintenanceMsg} onChange={(e) => setMaintenanceMsg(e.target.value)} placeholder="System under maintenance..." className="rounded-xl" />
-                  </div>
+                   <div className="col-span-full mt-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                     <div className="mb-4 flex items-start gap-3">
+                       <div className="rounded-xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                         <AlertTriangle className="h-5 w-5" />
+                       </div>
+                       <div>
+                         <h3 className="font-semibold text-amber-900 dark:text-amber-100">Maintenance experience</h3>
+                         <p className="mt-1 text-xs leading-5 text-amber-800/80 dark:text-amber-200/80">
+                           These details appear on the user-facing maintenance page. Add one affected service per line.
+                         </p>
+                       </div>
+                     </div>
+                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                       <div className="space-y-2">
+                         <Label className="text-sm">Page Title</Label>
+                         <Input value={maintenanceTitle} onChange={(e) => setMaintenanceTitle(e.target.value)} placeholder="We’ll be back shortly" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Status Label</Label>
+                         <Input value={maintenanceStatusLabel} onChange={(e) => setMaintenanceStatusLabel(e.target.value)} placeholder="Maintenance in progress" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2 md:col-span-2">
+                         <Label className="text-sm">User Message</Label>
+                         <Textarea value={maintenanceMsg} onChange={(e) => setMaintenanceMsg(e.target.value)} placeholder="We’re making a few improvements..." className="min-h-24 rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Estimated Time</Label>
+                         <Input value={maintenanceEstimatedTime} onChange={(e) => setMaintenanceEstimatedTime(e.target.value)} placeholder="Back within 30 minutes" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Severity</Label>
+                         <Select value={maintenanceSeverity} onValueChange={setMaintenanceSeverity}>
+                           <SelectTrigger className="rounded-xl bg-white dark:bg-slate-950"><SelectValue placeholder="Choose severity" /></SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="minor">Minor impact</SelectItem>
+                             <SelectItem value="moderate">Moderate impact</SelectItem>
+                             <SelectItem value="major">Major impact</SelectItem>
+                             <SelectItem value="critical">Critical impact</SelectItem>
+                           </SelectContent>
+                         </Select>
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Started At</Label>
+                         <Input type="datetime-local" value={maintenanceStartedAt} onChange={(e) => setMaintenanceStartedAt(e.target.value)} className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2 md:col-span-2">
+                         <Label className="text-sm">Affected Services</Label>
+                         <Textarea value={maintenanceAffectedServices} onChange={(e) => setMaintenanceAffectedServices(e.target.value)} placeholder={"Wallets and transfers\nDeposits and withdrawals\nCrypto services"} className="min-h-28 rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                     </div>
+                   </div>
                 </div>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100">
                   <Label className="text-sm font-medium text-red-700">Maintenance Mode</Label>

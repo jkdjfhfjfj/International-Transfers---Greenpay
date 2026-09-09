@@ -196,6 +196,7 @@ async function alterMissingColumns() {
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS completed_at TIMESTAMP`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()`,
     `ALTER TABLE transactions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT NOW()`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS password_set BOOLEAN DEFAULT TRUE`,
     `UPDATE users SET password_set = FALSE WHERE google_id IS NOT NULL AND password_set IS DISTINCT FROM FALSE`,
     `ALTER TABLE recipients ADD COLUMN IF NOT EXISTS phone TEXT`,
