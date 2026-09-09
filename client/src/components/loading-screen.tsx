@@ -20,7 +20,7 @@ export default function LoadingScreen() {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5 }}
-          className="fixed inset-0 bg-gradient-to-br from-[#0f766e] via-[#0b625e] to-[#073c3a] flex items-center justify-center z-50 overflow-hidden"
+          className="fixed inset-0 bg-gradient-to-br from-[var(--gp-brand)] via-[var(--gp-brand)] to-[#073c3a] flex items-center justify-center z-50 overflow-hidden"
           data-testid="loading-screen"
         >
           <div className="absolute inset-0 gp-splash-grid opacity-25" />
@@ -42,7 +42,7 @@ export default function LoadingScreen() {
               className="relative w-20 h-20 bg-white rounded-[1.6rem] flex items-center justify-center mb-5 mx-auto elevation-3 shadow-2xl shadow-teal-950/30"
             >
               <div className="gp-splash-ring absolute inset-0 rounded-[1.6rem] border-2 border-white/70" />
-              <Send className="w-8 h-8 text-[#0f766e] -rotate-12" />
+              <Send className="w-8 h-8 text-[var(--gp-brand)] -rotate-12" />
               <Sparkles className="absolute -right-2 -top-2 w-5 h-5 text-teal-100" />
             </motion.div>
             <motion.h1

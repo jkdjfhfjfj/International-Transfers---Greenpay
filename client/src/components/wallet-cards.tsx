@@ -125,7 +125,8 @@ export default function WalletCards({
               className={`
                 snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl relative overflow-hidden cursor-pointer
                 transition-all duration-200
-                ${isSelected ? 'ring-2 ring-white ring-offset-2 shadow-2xl scale-[1.02]' : 'shadow-lg hover:shadow-xl'}
+                border-2 border-white/80
+                ${isSelected ? 'border-white shadow-2xl scale-[1.02]' : 'shadow-lg hover:shadow-xl'}
               `}
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${color}`} />

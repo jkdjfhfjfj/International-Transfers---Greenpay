@@ -1,7 +1,16 @@
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, CreditCard, Send, ClipboardList, LayoutGrid } from "lucide-react";
+import { Home, CreditCard, Send, ClipboardList, LayoutGrid, Sun, Moon, Settings2, X } from "lucide-react";
+import {
+  Drawer,
+  DrawerClose,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
 const navItems = [
   { id: "dashboard",    Icon: Home,            label: "Home",     path: "/dashboard" },
@@ -14,6 +23,22 @@ const navItems = [
 export default function BottomNavigation() {
   const [location, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setIsDark(document.documentElement.classList.contains("dark"));
+    const openMenu = () => setMenuOpen(true);
+    window.addEventListener("open-bottom-menu", openMenu);
+    return () => window.removeEventListener("open-bottom-menu", openMenu);
+  }, []);
+
+  const toggleTheme = () => {
+    const nextIsDark = !document.documentElement.classList.contains("dark");
+    document.documentElement.classList.toggle("dark", nextIsDark);
+    localStorage.setItem("geepay-theme", nextIsDark ? "dark" : "light");
+    setIsDark(nextIsDark);
+  };
 
   const isExternal = window.opener !== null || window.parent !== window;
 
@@ -53,14 +78,15 @@ export default function BottomNavigation() {
   if (!showBottomNav) return null;
 
   return (
-    <motion.div
-      initial={{ y: 100 }}
-      animate={{ y: 0 }}
-      transition={{ type: "spring", stiffness: 300, damping: 30 }}
-      className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
-      style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
-      data-testid="bottom-navigation"
-    >
+    <>
+      <motion.div
+        initial={{ y: 100 }}
+        animate={{ y: 0 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+        style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
+        data-testid="bottom-navigation"
+      >
        <div
         className="bg-background/95 border-t border-border shadow-[0_-4px_18px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:shadow-[0_-4px_18px_rgba(0,0,0,0.28)]"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)', minHeight: 'var(--bottom-nav-height)' }}
@@ -88,7 +114,7 @@ export default function BottomNavigation() {
                       width: 52,
                       height: 52,
                       borderRadius: '50%',
-                      background: 'linear-gradient(135deg, #0f766e 0%, #14b8a6 100%)',
+                      background: 'var(--gp-gradient)',
                       border: '3px solid var(--background)',
                       boxShadow: '0 6px 20px rgba(5, 150, 105, 0.40)',
                       display: 'flex',
@@ -103,7 +129,7 @@ export default function BottomNavigation() {
                     style={{
                       fontSize: 10,
                       fontWeight: 600,
-                       color: isActive ? '#0f766e' : '#64748b',
+                      color: isActive ? 'var(--gp-brand)' : '#64748b',
                       marginTop: 32,
                       lineHeight: 1,
                     }}
@@ -131,7 +157,7 @@ export default function BottomNavigation() {
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                   color: isActive ? '#0f766e' : '#64748b',
+                  color: isActive ? 'var(--gp-brand)' : '#64748b',
                   position: 'relative',
                 }}
               >
@@ -148,7 +174,7 @@ export default function BottomNavigation() {
                       width: 4,
                       height: 4,
                       borderRadius: '50%',
-                       background: '#0f766e',
+                      background: 'var(--gp-brand)',
                     }}
                   />
                 )}
@@ -157,6 +183,53 @@ export default function BottomNavigation() {
           })}
         </div>
       </div>
-    </motion.div>
+      </motion.div>
+
+      <Drawer open={menuOpen} onOpenChange={setMenuOpen}>
+        <DrawerContent className="z-[10001] max-h-[calc(100dvh-var(--bottom-nav-height)-env(safe-area-inset-bottom,0px))] overflow-y-auto rounded-t-[28px] pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+1rem)]">
+          <DrawerHeader className="text-left">
+            <div className="flex items-center justify-between">
+              <div>
+                <DrawerTitle>App menu</DrawerTitle>
+                <DrawerDescription>Quick access to app preferences</DrawerDescription>
+              </div>
+              <DrawerClose asChild>
+                <button className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close app menu">
+                  <X className="h-5 w-5" />
+                </button>
+              </DrawerClose>
+            </div>
+          </DrawerHeader>
+          <div className="space-y-2 px-4 pb-4">
+            <button
+              onClick={toggleTheme}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left transition-colors hover:bg-muted"
+              data-testid="button-theme-toggle"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </span>
+              <span className="flex-1">
+                <span className="block text-sm font-semibold">{isDark ? "Light mode" : "Dark mode"}</span>
+                <span className="block text-xs text-muted-foreground">Switch the app appearance</span>
+              </span>
+              <span className="text-xs font-medium text-muted-foreground">{isDark ? "On" : "Off"}</span>
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); setLocation("/settings"); }}
+              className="flex w-full items-center gap-3 rounded-2xl border border-border p-4 text-left transition-colors hover:bg-muted"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Settings2 className="h-5 w-5" />
+              </span>
+              <span>
+                <span className="block text-sm font-semibold">Settings</span>
+                <span className="block text-xs text-muted-foreground">Manage your account and preferences</span>
+              </span>
+            </button>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    </>
   );
 }

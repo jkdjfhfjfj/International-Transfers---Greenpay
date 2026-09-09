@@ -970,7 +970,7 @@ export default function SettingsPage() {
             className="bg-card p-4 rounded-xl border border-border flex items-center justify-between elevation-1"
           >
             <div className="flex items-center">
-              <span className="material-icons mr-3" style={{ color: '#0f766e' }}>security</span>
+              <span className="material-icons mr-3" style={{ color: 'var(--gp-brand)' }}>security</span>
               <div>
                 <p className="font-medium">Two-Factor Authentication</p>
                 <p className="text-sm text-muted-foreground">Add extra security to your account</p>

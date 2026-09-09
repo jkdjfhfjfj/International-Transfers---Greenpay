@@ -153,18 +153,7 @@ export default function SplashPage() {
         </svg>
 
         {/* Content Overlay */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-6 h-24">
-          <motion.div
-            initial={{ opacity: 0, x: -12 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.5, delay: 0.15 }}
-            className="flex items-center gap-2 text-white"
-          >
-            <span className="w-8 h-8 rounded-xl bg-white/15 border border-white/20 flex items-center justify-center backdrop-blur-sm">
-              <Send className="w-4 h-4" />
-            </span>
-            <span className="text-sm font-bold tracking-[0.18em]">GEEPAY</span>
-          </motion.div>
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-end px-6 py-6 h-24">
           <motion.button
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}

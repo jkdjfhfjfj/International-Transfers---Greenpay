@@ -49,6 +49,7 @@ interface SystemSettings {
     default_currency: string;
     session_timeout: string;
     terms_url: string;
+    theme_color: string;
     maintenance_title: string;
     maintenance_message: string;
     maintenance_estimated_time: string;
@@ -109,6 +110,7 @@ export default function AdminSystemSettingsPage() {
   const [currency, setCurrency] = useState("");
   const [sessionTimeout, setSessionTimeout] = useState("");
   const [termsUrl, setTermsUrl] = useState("");
+  const [themeColor, setThemeColor] = useState("#0f766e");
   const [maintenanceTitle, setMaintenanceTitle] = useState("");
   const [maintenanceMsg, setMaintenanceMsg] = useState("");
   const [maintenanceEstimatedTime, setMaintenanceEstimatedTime] = useState("");
@@ -193,6 +195,7 @@ export default function AdminSystemSettingsPage() {
       setCurrency(settingsData.general?.default_currency || "");
       setSessionTimeout(settingsData.general?.session_timeout || "");
       setTermsUrl(settingsData.general?.terms_url || "");
+      setThemeColor(settingsData.general?.theme_color || "#0f766e");
       setMaintenanceTitle(settingsData.general?.maintenance_title || "");
       setMaintenanceMsg(settingsData.general?.maintenance_message || "");
       setMaintenanceEstimatedTime(settingsData.general?.maintenance_estimated_time || "");
@@ -298,6 +301,7 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/default_currency", { value: String(currency), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/session_timeout", { value: String(sessionTimeout), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/terms_url", { value: String(termsUrl), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/theme_color", { value: String(themeColor), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_title", { value: String(maintenanceTitle), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_message", { value: String(maintenanceMsg), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_estimated_time", { value: String(maintenanceEstimatedTime), category: "general" }),
@@ -602,6 +606,31 @@ export default function AdminSystemSettingsPage() {
                   <div className="space-y-2 col-span-2">
                     <Label className="text-sm">Terms URL</Label>
                     <Input value={termsUrl} onChange={(e) => setTermsUrl(e.target.value)} placeholder="https://..." className="rounded-xl" />
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4 col-span-full">
+                    <div>
+                      <Label className="text-sm font-semibold">User App Theme Color</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Choose the primary color used across the user-facing app, navigation, headers, and controls.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        type="color"
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        aria-label="Choose user app theme color"
+                        className="h-12 w-16 cursor-pointer rounded-xl border border-border bg-background p-1"
+                      />
+                      <Input
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        pattern="^#[0-9a-fA-F]{6}$"
+                        placeholder="#0f766e"
+                        className="rounded-xl sm:max-w-xs"
+                      />
+                      <div className="h-10 flex-1 rounded-xl border border-border shadow-inner" style={{ backgroundColor: themeColor }} />
+                    </div>
                   </div>
                    <div className="col-span-full mt-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
                      <div className="mb-4 flex items-start gap-3">

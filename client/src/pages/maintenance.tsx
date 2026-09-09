@@ -74,8 +74,6 @@ export default function MaintenancePage() {
   return (
     <main className="min-h-[100dvh] bg-background pb-36 text-foreground">
       <WavyHeader
-        title="Service status"
-        subtitle={getMaintenanceStatusLabel()}
         icon={<ServerCog className="h-5 w-5 text-white" aria-hidden="true" />}
         rightContent={
           <span className="rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold text-white ring-1 ring-white/20">

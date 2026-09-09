@@ -55,9 +55,9 @@ export function WavyHeader({
   };
 
   const paths = pathMap[size];
-  const BRAND = '#0f766e';
-  const BRAND_MID = 'rgba(15,118,110,0.45)';
-  const BRAND_STROKE = 'rgba(15,118,110,0.55)';
+  const BRAND = 'var(--gp-brand)';
+  const BRAND_MID = 'var(--gp-brand-soft)';
+  const BRAND_STROKE = 'var(--gp-brand-soft)';
 
   return (
     <motion.div
@@ -76,7 +76,7 @@ export function WavyHeader({
         <defs>
           <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%"   style={{ stopColor: BRAND, stopOpacity: 1 }} />
-            <stop offset="100%" style={{ stopColor: '#14b8a6', stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: 'var(--gp-brand-soft)', stopOpacity: 1 }} />
           </linearGradient>
         </defs>
 

@@ -5,6 +5,7 @@ type SettingValue = { value: string };
 
 interface SystemSettings {
   general?: {
+    theme_color?: { value: string };
     maintenance_mode?: { value: string };
     maintenance_message?: { value: string };
     maintenance_title?: { value: string };
@@ -42,6 +43,22 @@ interface SystemSettings {
   [key: string]: any;
 }
 
+function applyThemeColor(value?: string) {
+  const color = String(value || "").trim();
+  if (!/^#[0-9a-f]{6}$/i.test(color)) return;
+
+  const root = document.documentElement;
+  root.style.setProperty("--primary", color);
+  root.style.setProperty("--ring", color);
+  root.style.setProperty("--sidebar-primary", color);
+  root.style.setProperty("--sidebar-ring", color);
+  root.style.setProperty("--sidebar-accent-foreground", color);
+  root.style.setProperty("--chart-1", color);
+  root.style.setProperty("--gp-brand", color);
+  root.style.setProperty("--gp-brand-soft", color);
+  root.style.setProperty("--gp-gradient", `linear-gradient(135deg, ${color} 0%, ${color} 100%)`);
+}
+
 export function useSystemSettings() {
   const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -52,6 +69,10 @@ export function useSystemSettings() {
         const response = await apiRequest("GET", "/api/system-settings");
         const data = await response.json();
         setSettings(data);
+        applyThemeColor(
+          data?.general?.theme_color?.value ??
+          data?.platform?.theme_color?.value,
+        );
 
         const maintenanceSetting =
           data?.general?.maintenance_mode?.value ??

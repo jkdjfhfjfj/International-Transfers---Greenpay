@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
               animate={{ scale: 1 }}
               transition={{ delay: 0.2 }}
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-               style={{ background: '#0f766e' }}
+               style={{ background: 'var(--gp-brand)' }}
             >
               <KeyRound className="w-7 h-7 text-white" />
             </motion.div>
@@ -137,7 +137,7 @@ export default function ForgotPasswordPage() {
                 disabled={loading || !contact.trim()}
                 whileTap={{ scale: 0.97 }}
                 className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50"
-                 style={{ background: '#0f766e' }}
+                 style={{ background: 'var(--gp-brand)' }}
               >
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">

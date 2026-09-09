@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatNumber } from "@/lib/formatters";
 import AnnouncementSlide from "@/components/announcement-slide";
 import { MoreMenu } from "@/components/more-menu";
-import { Grid } from "lucide-react";
+import { Grid, PanelsTopLeft } from "lucide-react";
 import WalletCards from "@/components/wallet-cards";
 import { useWallets } from "@/hooks/use-wallets";
 import type { Wallet as WalletType } from "@/hooks/use-wallets";
@@ -138,10 +138,6 @@ export default function DashboardPage() {
 
   // Discount modal disabled - users can access virtual card from dashboard or menu
 
-  const toggleDarkMode = () => {
-    document.documentElement.classList.toggle('dark');
-  };
-
   // Quick action items
   const quickActions = [
     { 
@@ -149,8 +145,8 @@ export default function DashboardPage() {
       icon: Send, 
       label: "Send Money", 
       path: "/send-money", 
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -159,8 +155,8 @@ export default function DashboardPage() {
       icon: Download, 
       label: "Receive", 
       path: "/receive-money", 
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: !hasActiveVirtualCard,
       requiresCard: true
     },
@@ -169,8 +165,8 @@ export default function DashboardPage() {
       icon: Smartphone, 
       label: "Buy Airtime", 
       path: "/airtime", 
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: false,
       requiresCard: false
     },
@@ -179,8 +175,8 @@ export default function DashboardPage() {
       icon: Receipt, 
       label: "Pay Bills", 
       path: "/bills", 
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: false,
       requiresCard: false
     },
@@ -189,8 +185,8 @@ export default function DashboardPage() {
       icon: TrendingUp, 
       label: "Add Money", 
       path: "/deposit", 
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: false,
       requiresCard: false
     },
@@ -199,8 +195,8 @@ export default function DashboardPage() {
       icon: ArrowLeftRight,
       label: "Transfer",
       path: "/transfer",
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: false,
       requiresCard: false
     },
@@ -209,8 +205,8 @@ export default function DashboardPage() {
       icon: BarChart3,
       label: "Analytics",
       path: "/analytics",
-       accent: '#0f766e',
-       tint: 'rgba(15,118,110,0.08)',
+       accent: 'var(--gp-brand)',
+       tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
       disabled: false,
       requiresCard: false
     },
@@ -276,7 +272,7 @@ export default function DashboardPage() {
       <div
         className="sticky top-0 z-50"
         style={{
-          background: 'linear-gradient(160deg, #0f766e 0%, #14b8a6 100%)',
+          background: 'var(--gp-gradient)',
           borderBottomLeftRadius: 24,
           borderBottomRightRadius: 24,
           padding: '16px 16px 20px',
@@ -323,11 +319,13 @@ export default function DashboardPage() {
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.92 }}
-              onClick={toggleDarkMode}
+              onClick={() => window.dispatchEvent(new CustomEvent("open-bottom-menu"))}
               className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 transition-colors"
-              data-testid="button-dark-mode"
+              title="Open app menu"
+              aria-label="Open app menu"
+              data-testid="button-app-menu"
             >
-              <span className="material-icons text-white" style={{ fontSize: 18 }}>brightness_6</span>
+              <PanelsTopLeft className="h-[18px] w-[18px] text-white" />
             </motion.button>
           </div>
         </motion.div>
@@ -612,38 +610,38 @@ export default function DashboardPage() {
             {[
               {
                 id: 'card', label: 'Virtual Card', path: '/virtual-card', testId: 'button-virtual-card',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'credit_card',
                 badge: cardStatus === 'active',
               },
               {
                 id: 'history', label: 'History', path: '/transactions', testId: 'button-transactions',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'receipt_long',
               },
               {
                 id: 'exchange', label: 'Exchange', path: '/exchange', testId: '',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'currency_exchange',
               },
               {
                 id: 'crypto', label: 'Crypto', path: '/crypto', testId: 'button-crypto',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'currency_bitcoin',
               },
               {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'support_agent',
               },
               {
                 id: 'status', label: 'Status', path: '/status', testId: '',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'health_and_safety',
               },
               {
                 id: 'settings', label: 'Settings', path: '/settings', testId: 'button-settings',
-                accent: '#0f766e', tint: 'rgba(15,118,110,0.08)',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'settings',
               },
             ].map((service, index) => (
@@ -685,11 +683,11 @@ export default function DashboardPage() {
             >
               <div
                 className="w-14 h-14 rounded-2xl flex items-center justify-center"
-                style={{ background: 'rgba(15,118,110,0.08)' }}
+                style={{ background: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)' }}
               >
-                <Grid className="w-6 h-6" style={{ color: '#0f766e' }} />
+                <Grid className="w-6 h-6" style={{ color: 'var(--gp-brand)' }} />
               </div>
-              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: '#0f766e' }}>
+              <span className="font-semibold text-center leading-tight" style={{ fontSize: 10, color: 'var(--gp-brand)' }}>
                 More
               </span>
             </motion.button>

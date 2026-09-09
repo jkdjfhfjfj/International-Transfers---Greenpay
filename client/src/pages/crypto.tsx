@@ -388,7 +388,7 @@ export default function CryptoPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-2xl p-5 text-white"
-                           style={{ background: 'linear-gradient(160deg, #0f766e 0%, #14b8a6 100%)' }}
+                           style={{ background: 'var(--gp-gradient)' }}
         >
           <p className="text-sm text-white/80 mb-1">Crypto Portfolio</p>
           <p className="text-3xl font-bold">${totalUsdValue.toFixed(2)}</p>
