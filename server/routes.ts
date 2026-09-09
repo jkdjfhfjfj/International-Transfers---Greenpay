@@ -500,12 +500,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isAllowedPath = allowedPaths.some(path => req.path.startsWith(path));
       
       const isApiRequest = req.path.startsWith("/api/");
-      const acceptsHtml = String(req.headers.accept || "").includes("text/html");
 
       // Keep API consumers on a useful machine-readable 503, but allow normal
-      // browser navigation to reach the React maintenance screen. Returning
-      // JSON for a document request makes users see the raw response body.
-      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && (isApiRequest || !acceptsHtml)) {
+      // browser navigation and the app's JavaScript/CSS assets to reach the
+      // React maintenance screen. Blocking non-API assets here leaves the
+      // document without its bundle and produces a blank page.
+      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && isApiRequest) {
         const messageSetting =
           await storage.getSystemSetting("general", "maintenance_message") ||
           await storage.getSystemSetting("platform", "maintenance_message");

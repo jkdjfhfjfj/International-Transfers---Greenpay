@@ -8534,8 +8534,7 @@ async function registerRoutes(app2) {
       ];
       const isAllowedPath = allowedPaths.some((path4) => req.path.startsWith(path4));
       const isApiRequest = req.path.startsWith("/api/");
-      const acceptsHtml = String(req.headers.accept || "").includes("text/html");
-      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && (isApiRequest || !acceptsHtml)) {
+      if (maintenanceEnabled && !isAllowedPath && !req.session?.admin && isApiRequest) {
         const messageSetting = await storage.getSystemSetting("general", "maintenance_message") || await storage.getSystemSetting("platform", "maintenance_message");
         return res.status(503).json({
           message: messageSetting?.value || "System is under maintenance. Please try again later.",

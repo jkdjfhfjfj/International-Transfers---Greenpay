@@ -50,11 +50,6 @@ export function PWAInstallPrompt() {
           // Force check for updates on every page load
           registration.update().catch(() => {});
 
-          // When a new SW takes control, reload to get fresh assets
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            console.log('SW updated, reloading for fresh assets...');
-            window.location.reload();
-          });
         })
         .catch((registrationError) => {
           console.log('SW registration failed: ', registrationError);
