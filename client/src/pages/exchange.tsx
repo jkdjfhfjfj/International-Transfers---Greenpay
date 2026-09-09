@@ -393,7 +393,8 @@ export default function ExchangePage() {
         onClose={() => setSecurityPrompt(null)}
         requiresPin={securityPrompt?.pin}
         requiresAuthenticator={securityPrompt?.authenticator}
-        hideHeader
+        title="Confirm exchange"
+        description="Verify your transaction security settings to complete this exchange."
         onSuccess={(pin, authenticatorCode) => {
           setSecurityPrompt(null);
           void handleExchange({ pin, authenticatorCode });
