@@ -7,4 +7,4 @@ Treat a clean Git checkout as separate from a complete dependency install. A fai
 
 **Why:** The imported app's install was blocked by security-policy 403 responses for packages in the dependency graph, and the build and workflow then surfaced different missing imports.
 
-**How to apply:** Before debugging application code, run the install and build checks and inspect the exact missing package. Do not bypass the package firewall; repair the dependency graph or use an approved safe version before claiming the preview is verified.
+**How to apply:** Before debugging application code, run the install and build checks and inspect the exact missing package. Failed package-manager retries can also rewrite dependency manifests, so compare them with Git and restore unintended version changes. Do not bypass the firewall or claim preview verification while tooling is missing.

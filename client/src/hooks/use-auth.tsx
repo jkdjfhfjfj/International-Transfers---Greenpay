@@ -61,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = (userData: User) => {
     setUser(userData);
+    setIsImpersonating(false);
     setStorageSafe("greenpay_user", userData);
     if (userData?.darkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
@@ -92,6 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (res.status === 401) {
         // Session expired or user removed from DB — log out cleanly
         setUser(null);
+        setIsImpersonating(false);
         localStorage.removeItem("greenpay_user");
       }
     } catch {

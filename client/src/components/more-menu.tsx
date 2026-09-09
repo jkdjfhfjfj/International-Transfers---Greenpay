@@ -100,7 +100,7 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            className="fixed inset-0 z-[10000] bg-black/40 backdrop-blur-sm"
           />
         )}
       </AnimatePresence>
@@ -112,7 +112,7 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 z-50 bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl flex flex-col"
+            className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 z-[10001] bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl flex flex-col"
             style={{ maxHeight: '82vh' }}
           >
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">

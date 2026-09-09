@@ -10873,6 +10873,17 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       } else if (transaction && failed) {
         await storage.updateTransactionStatus(transaction.id, "failed");
+        if (metadata.billPaymentId) {
+          try {
+            await refundBillPayment({
+              billPaymentId: String(metadata.billPaymentId),
+              transactionId: transaction.id,
+              reason: statusResult.message || `Bill provider returned ${normalizedStatus}`,
+            });
+          } catch (refundError) {
+            console.error("Bill provider failure refund error:", refundError);
+          }
+        }
       }
 
       res.json({
