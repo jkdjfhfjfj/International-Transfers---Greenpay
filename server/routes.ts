@@ -1035,22 +1035,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Create default admin account if none exists
-  try {
-    const existingAdmin = await storage.getAdminByEmail("admin@greenpay.com");
-    if (!existingAdmin) {
-      await storage.createAdmin({
-        email: "admin@greenpay.com",
-        password: "Admin123!@#",
-        fullName: "GreenPay Administrator",
-        role: "admin",
-        twoFactorEnabled: false
-      });
-      console.log("✅ Default admin account created");
-    }
-  } catch (error) {
-    console.error("Failed to create default admin:", error);
-  }
+  // Administrator accounts must be provisioned through a secure process.
+  // Never create an account with credentials embedded in source code.
   // Authentication routes with real WhatsApp integration
   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
     try {
@@ -10188,7 +10174,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin notification broadcast
-  app.post("/api/admin/broadcast-notification", async (req, res) => {
+  app.post("/api/admin/broadcast-notification", requireAdminAuth, async (req, res) => {
     try {
       const { title, message, type, actionUrl, expiresIn } = req.body;
       
@@ -10218,7 +10204,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.get("/api/admin/notifications", async (req, res) => {
+  app.get("/api/admin/notifications", requireAdminAuth, async (req, res) => {
     try {
       const globalNotifications = await storage.getGlobalNotifications();
       res.json({ notifications: globalNotifications });
@@ -10229,7 +10215,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Delete notification
-  app.delete("/api/admin/notifications/:id", async (req, res) => {
+  app.delete("/api/admin/notifications/:id", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       
@@ -10369,7 +10355,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Update system settings card price endpoint
-  app.put("/api/system-settings/card-price", async (req, res) => {
+  app.put("/api/system-settings/card-price", requireAdminAuth, async (req, res) => {
     try {
       const { price } = req.body;
       
@@ -10416,7 +10402,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.put("/api/system-settings/discount-enabled", async (req, res) => {
+  app.put("/api/system-settings/discount-enabled", requireAdminAuth, async (req, res) => {
     try {
       const { enabled } = req.body;
       await storage.setSystemSetting({
@@ -10638,7 +10624,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin login as user endpoint
-  app.post("/api/admin/login-as-user", async (req, res) => {
+  app.post("/api/admin/login-as-user", requireAdminAuth, async (req, res) => {
     try {
       const { userId } = req.body;
       
@@ -12605,72 +12591,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
     } catch (error: any) {
       console.error('AI chat error:', error);
       res.status(500).json({ error: error.message || "Failed to generate AI response" });
-    }
-  });
-
-  // Export Environment Variables as .env file
-  app.get("/api/admin/export-env", async (req, res) => {
-    try {
-      // Check admin authentication or session
-      const isAdmin = req.session?.admin?.id || req.user?.id;
-      if (!isAdmin) {
-        return res.status(401).json({ message: "Authentication required. Please log in as an administrator." });
-      }
-
-      const envVars = process.env;
-      let envContent = '';
-
-      // Collect all environment variables and format as KEY=VALUE
-      for (const [key, value] of Object.entries(envVars)) {
-        if (value !== undefined && value !== null) {
-          // Escape values that contain special characters
-          const escapedValue = typeof value === 'string' && value.includes('"') 
-            ? `'${value}'` 
-            : `${value}`;
-          envContent += `${key}=${escapedValue}\n`;
-        }
-      }
-
-      // Set response headers for file download
-      res.setHeader('Content-Type', 'text/plain');
-      res.setHeader('Content-Disposition', `attachment; filename=".env-${new Date().toISOString().split('T')[0]}"`);
-      res.send(envContent);
-      
-      console.log('[Admin] Environment variables exported by admin');
-    } catch (error: any) {
-      console.error('Export env error:', error);
-      res.status(500).json({ error: 'Failed to export environment variables' });
-    }
-  });
-
-  // Direct .env export for development (saves to file)
-  app.get("/api/dev/export-env-file", async (req, res) => {
-    try {
-      const envVars = process.env;
-      let envContent = '';
-
-      // Collect all environment variables and format as KEY=VALUE
-      for (const [key, value] of Object.entries(envVars)) {
-        if (value !== undefined && value !== null) {
-          // Escape values that contain special characters
-          const escapedValue = typeof value === 'string' && value.includes('"') 
-            ? `'${value}'` 
-            : `${value}`;
-          envContent += `${key}=${escapedValue}\n`;
-        }
-      }
-
-      res.json({ 
-        success: true, 
-        content: envContent,
-        fileName: `.env-${new Date().toISOString().split('T')[0]}`,
-        count: Object.keys(envVars).length 
-      });
-      
-      console.log('[Dev] Environment variables exported');
-    } catch (error: any) {
-      console.error('Export env error:', error);
-      res.status(500).json({ error: 'Failed to export environment variables' });
     }
   });
 
