@@ -75,7 +75,7 @@ export default function MaintenancePage() {
       <div className="pointer-events-none absolute -left-24 -top-28 h-72 w-72 rounded-full bg-emerald-300/25 blur-3xl dark:bg-emerald-800/20" />
       <div className="pointer-events-none absolute -bottom-32 -right-20 h-80 w-80 rounded-full bg-teal-200/30 blur-3xl dark:bg-teal-900/20" />
 
-      <div className="relative mx-auto w-full max-w-2xl px-4 pb-10 pt-4 sm:px-6 sm:pt-8">
+      <div className="relative mx-auto w-full max-w-2xl px-4 pb-36 pt-4 sm:px-6 sm:pt-8">
         <header className="flex items-center justify-between px-1 py-2">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
@@ -93,8 +93,8 @@ export default function MaintenancePage() {
           </span>
         </header>
 
-        <section className="mt-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-700 p-6 text-white shadow-2xl shadow-emerald-900/15 sm:p-8">
-          <div className="flex items-start justify-between gap-4">
+        <section className="relative mt-5 overflow-hidden rounded-[2rem] bg-gradient-to-br from-emerald-700 via-emerald-600 to-teal-700 px-6 pb-16 pt-6 text-white shadow-2xl shadow-emerald-900/15 sm:px-8 sm:pt-8">
+          <div className="relative z-10 flex items-start justify-between gap-4">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-white/20 backdrop-blur">
               <Wrench className="h-7 w-7" aria-hidden="true" />
             </div>
@@ -102,14 +102,14 @@ export default function MaintenancePage() {
               {getMaintenanceStatusLabel()}
             </span>
           </div>
-          <p className="mt-7 text-sm font-medium text-emerald-100">We’re taking care of things</p>
-          <h1 className="mt-2 max-w-xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
+          <p className="relative z-10 mt-7 text-sm font-medium text-emerald-100">We’re taking care of things</p>
+          <h1 className="relative z-10 mt-2 max-w-xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl">
             {getMaintenanceTitle()}
           </h1>
-          <p className="mt-4 max-w-xl text-sm leading-6 text-emerald-50/90 sm:text-base">
+          <p className="relative z-10 mt-4 max-w-xl text-sm leading-6 text-emerald-50/90 sm:text-base">
             {getMaintenanceMessage()}
           </p>
-          <div className="mt-6 flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-50">
+          <div className="relative z-10 mt-6 flex flex-wrap items-center gap-2 text-xs font-semibold text-emerald-50">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-black/15 px-3 py-2">
               <Clock3 className="h-3.5 w-3.5" />
               {getMaintenanceEstimatedTime()}
@@ -119,6 +119,17 @@ export default function MaintenancePage() {
               {severityInfo.label}
             </span>
           </div>
+          <svg
+            className="absolute inset-x-0 bottom-[-1px] h-14 w-full text-[#f5f8f7] dark:text-slate-950"
+            viewBox="0 0 480 56"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              fill="currentColor"
+              d="M0 33C72 55 133 55 200 35C279 11 354 4 480 31V56H0Z"
+            />
+          </svg>
         </section>
 
         <section className={`mt-4 rounded-3xl border p-4 ${severityInfo.className}`}>
@@ -182,13 +193,9 @@ export default function MaintenancePage() {
           </div>
         </section>
 
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-          <Button className="h-12 flex-1 gap-2 rounded-2xl bg-emerald-600 font-bold shadow-lg shadow-emerald-600/15 hover:bg-emerald-700" onClick={() => window.location.reload()}>
-            <RefreshCw className="h-4 w-4" />
-            Check again
-          </Button>
+        <div className="mt-6 pb-32">
           {supportEmail ? (
-            <Button asChild variant="outline" className="h-12 flex-1 gap-2 rounded-2xl border-slate-300 bg-white/80 font-bold dark:border-slate-700 dark:bg-slate-900/80">
+            <Button asChild variant="outline" className="h-12 w-full gap-2 rounded-2xl border-slate-300 bg-white/80 font-bold dark:border-slate-700 dark:bg-slate-900/80">
               <a href={`mailto:${supportEmail}`}>
                 <Mail className="h-4 w-4" />
                 Contact support
@@ -199,6 +206,17 @@ export default function MaintenancePage() {
         <p className="mt-5 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
           You can safely keep this page open. It will update automatically when Geepay is available again.
         </p>
+      </div>
+      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200/80 bg-[#f5f8f7]/95 px-4 pt-3 shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/95">
+        <div className="mx-auto max-w-2xl pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <Button
+            className="h-12 w-full gap-2 rounded-2xl bg-emerald-600 font-bold shadow-lg shadow-emerald-600/20 hover:bg-emerald-700"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="h-4 w-4" />
+            Check again
+          </Button>
+        </div>
       </div>
     </main>
   );
