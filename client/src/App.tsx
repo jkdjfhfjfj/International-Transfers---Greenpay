@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -37,6 +37,7 @@ import AirtimePage from "@/pages/airtime";
 import BillsPage from "@/pages/bills";
 import StatusPage from "@/pages/status";
 import MaintenancePage from "@/pages/maintenance";
+import OfflinePage from "@/pages/offline";
 import LoadingScreen from "@/components/loading-screen";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PWAInstallPrompt } from "@/components/pwa-install";
@@ -238,9 +239,23 @@ function AppContent() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const { getMaintenanceMode } = useSystemSettings();
   const maintenanceState = useMaintenanceState();
+  const [isOffline, setIsOffline] = useState(
+    typeof navigator !== "undefined" && !navigator.onLine,
+  );
   
   // Initialize FCM push notifications
   useFCM(isAuthenticated);
+
+  useEffect(() => {
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => setIsOffline(false);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
 
   // Use the browser Notification API for web notifications. This is
   // intentionally separate from Capacitor/FCM; the persisted notification
@@ -330,7 +345,7 @@ function AppContent() {
       <OfflineIndicator />
       {showAppShell && <DesktopSidebar />}
       <div className={showAppShell ? "md:pl-64" : ""}>
-        {showMaintenance ? <MaintenancePage /> : <Router />}
+        {isOffline ? <OfflinePage /> : showMaintenance ? <MaintenancePage /> : <Router />}
       </div>
       {!isAdminPage && !showMaintenance && <BottomNavigation />}
       {!isAdminPage && !showMaintenance && <PWAInstallPrompt />}

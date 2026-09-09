@@ -82,7 +82,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          return caches.match(event.request) || caches.match('/offline.html');
+          return caches.match(event.request).then((cached) => cached || caches.match('/offline.html'));
         })
     );
     return;

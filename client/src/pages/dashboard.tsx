@@ -431,18 +431,6 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-1 flex-shrink-0">
-            <div
-              className="mr-1 flex max-w-[92px] min-w-0 flex-col items-end"
-              title={netWorthLabel}
-              data-testid="dashboard-net-worth"
-            >
-              <span className="truncate text-[8px] font-semibold uppercase tracking-[0.08em] text-white/65">
-                Net worth
-              </span>
-              <span className="max-w-full truncate text-[11px] font-bold text-white">
-                {getCurrencySymbol(netWorthCurrency)}{formatNumber(netWorthAmount)}
-              </span>
-            </div>
             <Notifications />
             <motion.button
               whileTap={{ scale: 0.92 }}
@@ -467,27 +455,37 @@ export default function DashboardPage() {
         </motion.div>
 
         {/* Location tag */}
-        {user?.country && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.05 }}
-            className="flex items-center gap-1.5 mb-3"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.05 }}
+          className="mb-3 flex items-center justify-between gap-3"
+        >
+          <div
+            className="flex items-center gap-1.5 text-white/70 text-xs"
+            style={{
+              background: 'rgba(255,255,255,0.10)',
+              borderRadius: 20,
+              padding: '3px 10px',
+              display: 'inline-flex',
+            }}
           >
-            <div
-              className="flex items-center gap-1.5 text-white/70 text-xs"
-              style={{
-                background: 'rgba(255,255,255,0.10)',
-                borderRadius: 20,
-                padding: '3px 10px',
-                display: 'inline-flex',
-              }}
-            >
-              <MapPin className="w-2.5 h-2.5" />
-              <span>Logged in · {user.country}</span>
-            </div>
-          </motion.div>
-        )}
+            <MapPin className="w-2.5 h-2.5" />
+            <span>Logged in · {user?.country || "your account"}</span>
+          </div>
+          <div
+            className="flex min-w-0 flex-col items-end rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-right"
+            title={netWorthLabel}
+            data-testid="dashboard-net-worth"
+          >
+            <span className="truncate text-[8px] font-semibold uppercase tracking-[0.08em] text-white/65">
+              Net worth
+            </span>
+            <span className="max-w-[140px] truncate text-xs font-bold text-white">
+              {getCurrencySymbol(netWorthCurrency)}{formatNumber(netWorthAmount)}
+            </span>
+          </div>
+        </motion.div>
 
         {/* Wallet Cards Carousel */}
         <motion.div

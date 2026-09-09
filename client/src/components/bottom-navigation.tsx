@@ -2,7 +2,10 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, CreditCard, Send, ClipboardList, LayoutGrid, Sun, Moon, Settings2, X } from "lucide-react";
+import { Home, CreditCard, Send, ClipboardList, LayoutGrid, Sun, Moon, Settings2, X, TrendingUp, WalletCards, RefreshCw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useWallets } from "@/hooks/use-wallets";
 import {
   Drawer,
   DrawerClose,
@@ -25,6 +28,13 @@ export default function BottomNavigation() {
   const { isAuthenticated } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  const { wallets } = useWallets();
+  const { data: rateData, isLoading: ratesLoading } = useQuery<any>({
+    queryKey: ["/api/exchange-rates", "USD", "bottom-menu"],
+    queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
+    enabled: isAuthenticated && menuOpen,
+    staleTime: 5 * 60 * 1000,
+  });
 
   useEffect(() => {
     setIsDark(document.documentElement.classList.contains("dark"));
@@ -106,6 +116,7 @@ export default function BottomNavigation() {
                 <div key={item.id} className="flex flex-col items-center justify-end pb-2 relative" style={{ flex: 1 }}>
                   <motion.button
                     onClick={() => setLocation(item.path)}
+                    whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.92 }}
                     data-testid={`nav-${item.id}`}
                     style={{
@@ -114,7 +125,7 @@ export default function BottomNavigation() {
                       width: 52,
                       height: 52,
                       borderRadius: '50%',
-                      background: 'var(--gp-gradient)',
+                      background: 'var(--gp-brand)',
                       border: '3px solid var(--background)',
                       boxShadow: '0 6px 20px rgba(5, 150, 105, 0.40)',
                       display: 'flex',
@@ -129,7 +140,7 @@ export default function BottomNavigation() {
                     style={{
                       fontSize: 10,
                       fontWeight: 600,
-                      color: isActive ? 'var(--gp-brand)' : '#64748b',
+                      color: isActive ? 'var(--gp-brand)' : 'var(--muted-foreground)',
                       marginTop: 32,
                       lineHeight: 1,
                     }}
@@ -144,6 +155,7 @@ export default function BottomNavigation() {
               <motion.button
                 key={item.id}
                 onClick={() => setLocation(item.path)}
+                whileHover={{ y: -2, scale: 1.04 }}
                 whileTap={{ scale: 0.88 }}
                 data-testid={`nav-${item.id}`}
                 style={{
@@ -157,7 +169,7 @@ export default function BottomNavigation() {
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  color: isActive ? 'var(--gp-brand)' : '#64748b',
+                  color: isActive ? 'var(--gp-brand)' : 'var(--muted-foreground)',
                   position: 'relative',
                 }}
               >
@@ -201,6 +213,41 @@ export default function BottomNavigation() {
             </div>
           </DrawerHeader>
           <div className="space-y-2 px-4 pb-4">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <WalletCards className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Wallet balance</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {wallets.length ? `${wallets[0].currency} ${Number(wallets[0].availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "Loading wallet"}
+                    </p>
+                  </div>
+                </div>
+                <TrendingUp className="h-4 w-4 text-primary" />
+              </div>
+              <div className="border-t border-border pt-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-foreground">Live rates</p>
+                  {ratesLoading && <RefreshCw className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {["KES", "UGX", "NGN"].map((currency) => {
+                    const rate = Number(rateData?.rates?.[currency] ?? rateData?.[currency]);
+                    return (
+                      <div key={currency} className="rounded-xl bg-muted/60 px-2 py-2 text-center">
+                        <p className="text-[10px] font-semibold text-muted-foreground">USD/{currency}</p>
+                        <p className="mt-0.5 text-xs font-bold text-foreground">
+                          {Number.isFinite(rate) && rate > 0 ? rate.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "—"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             <button
               onClick={toggleTheme}
               className="flex w-full items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left transition-colors hover:bg-muted"

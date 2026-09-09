@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wifi, WifiOff } from 'lucide-react';
+import { WifiOff } from 'lucide-react';
 
 export function OfflineIndicator() {
   const [status, setStatus] = useState<"offline" | "online" | null>(
@@ -47,25 +47,10 @@ export function OfflineIndicator() {
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className="fixed left-1/2 top-3 z-[10001] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-full bg-orange-500 px-4 py-2.5 text-white shadow-lg"
+          className="fixed left-1/2 top-3 z-[10001] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-card px-4 py-2.5 text-amber-700 shadow-lg dark:text-amber-300"
         >
           <WifiOff className="w-4 h-4" />
-          <span className="text-sm font-medium">
-            You're offline - some features may be limited
-          </span>
-        </motion.div>
-      )}
-
-      {status === "online" && (
-        <motion.div
-          key="back-online"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -10 }}
-          className="fixed left-1/2 top-3 z-[10001] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-full bg-green-500 px-4 py-2.5 text-white shadow-lg"
-        >
-          <Wifi className="w-4 h-4" />
-          <span className="text-sm font-medium">Back online</span>
+          <span className="text-sm font-semibold">You are offline</span>
         </motion.div>
       )}
     </AnimatePresence>
