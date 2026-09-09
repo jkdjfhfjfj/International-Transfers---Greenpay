@@ -17,7 +17,7 @@ export class ExchangeRateService {
     this.storage = storage;
     this.apiKey = process.env.EXCHANGERATE_API_KEY;
     if (!this.apiKey) {
-      console.warn('Exchange rate API key not configured - using fallback rates');
+      console.warn('Exchange rate API key not configured - exchange conversions will be unavailable');
     }
   }
 
@@ -47,9 +47,8 @@ export class ExchangeRateService {
     // Get API key from database or environment
     const apiKey = await this.getApiKey();
     
-    // Use fallback rates if no API key is configured
     if (!apiKey) {
-      return this.getFallbackRate(from, to);
+      throw new Error('Exchange rate API key is not configured');
     }
     
     try {
@@ -66,34 +65,24 @@ export class ExchangeRateService {
         throw new Error(`API error: ${data['error-type']}`);
       }
       
-      return data.conversion_rate;
+      const rate = Number(data.conversion_rate);
+      if (!Number.isFinite(rate) || rate <= 0) {
+        throw new Error(`Invalid exchange rate returned for ${from}/${to}`);
+      }
+
+      return rate;
     } catch (error) {
       console.error('Exchange rate fetch error:', error);
-      return this.getFallbackRate(from, to);
+      throw new Error('Exchange rate provider is unavailable');
     }
-  }
-
-  private getFallbackRate(from: string, to: string): number {
-    // Fallback rates for USD/KES only
-    const fallbackRates: Record<string, Record<string, number>> = {
-      'USD': {
-        'KES': 129
-      },
-      'KES': {
-        'USD': 0.0077
-      }
-    };
-    
-    return fallbackRates[from]?.[to] || 1;
   }
 
   async getMultipleRates(base: string, targets: string[]): Promise<Record<string, number>> {
     // Get API key from database or environment
     const apiKey = await this.getApiKey();
     
-    // Use fallback rates if no API key is configured
     if (!apiKey) {
-      return this.getMultipleFallbackRates(base, targets);
+      throw new Error('Exchange rate API key is not configured');
     }
     
     try {
@@ -112,47 +101,18 @@ export class ExchangeRateService {
       
       const rates: Record<string, number> = {};
       targets.forEach(target => {
-        rates[target] = data.conversion_rates[target] || 1;
+        const rate = data.conversion_rates?.[target];
+        if (!Number.isFinite(rate) || rate <= 0) {
+          throw new Error(`Exchange rate missing for ${base}/${target}`);
+        }
+        rates[target] = rate;
       });
       
       return rates;
     } catch (error) {
       console.error('Multiple exchange rates fetch error:', error);
-      return this.getMultipleFallbackRates(base, targets);
+      throw new Error('Exchange rate provider is unavailable');
     }
-  }
-
-  private getMultipleFallbackRates(base: string, targets: string[]): Record<string, number> {
-    // Approximate fallback rates relative to USD
-    const usdRates: Record<string, number> = {
-      'KES': 129.50,
-      'EUR': 0.9215,
-      'GBP': 0.7891,
-      'NGN': 1601.00,
-      'GHS': 15.60,
-      'TZS': 2645.00,
-      'UGX': 3720.00,
-      'ZAR': 18.63,
-      'CAD': 1.3615,
-      'AUD': 1.5430,
-      'JPY': 154.80,
-      'CNY': 7.2410,
-      'INR': 83.45,
-      'AED': 3.6725,
-      'SAR': 3.7500,
-      'USD': 1.0,
-    };
-
-    if (base === 'USD') {
-      return Object.fromEntries(
-        targets.map(target => [target, usdRates[target] ?? 1])
-      );
-    }
-
-    const baseToUsd = usdRates[base] ? 1 / usdRates[base] : 1;
-    return Object.fromEntries(
-      targets.map(target => [target, parseFloat(((usdRates[target] ?? 1) * baseToUsd).toFixed(6))])
-    );
   }
 }
 

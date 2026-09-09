@@ -47,9 +47,9 @@ async function getUsdToKesRate(): Promise<number> {
     const rate = await createExchangeRateService(storage).getExchangeRate("USD", "KES");
     if (Number.isFinite(rate) && rate > 0) return rate;
   } catch (error) {
-    console.warn("[USD/KES] Exchange rate lookup failed; using fallback", error);
+    console.error("[USD/KES] Exchange rate lookup failed", error);
   }
-  return 129;
+  throw new Error("USD/KES exchange rate is unavailable");
 }
 
 async function addWithdrawalEvent(
