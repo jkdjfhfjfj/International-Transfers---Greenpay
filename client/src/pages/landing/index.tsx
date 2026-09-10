@@ -71,7 +71,7 @@ const STATS = [
   { value: "50K+", label: "Active users" },
   { value: "$2M+", label: "Transferred monthly" },
   { value: "< 30s", label: "Transfer time" },
-  { value: "128+", label: "KES per USD" },
+  { value: "Live", label: "Exchange rates" },
 ];
 
 export default function LandingPage() {
@@ -83,10 +83,16 @@ export default function LandingPage() {
   const navShadow = useTransform(scrollY, [0, 80], ["0 0 0 0 rgba(0,0,0,0)", "0 2px 20px rgba(0,0,0,0.08)"]);
 
   useEffect(() => {
-    fetch("/api/exchange-rate")
-      .then(r => r.json())
-      .then(d => { if (d.rate) setRate(Number(d.rate).toFixed(2)); })
-      .catch(() => setRate("129.50"));
+    fetch("/api/exchange-rates/USD")
+      .then(r => {
+        if (!r.ok) throw new Error("Exchange rate unavailable");
+        return r.json();
+      })
+      .then(d => {
+        const nextRate = Number(d.rates?.KES);
+        setRate(Number.isFinite(nextRate) && nextRate > 0 ? nextRate.toFixed(2) : null);
+      })
+      .catch(() => setRate(null));
   }, []);
 
   return (

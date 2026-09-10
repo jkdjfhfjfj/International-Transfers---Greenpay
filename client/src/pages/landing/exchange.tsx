@@ -9,7 +9,7 @@ export default function ExchangeLanding() {
     <>
       <SEO
         title="USD to KES Exchange Rate - Live Rates | Geepay Currency Exchange"
-        description="Convert USD to KES with live exchange rates. Current rate: 129.27 KES per USD. No hidden fees. Fast, secure currency exchange for Kenya."
+        description="Convert USD to KES with live exchange rates shown at checkout. No hidden fees. Fast, secure currency exchange for Kenya."
         keywords="USD to KES, currency exchange, exchange rate, Kenya shilling, US dollar to Kenyan shilling, forex Kenya"
         canonical="https://geepay.us/features/exchange"
       />
@@ -38,8 +38,8 @@ export default function ExchangeLanding() {
           </CardHeader>
           <CardContent>
             <div className="text-center p-8 bg-green-50 rounded-lg">
-              <div className="text-5xl font-bold text-green-600 mb-2">129.27</div>
-              <div className="text-gray-600">KES per 1 USD</div>
+              <div className="text-5xl font-bold text-green-600 mb-2">Live</div>
+              <div className="text-gray-600">Current rate shown at checkout</div>
               <div className="text-sm text-gray-500 mt-2">Updated in real-time</div>
             </div>
           </CardContent>

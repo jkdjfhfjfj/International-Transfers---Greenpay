@@ -384,11 +384,11 @@ export class PayHeroService {
   }
 
   /**
-   * Convert USD to KES (using a fixed rate for now, could be improved with real-time rates)
+   * Convert USD to KES using the configured live exchange-rate provider.
    */
   async convertUSDtoKES(usdAmount: number): Promise<number> {
-    // Using approximate exchange rate - in production you might want to use a real-time API
-    const exchangeRate = 129; // 1 USD = ~129 KES (approximate)
+    const { exchangeRateService } = await import("./exchange-rate");
+    const exchangeRate = await exchangeRateService.getExchangeRate("USD", "KES");
     return Math.round(usdAmount * exchangeRate);
   }
 }

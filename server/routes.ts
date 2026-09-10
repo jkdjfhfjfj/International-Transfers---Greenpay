@@ -3828,18 +3828,11 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      // 1. Convert USD to KES
-      let finalAmountKes = parseFloat(amount);
-      let exchangeRate = 129; // Fallback
-
-      try {
-        const rateService = await createExchangeRateService();
-        exchangeRate = await rateService.getRate("USD", "KES");
-      } catch (e) {
-        console.warn("Using fallback exchange rate for deposit initialization");
-      }
-      
-      finalAmountKes = parseFloat(amount) * exchangeRate;
+      // 1. Convert USD to KES using a live provider rate. Never initialize a
+      // payment with an approximate rate when the provider is unavailable.
+      const rateService = createExchangeRateService(storage);
+      const exchangeRate = await rateService.getExchangeRate("USD", "KES");
+      const finalAmountKes = parseFloat(amount) * exchangeRate;
 
       // Validate user email
       if (!user.email || !user.email.includes('@')) {
@@ -9401,7 +9394,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/admin/send-message", async (req, res) => {
+  app.post("/api/admin/send-message", requireAdminAuth, async (req, res) => {
     try {
       const { userId, message } = req.body;
       
@@ -9417,7 +9410,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const { messagingService } = await import('./services/messaging');
       const result = await messagingService.sendMessage(user.phone, message);
       
-      console.log(`Admin sent message to ${user.fullName} (${user.phone}):`, { sms: result.sms, whatsapp: result.whatsapp });
+      console.log("Admin message sent", { sms: result.sms, whatsapp: result.whatsapp });
       
       res.json({
         success: true,
@@ -12104,12 +12097,12 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   // WhatsApp webhook - verification endpoint
   app.get("/api/whatsapp/webhook", async (req, res) => {
-    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "greenpay_verify_token_2024";
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
     const mode = req.query["hub.mode"];
     const token = req.query["hub.verify_token"];
     const challenge = req.query["hub.challenge"];
 
-    if (mode === "subscribe" && token === verifyToken) {
+    if (verifyToken && mode === "subscribe" && token === verifyToken) {
       console.log("[WhatsApp] ✓ Webhook verified");
       res.status(200).send(challenge);
     } else {
@@ -12565,15 +12558,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.get("/api/admin/whatsapp/config", requireAdminAuth, async (req, res) => {
     try {
       let config = await storage.getWhatsappConfig();
-      console.log('[WhatsApp Config] Get request - config exists:', !!config, 'has token:', !!config?.accessToken);
       if (!config) {
         config = await storage.initWhatsappConfig();
-        console.log('[WhatsApp Config] Initialized new config');
       }
       res.json({
         phoneNumberId: config.phoneNumberId || '',
         businessAccountId: config.businessAccountId || '',
-        verifyToken: config.verifyToken,
+        hasVerifyToken: Boolean(config.verifyToken),
         webhookUrl: process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS}/api/whatsapp/webhook` : config.webhookUrl,
         isActive: config.isActive
       });
@@ -12586,8 +12577,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/admin/whatsapp/config", requireAdminAuth, async (req, res) => {
     try {
       const { phoneNumberId, businessAccountId, accessToken, isActive } = req.body;
-      console.log('[WhatsApp Config] Saving config:', { phoneNumberId: !!phoneNumberId, businessAccountId: !!businessAccountId, accessToken: !!accessToken, isActive });
-      
       const updated = await storage.updateWhatsappConfig({
         phoneNumberId,
         businessAccountId,
@@ -12595,10 +12584,15 @@ Sitemap: https://geepay.us/sitemap.xml`;
         isActive
       });
       
-      console.log('[WhatsApp Config] Saved successfully:', { hasToken: !!updated?.accessToken, hasPhoneId: !!updated?.phoneNumberId });
-      
       if (updated) {
-        res.json({ success: true, config: updated });
+        res.json({
+          success: true,
+          config: {
+            phoneNumberId: updated.phoneNumberId || "",
+            businessAccountId: updated.businessAccountId || "",
+            isActive: updated.isActive,
+          },
+        });
       } else {
         res.status(500).json({ message: "Failed to update config" });
       }
@@ -13528,7 +13522,9 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const feeAmount = sourceAmount * feeRate;
       const grossUsdValue = sourceAmount * sourceRate;
       const feeUsdValue = feeAmount * sourceRate;
-      const usdValue = Math.max(0, grossUsdValue - feeUsdValue);
+      // The fee is charged separately in the source currency. It must not be
+      // deducted from the principal that is converted and credited.
+      const usdValue = grossUsdValue;
       const destinationAmount = destinationType === "crypto"
         ? usdValue / destinationRate
         : destinationType === "card"
@@ -13670,7 +13666,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         destinationCurrency: destinationType === "crypto" ? destinationCoinCode : destinationType === "card" ? "USD" : normalizeCurrency(destinationWallet.currency),
         sourceRate,
         destinationRate,
-        rate: destinationAmount / Math.max(sourceAmount - feeAmount, Number.EPSILON),
+        rate: destinationAmount / Math.max(sourceAmount, Number.EPSILON),
         fee: feeAmount,
         feeRate,
         grossUsdValue,
@@ -14474,20 +14470,21 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (fromWallet.isSuspended || toWallet.isSuspended) return res.status(400).json({ message: "One or both wallets are suspended" });
       const fromLedgerBalance = await getLedgerBalance({ walletId: fromWallet.id }, Number(fromWallet.balance || 0));
       const fromBalance = walletAvailableBalance({ ...fromWallet, balance: fromLedgerBalance.toString() });
-      if (fromAmt > fromBalance) return res.status(400).json({ message: "Insufficient balance" });
       const exchangeRateSvc = createExchangeRateService(storage);
       const rate = await exchangeRateSvc.getExchangeRate(fromWallet.currency, toWallet.currency);
-       if (!Number.isFinite(rate) || rate <= 0) {
-         return res.status(400).json({ message: "A live exchange rate is not available for these currencies. Please try again." });
-       }
+      if (!Number.isFinite(rate) || rate <= 0) {
+        return res.status(400).json({ message: "A live exchange rate is not available for these currencies. Please try again." });
+      }
       const FEE_RATE = await getTransactionFeeRate();
       const fee = fromAmt * FEE_RATE;
-      const toAmount = (fromAmt - fee) * rate;
+      const totalDebited = fromAmt + fee;
+      if (totalDebited > fromBalance) return res.status(400).json({ message: "Insufficient balance for amount and fee" });
+      const toAmount = fromAmt * rate;
       const ref = `EX-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
       let fromDebited = false;
       try {
         await applyLedgerEntry({
-          walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: -fromAmt,
+          walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: -totalDebited,
           entryType: "exchange", idempotencyKey: `exchange:${ref}:debit`,
           description: `Exchange ${fromWallet.currency} to ${toWallet.currency}`,
         });
@@ -14500,7 +14497,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       } catch (error: any) {
         if (fromDebited) {
           await applyLedgerEntry({
-            walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: fromAmt,
+            walletId: fromWallet.id, userId, currency: normalizeCurrency(fromWallet.currency), amount: totalDebited,
             entryType: "exchange_rollback", idempotencyKey: `exchange:${ref}:rollback`,
             description: "Rollback failed exchange",
           }).catch(() => {});

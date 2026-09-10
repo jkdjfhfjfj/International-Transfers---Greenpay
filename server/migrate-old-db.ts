@@ -2,8 +2,12 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/neon-http";
 import { Pool } from "@neondatabase/serverless";
 
-const OLD_DB = "postgresql://neondb_owner:npg_M2ENoGYJaSI5@ep-round-paper-ad2krcnv-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
-const NEW_DB = process.env.DATABASE_URL!;
+const OLD_DB = process.env.OLD_DATABASE_URL;
+const NEW_DB = process.env.DATABASE_URL;
+
+if (!OLD_DB || !NEW_DB) {
+  throw new Error("OLD_DATABASE_URL and DATABASE_URL are required to run the migration");
+}
 
 const tables = [
   "users", "kyc_documents", "virtual_cards", "transactions", "recipients",

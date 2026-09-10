@@ -60,9 +60,11 @@ if (shouldTrustProxy) {
   app.set('trust proxy', 1);
 }
 
-// Require SESSION_SECRET in production to avoid session invalidation on restart
-if (isProduction && !process.env.SESSION_SECRET) {
-  console.error('SESSION_SECRET environment variable is required in production');
+// Require a stable session secret in every environment. A generated fallback
+// would invalidate sessions on restart and is unsafe if it leaks.
+const sessionSecret = process.env.SESSION_SECRET;
+if (!sessionSecret) {
+  console.error('SESSION_SECRET environment variable is required');
   process.exit(1);
 }
 
@@ -83,7 +85,18 @@ app.use((req, res, next) => {
   
   // Force HTTPS if not in development
   if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
-    return res.redirect(`https://${req.headers.host}${req.url}`);
+    const trustedHosts = [
+      process.env.PUBLIC_APP_HOST,
+      ...(process.env.REPLIT_DOMAINS || "").split(","),
+    ]
+      .map(host => host.trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""))
+      .filter(Boolean);
+    const requestHost = req.hostname;
+    const redirectHost = trustedHosts.includes(requestHost) ? requestHost : trustedHosts[0];
+    if (!redirectHost) {
+      return res.status(400).send("HTTPS host is not configured");
+    }
+    return res.redirect(308, `https://${redirectHost}${req.originalUrl}`);
   }
 
   // Automatic "Clear-Site-Data" for the root path to ensure fresh loads
@@ -102,7 +115,7 @@ app.use((req, res, next) => {
 
 const sessionConfig = {
   store: sessionStore,
-  secret: process.env.SESSION_SECRET || 'greenpay-secret-key-change-in-production-' + Math.random(),
+  secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
   rolling: true,

@@ -124,8 +124,10 @@ export default function DepositPage() {
   const isMakamescoKesDeposit = selectedMethod === "nexuspay"
     && nexusCurrency === "KES"
     && ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
+  const usdToKesRate = Number(config?.usdToKesRate);
+  const hasUsdToKesRate = Number.isFinite(usdToKesRate) && usdToKesRate > 0;
   const quotedKesAmount = isMakamescoKesDeposit && amount
-    ? Math.round(parseFloat(amount) * Number(config?.usdToKesRate || 129))
+    ? hasUsdToKesRate ? Math.round(parseFloat(amount) * usdToKesRate) : 0
     : 0;
 
   const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).filter(m =>
@@ -708,8 +710,9 @@ export default function DepositPage() {
                     />
                     {isMakamescoKesDeposit && (
                       <p className="text-xs text-muted-foreground">
-                        Makamesco will charge approximately KES {quotedKesAmount.toLocaleString()} at
-                        {` ${Number(config?.usdToKesRate || 129).toFixed(2)}`} KES/USD.
+                        {hasUsdToKesRate
+                          ? `Makamesco will charge approximately KES ${quotedKesAmount.toLocaleString()} at ${usdToKesRate.toFixed(2)} KES/USD.`
+                          : "Live USD/KES rate unavailable. Try again shortly."}
                       </p>
                     )}
                   </div>

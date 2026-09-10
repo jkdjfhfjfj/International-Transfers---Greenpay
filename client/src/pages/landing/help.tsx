@@ -23,7 +23,7 @@ export default function HelpLanding() {
         "name": "What is the USD to KES exchange rate?",
         "acceptedAnswer": {
           "@type": "Answer",
-          "text": "Geepay offers live exchange rates updated in real-time. Current rate is approximately 129 KES per 1 USD. Check our app for the latest rates."
+          "text": "Geepay offers live exchange rates updated in real-time. Check the app at checkout for the latest rate."
         }
       }
     ]
@@ -66,8 +66,8 @@ export default function HelpLanding() {
               <AccordionItem value="item-2">
                 <AccordionTrigger>What is the USD to KES exchange rate?</AccordionTrigger>
                 <AccordionContent>
-                  Geepay offers live exchange rates updated in real-time. Current rate is approximately
-                  129 KES per 1 USD. Check our app for the latest rates.
+                   Geepay offers live exchange rates updated in real-time. Check the app at checkout
+                   for the latest rate.
                 </AccordionContent>
               </AccordionItem>
 

@@ -67,8 +67,9 @@ export default function TransferPage() {
   const selectedDestination = destinationOptions.some((option) => option.value === destination && option.value !== selectedSource)
     ? destination
     : destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
-  const feeRate = Number((feeData as any)?.exchangeFeeRate || 0);
-  const fee = Number(amount || 0) * feeRate;
+  const feeRateValue = Number((feeData as any)?.exchangeFeeRate);
+  const feeRate = Number.isFinite(feeRateValue) && feeRateValue >= 0 ? feeRateValue : null;
+  const fee = feeRate === null ? 0 : Number(amount || 0) * feeRate;
   const cryptoPrices: Record<string, number> = (cryptoData as any)?.prices || (cryptoData as any)?.rates || {};
   const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
 
@@ -99,13 +100,18 @@ export default function TransferPage() {
   const sourceAsset = getAsset(selectedSource);
   const destinationAsset = getAsset(selectedDestination);
   const transferAmount = Number(amount || 0);
-  const netUsd = Math.max(0, transferAmount * sourceAsset.usdRate - fee * sourceAsset.usdRate);
+  // The fee is charged separately from the principal. The recipient receives
+  // the conversion of the full transfer amount, while the source pays amount + fee.
+  const netUsd = transferAmount * sourceAsset.usdRate;
   const destinationPerUsd = destinationAsset.kind === "crypto"
     ? (destinationAsset.usdRate ? 1 / destinationAsset.usdRate : 0)
     : destinationAsset.currency === "USD" ? 1 : Number(fiatRates[destinationAsset.currency] || 0);
   const receiveAmount = netUsd * destinationPerUsd;
   const quoteRate = transferAmount > 0 ? receiveAmount / transferAmount : 0;
-  const quoteReady = transferAmount > 0 && sourceAsset.usdRate > 0 && destinationPerUsd > 0;
+  const quoteReady = transferAmount > 0
+    && feeRate !== null
+    && sourceAsset.usdRate > 0
+    && destinationPerUsd > 0;
 
   const transferMutation = useMutation({
     mutationFn: async (security?: { pin?: string; authenticatorCode?: string }) => {
@@ -269,7 +275,7 @@ export default function TransferPage() {
             <div className="space-y-2 rounded-2xl bg-muted/60 p-4 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Source available</span><span>{sourceAsset.balance.toLocaleString()} {sourceAsset.currency}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{transferAmount.toFixed(8)} {sourceAsset.currency}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(feeRate * 100).toFixed(2)}%)</span><span>{fee.toFixed(8)} {sourceAsset.currency}</span></div>
+               <div className="flex justify-between"><span className="text-muted-foreground">Fee ({feeRate === null ? "unavailable" : `${(feeRate * 100).toFixed(2)}%`})</span><span>{quoteReady ? `${fee.toFixed(8)} ${sourceAsset.currency}` : "Unavailable"}</span></div>
                <div className="flex justify-between"><span className="text-muted-foreground">Source value</span><span>{quoteReady ? `$${(transferAmount * sourceAsset.usdRate).toFixed(2)}` : "Rate unavailable"}</span></div>
                <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>{quoteReady ? `1 ${sourceAsset.currency} = ${quoteRate < 0.01 ? quoteRate.toFixed(8) : quoteRate.toFixed(4)} ${destinationAsset.currency}` : "Loading rate…"}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{destinationAsset.balance.toLocaleString()} {destinationAsset.currency}</span></div>

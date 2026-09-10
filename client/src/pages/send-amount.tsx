@@ -38,9 +38,10 @@ export default function SendAmountPage() {
     }
   }, [setLocation]);
 
-  const exchangeRate = exchangeRates?.rates?.[targetCurrency] || 1;
+  const exchangeRateValue = Number(exchangeRates?.rates?.[targetCurrency]);
+  const exchangeRate = Number.isFinite(exchangeRateValue) && exchangeRateValue > 0 ? exchangeRateValue : null;
   const amountNum = amount ? parseFloat(amount) : 0;
-  const convertedAmountNum = amountNum * exchangeRate;
+  const convertedAmountNum = exchangeRate ? amountNum * exchangeRate : 0;
   const feeNum = amountNum * 0.025; // 2.5% fee
   const totalNum = amountNum + feeNum;
   
@@ -79,7 +80,7 @@ export default function SendAmountPage() {
       fee,
       total,
       description,
-      exchangeRate
+       exchangeRate
     }));
     
     setLocation("/send-confirm");
@@ -191,7 +192,9 @@ export default function SendAmountPage() {
             <div className="text-center py-2">
               <div className="flex items-center justify-center text-sm text-muted-foreground">
                 <span className="material-icons mr-1 text-sm">sync_alt</span>
-                1 {sourceCurrency} = {exchangeRate.toFixed(4)} {targetCurrency}
+                {exchangeRate
+                  ? `1 ${sourceCurrency} = ${exchangeRate.toFixed(4)} ${targetCurrency}`
+                  : "Live exchange rate unavailable"}
               </div>
             </div>
 
@@ -200,7 +203,7 @@ export default function SendAmountPage() {
               <div className="relative">
                 <Input
                   id="converted"
-                  value={convertedAmount}
+                  value={exchangeRate ? convertedAmount : "Unavailable"}
                   disabled
                   className="pr-16 text-2xl h-14 bg-muted/50"
                 />
@@ -269,7 +272,7 @@ export default function SendAmountPage() {
           <Button
             onClick={handleContinue}
             className="w-full ripple"
-            disabled={!amount || parseFloat(amount) <= 0}
+            disabled={!amount || parseFloat(amount) <= 0 || !exchangeRate}
             data-testid="button-continue"
           >
             Continue

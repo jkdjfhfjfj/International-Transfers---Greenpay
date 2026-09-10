@@ -295,8 +295,9 @@ export default function CryptoPage() {
   ];
   const selectedSource = transferSource || sourceOptions[0]?.value || "";
   const selectedDestination = transferDestination || destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
-  const transferFeeRate = Number((transferFees as any)?.exchangeFeeRate || 0);
-  const transferFee = Number(transferAmount || 0) * transferFeeRate;
+  const transferFeeRateValue = Number((transferFees as any)?.exchangeFeeRate);
+  const transferFeeRate = Number.isFinite(transferFeeRateValue) && transferFeeRateValue >= 0 ? transferFeeRateValue : null;
+  const transferFee = transferFeeRate === null ? 0 : Number(transferAmount || 0) * transferFeeRate;
 
   const addressesByCoin: Record<string, any[]> = allDepositAddresses.reduce((acc, addr) => {
     const c = (addr.coin || "").toUpperCase();
@@ -337,9 +338,9 @@ export default function CryptoPage() {
   const transferSourceAsset = getTransferAsset(selectedSource);
   const transferDestinationAsset = getTransferAsset(selectedDestination);
   const transferAmountNumber = Number(transferAmount || 0);
-  const transferFeeAmount = transferAmountNumber * transferFeeRate;
+  const transferFeeAmount = transferFeeRate === null ? 0 : transferAmountNumber * transferFeeRate;
   const transferGrossUsd = transferAmountNumber * transferSourceAsset.usdRate;
-  const transferNetUsd = Math.max(0, transferGrossUsd - transferFeeAmount * transferSourceAsset.usdRate);
+  const transferNetUsd = transferGrossUsd;
   const transferDestinationPerUsd = transferDestinationAsset.kind === "crypto"
     ? (transferDestinationAsset.usdRate ? 1 / transferDestinationAsset.usdRate : 0)
     : transferDestinationAsset.currency === "USD"
@@ -351,6 +352,7 @@ export default function CryptoPage() {
     : 0;
   const sourceAvailableBalance = transferSourceAsset.balance;
   const transferQuoteReady = transferAmountNumber > 0
+    && transferFeeRate !== null
     && transferSourceAsset.usdRate > 0
     && transferDestinationPerUsd > 0;
   const formatTransferUsd = (value: number) => transferQuoteReady ? formatUsdValue(value) : "Rate unavailable";
@@ -844,7 +846,7 @@ export default function CryptoPage() {
                <div className="space-y-2 rounded-2xl bg-muted/60 p-4 text-sm">
                  <div className="flex justify-between"><span className="text-muted-foreground">Source available</span><span>{formatCryptoAmount(sourceAvailableBalance)} {transferSourceAsset.currency}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Transfer amount</span><span>{formatCryptoAmount(transferAmountNumber)} {transferSourceAsset.currency}</span></div>
-                 <div className="flex justify-between"><span className="text-muted-foreground">Fee ({(transferFeeRate * 100).toFixed(2)}%)</span><span>{formatCryptoAmount(transferFee)} {transferSourceAsset.currency}</span></div>
+                 <div className="flex justify-between"><span className="text-muted-foreground">Fee ({transferFeeRate === null ? "unavailable" : `${(transferFeeRate * 100).toFixed(2)}%`})</span><span>{transferQuoteReady ? `${formatCryptoAmount(transferFee)} ${transferSourceAsset.currency}` : "Unavailable"}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Live rate</span><span>1 {transferSourceAsset.currency} = {transferQuoteRate < 0.01 ? transferQuoteRate.toFixed(8) : transferQuoteRate.toFixed(4)} {transferDestinationAsset.currency}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Source value</span><span>{formatTransferUsd(transferGrossUsd)}</span></div>
                  <div className="flex justify-between"><span className="text-muted-foreground">Destination balance</span><span>{formatCryptoAmount(transferDestinationAsset.balance)} {transferDestinationAsset.currency}</span></div>

@@ -57,7 +57,6 @@ export const mockCurrencies = [
 ];
 
 export const mockExchangeRates = {
-  "USD-KES": 129.0,
   "KES-USD": 0.0077,
 };
 

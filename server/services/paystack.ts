@@ -141,8 +141,7 @@ export class PaystackService {
       return usdAmount * rate;
     } catch (error) {
       console.error('Currency conversion error:', error);
-      // Fallback to static rate if API fails
-      return usdAmount * 129; // Fallback KES rate
+      throw new Error('Currency conversion is unavailable');
     }
   }
 

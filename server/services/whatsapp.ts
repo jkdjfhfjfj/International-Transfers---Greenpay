@@ -279,13 +279,7 @@ export class WhatsAppService {
 
       if (response.ok && responseData.messages) {
         const messageId = responseData.messages?.[0]?.id || 'unknown';
-        console.log('[WhatsApp] ✓ OTP sent successfully', {
-          to: phoneNumber,
-          messageId,
-          templateName: 'otp',
-          timestamp: new Date().toISOString(),
-          response: responseData
-        });
+         console.log('[WhatsApp] OTP sent successfully', { messageId, templateName: 'otp' });
         return true;
       } else {
         const errorMsg = responseData.error?.message || 'Unknown error';

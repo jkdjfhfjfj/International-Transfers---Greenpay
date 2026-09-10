@@ -56,7 +56,6 @@ export class StatumService {
       cleaned = '254' + cleaned;
     }
     
-    console.log(`📞 Formatted phone number: ${phone} -> ${cleaned}`);
     return cleaned;
   }
 
@@ -67,15 +66,13 @@ export class StatumService {
     try {
       const formattedPhone = this.formatPhoneNumber(phoneNumber);
       
-      console.log(`📱 Statum API Request: Purchasing KES ${amount} airtime for ${formattedPhone}`);
+      console.log(`📱 Statum API Request: Purchasing KES ${amount} airtime`);
       console.log(`🔗 Endpoint: ${this.apiUrl}`);
       
       const requestBody: StatumAirtimeRequest = {
         phone_number: formattedPhone,
         amount: amount,
       };
-
-      console.log(`📤 Request body:`, JSON.stringify(requestBody, null, 2));
 
       const response = await fetch(this.apiUrl, {
         method: 'POST',
@@ -90,14 +87,13 @@ export class StatumService {
       console.log(`📥 Statum API Response Status: ${response.status} ${response.statusText}`);
 
       const responseData = await response.json() as StatumAirtimeResponse;
-      console.log(`📥 Response data:`, JSON.stringify(responseData, null, 2));
 
       if (!response.ok) {
         console.error(`❌ Statum API Error: ${response.status}`, responseData);
         throw new Error(responseData.message || `Statum API request failed with status ${response.status}`);
       }
 
-      console.log(`✅ Airtime purchase successful for ${formattedPhone}`);
+      console.log("✅ Airtime purchase successful");
       return responseData;
 
     } catch (error) {
