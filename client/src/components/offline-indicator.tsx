@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { WifiOff } from 'lucide-react';
+import { Wifi, WifiOff } from 'lucide-react';
 
 export function OfflineIndicator() {
   const [status, setStatus] = useState<"offline" | "online" | null>(
@@ -41,16 +41,31 @@ export function OfflineIndicator() {
 
   return (
     <AnimatePresence>
-      {status === "offline" && (
+      {status && (
         <motion.div
-          key="offline"
+          key={status}
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -10 }}
-          className="fixed left-1/2 top-3 z-[10001] flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 items-center justify-center gap-2 rounded-full border border-amber-500/30 bg-card px-4 py-2.5 text-amber-700 shadow-lg dark:text-amber-300"
+          role="status"
+          aria-live="polite"
+          className="fixed left-1/2 top-3 z-[10001] flex w-[min(360px,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-2xl border border-border bg-card px-3.5 py-3 text-card-foreground shadow-xl"
         >
-          <WifiOff className="w-4 h-4" />
-          <span className="text-sm font-semibold">You are offline</span>
+          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
+            status === "offline" ? "bg-amber-500/10 text-amber-600 dark:text-amber-300" : "bg-primary/10 text-primary"
+          }`}>
+            {status === "offline" ? <WifiOff className="h-4 w-4" /> : <Wifi className="h-4 w-4" />}
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">
+              {status === "offline" ? "You are offline" : "You are back online"}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {status === "offline"
+                ? "Some actions are paused until your connection returns."
+                : "Your connection has been restored."}
+            </span>
+          </span>
         </motion.div>
       )}
     </AnimatePresence>
