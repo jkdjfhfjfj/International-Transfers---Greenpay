@@ -14,10 +14,6 @@ export function useInitializeCardPayment() {
       });
       return response.json();
     },
-    onSuccess: (data) => {
-      // Redirect to Paystack payment page
-      window.open(data.authorizationUrl, '_blank');
-    },
     onError: (error: any) => {
       toast({
         title: 'Payment Initialization Failed',

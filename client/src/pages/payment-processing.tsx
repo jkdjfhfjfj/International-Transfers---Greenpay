@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { WavyHeader } from "@/components/wavy-header";
@@ -12,6 +12,7 @@ export default function PaymentProcessingPage() {
   const [pollCount, setPollCount] = useState(0);
   const [reference, setReference] = useState<string>('');
   const [type, setType] = useState<string>('');
+  const pollCountRef = useRef(0);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -24,38 +25,48 @@ export default function PaymentProcessingPage() {
   useEffect(() => {
     if (!reference) return;
 
-    const pollInterval = setInterval(async () => {
+    let stopped = false;
+    const checkStatus = async () => {
       try {
-        setPollCount(prev => prev + 1);
         const response = await fetch(`/api/transaction-status/${reference}`);
         const data = await response.json();
 
+        if (stopped) return;
         if (data.success && data.status) {
           const s = data.status.toLowerCase();
           if (s === 'success' || s === 'completed') {
             setStatus('success');
-            clearInterval(pollInterval);
+            stopped = true;
             setTimeout(() => {
               if (type === 'virtual-card') setLocation('/virtual-card');
               else setLocation('/dashboard');
             }, 3000);
           } else if (s === 'failed' || s === 'cancelled') {
             setStatus('failed');
-            clearInterval(pollInterval);
+            stopped = true;
           }
         }
 
-        if (pollCount >= 60) {
+        pollCountRef.current += 1;
+        setPollCount(pollCountRef.current);
+        if (pollCountRef.current >= 60) {
           setStatus('timeout');
-          clearInterval(pollInterval);
+          stopped = true;
         }
       } catch (error) {
         console.error('Status polling error:', error);
       }
-    }, 5000);
+    };
 
-    return () => clearInterval(pollInterval);
-  }, [reference, pollCount]);
+    pollCountRef.current = 0;
+    void checkStatus();
+    const pollInterval = setInterval(() => void checkStatus(), 5000);
+
+    return () => {
+      stopped = true;
+      clearInterval(pollInterval);
+    };
+  }, [reference, type, setLocation]);
 
   const handleTryAgain = () => {
     if (type === 'virtual-card') setLocation('/virtual-card');

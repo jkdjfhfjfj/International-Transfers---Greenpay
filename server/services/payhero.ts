@@ -294,6 +294,15 @@ export class PayHeroService {
    */
   async checkTransactionStatus(reference: string): Promise<{ success: boolean; status: string; data?: any; message?: string }> {
     try {
+      await this.getCredentials();
+      if (!this.hasCredentials()) {
+        return {
+          success: false,
+          status: "CREDENTIALS_MISSING",
+          message: "PayHero credentials are not configured",
+        };
+      }
+
       const url = `${this.baseUrl}/transaction-status?reference=${reference}`;
       
       // Create proper Basic Auth header

@@ -116,6 +116,13 @@ async function sendAccountEmail(
   }
 }
 
+async function activateVirtualCardForUser(userId: string, purchaseAmount = "60.00") {
+  const { virtualCardService } = await import("./services/virtual-card");
+  const card = await virtualCardService.generateCard(userId, purchaseAmount);
+  await storage.updateUser(userId, { hasVirtualCard: true });
+  return card;
+}
+
 function getSupportedCurrencyCodes() {
   return NEXUSPAY_CURRENCIES.map((currency) => currency.code);
 }
@@ -2983,6 +2990,27 @@ p{color:#6b7280;font-size:14px;}</style>
       let redirectUrl: string | null = null;
       let paymentMessage = "STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment.";
 
+      // PayHero can send the callback immediately after the STK request. Keep
+      // the pending row available before contacting the provider so the
+      // callback and status polling can always find this purchase.
+      const transaction = await storage.createTransaction({
+        userId,
+        type: "card_purchase",
+        amount: usdAmount.toString(),
+        currency: "USD",
+        status: "pending",
+        reference,
+        paystackReference: reference,
+        description: "Virtual Card Purchase",
+        exchangeRate: exchangeRate.toString(),
+        metadata: {
+          phoneNumber: user.phone,
+          gateway,
+          gatewayAmount: kesAmount.toString(),
+          status_reason: "Awaiting M-Pesa payment confirmation",
+        },
+      });
+
       if (gateway === "nexuspay") {
         const payment = await nexusPayService.checkout({
           amount: kesAmount,
@@ -3009,6 +3037,10 @@ p{color:#6b7280;font-size:14px;}</style>
           { type: "virtual_card", usd_amount: usdAmount.toFixed(2), exchange_rate: exchangeRate.toString() },
         );
         if (!payment.status) {
+          await storage.updateTransaction(transaction.id, {
+            status: "failed",
+            failureReason: payment.message || "Payment initialization failed",
+          });
           return res.status(400).json({ message: payment.message || "Payment initialization failed.", status: "FAILED" });
         }
         paymentReference = payment.data?.reference || reference;
@@ -3026,6 +3058,10 @@ p{color:#6b7280;font-size:14px;}</style>
           callbackUrl,
         );
         if (!payment.success) {
+          await storage.updateTransaction(transaction.id, {
+            status: "failed",
+            failureReason: payment.message || payment.status,
+          });
           if (payment.status === 'INVALID_PHONE_NUMBER' || payment.status === 'INVALID_PHONE_FORMAT') {
             return res.status(400).json({
               message: 'Invalid phone number format. Please enter a valid international phone number with country code (e.g., +254712345678, +2348012345678).',
@@ -3047,6 +3083,12 @@ p{color:#6b7280;font-size:14px;}</style>
         checkoutRequestId = payment.CheckoutRequestID || "";
         paymentStatus = payment.status || "pending";
       }
+
+      if (paymentReference !== reference) {
+        await storage.updateTransaction(transaction.id, {
+          paystackReference: paymentReference,
+        });
+      }
       
       res.json({ 
         success: true,
@@ -3057,26 +3099,6 @@ p{color:#6b7280;font-size:14px;}</style>
         redirectUrl,
         message: paymentMessage,
       });
-
-      // Create a transaction record for tracking
-      await storage.createTransaction({
-        userId,
-        type: "card_purchase",
-        amount: usdAmount.toString(),
-        currency: "USD",
-        status: "pending",
-        reference: paymentReference,
-        paystackReference: paymentReference,
-        description: "Virtual Card Purchase",
-        exchangeRate: exchangeRate.toString(),
-        metadata: { 
-          phoneNumber: user.phone,
-          gateway,
-          gatewayAmount: kesAmount.toString(),
-          redirectUrl,
-          status_reason: "Awaiting M-Pesa payment confirmation"
-        }
-      });
     } catch (error) {
       console.error('Card payment initialization error:', error);
       res.status(500).json({ message: "Error initializing card payment" });
@@ -3086,7 +3108,8 @@ p{color:#6b7280;font-size:14px;}</style>
   // PayHero callback to handle card activation, deposits, and transaction status
   app.post("/api/payments/payhero/callback", async (req, res) => {
     try {
-      const { CheckoutRequestID, ResultCode, ResultDesc, ExternalReference } = req.body;
+      const callback = req.body?.response || req.body;
+      const { CheckoutRequestID, ResultCode, ResultDesc, ExternalReference } = callback;
       
       const transaction = await db.query.transactions.findFirst({
         where: eq(transactions.paystackReference, ExternalReference || CheckoutRequestID)
@@ -3097,7 +3120,7 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.sendStatus(200);
       }
 
-      if (ResultCode === 0) {
+      if (Number(ResultCode) === 0) {
         await storage.updateTransactionStatus(transaction.id, "completed");
         await storage.updateTransactionMetadata(transaction.id, {
           ...((transaction.metadata as object) || {}),
@@ -3106,9 +3129,10 @@ p{color:#6b7280;font-size:14px;}</style>
         });
 
         if (transaction.type === 'card_purchase') {
-          const { virtualCardService } = await import('./services/virtual-card');
-          await virtualCardService.generateCard(transaction.userId);
-          await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+          await activateVirtualCardForUser(
+            transaction.userId,
+            String((transaction.metadata as any)?.cardPrice || "60.00"),
+          );
           notificationService.sendNotification({
             userId: transaction.userId,
             title: "Virtual Card Activated",
@@ -3751,11 +3775,9 @@ p{color:#6b7280;font-size:14px;}</style>
         if (transaction && transaction.status !== "completed") {
           await storage.updateTransactionStatus(transaction.id, "completed");
           if (transaction.type === "card_purchase") {
-            const { virtualCardService } = await import("./services/virtual-card");
             const cards = await storage.getVirtualCardsByUserId(transaction.userId);
             if (cards.length === 0) {
-              await virtualCardService.generateCard(transaction.userId);
-              await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+              await activateVirtualCardForUser(transaction.userId);
             }
           }
         }
@@ -10886,9 +10908,10 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // PayHero transaction status endpoint
-  app.get("/api/transaction-status/:reference", async (req, res) => {
+  app.get("/api/transaction-status/:reference", requireAuth, async (req, res) => {
     try {
       const { reference } = req.params;
+      const sessionUserId = (req as any).session?.userId;
       
       if (!reference) {
         return res.status(400).json({ message: "Transaction reference is required" });
@@ -10899,10 +10922,16 @@ p{color:#6b7280;font-size:14px;}</style>
       const transaction = await db.query.transactions.findFirst({
         where: or(eq(transactions.reference, reference), eq(transactions.paystackReference, reference)),
       });
+      if (!transaction || transaction.userId !== sessionUserId) {
+        return res.status(404).json({ message: "Transaction not found" });
+      }
       const metadata = (transaction?.metadata || {}) as any;
       const gateway = String(metadata.gateway || "payhero").toLowerCase();
 
       if (transaction?.status === "completed") {
+        if (transaction.type === "card_purchase") {
+          await activateVirtualCardForUser(transaction.userId, String(metadata.cardPrice || "60.00"));
+        }
         return res.json({ success: true, status: "completed", data: { reference } });
       }
 
@@ -10926,7 +10955,11 @@ p{color:#6b7280;font-size:14px;}</style>
         statusResult = await payHeroService.checkTransactionStatus(reference);
       }
 
-      const normalizedStatus = String(statusResult.status || "").toLowerCase();
+      const providerStatus = statusResult.data?.response?.Status
+        || statusResult.data?.response?.status
+        || statusResult.data?.status
+        || statusResult.status;
+      const normalizedStatus = String(providerStatus || "").toLowerCase();
       const completed = ["success", "completed", "paid"].includes(normalizedStatus);
       const failed = ["failed", "cancelled", "rejected"].includes(normalizedStatus);
       if (transaction && completed && transaction.status !== "completed") {
@@ -10936,11 +10969,9 @@ p{color:#6b7280;font-size:14px;}</style>
           status_reason: "Payment provider confirmed successful payment",
         });
         if (transaction.type === "card_purchase") {
-          const { virtualCardService } = await import("./services/virtual-card");
           const cards = await storage.getVirtualCardsByUserId(transaction.userId);
           if (cards.length === 0) {
-            await virtualCardService.generateCard(transaction.userId);
-            await storage.updateUser(transaction.userId, { hasVirtualCard: true });
+            await activateVirtualCardForUser(transaction.userId, String(metadata.cardPrice || "60.00"));
           }
         }
       } else if (transaction && failed) {

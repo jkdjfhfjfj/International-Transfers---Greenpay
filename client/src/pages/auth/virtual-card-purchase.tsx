@@ -115,8 +115,11 @@ export default function VirtualCardPurchasePage() {
   const handlePurchase = () => {
     initializePayment.mutate(undefined, {
       onSuccess: (data) => {
-        if (data.authorization_url) {
-          window.location.href = data.authorization_url;
+        const redirectUrl = data.redirectUrl || data.authorization_url;
+        if (redirectUrl) {
+          window.location.href = redirectUrl;
+        } else if (data.reference) {
+          setLocation(`/payment-processing?reference=${encodeURIComponent(data.reference)}&type=virtual-card`);
         }
       },
       onError: (error) => {
