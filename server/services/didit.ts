@@ -121,6 +121,16 @@ export function diditIdentityToUserFields(identity: DiditIdentityData): Record<s
   ) as Record<string, string>;
 }
 
+export function diditIdentityToUserProfileFields(identity: DiditIdentityData): Record<string, string> {
+  const country = identity.nationality || identity.issuingCountry;
+  return Object.fromEntries(
+    Object.entries({
+      fullName: identity.fullName,
+      country,
+    }).filter(([, value]) => value !== null && value !== undefined && value !== ''),
+  ) as Record<string, string>;
+}
+
 function getApiKey(): string | null {
   return process.env.DIDIT_API_KEY || null;
 }

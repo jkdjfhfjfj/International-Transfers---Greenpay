@@ -2508,6 +2508,7 @@ p{color:#6b7280;font-size:14px;}</style>
         isTerminalStatus,
         extractDiditIdentity,
         diditIdentityToUserFields,
+        diditIdentityToUserProfileFields,
       } = await import('./services/didit');
 
       const decision = await getSessionDecision((kyc as any).diditSessionId);
@@ -2556,8 +2557,9 @@ p{color:#6b7280;font-size:14px;}</style>
       // by the webhook before the user opened this page.
       if (kycStatus === 'verified') {
         const identityFields = diditIdentityToUserFields(identity);
-        if (Object.keys(identityFields).length > 0) {
-          await storage.updateUser(userId, identityFields as any);
+        const profileFields = diditIdentityToUserProfileFields(identity);
+        if (Object.keys(identityFields).length > 0 || Object.keys(profileFields).length > 0) {
+          await storage.updateUser(userId, { ...identityFields, ...profileFields } as any);
         }
       }
 
@@ -2584,6 +2586,7 @@ p{color:#6b7280;font-size:14px;}</style>
         isTerminalStatus,
         extractDiditIdentity,
         diditIdentityToUserFields,
+        diditIdentityToUserProfileFields,
       } = await import('./services/didit');
 
       // Verify webhook signature if secret is configured
@@ -2645,7 +2648,10 @@ p{color:#6b7280;font-size:14px;}</style>
           }
         }
         const filtered = diditIdentityToUserFields(identity);
-        if (Object.keys(filtered).length > 0) await storage.updateUser(userId, filtered as any);
+        const profileFields = diditIdentityToUserProfileFields(identity);
+        if (Object.keys(filtered).length > 0 || Object.keys(profileFields).length > 0) {
+          await storage.updateUser(userId, { ...filtered, ...profileFields } as any);
+        }
       }
 
       // Send notifications on terminal statuses
@@ -6378,6 +6384,7 @@ p{color:#6b7280;font-size:14px;}</style>
         isTerminalStatus,
         extractDiditIdentity,
         diditIdentityToUserFields,
+        diditIdentityToUserProfileFields,
       } = await import('./services/didit');
       const decision = await getSessionDecision(sessionId);
 
@@ -6414,7 +6421,10 @@ p{color:#6b7280;font-size:14px;}</style>
       // Auto-populate KYC identity fields when verified via poll
       if (kycStatus === 'verified') {
         const filtered = diditIdentityToUserFields(extractedData);
-        if (Object.keys(filtered).length > 0) await storage.updateUser(kyc.userId, filtered as any);
+        const profileFields = diditIdentityToUserProfileFields(extractedData);
+        if (Object.keys(filtered).length > 0 || Object.keys(profileFields).length > 0) {
+          await storage.updateUser(kyc.userId, { ...filtered, ...profileFields } as any);
+        }
       }
 
       // Send notifications on terminal statuses
