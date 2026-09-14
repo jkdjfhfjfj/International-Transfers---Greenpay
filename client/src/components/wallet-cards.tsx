@@ -123,11 +123,21 @@ export default function WalletCards({
               transition={{ delay: i * 0.05 }}
               onClick={() => { onWalletSelect?.(wallet); setActiveIndex(i); }}
               className={`
-                snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl relative overflow-hidden cursor-pointer
-                transition-all duration-200
+                group snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl relative overflow-hidden cursor-pointer
+                transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-2xl
                 border-2 border-white/80
                 ${isSelected ? 'border-white shadow-2xl scale-[1.02]' : 'shadow-lg hover:shadow-xl'}
               `}
+              tabIndex={0}
+              role="button"
+              aria-label={`${name} wallet balance`}
+              onKeyDown={event => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onWalletSelect?.(wallet);
+                  setActiveIndex(i);
+                }
+              }}
             >
               <div className={`absolute inset-0 bg-gradient-to-br ${color}`} />
               <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_bottom_right,_white_0%,_transparent_70%)]" />
@@ -169,7 +179,7 @@ export default function WalletCards({
                     <div>
                       <div className="flex items-baseline gap-1">
                         <span className="text-white/70 text-xs">{symbol}</span>
-                        <span className="text-white font-bold text-2xl tracking-tight">
+                        <span className="text-white font-bold text-2xl tracking-tight transition-all duration-200 group-hover:tracking-normal group-hover:drop-shadow-md">
                           {formatNumber(available, 2)}
                         </span>
                       </div>
