@@ -239,7 +239,6 @@ export default function KYCPage() {
             <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Identity verification</h1>
             <p className="mt-1 text-sm text-muted-foreground">Complete a secure Didit check to unlock your account.</p>
           </div>
-          <StatusBadge status={kycStatus} />
         </div>
 
         {/* Re-verification notice */}
