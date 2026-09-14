@@ -2427,7 +2427,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const userId = (req as any).session?.userId;
       if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
-      const { createDiditSession, isDiditConfigured } = await import('./services/didit');
+      const { createDiditSession, isDiditConfigured, mapDiditStatusToKyc } = await import('./services/didit');
 
       if (!isDiditConfigured()) {
         return res.status(503).json({
@@ -2451,6 +2451,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!session) {
         return res.status(502).json({ message: "Failed to create verification session. Please try again." });
       }
+      const initialKycStatus = mapDiditStatusToKyc(session.status);
 
       // Store session in kyc_documents (upsert pattern)
       let existingKyc = await storage.getKycByUserId(userId);
@@ -2460,27 +2461,28 @@ p{color:#6b7280;font-size:14px;}</style>
           diditSessionId: session.session_id,
           diditStatus: session.status,
           diditDecision: { sessionUrl: session.url } as any,
-          status: 'pending',
+          status: initialKycStatus,
         } as any);
       } else {
         // Create a new kyc_documents record for this session
         await storage.createKycDocument({
           userId,
           documentType: 'didit_verification',
-          status: 'pending',
+          status: initialKycStatus,
           diditSessionId: session.session_id,
           diditStatus: session.status,
           diditDecision: { sessionUrl: session.url } as any,
         } as any);
       }
 
-      // Update user KYC status to pending
-      await storage.updateUser(userId, { kycStatus: 'pending' });
+      // Keep Didit's initial "Not Started" state separate from an active review.
+      await storage.updateUser(userId, { kycStatus: initialKycStatus });
 
       res.json({
         sessionId: session.session_id,
         url: session.url,
         status: session.status,
+         kycStatus: initialKycStatus,
       });
     } catch (error) {
       console.error('[Didit] Start session error:', error);

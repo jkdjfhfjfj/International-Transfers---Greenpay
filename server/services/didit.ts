@@ -132,7 +132,7 @@ function getWorkflowId(): string | null {
 /**
  * Map a didit session status to a Geepay KYC status
  */
-export function mapDiditStatusToKyc(diditStatus: string): 'pending' | 'verified' | 'rejected' {
+export function mapDiditStatusToKyc(diditStatus: string): 'not_submitted' | 'pending' | 'verified' | 'rejected' {
   switch (diditStatus) {
     case 'Approved':
       return 'verified';
@@ -146,7 +146,9 @@ export function mapDiditStatusToKyc(diditStatus: string): 'pending' | 'verified'
     case 'Awaiting User':
     case 'Resubmitted':
     case 'In Progress':
+      return 'pending';
     case 'Not Started':
+      return 'not_submitted';
     default:
       return 'pending';
   }

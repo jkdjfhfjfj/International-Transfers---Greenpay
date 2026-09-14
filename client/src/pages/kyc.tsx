@@ -158,15 +158,15 @@ export default function KYCPage() {
         const err = await res.json();
         throw new Error(err.message || "Failed to start verification");
       }
-      return res.json() as Promise<{ sessionId: string; url: string; status: string }>;
+      return res.json() as Promise<{ sessionId: string; url: string; status: string; kycStatus: KycStatus }>;
     },
     onSuccess: (data) => {
       setSessionId(data.sessionId);
       setSessionUrl(data.url);
       setShowIframe(true);
       setIsPolling(true);
-      // Update user status to pending in auth context
-      if (user) login({ ...user, kycStatus: "pending" } as any);
+      // Keep Didit's initial "Not Started" state separate from an active review.
+      if (user) login({ ...user, kycStatus: data.kycStatus } as any);
     },
     onError: (e: any) => {
       toast({ title: "Failed to Start", description: e.message, variant: "destructive" });
