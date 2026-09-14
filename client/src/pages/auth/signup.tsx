@@ -18,9 +18,8 @@ const signupSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
   email: z.string().email("Please enter a valid email"),
   phone: z.string()
-    .min(9, "Phone number must be 9 digits")
-    .max(9, "Phone number must be 9 digits")
-    .regex(/^[17]\d{8}$/, "Phone number must start with 1 or 7 and be 9 digits (e.g., 145454534 or 712345678)"),
+    .trim()
+    .refine((value) => /^\d{6,14}$/.test(value.replace(/[\s().-]/g, "")), "Enter 6–14 digits for your phone number"),
   phoneCountryCode: z.string().min(1, "Please select country code"),
   country: z.string().min(1, "Please select your country"),
   password: z.string().min(8, "Password must be at least 8 characters"),
@@ -76,8 +75,9 @@ export default function SignupPage() {
 
   const onSubmit = (data: SignupForm) => {
     const { confirmPassword, agreeToTerms, phoneCountryCode, ...signupData } = data;
-    // Combine country code with phone number
-    const fullPhone = phoneCountryCode + signupData.phone;
+    // Accept local national formats for every selected country code.
+    const localPhone = signupData.phone.replace(/\D/g, "").replace(/^0+/, "");
+    const fullPhone = phoneCountryCode + localPhone;
     signupMutation.mutate({ ...signupData, phone: fullPhone });
   };
 
@@ -196,7 +196,7 @@ export default function SignupPage() {
                         <Input
                           {...field}
                           type="tel"
-                          placeholder="712345678"
+                          placeholder="712345678 or your local number"
                           data-testid="input-phone"
                         />
                       </FormControl>
