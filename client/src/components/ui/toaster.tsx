@@ -15,17 +15,23 @@ export function Toaster() {
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, ...props }) {
-        const variant = props.variant
+        const message = `${title || ""} ${description || ""}`
+        const inferredVariant =
+          /error|failed|failure|unable|insufficient|invalid|required|declined|cancelled|blocked|expired|suspended|denied|could not|not found/i.test(message)
+            ? "destructive"
+            : /success|successful|complete|completed|saved|updated|sent|approved|activated|restored|welcome|logged in|processed|created|added|confirmed/i.test(message)
+              ? "success"
+              : props.variant || "default"
         return (
-          <Toast key={id} {...props}>
+          <Toast key={id} {...props} variant={inferredVariant as "default" | "destructive" | "success"}>
             <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${
-              variant === "destructive"
+              inferredVariant === "destructive"
                 ? "bg-destructive/10 text-destructive"
-                : variant === "success"
-                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : inferredVariant === "success"
+                  ? "bg-primary/10 text-primary"
                   : "bg-primary/10 text-primary"
             }`}>
-              {variant === "destructive" ? <AlertCircle className="h-4 w-4" /> : variant === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
+              {inferredVariant === "destructive" ? <AlertCircle className="h-4 w-4" /> : inferredVariant === "success" ? <CheckCircle2 className="h-4 w-4" /> : <Info className="h-4 w-4" />}
             </span>
             <div className="grid gap-1">
               {title && <ToastTitle>{title}</ToastTitle>}
