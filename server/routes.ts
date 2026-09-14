@@ -5,7 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -33,6 +33,21 @@ import { getCryptoPrice, getCryptoPrices, invalidateCryptoPriceCache, SUPPORTED_
 const cloudinaryStorage = new CloudinaryStorageService();
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
+
+function slugify(value: unknown): string {
+  const slug = String(value || "")
+    .normalize("NFKD")
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/[-\s]+/g, "-");
+  return slug || `blog-${Date.now()}`;
+}
+
+function makeSeoDescription(excerpt: unknown, content: unknown): string {
+  const source = String(excerpt || content || "").replace(/\s+/g, " ").trim();
+  return source.length > 160 ? `${source.slice(0, 157).trim()}...` : source;
+}
 
 function settingText(value: unknown, fallback = ""): string {
   const raw = (value as any)?.value ?? value;
@@ -12919,6 +12934,145 @@ Sitemap: https://geepay.us/sitemap.xml`;
     } catch (error) {
       console.error("Announcement media upload error:", error);
       res.status(500).json({ message: "Failed to upload media" });
+    }
+  });
+
+  // Blog media uses the same managed Cloudinary upload path as announcements.
+  app.post("/api/admin/blogs/upload-media", requireAdminAuth, upload.single("file"), async (req, res) => {
+    try {
+      const file = req.file;
+      if (!file) return res.status(400).json({ message: "No file provided" });
+      const isVideo = file.mimetype.startsWith("video/");
+      const folder = isVideo ? "blogs/video" : "blogs/image";
+      const url = await cloudinaryStorage.uploadFile(`${folder}/${Date.now()}-${file.originalname}`, file.buffer, file.mimetype);
+      res.json({ url, type: isVideo ? "video" : "image" });
+    } catch (error) {
+      console.error("Blog media upload error:", error);
+      res.status(500).json({ message: "Failed to upload blog media" });
+    }
+  });
+
+  // Public blog endpoints. Only explicitly published entries are exposed.
+  app.get("/api/blogs", async (_req, res) => {
+    try {
+      const publishedBlogs = await db.select()
+        .from(blogs)
+        .where(eq(blogs.status, "published"))
+        .orderBy(desc(blogs.publishedAt), desc(blogs.createdAt))
+        .limit(50);
+      res.json({ blogs: publishedBlogs });
+    } catch (error) {
+      console.error("Public blogs fetch error:", error);
+      res.status(500).json({ message: "Failed to load blogs" });
+    }
+  });
+
+  app.get("/api/blogs/:slug", async (req, res) => {
+    try {
+      const [blog] = await db.select()
+        .from(blogs)
+        .where(and(eq(blogs.slug, req.params.slug), eq(blogs.status, "published")))
+        .limit(1);
+      if (!blog) return res.status(404).json({ message: "Blog not found" });
+      res.json({ blog });
+    } catch (error) {
+      console.error("Public blog fetch error:", error);
+      res.status(500).json({ message: "Failed to load blog" });
+    }
+  });
+
+  // Admin blog management.
+  app.get("/api/admin/blogs", requireAdminAuth, async (_req, res) => {
+    try {
+      const allBlogs = await db.select().from(blogs).orderBy(desc(blogs.createdAt));
+      res.json({ blogs: allBlogs });
+    } catch (error) {
+      console.error("Admin blogs fetch error:", error);
+      res.status(500).json({ message: "Failed to load blogs" });
+    }
+  });
+
+  app.post("/api/admin/blogs", requireAdminAuth, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const title = String(body.title || "").trim();
+      const content = String(body.content || "").trim();
+      if (!title || !content) return res.status(400).json({ message: "Title and content are required" });
+
+      const slug = slugify(body.slug || title);
+      const [duplicate] = await db.select({ id: blogs.id }).from(blogs).where(eq(blogs.slug, slug)).limit(1);
+      if (duplicate) return res.status(409).json({ message: "A blog with this link already exists" });
+
+      const status = body.status === "published" ? "published" : "draft";
+      const excerpt = String(body.excerpt || "").trim() || makeSeoDescription("", content);
+      const blogData = insertBlogSchema.parse({
+        title,
+        slug,
+        excerpt,
+        content,
+        mediaUrl: body.mediaUrl || null,
+        mediaType: body.mediaType || "none",
+        externalUrl: body.externalUrl || null,
+        status,
+        publishedAt: status === "published" ? new Date() : null,
+        seoTitle: String(body.seoTitle || title).trim(),
+        seoDescription: String(body.seoDescription || excerpt).trim() || makeSeoDescription(excerpt, content),
+        seoKeywords: String(body.seoKeywords || "").trim() || title.toLowerCase(),
+      });
+      const [blog] = await db.insert(blogs).values(blogData).returning();
+      res.status(201).json({ blog, message: "Blog created successfully" });
+    } catch (error) {
+      console.error("Create blog error:", error);
+      res.status(400).json({ message: "Invalid blog data" });
+    }
+  });
+
+  app.put("/api/admin/blogs/:id", requireAdminAuth, async (req, res) => {
+    try {
+      const [existing] = await db.select().from(blogs).where(eq(blogs.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ message: "Blog not found" });
+
+      const body = req.body || {};
+      const title = String(body.title ?? existing.title).trim();
+      const content = String(body.content ?? existing.content).trim();
+      const slug = slugify(body.slug || existing.slug || title);
+      const [duplicate] = await db.select({ id: blogs.id })
+        .from(blogs)
+        .where(and(eq(blogs.slug, slug), sql`${blogs.id} <> ${existing.id}`))
+        .limit(1);
+      if (duplicate) return res.status(409).json({ message: "A blog with this link already exists" });
+
+      const status = body.status === "published" ? "published" : "draft";
+      const excerpt = String(body.excerpt ?? existing.excerpt ?? "").trim() || makeSeoDescription("", content);
+      const updateData = insertBlogSchema.partial().parse({
+        title,
+        slug,
+        excerpt,
+        content,
+        mediaUrl: body.mediaUrl ?? existing.mediaUrl,
+        mediaType: body.mediaType ?? existing.mediaType ?? "none",
+        externalUrl: body.externalUrl ?? existing.externalUrl,
+        status,
+        publishedAt: status === "published" ? existing.publishedAt || new Date() : null,
+        seoTitle: String(body.seoTitle ?? existing.seoTitle ?? title).trim(),
+        seoDescription: String(body.seoDescription ?? existing.seoDescription ?? excerpt).trim() || makeSeoDescription(excerpt, content),
+        seoKeywords: String(body.seoKeywords ?? existing.seoKeywords ?? title).trim(),
+      });
+      const [blog] = await db.update(blogs).set({ ...updateData, updatedAt: new Date() }).where(eq(blogs.id, existing.id)).returning();
+      res.json({ blog, message: "Blog updated successfully" });
+    } catch (error) {
+      console.error("Update blog error:", error);
+      res.status(400).json({ message: "Invalid blog data" });
+    }
+  });
+
+  app.delete("/api/admin/blogs/:id", requireAdminAuth, async (req, res) => {
+    try {
+      await db.delete(blogs).where(eq(blogs.id, req.params.id));
+      res.json({ message: "Blog deleted successfully" });
+    } catch (error) {
+      console.error("Delete blog error:", error);
+      res.status(500).json({ message: "Failed to delete blog" });
     }
   });
 

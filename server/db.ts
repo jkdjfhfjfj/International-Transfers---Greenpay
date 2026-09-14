@@ -150,6 +150,23 @@ async function alterMissingColumns() {
       created_at TIMESTAMP DEFAULT NOW(),
       updated_at TIMESTAMP DEFAULT NOW()
     )`,
+    `CREATE TABLE IF NOT EXISTS blogs (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      excerpt TEXT,
+      content TEXT NOT NULL,
+      media_url TEXT,
+      media_type TEXT DEFAULT 'none',
+      external_url TEXT,
+      status TEXT DEFAULT 'draft',
+      published_at TIMESTAMP,
+      seo_title TEXT,
+      seo_description TEXT,
+      seo_keywords TEXT,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    )`,
     `CREATE TABLE IF NOT EXISTS announcement_dismissals (
       user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       announcement_id VARCHAR NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,

@@ -95,6 +95,8 @@ import AdminCryptoPage from "@/pages/admin-crypto";
 import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
 import AdminWalletsPage from "@/pages/admin-wallets";
 import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
+import AdminBlogsPage from "@/pages/admin-blogs";
+import BlogPage from "@/pages/blog";
 import { useFCM } from "@/hooks/use-fcm";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import { useMaintenanceState } from "@/hooks/use-maintenance";
@@ -190,6 +192,8 @@ function Router() {
       <Route path="/contact" component={ContactLanding} />
       <Route path="/terms" component={TermsAndConditionsPage} />
       <Route path="/privacy" component={PrivacyPolicyPage} />
+      <Route path="/blog" component={BlogPage} />
+      <Route path="/blog/:slug" component={BlogPage} />
       <Route path="/crypto">
         <ProtectedRoute component={CryptoPage} />
       </Route>
@@ -233,6 +237,7 @@ function Router() {
       <Route path="/admin/deposit-settings" component={AdminDepositSettingsPage} />
       <Route path="/admin/wallets" component={AdminWalletsPage} />
       <Route path="/admin/virtual-accounts" component={AdminVirtualAccountsPage} />
+      <Route path="/admin/blogs" component={AdminBlogsPage} />
       <Route component={NotFound} />
     </Switch>
   );

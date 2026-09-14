@@ -571,6 +571,34 @@ export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
 export type Announcement = typeof announcements.$inferSelect;
 export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
 
+// Public editorial content managed by administrators.
+export const blogs = pgTable("blogs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt"),
+  content: text("content").notNull(),
+  mediaUrl: text("media_url"),
+  mediaType: text("media_type").default("none"), // none, image, video
+  externalUrl: text("external_url"),
+  status: text("status").default("draft"), // draft, published
+  publishedAt: timestamp("published_at"),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  seoKeywords: text("seo_keywords"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBlogSchema = createInsertSchema(blogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Blog = typeof blogs.$inferSelect;
+export type InsertBlog = z.infer<typeof insertBlogSchema>;
+
 // User sessions table for express-session with PostgreSQL store (connect-pg-simple)
 export const userSessions = pgTable("user_sessions", {
   sid: varchar("sid").primaryKey(),
