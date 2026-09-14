@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +32,18 @@ export default function SettingsPage() {
     phone: user?.phone || "",
     country: user?.country || "",
   });
+
+  // Keep the edit form in sync when Didit webhook data refreshes the user.
+  // Do not reset fields while the user is actively typing.
+  useEffect(() => {
+    if (isEditingProfile || !user) return;
+    setProfileData({
+      fullName: user.fullName || "",
+      email: user.email || "",
+      phone: user.phone || "",
+      country: user.country || "",
+    });
+  }, [user?.id, user?.fullName, user?.email, user?.phone, user?.country, isEditingProfile]);
 
   // Password change states
   const [isChangingPassword, setIsChangingPassword] = useState(false);

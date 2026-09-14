@@ -8,6 +8,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { TalkToUs } from "@/components/talk-to-us";
 import NotFound from "@/pages/not-found";
 import DesktopSidebar from "@/components/desktop-sidebar";
+import DesktopTopbar from "@/components/desktop-topbar";
 import SplashPage from "@/pages/splash";
 import LoginPage from "@/pages/auth/login";
 import SignupPage from "@/pages/auth/signup";
@@ -344,6 +345,7 @@ function AppContent() {
       <Toaster />
       <OfflineIndicator />
       {showAppShell && <DesktopSidebar />}
+      {showAppShell && <DesktopTopbar />}
       <div className={showAppShell ? "md:pl-64" : ""}>
         {isOffline ? <OfflinePage /> : showMaintenance ? <MaintenancePage /> : <Router />}
       </div>

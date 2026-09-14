@@ -2388,22 +2388,23 @@ p{color:#6b7280;font-size:14px;}</style>
       const kyc = await storage.getKycByUserId(userId);
       const u = user as any;
 
-      // Fallback: parse raw diditDecision if denormalised columns are empty
+      // Fallback: parse raw Didit decision if denormalised columns are empty.
       const decision = (kyc as any)?.diditDecision as any;
-      const docFeatures = decision?.features?.document || {};
+      const { extractDiditIdentity } = await import('./services/didit');
+      const identity = extractDiditIdentity(decision);
 
       const extractedData = {
-        fullName:        u.kycFullName        || [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
-        firstName:       docFeatures.first_name || null,
-        lastName:        docFeatures.last_name  || null,
-        dateOfBirth:     u.kycDateOfBirth     || docFeatures.date_of_birth   || null,
-        idNumber:        u.kycIdNumber        || docFeatures.document_number  || null,
-        documentType:    u.kycDocumentType    || docFeatures.document_type    || kyc?.documentType || null,
-        nationality:     u.kycNationality     || docFeatures.nationality      || null,
-        gender:          u.kycGender          || docFeatures.gender           || null,
-        expiryDate:      u.kycIdExpiryDate    || docFeatures.expiry_date      || null,
-        address:         u.kycAddress         || docFeatures.address          || kyc?.address      || null,
-        issuingCountry:  u.kycIssuingCountry  || docFeatures.issuing_country  || null,
+        fullName:        u.kycFullName        || identity.fullName || null,
+        firstName:       identity.firstName,
+        lastName:        identity.lastName,
+        dateOfBirth:     u.kycDateOfBirth     || identity.dateOfBirth || null,
+        idNumber:        u.kycIdNumber        || identity.idNumber || null,
+        documentType:    u.kycDocumentType    || identity.documentType || kyc?.documentType || null,
+        nationality:     u.kycNationality     || identity.nationality || null,
+        gender:          u.kycGender          || identity.gender || null,
+        expiryDate:      u.kycIdExpiryDate    || identity.expiryDate || null,
+        address:         u.kycAddress         || identity.address || kyc?.address || null,
+        issuingCountry:  u.kycIssuingCountry  || identity.issuingCountry || null,
         diditStatus:     (kyc as any)?.diditStatus || null,
         kycStatus:       kyc?.status || user.kycStatus,
       };
@@ -2499,20 +2500,29 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.json({ status: null, kycStatus: 'not_submitted', docStatus: kyc?.status || null });
       }
 
-      const { getSessionDecision, mapDiditStatusToKyc, isTerminalStatus } = await import('./services/didit');
+      const {
+        getSessionDecision,
+        mapDiditStatusToKyc,
+        isTerminalStatus,
+        extractDiditIdentity,
+        diditIdentityToUserFields,
+      } = await import('./services/didit');
 
       const decision = await getSessionDecision((kyc as any).diditSessionId);
       if (!decision) {
+        const savedIdentity = extractDiditIdentity((kyc as any).diditDecision);
         return res.json({
           status: (kyc as any).diditStatus,
           kycStatus: (kyc as any).status,
           sessionId: (kyc as any).diditSessionId,
           sessionUrl: (kyc as any).diditDecision?.sessionUrl || null,
+          extractedData: savedIdentity,
         });
       }
 
       const diditStatus = decision.status;
       const kycStatus = mapDiditStatusToKyc(diditStatus);
+      const identity = extractDiditIdentity(decision);
 
       // Update DB if status changed
       if (diditStatus !== (kyc as any).diditStatus || kycStatus !== kyc.status) {
@@ -2540,12 +2550,22 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
 
+      // Populate the verified identity even when the status was already synced
+      // by the webhook before the user opened this page.
+      if (kycStatus === 'verified') {
+        const identityFields = diditIdentityToUserFields(identity);
+        if (Object.keys(identityFields).length > 0) {
+          await storage.updateUser(userId, identityFields as any);
+        }
+      }
+
       res.json({
         status: diditStatus,
         kycStatus,
         sessionId: (kyc as any).diditSessionId,
         sessionUrl: (kyc as any).diditDecision?.sessionUrl || null,
         decision: isTerminalStatus(diditStatus) ? decision : undefined,
+        extractedData: identity,
       });
     } catch (error) {
       console.error('[Didit] Status poll error:', error);
@@ -2556,17 +2576,28 @@ p{color:#6b7280;font-size:14px;}</style>
   // Webhook endpoint — didit calls this when a session status changes
   app.post("/api/kyc/didit/webhook", async (req, res) => {
     try {
-      const { verifyWebhookSignature, mapDiditStatusToKyc, isTerminalStatus } = await import('./services/didit');
+      const {
+        verifyWebhookSignature,
+        mapDiditStatusToKyc,
+        isTerminalStatus,
+        extractDiditIdentity,
+        diditIdentityToUserFields,
+      } = await import('./services/didit');
 
       // Verify webhook signature if secret is configured
       const webhookSecret = process.env.DIDIT_WEBHOOK_SECRET;
       if (webhookSecret) {
-        const signature = req.headers['x-didit-signature'] as string;
+        const signature = (
+          req.headers['x-signature-v2'] ||
+          req.headers['x-signature'] ||
+          req.headers['x-didit-signature']
+        ) as string;
         if (!signature) {
           return res.status(401).json({ message: "Missing webhook signature" });
         }
-        const rawBody = JSON.stringify(req.body);
-        const valid = verifyWebhookSignature(rawBody, signature, webhookSecret);
+        const rawBody = (req as any).rawBody || JSON.stringify(req.body);
+        const timestamp = req.headers['x-timestamp'] as string | undefined;
+        const valid = verifyWebhookSignature(rawBody, signature, webhookSecret, timestamp);
         if (!valid) {
           return res.status(401).json({ message: "Invalid webhook signature" });
         }
@@ -2599,9 +2630,9 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Auto-populate KYC identity fields when verified via webhook
       if (kycStatus === 'verified') {
+        const identity = extractDiditIdentity(payload);
         // Duplicate ID check
-        const doc = payload?.features?.document || {};
-        const idNumber = doc.document_number || null;
+        const idNumber = identity.idNumber;
         if (idNumber) {
           const existing = await db.select({ id: users.id }).from(users).where(eq(users.kycIdNumber, idNumber));
           if (existing.some(u => u.id !== userId)) {
@@ -2611,18 +2642,7 @@ p{color:#6b7280;font-size:14px;}</style>
             return res.json({ received: true });
           }
         }
-        const kycFields = {
-          kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(' ') || null,
-          kycDateOfBirth: doc.date_of_birth || null,
-          kycIdNumber: idNumber,
-          kycNationality: doc.nationality || null,
-          kycGender: doc.gender || null,
-          kycAddress: doc.address || null,
-          kycDocumentType: doc.document_type || null,
-          kycIdExpiryDate: doc.expiry_date || null,
-          kycIssuingCountry: doc.issuing_country || null,
-        };
-        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        const filtered = diditIdentityToUserFields(identity);
         if (Object.keys(filtered).length > 0) await storage.updateUser(userId, filtered as any);
       }
 
@@ -6232,6 +6252,23 @@ p{color:#6b7280;font-size:14px;}</style>
       const isReVerify = status === 're_verification_requested';
       const docStatus = isReVerify ? 're_verification_requested' : status;
       const userKycStatus = isReVerify ? 'not_submitted' : status;
+      const { extractDiditIdentity, diditIdentityToUserFields } = await import('./services/didit');
+      const submittedIdentity = req.body?.identity && typeof req.body.identity === 'object'
+        ? req.body.identity
+        : {};
+      const manualIdentityFields = diditIdentityToUserFields({
+        firstName: null,
+        lastName: null,
+        fullName: typeof submittedIdentity.fullName === 'string' ? submittedIdentity.fullName.trim() || null : null,
+        dateOfBirth: typeof submittedIdentity.dateOfBirth === 'string' ? submittedIdentity.dateOfBirth.trim() || null : null,
+        idNumber: typeof submittedIdentity.idNumber === 'string' ? submittedIdentity.idNumber.trim() || null : null,
+        documentType: typeof submittedIdentity.documentType === 'string' ? submittedIdentity.documentType.trim() || null : null,
+        nationality: typeof submittedIdentity.nationality === 'string' ? submittedIdentity.nationality.trim() || null : null,
+        gender: typeof submittedIdentity.gender === 'string' ? submittedIdentity.gender.trim() || null : null,
+        expiryDate: typeof submittedIdentity.expiryDate === 'string' ? submittedIdentity.expiryDate.trim() || null : null,
+        address: typeof submittedIdentity.address === 'string' ? submittedIdentity.address.trim() || null : null,
+        issuingCountry: typeof submittedIdentity.issuingCountry === 'string' ? submittedIdentity.issuingCountry.trim() || null : null,
+      });
 
       // ── Duplicate ID check when manually approving ──────────────────────────
       if (status === 'verified') {
@@ -6239,7 +6276,7 @@ p{color:#6b7280;font-size:14px;}</style>
           (await db.select({ userId: kycDocuments.userId }).from(kycDocuments).where(eq(kycDocuments.id, id)))[0]?.userId
         );
         const decision = (kycDoc as any)?.diditDecision;
-        const idNumber = decision?.features?.document?.document_number || null;
+        const idNumber = manualIdentityFields.kycIdNumber || extractDiditIdentity(decision).idNumber;
         if (idNumber) {
           const existing = await db.select({ id: users.id }).from(users)
             .where(eq(users.kycIdNumber, idNumber));
@@ -6262,23 +6299,16 @@ p{color:#6b7280;font-size:14px;}</style>
         // Auto-populate KYC identity fields on user when verified
         if (status === 'verified') {
           const decision = (updatedKyc as any).diditDecision;
-          const doc = decision?.features?.document || {};
-          const kycFields = {
-            kycFullName: [doc.first_name, doc.last_name].filter(Boolean).join(' ') || null,
-            kycDateOfBirth: doc.date_of_birth || null,
-            kycIdNumber: doc.document_number || null,
-            kycNationality: doc.nationality || null,
-            kycGender: doc.gender || null,
-            kycAddress: doc.address || null,
-            kycDocumentType: doc.document_type || null,
-            kycIdExpiryDate: doc.expiry_date || null,
-            kycIssuingCountry: doc.issuing_country || null,
+          const filteredKycFields = {
+            ...diditIdentityToUserFields(extractDiditIdentity(decision)),
+            ...manualIdentityFields,
           };
-          // Only write fields that have actual values
-          const filteredKycFields = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
           if (Object.keys(filteredKycFields).length > 0) {
             await storage.updateUser(updatedKyc.userId, filteredKycFields as any);
           }
+        }
+        if (status !== 'verified' && Object.keys(manualIdentityFields).length > 0) {
+          await storage.updateUser(updatedKyc.userId, manualIdentityFields as any);
         }
 
         // Update user KYC status
@@ -6340,7 +6370,13 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "No Didit session attached to this document" });
       }
 
-      const { getSessionDecision, mapDiditStatusToKyc, isTerminalStatus } = await import('./services/didit');
+      const {
+        getSessionDecision,
+        mapDiditStatusToKyc,
+        isTerminalStatus,
+        extractDiditIdentity,
+        diditIdentityToUserFields,
+      } = await import('./services/didit');
       const decision = await getSessionDecision(sessionId);
 
       if (!decision) {
@@ -6350,21 +6386,9 @@ p{color:#6b7280;font-size:14px;}</style>
       const diditStatus = decision.status;
       const kycStatus = mapDiditStatusToKyc(diditStatus);
 
-      // Extract structured data from Didit decision features
-      const docFeatures = (decision as any).features?.document || {};
-      const extractedData = {
-        firstName: docFeatures.first_name || null,
-        lastName: docFeatures.last_name || null,
-        fullName: [docFeatures.first_name, docFeatures.last_name].filter(Boolean).join(' ') || null,
-        dateOfBirth: docFeatures.date_of_birth || null,
-        idNumber: docFeatures.document_number || null,
-        documentType: docFeatures.document_type || null,
-        nationality: docFeatures.nationality || null,
-        gender: docFeatures.gender || null,
-        expiryDate: docFeatures.expiry_date || null,
-        address: docFeatures.address || null,
-        issuingCountry: docFeatures.issuing_country || null,
-      };
+      // Didit identity data may be in id_verifications or the legacy
+      // features.document shape.
+      const extractedData = extractDiditIdentity(decision);
 
       // Duplicate ID check before approving via poll
       if (kycStatus === 'verified' && extractedData.idNumber) {
@@ -6387,18 +6411,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Auto-populate KYC identity fields when verified via poll
       if (kycStatus === 'verified') {
-        const kycFields = {
-          kycFullName: extractedData.fullName || null,
-          kycDateOfBirth: extractedData.dateOfBirth || null,
-          kycIdNumber: extractedData.idNumber || null,
-          kycNationality: extractedData.nationality || null,
-          kycGender: extractedData.gender || null,
-          kycAddress: extractedData.address || null,
-          kycDocumentType: extractedData.documentType || null,
-          kycIdExpiryDate: extractedData.expiryDate || null,
-          kycIssuingCountry: extractedData.issuingCountry || null,
-        };
-        const filtered = Object.fromEntries(Object.entries(kycFields).filter(([, v]) => v != null));
+        const filtered = diditIdentityToUserFields(extractedData);
         if (Object.keys(filtered).length > 0) await storage.updateUser(kyc.userId, filtered as any);
       }
 

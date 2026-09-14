@@ -72,7 +72,7 @@ function DiditStatusLabel({ diditStatus }: { diditStatus?: string }) {
 
 export default function KYCPage() {
   const [, setLocation] = useLocation();
-  const { user, login } = useAuth();
+  const { user, login, refreshUser } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -95,6 +95,7 @@ export default function KYCPage() {
     sessionId: string | null;
     sessionUrl: string | null;
     docStatus: string | null;
+    extractedData?: Record<string, string | null> | null;
   }>({
     queryKey: ["/api/kyc/didit/status"],
     enabled: !!user?.id && (isPending || isNotStarted || !!sessionId),
@@ -116,10 +117,24 @@ export default function KYCPage() {
       setIsPolling(false);
       setShowIframe(false);
 
-      // Sync user auth state
+      // Sync status and webhook-extracted identity into the authenticated user.
       const newKycStatus = diditStatusData?.kycStatus;
-      if (newKycStatus && user && newKycStatus !== user.kycStatus) {
-        login({ ...user, kycStatus: newKycStatus } as any);
+      if (newKycStatus && user) {
+        const extracted = diditStatusData?.extractedData || {};
+        login({
+          ...user,
+          kycStatus: newKycStatus,
+          kycFullName: extracted.fullName || user.kycFullName,
+          kycDateOfBirth: extracted.dateOfBirth || user.kycDateOfBirth,
+          kycIdNumber: extracted.idNumber || user.kycIdNumber,
+          kycNationality: extracted.nationality || user.kycNationality,
+          kycGender: extracted.gender || user.kycGender,
+          kycAddress: extracted.address || user.kycAddress,
+          kycDocumentType: extracted.documentType || user.kycDocumentType,
+          kycIdExpiryDate: extracted.expiryDate || user.kycIdExpiryDate,
+          kycIssuingCountry: extracted.issuingCountry || user.kycIssuingCountry,
+        } as any);
+        void refreshUser();
         queryClient.invalidateQueries({ queryKey: ["/api/user"] });
         toast({
           title: ds === "Approved" ? "KYC Verified! 🎉" : "Verification Update",
@@ -133,7 +148,7 @@ export default function KYCPage() {
         });
       }
     }
-  }, [diditStatusData?.status]);
+  }, [diditStatusData?.status, diditStatusData?.extractedData, user?.id]);
 
   // Start a new didit verification session
   const startMutation = useMutation({
@@ -168,8 +183,22 @@ export default function KYCPage() {
     const result = await refetchStatus();
     const nextStatus = result.data?.kycStatus;
     const statusCheckFailed = Boolean(result.error);
-    if (nextStatus && user && nextStatus !== user.kycStatus) {
-      login({ ...user, kycStatus: nextStatus } as any);
+    if (nextStatus && user) {
+      const extracted = result.data?.extractedData || {};
+      login({
+        ...user,
+        kycStatus: nextStatus,
+        kycFullName: extracted.fullName || user.kycFullName,
+        kycDateOfBirth: extracted.dateOfBirth || user.kycDateOfBirth,
+        kycIdNumber: extracted.idNumber || user.kycIdNumber,
+        kycNationality: extracted.nationality || user.kycNationality,
+        kycGender: extracted.gender || user.kycGender,
+        kycAddress: extracted.address || user.kycAddress,
+        kycDocumentType: extracted.documentType || user.kycDocumentType,
+        kycIdExpiryDate: extracted.expiryDate || user.kycIdExpiryDate,
+        kycIssuingCountry: extracted.issuingCountry || user.kycIssuingCountry,
+      } as any);
+      void refreshUser();
       await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     }
     toast({
@@ -198,17 +227,19 @@ export default function KYCPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-screen bg-background pb-28 md:min-h-[calc(100dvh-4rem)] md:pb-8">
       <WavyHeader size="sm" />
 
-      <div className="max-w-md mx-auto px-4 pt-6 space-y-5">
+      <div className="mx-auto max-w-6xl space-y-5 px-4 pt-6 md:px-8 md:pt-10">
 
         {/* Page Title */}
-        <div>
-          <h1 className="text-xl font-bold text-foreground">Identity Verification</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Verify your identity to unlock all Geepay features
-          </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400">Account security</p>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">Identity verification</h1>
+            <p className="mt-1 text-sm text-muted-foreground">Complete a secure Didit check to unlock your account.</p>
+          </div>
+          <StatusBadge status={kycStatus} />
         </div>
 
         {/* Re-verification notice */}
@@ -311,25 +342,25 @@ export default function KYCPage() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="bg-card border border-border rounded-2xl p-5 space-y-4"
+            className="bg-card border border-border rounded-2xl p-5 space-y-4 md:grid md:grid-cols-2 md:gap-x-8 md:space-y-0"
           >
-            <h2 className="font-semibold text-sm text-foreground">What you'll need</h2>
-            <div className="space-y-3">
+            <h2 className="font-semibold text-sm text-foreground md:col-span-2">Before you start</h2>
+            <div className="space-y-3 md:mt-4">
               {[
                 {
                   icon: "🪪",
                   title: "Government-issued ID",
-                  desc: "National ID, passport, or driver's license",
+                  desc: "Passport, national ID, or driver's license",
                 },
                 {
                   icon: "🤳",
                   title: "Selfie / Liveness check",
-                  desc: "A quick photo to confirm it's you",
+                  desc: "A quick liveness check",
                 },
                 {
                   icon: "💡",
                   title: "Good lighting & clear images",
-                  desc: "Ensure documents are clearly visible",
+                  desc: "Use a well-lit space",
                 },
               ].map((item, i) => (
                 <div key={i} className="flex items-start gap-3">
@@ -343,8 +374,8 @@ export default function KYCPage() {
             </div>
 
             {/* Features unlocked */}
-            <div className="pt-2 border-t border-border">
-              <p className="text-xs font-medium text-muted-foreground mb-2">What you unlock</p>
+            <div className="pt-2 border-t border-border md:mt-4 md:border-t-0 md:border-l md:pl-8">
+              <p className="text-xs font-medium text-muted-foreground mb-2">After verification</p>
               <div className="grid grid-cols-2 gap-2">
                 {["Send money", "Receive payments", "Virtual card", "Higher limits"].map((f) => (
                   <div key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -426,9 +457,7 @@ export default function KYCPage() {
                 </Button>
               )}
 
-              <p className="text-xs text-center text-muted-foreground mt-3">
-                Powered by Didit — secure, AI-assisted identity verification in under 2 minutes
-              </p>
+              <p className="text-xs text-center text-muted-foreground mt-3">Secure verification by Didit.</p>
             </motion.div>
           )}
 
@@ -461,9 +490,7 @@ export default function KYCPage() {
         {/* Security note */}
         <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-xl">
           <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-          <p className="text-xs text-muted-foreground">
-            Your data is encrypted and processed securely. We never store your ID documents — they are verified instantly and discarded.
-          </p>
+          <p className="text-xs text-muted-foreground">Your verification is encrypted and handled securely by Didit.</p>
         </div>
       </div>
 
@@ -474,7 +501,7 @@ export default function KYCPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-background flex flex-col"
+            className="fixed inset-0 z-50 flex min-h-0 flex-col overflow-hidden bg-background"
           >
             {/* Top bar */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
@@ -512,7 +539,7 @@ export default function KYCPage() {
             {/* Iframe */}
             <iframe
               src={sessionUrl}
-              className="flex-1 w-full border-0"
+              className="min-h-0 flex-1 w-full border-0"
               allow="camera; microphone; geolocation"
               title="Identity Verification"
             />

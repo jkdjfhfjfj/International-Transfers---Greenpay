@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -69,6 +70,18 @@ interface KycResponse {
   kycDocuments: KycDocument[];
 }
 
+interface KycIdentityEdits {
+  fullName: string;
+  dateOfBirth: string;
+  idNumber: string;
+  documentType: string;
+  nationality: string;
+  gender: string;
+  expiryDate: string;
+  address: string;
+  issuingCountry: string;
+}
+
 // Map Didit status to color/label
 function getDiditStatusBadge(diditStatus: string | null | undefined) {
   if (!diditStatus) return <Badge variant="outline" className="text-xs">Not Started</Badge>;
@@ -116,19 +129,47 @@ function getDocumentTypeName(type: string) {
 // Extract structured data from a Didit decision payload
 function extractDiditData(diditDecision: any) {
   if (!diditDecision) return null;
-  const doc = diditDecision?.features?.document || {};
+  const verification = Array.isArray(diditDecision?.id_verifications)
+    ? diditDecision.id_verifications.find((item: any) => item && typeof item === "object") || {}
+    : diditDecision?.id_verifications && typeof diditDecision.id_verifications === "object"
+      ? diditDecision.id_verifications
+      : {};
+  const verificationDetails = verification?.document || verification?.identity || verification;
+  const liveness = Array.isArray(diditDecision?.liveness_checks)
+    ? diditDecision.liveness_checks.find((item: any) => item && typeof item === "object") || {}
+    : {};
+  const doc = {
+    ...(diditDecision?.features?.document || {}),
+    ...(diditDecision?.document || {}),
+    ...liveness,
+    ...verificationDetails,
+  };
+  const value = (...keys: string[]) => {
+    for (const key of keys) {
+      const candidate = doc?.[key];
+      if (candidate === undefined || candidate === null || candidate === "") continue;
+      if (typeof candidate === "string" || typeof candidate === "number") return String(candidate);
+      if (typeof candidate === "object" && !Array.isArray(candidate)) {
+        const nested = candidate.value || candidate.text || candidate.formatted || candidate.name;
+        if (nested) return String(nested);
+      }
+    }
+    return null;
+  };
+  const firstName = value("first_name", "firstName");
+  const lastName = value("last_name", "lastName");
   return {
-    firstName: doc.first_name || null,
-    lastName: doc.last_name || null,
-    fullName: [doc.first_name, doc.last_name].filter(Boolean).join(" ") || null,
-    dateOfBirth: doc.date_of_birth || null,
-    idNumber: doc.document_number || null,
-    documentType: doc.document_type || null,
-    nationality: doc.nationality || null,
-    gender: doc.gender || null,
-    expiryDate: doc.expiry_date || null,
-    address: doc.address || null,
-    issuingCountry: doc.issuing_country || null,
+    firstName,
+    lastName,
+    fullName: value("full_name", "fullName", "name") || [firstName, lastName].filter(Boolean).join(" ") || null,
+    dateOfBirth: value("date_of_birth", "dateOfBirth", "birth_date"),
+    idNumber: value("document_number", "documentNumber", "id_number", "idNumber"),
+    documentType: value("document_type", "documentType", "type"),
+    nationality: value("nationality", "nationality_code"),
+    gender: value("gender", "sex"),
+    expiryDate: value("expiry_date", "expiryDate", "expiration_date"),
+    address: value("address", "full_address", "residential_address"),
+    issuingCountry: value("issuing_country", "issuingCountry", "country_of_issue"),
   };
 }
 
@@ -150,10 +191,11 @@ export default function KycManagement() {
   });
 
   const updateKycMutation = useMutation({
-    mutationFn: async ({ id, status, notes }: { id: string; status: string; notes: string }) => {
+    mutationFn: async ({ id, status, notes, identity }: { id: string; status: string; notes: string; identity: KycIdentityEdits }) => {
       const response = await apiRequest("PUT", `/api/admin/kyc/${id}`, {
         status,
         verificationNotes: notes,
+        identity,
       });
       return response.json();
     },
@@ -191,9 +233,9 @@ export default function KycManagement() {
     },
   });
 
-  const handleSubmitReview = () => {
+  const handleSubmitReview = (identity: KycIdentityEdits) => {
     if (!selectedKyc || !reviewStatus) return;
-    updateKycMutation.mutate({ id: selectedKyc.id, status: reviewStatus, notes: reviewNotes });
+    updateKycMutation.mutate({ id: selectedKyc.id, status: reviewStatus, notes: reviewNotes, identity });
   };
 
   if (error) {
@@ -441,10 +483,25 @@ function KycReviewContent({
   setReviewStatus: (s: string) => void;
   reviewNotes: string;
   setReviewNotes: (s: string) => void;
-  onSubmit: () => void;
+  onSubmit: (identity: KycIdentityEdits) => void;
   isLoading: boolean;
 }) {
   const extracted = extractDiditData(kyc.diditDecision);
+  const [identity, setIdentity] = useState<KycIdentityEdits>(() => ({
+    fullName: extracted?.fullName || "",
+    dateOfBirth: extracted?.dateOfBirth || "",
+    idNumber: extracted?.idNumber || "",
+    documentType: extracted?.documentType || "",
+    nationality: extracted?.nationality || "",
+    gender: extracted?.gender || "",
+    expiryDate: extracted?.expiryDate || "",
+    address: extracted?.address || "",
+    issuingCountry: extracted?.issuingCountry || "",
+  }));
+
+  const updateIdentity = (field: keyof KycIdentityEdits, value: string) => {
+    setIdentity((current) => ({ ...current, [field]: value }));
+  };
 
   return (
     <div className="space-y-6">
@@ -541,6 +598,35 @@ function KycReviewContent({
         </div>
       )}
 
+      {/* Editable identity values prefilled from Didit */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-800 dark:bg-blue-900/20">
+        <p className="mb-1 flex items-center gap-2 text-sm font-semibold text-blue-700 dark:text-blue-300">
+          <Shield className="h-4 w-4" /> Editable identity details
+        </p>
+        <p className="mb-3 text-xs text-muted-foreground">Didit values are prefilled. Correct any errors before saving.</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {([
+            ["fullName", "Full name"],
+            ["dateOfBirth", "Date of birth"],
+            ["idNumber", "ID / document number"],
+            ["documentType", "Document type"],
+            ["nationality", "Nationality"],
+            ["gender", "Gender"],
+            ["expiryDate", "Document expiry"],
+            ["issuingCountry", "Issuing country"],
+          ] as const).map(([field, label]) => (
+            <label key={field} className="space-y-1">
+              <span className="text-xs font-medium text-muted-foreground">{label}</span>
+              <Input value={identity[field]} onChange={(event) => updateIdentity(field, event.target.value)} />
+            </label>
+          ))}
+          <label className="space-y-1 sm:col-span-2">
+            <span className="text-xs font-medium text-muted-foreground">Address</span>
+            <Input value={identity.address} onChange={(event) => updateIdentity("address", event.target.value)} />
+          </label>
+        </div>
+      </div>
+
       {/* Document info */}
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div className="space-y-2">
@@ -616,7 +702,7 @@ function KycReviewContent({
         <Button
           className="w-full"
           disabled={!reviewStatus || isLoading}
-          onClick={onSubmit}
+          onClick={() => onSubmit(identity)}
         >
           {isLoading ? (
             <span className="flex items-center gap-2">

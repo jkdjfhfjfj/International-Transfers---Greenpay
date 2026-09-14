@@ -20,7 +20,13 @@ if (missingVars.length > 0) {
 }
 
 const app = express();
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({
+  limit: '50mb',
+  verify: (req, _res, buffer) => {
+    // Preserve the exact signed payload for Didit's webhook verification.
+    (req as any).rawBody = buffer.toString('utf8');
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Configure PostgreSQL session store for production
