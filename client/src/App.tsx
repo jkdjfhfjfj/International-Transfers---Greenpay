@@ -97,6 +97,7 @@ import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
 import { useFCM } from "@/hooks/use-fcm";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import { useMaintenanceState } from "@/hooks/use-maintenance";
+import { Smartphone } from "lucide-react";
 
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -235,11 +236,28 @@ function Router() {
   );
 }
 
+function MobileOnlyPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center">
+      <div className="max-w-sm space-y-4">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <Smartphone className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">Mobile access only</h1>
+        <p className="text-sm text-muted-foreground">
+          This app is currently optimized for mobile devices. Open Geepay on a phone or smaller screen to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading, user } = useAuth();
-  const { getMaintenanceMode } = useSystemSettings();
+  const { getMaintenanceMode, getDesktopAccessEnabled } = useSystemSettings();
   const maintenanceState = useMaintenanceState();
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
   const [isOffline, setIsOffline] = useState(
     typeof navigator !== "undefined" && !navigator.onLine,
   );
@@ -256,6 +274,14 @@ function AppContent() {
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
     };
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const updateViewport = () => setIsDesktopViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
   }, []);
 
   // Use the browser Notification API for web notifications. This is
@@ -332,13 +358,19 @@ function AppContent() {
     location.startsWith("/admin/");
   const showMaintenance =
     !isAdminPage && (maintenanceState.active || (!isLoading && getMaintenanceMode()));
+  const showMobileOnly =
+    !isAdminPage &&
+    !isLandingPage &&
+    isDesktopViewport &&
+    !getDesktopAccessEnabled();
 
   const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
 
   // Only show user widgets on authenticated non-admin pages where they won't cover message composers
   const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage && !isSupportComposerPage;
 
-  const showAppShell = isAuthenticated && !isLandingPage && !isAdminPage && !showMaintenance;
+  const showAppShell =
+    isAuthenticated && !isLandingPage && !isAdminPage && !showMaintenance && !showMobileOnly;
 
   return (
     <TooltipProvider>
@@ -347,7 +379,15 @@ function AppContent() {
       {showAppShell && <DesktopSidebar />}
       {showAppShell && <DesktopTopbar />}
       <div className={showAppShell ? "md:pl-64" : ""}>
-        {isOffline ? <OfflinePage /> : showMaintenance ? <MaintenancePage /> : <Router />}
+        {isOffline ? (
+          <OfflinePage />
+        ) : showMaintenance ? (
+          <MaintenancePage />
+        ) : showMobileOnly ? (
+          <MobileOnlyPage />
+        ) : (
+          <Router />
+        )}
       </div>
       {!isAdminPage && !showMaintenance && <BottomNavigation />}
       {!isAdminPage && !showMaintenance && <PWAInstallPrompt />}

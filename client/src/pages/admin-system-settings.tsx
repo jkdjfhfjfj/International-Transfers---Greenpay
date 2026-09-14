@@ -58,6 +58,7 @@ interface SystemSettings {
     maintenance_started_at: string;
     maintenance_status_label: string;
     maintenance_mode: boolean;
+    desktop_access_enabled: boolean;
   };
   whatsapp?: {
     phone_number_id: string;
@@ -119,6 +120,7 @@ export default function AdminSystemSettingsPage() {
   const [maintenanceStartedAt, setMaintenanceStartedAt] = useState("");
   const [maintenanceStatusLabel, setMaintenanceStatusLabel] = useState("Maintenance in progress");
   const [maintenance, setMaintenance] = useState(false);
+  const [desktopAccessEnabled, setDesktopAccessEnabled] = useState(true);
 
   // WhatsApp state
   const [waPhoneId, setWaPhoneId] = useState("");
@@ -204,6 +206,7 @@ export default function AdminSystemSettingsPage() {
       setMaintenanceStartedAt(settingsData.general?.maintenance_started_at || "");
       setMaintenanceStatusLabel(settingsData.general?.maintenance_status_label || "Maintenance in progress");
       setMaintenance(settingsData.general?.maintenance_mode || false);
+      setDesktopAccessEnabled(settingsData.general?.desktop_access_enabled ?? true);
 
       setWaPhoneId(settingsData.whatsapp?.phone_number_id || "");
       setWaBusinessId(settingsData.whatsapp?.business_account_id || "");
@@ -310,6 +313,7 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/maintenance_started_at", { value: String(maintenanceStartedAt), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_status_label", { value: String(maintenanceStatusLabel), category: "general" }),
         apiRequest("PUT", "/api/admin/settings/maintenance_mode", { value: String(maintenance), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/desktop_access_enabled", { value: String(desktopAccessEnabled), category: "general" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -684,6 +688,15 @@ export default function AdminSystemSettingsPage() {
                      </div>
                    </div>
                 </div>
+                 <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3">
+                   <div>
+                     <Label className="text-sm font-medium">Desktop User Access</Label>
+                     <p className="mt-1 text-xs text-muted-foreground">
+                       Allow authenticated users to use the app on desktop screens. Mobile access is always available.
+                     </p>
+                   </div>
+                   <Switch checked={desktopAccessEnabled} onCheckedChange={setDesktopAccessEnabled} />
+                 </div>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100">
                   <Label className="text-sm font-medium text-red-700">Maintenance Mode</Label>
                   <Switch checked={maintenance} onCheckedChange={setMaintenance} />

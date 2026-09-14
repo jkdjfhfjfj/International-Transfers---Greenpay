@@ -14,6 +14,7 @@ interface SystemSettings {
     maintenance_severity?: { value: string };
     maintenance_started_at?: { value: string };
     maintenance_status_label?: { value: string };
+    desktop_access_enabled?: { value: string };
     support_email?: { value: string };
     [key: string]: SettingValue | undefined;
   };
@@ -149,6 +150,13 @@ export function useSystemSettings() {
   const getMaintenanceStatusLabel = () =>
     getMaintenanceValue("maintenance_status_label", "Maintenance in progress");
 
+  const getDesktopAccessEnabled = () => {
+    const value =
+      settings?.general?.desktop_access_enabled?.value ??
+      settings?.platform?.desktop_access_enabled?.value;
+    return value === undefined ? true : isEnabled(value);
+  };
+
   const getPinRequired = () => {
     return settings?.security?.pin_required?.value === 'true';
   };
@@ -169,6 +177,7 @@ export function useSystemSettings() {
     getMaintenanceSeverity,
     getMaintenanceStartedAt,
     getMaintenanceStatusLabel,
+    getDesktopAccessEnabled,
     getPinRequired,
     getTwoFactorRequired,
   };
