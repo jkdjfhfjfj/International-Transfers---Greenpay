@@ -42,6 +42,26 @@ function settingText(value: unknown, fallback = ""): string {
   return String(raw ?? fallback).replace(/^"|"$/g, "").trim();
 }
 
+function normalizeDiditIdNumber(value: unknown): string {
+  return String(value ?? "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+async function findDiditIdentityOwner(userId: string, idNumber: string | null | undefined) {
+  const normalizedId = normalizeDiditIdNumber(idNumber);
+  if (!normalizedId) return null;
+
+  const candidates = await db
+    .select({ id: users.id, kycIdNumber: users.kycIdNumber })
+    .from(users)
+    .where(sql`${users.kycIdNumber} IS NOT NULL`);
+
+  return candidates.find(
+    candidate =>
+      candidate.id !== userId &&
+      normalizeDiditIdNumber(candidate.kycIdNumber) === normalizedId,
+  ) || null;
+}
+
 async function getUsdToKesRate(): Promise<number> {
   try {
     const rate = await createExchangeRateService(storage).getExchangeRate("USD", "KES");
@@ -2527,6 +2547,25 @@ p{color:#6b7280;font-size:14px;}</style>
       const kycStatus = mapDiditStatusToKyc(diditStatus);
       const identity = extractDiditIdentity(decision);
 
+      if (kycStatus === 'verified') {
+        const duplicateOwner = await findDiditIdentityOwner(userId, identity.idNumber);
+        if (duplicateOwner) {
+          const duplicateMessage = 'This ID document is already linked to another account. Verification blocked.';
+          await storage.updateKycDocument(kyc.id, {
+            diditStatus,
+            status: 'rejected',
+            diditDecision: decision as any,
+            verificationNotes: duplicateMessage,
+          } as any);
+          await storage.updateUser(userId, { kycStatus: 'rejected' });
+          return res.status(409).json({
+            message: duplicateMessage,
+            duplicateIdentity: true,
+            kycStatus: 'rejected',
+          });
+        }
+      }
+
       // Update DB if status changed
       if (diditStatus !== (kyc as any).diditStatus || kycStatus !== kyc.status) {
         await storage.updateKycDocument(kyc.id, {
@@ -2618,9 +2657,28 @@ p{color:#6b7280;font-size:14px;}</style>
       console.log(`[Didit] Webhook: session ${sessionId} → ${diditStatus} (user: ${userId})`);
 
       const kycStatus = mapDiditStatusToKyc(diditStatus);
+      const identity = kycStatus === 'verified' ? extractDiditIdentity(payload) : null;
 
       // Find and update the kyc_documents record
       const kyc = await storage.getKycByUserId(userId);
+      if (kycStatus === 'verified' && identity?.idNumber) {
+        const duplicateOwner = await findDiditIdentityOwner(userId, identity.idNumber);
+        if (duplicateOwner) {
+          const duplicateMessage = 'This ID document is already linked to another account. Verification blocked.';
+          if (kyc) {
+            await storage.updateKycDocument(kyc.id, {
+              diditStatus,
+              status: 'rejected',
+              diditDecision: payload as any,
+              verificationNotes: duplicateMessage,
+            } as any);
+          }
+          await storage.updateUser(userId, { kycStatus: 'rejected' });
+          console.warn(`[Didit] Webhook: duplicate ID for user ${userId} — verification rejected`);
+          return res.json({ received: true, duplicateIdentity: true });
+        }
+      }
+
       if (kyc) {
         await storage.updateKycDocument(kyc.id, {
           diditStatus,
@@ -2635,20 +2693,8 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Auto-populate KYC identity fields when verified via webhook
       if (kycStatus === 'verified') {
-        const identity = extractDiditIdentity(payload);
-        // Duplicate ID check
-        const idNumber = identity.idNumber;
-        if (idNumber) {
-          const existing = await db.select({ id: users.id }).from(users).where(eq(users.kycIdNumber, idNumber));
-          if (existing.some(u => u.id !== userId)) {
-            console.warn(`[Didit] Webhook: duplicate ID ${idNumber} — user ${userId} blocked`);
-            await storage.updateUser(userId, { kycStatus: 'rejected' });
-            await storage.updateKycDocument(kyc!.id, { status: 'rejected', verificationNotes: 'Duplicate ID — this document is already linked to another account.' } as any);
-            return res.json({ received: true });
-          }
-        }
-        const filtered = diditIdentityToUserFields(identity);
-        const profileFields = diditIdentityToUserProfileFields(identity);
+        const filtered = diditIdentityToUserFields(identity!);
+        const profileFields = diditIdentityToUserProfileFields(identity!);
         if (Object.keys(filtered).length > 0 || Object.keys(profileFields).length > 0) {
           await storage.updateUser(userId, { ...filtered, ...profileFields } as any);
         }
@@ -6401,9 +6447,17 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Duplicate ID check before approving via poll
       if (kycStatus === 'verified' && extractedData.idNumber) {
-        const existing = await db.select({ id: users.id }).from(users).where(eq(users.kycIdNumber, extractedData.idNumber));
-        if (existing.some(u => u.id !== kyc.userId)) {
-          return res.status(409).json({ message: `This ID document (${extractedData.idNumber}) is already linked to another account. Verification blocked.` });
+        const duplicateOwner = await findDiditIdentityOwner(kyc.userId, extractedData.idNumber);
+        if (duplicateOwner) {
+          const duplicateMessage = 'This ID document is already linked to another account. Verification blocked.';
+          await storage.updateKycDocument(id, {
+            diditStatus,
+            status: 'rejected',
+            diditDecision: decision as any,
+            verificationNotes: duplicateMessage,
+          } as any);
+          await storage.updateUser(kyc.userId, { kycStatus: 'rejected' });
+          return res.status(409).json({ message: duplicateMessage, duplicateIdentity: true, kycStatus: 'rejected' });
         }
       }
 
