@@ -87,6 +87,7 @@ export default function KYCPage() {
   const isPending = kycStatus === "pending";
   const isRejected = kycStatus === "rejected";
   const isNotStarted = kycStatus === "not_submitted";
+  const hasResumableSession = Boolean(sessionId && sessionUrl);
 
   // Query current didit session status
   const { data: diditStatusData, refetch: refetchStatus, isFetching: isStatusFetching } = useQuery<{
@@ -414,7 +415,7 @@ export default function KYCPage() {
                     </span>
                   )}
                 </Button>
-              ) : isPending && diditStatusData?.sessionId ? (
+              ) : hasResumableSession ? (
                 <div className="space-y-2">
                   <Button
                     onClick={() => { setShowIframe(true); setIsPolling(true); }}
