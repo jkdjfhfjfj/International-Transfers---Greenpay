@@ -6319,6 +6319,46 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  // Admin risk overview derived from the stored Didit decision payload.
+  app.get("/api/admin/risks", requireAdminAuth, async (_req, res) => {
+    try {
+      const documents = await storage.getAllKycDocuments();
+      const allUsers = await storage.getAllUsers();
+      const usersById = new Map(allUsers.map(user => [user.id, user]));
+      const { extractDiditRiskSignals } = await import("./services/didit");
+
+      const risks = documents
+        .filter(document => document.diditSessionId || document.diditDecision)
+        .map(document => {
+          const user = usersById.get(document.userId);
+          return {
+            id: document.id,
+            userId: document.userId,
+            user: user ? {
+              fullName: user.fullName,
+              email: user.email,
+              country: user.country,
+            } : null,
+            kycStatus: document.status,
+            diditStatus: document.diditStatus,
+            diditSessionId: document.diditSessionId,
+            createdAt: document.createdAt,
+            risk: extractDiditRiskSignals(document.diditDecision),
+          };
+        })
+        .sort((a, b) => {
+          const rank = { high: 3, medium: 2, low: 1, unknown: 0 };
+          return rank[b.risk.level] - rank[a.risk.level]
+            || new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+        });
+
+      res.json({ risks });
+    } catch (error) {
+      console.error("Admin risks fetch error:", error);
+      res.status(500).json({ message: "Failed to fetch risk signals" });
+    }
+  });
+
   app.put("/api/admin/kyc/:id", async (req, res) => {
     try {
       const { id } = req.params;

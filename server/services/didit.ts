@@ -50,6 +50,125 @@ export interface DiditIdentityData {
   issuingCountry: string | null;
 }
 
+export interface DiditRiskSignals {
+  level: 'high' | 'medium' | 'low' | 'unknown';
+  score: number | null;
+  flags: string[];
+  indicators: string[];
+}
+
+function readNestedValue(source: any, paths: string[][]): any {
+  for (const path of paths) {
+    let current = source;
+    for (const key of path) current = current?.[key];
+    if (current !== undefined && current !== null && current !== '') return current;
+  }
+  return null;
+}
+
+function normalizeRiskFlag(value: unknown): string | null {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const label = String(value).trim().replace(/[_-]+/g, ' ');
+    return label ? label.replace(/\b\w/g, char => char.toUpperCase()) : null;
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, any>;
+    const label = record.label || record.name || record.type || record.reason || record.code;
+    return normalizeRiskFlag(label);
+  }
+  return null;
+}
+
+/**
+ * Normalize the risk-related parts of a Didit decision without exposing the
+ * full provider payload to the admin UI.
+ */
+export function extractDiditRiskSignals(payload: any): DiditRiskSignals {
+  const data = payload?.decision && typeof payload.decision === 'object'
+    ? { ...payload, ...payload.decision }
+    : payload || {};
+
+  const rawLevel = readNestedValue(data, [
+    ['risk_level'],
+    ['riskLevel'],
+    ['risk', 'level'],
+    ['fraud', 'risk_level'],
+    ['fraud', 'riskLevel'],
+  ]);
+  const normalizedLevel = String(rawLevel || '').toLowerCase();
+  const level: DiditRiskSignals['level'] =
+    ['critical', 'high', 'elevated'].includes(normalizedLevel) ? 'high' :
+    ['medium', 'moderate'].includes(normalizedLevel) ? 'medium' :
+    ['low', 'clear', 'none', 'pass', 'passed'].includes(normalizedLevel) ? 'low' :
+    'unknown';
+
+  const rawScore = readNestedValue(data, [
+    ['risk_score'],
+    ['riskScore'],
+    ['risk', 'score'],
+    ['fraud', 'risk_score'],
+    ['fraud', 'riskScore'],
+  ]);
+  let score = typeof rawScore === 'number' ? rawScore : Number(rawScore);
+  if (!Number.isFinite(score)) score = Number.NaN;
+  if (Number.isFinite(score) && score >= 0 && score <= 1) score *= 100;
+  score = Number.isFinite(score) ? Math.round(score * 100) / 100 : Number.NaN;
+
+  const flags: string[] = [];
+  const rawFlagLists = [
+    readNestedValue(data, [['risk_flags']]),
+    readNestedValue(data, [['riskFlags']]),
+    readNestedValue(data, [['fraud_flags']]),
+    readNestedValue(data, [['fraudFlags']]),
+    readNestedValue(data, [['watchlist_matches']]),
+    readNestedValue(data, [['sanctions_matches']]),
+    readNestedValue(data, [['risk', 'flags']]),
+  ];
+  for (const rawFlags of rawFlagLists) {
+    const values = Array.isArray(rawFlags) ? rawFlags : rawFlags ? [rawFlags] : [];
+    for (const value of values) {
+      const flag = normalizeRiskFlag(value);
+      if (flag && !flags.includes(flag)) flags.push(flag);
+    }
+  }
+
+  const indicators: string[] = [];
+  const booleanIndicators: Array<[string[], string]> = [
+    [['face_match'], 'Face match failed'],
+    [['faceMatch'], 'Face match failed'],
+    [['liveness'], 'Liveness check failed'],
+    [['liveness_check'], 'Liveness check failed'],
+    [['document_authenticity'], 'Document authenticity failed'],
+    [['documentAuthenticity'], 'Document authenticity failed'],
+    [['watchlist_match'], 'Watchlist match'],
+    [['sanctions_match'], 'Sanctions match'],
+    [['duplicate_identity'], 'Duplicate identity signal'],
+  ];
+  for (const [path, label] of booleanIndicators) {
+    const value = readNestedValue(data, [path]);
+    if (value === false || value === true && /match|duplicate/.test(path[0])) {
+      if (!indicators.includes(label)) indicators.push(label);
+    }
+  }
+
+  const hasHighSignal = flags.some(flag => /sanction|watchlist|duplicate|fraud/i.test(flag))
+    || indicators.some(indicator => /sanction|watchlist|duplicate/i.test(indicator));
+  const resolvedLevel = level === 'unknown'
+    ? hasHighSignal
+      ? 'high'
+      : Number.isFinite(score)
+        ? score >= 70 ? 'high' : score >= 35 ? 'medium' : 'low'
+        : flags.length || indicators.length ? 'medium' : 'unknown'
+    : level;
+
+  return {
+    level: resolvedLevel,
+    score: Number.isFinite(score) ? score : null,
+    flags,
+    indicators,
+  };
+}
+
 function firstValue(source: Record<string, any>, keys: string[]): string | null {
   for (const key of keys) {
     const value = source?.[key];
