@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
-import { mockCountries } from "@/lib/mock-data";
+import { africanCountries, mockCountries } from "@/lib/mock-data";
 import { WavyHeader } from "@/components/wavy-header";
 
 const signupSchema = z.object({
@@ -82,13 +82,7 @@ export default function SignupPage() {
   };
 
   const countryCodes = [
-    { code: "+254", country: "Kenya" },
-    { code: "+234", country: "Nigeria" },
-    { code: "+233", country: "Ghana" },
-    { code: "+27", country: "South Africa" },
-    { code: "+20", country: "Egypt" },
-    { code: "+256", country: "Uganda" },
-    { code: "+255", country: "Tanzania" },
+    ...africanCountries.map(({ dialCode, name }) => ({ code: dialCode, country: name })),
     { code: "+1", country: "USA" },
     { code: "+44", country: "UK" },
   ];

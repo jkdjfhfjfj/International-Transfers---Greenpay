@@ -7,6 +7,7 @@ import {
   RefreshCcw, Smartphone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SEO } from "@/components/seo";
 
 const NAV_LINKS = [
   { label: "Send Money", href: "/features/send-money" },
@@ -21,7 +22,7 @@ const FEATURES = [
     icon: Send,
     color: "from-emerald-500 to-green-600",
     title: "Instant Transfers",
-    desc: "Send money to Kenya in seconds. Real-time processing with live tracking every step of the way.",
+    desc: "Send money across Africa in seconds with real-time processing and live tracking every step of the way.",
   },
   {
     icon: CreditCard,
@@ -39,7 +40,7 @@ const FEATURES = [
     icon: TrendingUp,
     color: "from-purple-500 to-violet-600",
     title: "Live Exchange Rates",
-    desc: "Get the best USD to KES rates, updated in real-time so you never miss a good rate.",
+    desc: "Compare live exchange rates for African currencies and see your total before sending.",
   },
   {
     icon: Shield,
@@ -51,19 +52,19 @@ const FEATURES = [
     icon: Zap,
     color: "from-teal-500 to-cyan-600",
     title: "Airtime Top-up",
-    desc: "Buy airtime for any Kenyan network instantly. Safaricom, Airtel, and Telkom supported.",
+    desc: "Top up supported mobile networks across Africa instantly from your Geepay wallet.",
   },
 ];
 
 const STEPS = [
   { n: "01", title: "Create your account", desc: "Sign up in under 2 minutes with just your email. Verify your identity once and you're ready to go." },
   { n: "02", title: "Add funds", desc: "Fund your USD wallet via bank transfer or card. Your money is secured and ready to send." },
-  { n: "03", title: "Send to Kenya", desc: "Enter the recipient's M-Pesa or bank details and confirm. Money arrives in seconds." },
+  { n: "03", title: "Send across Africa", desc: "Enter the recipient's mobile-money or bank details and confirm. Money arrives in seconds." },
 ];
 
 const TESTIMONIALS = [
-  { name: "Amara K.", role: "Kenyan diaspora, London", text: "I used to lose $30+ per transfer in fees. Geepay saves me that every month. My family gets more money — that's what matters.", stars: 5, avatar: "A" },
-  { name: "David M.", role: "Freelancer, Nairobi", text: "The virtual card changed everything for me. I can receive USD from international clients and spend online. Best fintech app for Kenya.", stars: 5, avatar: "D" },
+  { name: "Amara K.", role: "African diaspora, London", text: "I used to lose $30+ per transfer in fees. Geepay saves me that every month. My family gets more money — that's what matters.", stars: 5, avatar: "A" },
+  { name: "David M.", role: "Freelancer, Nairobi", text: "The virtual card changed everything for me. I can receive USD from international clients and spend online. Best fintech app for sending money home.", stars: 5, avatar: "D" },
   { name: "Sarah N.", role: "Student, Toronto", text: "Sending money home used to stress me out. Now it's as easy as sending a text message. And the rates are amazing!", stars: 5, avatar: "S" },
 ];
 
@@ -97,6 +98,12 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white text-gray-900 overflow-x-hidden">
+      <SEO
+        title="Geepay | Fast Money Transfers Across Africa"
+        description="Send and receive money across Africa with Geepay. Use digital wallets, live exchange rates, mobile-money delivery, and secure virtual cards."
+        keywords="send money to Africa, African money transfer, mobile money Africa, digital wallet Africa, virtual card Africa, Kenya, Nigeria, Ghana, Uganda, Tanzania, South Africa, Egypt"
+        canonical="https://geepay.us/"
+      />
 
       {/* ── NAVBAR ── */}
       <motion.nav
@@ -160,18 +167,18 @@ export default function LandingPage() {
             {rate && (
               <div className="inline-flex items-center gap-2 bg-white border border-emerald-200 rounded-full px-4 py-1.5 text-sm text-emerald-700 font-semibold mb-6 shadow-sm">
                 <RefreshCcw className="w-3.5 h-3.5" />
-                Live rate: 1 USD = {rate} KES
+                Live Kenya rate: 1 USD = {rate} KES
               </div>
             )}
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight text-gray-900">
-              Send money to{" "}
+              Send money across{" "}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600">
-                Kenya
+                Africa
               </span>{" "}
               instantly
             </h1>
             <p className="mt-5 text-lg text-gray-600 leading-relaxed max-w-lg">
-              Best USD to KES exchange rates, M-Pesa transfers, virtual cards, and airtime top-ups — all in one secure app. Join 50,000+ users sending money home.
+              Send money across Africa with live exchange rates, mobile-money transfers, virtual cards, and airtime top-ups — all in one secure app.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
               <Button size="lg"
@@ -305,7 +312,7 @@ export default function LandingPage() {
             className="text-center mb-14">
             <span className="inline-block px-4 py-1.5 bg-emerald-50 text-emerald-700 text-sm font-semibold rounded-full mb-4">Everything you need</span>
             <h2 className="text-3xl md:text-4xl font-extrabold text-gray-900">Packed with features</h2>
-            <p className="text-gray-500 mt-3 max-w-lg mx-auto">One app for all your financial needs between the US and Kenya.</p>
+            <p className="text-gray-500 mt-3 max-w-lg mx-auto">One app for sending, receiving, and managing money across Africa.</p>
           </motion.div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {FEATURES.map((f, i) => (
@@ -392,7 +399,7 @@ export default function LandingPage() {
           <motion.div initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <span className="inline-block px-4 py-1.5 bg-emerald-900/50 text-emerald-400 text-sm font-semibold rounded-full mb-6 border border-emerald-800">Free to get started</span>
             <h2 className="text-3xl md:text-5xl font-extrabold text-white leading-tight">
-              Start sending money<br className="hidden md:block" /> to Kenya today
+              Start sending money<br className="hidden md:block" /> across Africa today
             </h2>
             <p className="text-gray-400 mt-4 max-w-lg mx-auto text-lg leading-relaxed">
               Join 50,000+ people who trust Geepay for fast, secure, and affordable international transfers.
@@ -430,7 +437,7 @@ export default function LandingPage() {
                 <span className="font-bold text-lg text-white">Geepay</span>
               </div>
               <p className="text-gray-500 text-sm leading-relaxed max-w-xs">
-                The fastest way to send money to Kenya. Trusted by thousands of families worldwide.
+                A faster way to send money across Africa. Trusted by families and businesses worldwide.
               </p>
               <div className="flex items-center gap-2 mt-4">
                 <Users className="w-4 h-4 text-emerald-400" />

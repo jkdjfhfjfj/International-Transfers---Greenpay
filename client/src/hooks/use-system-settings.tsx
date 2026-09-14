@@ -116,17 +116,18 @@ export function useSystemSettings() {
   };
 
   const getMaintenanceMessage = () => {
-    return (
+    const message = (
       settings?.general?.maintenance_message?.value ||
       settings?.platform?.maintenance_message?.value ||
       "System maintenance in progress"
     );
+    return message.trim().replace(/[ \t]{2,}/g, " ");
   };
 
   const getMaintenanceValue = (key: string, fallback = "") => {
     const generalValue = settings?.general?.[key]?.value;
     const platformValue = settings?.platform?.[key]?.value;
-    return generalValue || platformValue || fallback;
+    return (generalValue || platformValue || fallback).trim().replace(/[ \t]{2,}/g, " ");
   };
 
   const getMaintenanceTitle = () =>

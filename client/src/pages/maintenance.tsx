@@ -72,7 +72,7 @@ export default function MaintenancePage() {
     : "Status updates will appear here";
 
   return (
-    <main className="min-h-[100dvh] bg-background pb-36 text-foreground">
+    <main className="min-h-[100dvh] bg-background pb-24 text-foreground">
       <WavyHeader
         icon={<ServerCog className="h-5 w-5 text-white" aria-hidden="true" />}
         rightContent={
@@ -83,7 +83,7 @@ export default function MaintenancePage() {
         size="md"
       />
 
-      <div className="relative mx-auto w-full max-w-2xl px-4 pb-8 pt-4 sm:px-6 sm:pt-6">
+      <div className="relative mx-auto w-full max-w-2xl px-4 pb-4 pt-2 sm:px-6 sm:pt-4">
         <section className="rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 to-primary/10 p-5 shadow-sm sm:p-6">
           <div className="flex items-start gap-4">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -94,7 +94,7 @@ export default function MaintenancePage() {
               <h1 className="mt-1 text-2xl font-bold leading-tight tracking-tight sm:text-3xl">
                 {getMaintenanceTitle()}
               </h1>
-              <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
+              <p className="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">
                 {getMaintenanceMessage()}
               </p>
             </div>
@@ -172,7 +172,7 @@ export default function MaintenancePage() {
           </div>
         </section>
 
-        <div className="mt-6 pb-32">
+        <div className="mt-4 pb-20">
           {supportEmail ? (
             <Button asChild variant="outline" className="h-12 w-full gap-2 rounded-2xl border-slate-300 bg-white/80 font-bold dark:border-slate-700 dark:bg-slate-900/80">
               <a href={`mailto:${supportEmail}`}>
@@ -182,7 +182,7 @@ export default function MaintenancePage() {
             </Button>
           ) : null}
         </div>
-        <p className="mt-5 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
+        <p className="mt-3 text-center text-xs leading-5 text-slate-500 dark:text-slate-400">
           You can safely keep this page open. It will update automatically when Geepay is available again.
         </p>
       </div>
