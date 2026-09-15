@@ -109,6 +109,7 @@ export function useNexusDeposit() {
     mutationFn: async (params: {
       walletId: string;
       currency: string;
+      paymentCurrency?: string;
       amount: number;
       phone?: string;
       email?: string;

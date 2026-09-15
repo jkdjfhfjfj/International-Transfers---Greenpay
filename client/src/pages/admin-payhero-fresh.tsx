@@ -17,6 +17,8 @@ interface PayHeroData {
   provider?: string;
   defaultGateway?: string;
   nexuspayConfigured?: boolean;
+  payzaConfigured?: boolean;
+  paystackConfigured?: boolean;
   cardPrice?: string;
 }
 
@@ -30,6 +32,9 @@ export default function AdminPayHeroSettingsPage() {
   const [cardPrice, setCardPrice] = useState("");
   const [defaultGateway, setDefaultGateway] = useState("payhero");
   const [nexuspayApiKey, setNexuspayApiKey] = useState("");
+  const [payzaPublicKey, setPayzaPublicKey] = useState("");
+  const [payzaSecretKey, setPayzaSecretKey] = useState("");
+  const [paystackSecretKey, setPaystackSecretKey] = useState("");
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -57,6 +62,9 @@ export default function AdminPayHeroSettingsPage() {
         cardPrice,
         defaultGateway,
         nexuspayApiKey: nexuspayApiKey || undefined,
+        payzaPublicKey: payzaPublicKey || undefined,
+        payzaSecretKey: payzaSecretKey || undefined,
+        paystackSecretKey: paystackSecretKey || undefined,
       });
       return r.json();
     },
@@ -163,6 +171,8 @@ export default function AdminPayHeroSettingsPage() {
             >
               <option value="payhero">PayHero</option>
               <option value="nexuspay">Makamesco Nexus Pay</option>
+              <option value="payzaapi">PayzaAPI (multi-currency)</option>
+              <option value="paystack">Paystack (card)</option>
             </select>
             <div className="space-y-2">
               <Label className="text-sm font-medium">Makamesco Nexus Pay API key</Label>
@@ -178,6 +188,30 @@ export default function AdminPayHeroSettingsPage() {
             <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} variant="outline" className="w-full rounded-xl">
               <Save className="w-4 h-4 mr-2" />
               Save gateway selection
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle>Multi-currency provider keys</CardTitle>
+            <CardDescription>Optional fallback credentials. Existing values are never returned to the browser.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>PayzaAPI public key</Label>
+              <Input value={payzaPublicKey} onChange={e => setPayzaPublicKey(e.target.value)} placeholder={data?.payzaConfigured ? "Configured — enter only to replace" : "pk_live_..."} className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label>PayzaAPI secret key</Label>
+              <Input type="password" value={payzaSecretKey} onChange={e => setPayzaSecretKey(e.target.value)} placeholder={data?.payzaConfigured ? "Configured — enter only to replace" : "sk_live_..."} className="rounded-xl" />
+            </div>
+            <div className="space-y-2">
+              <Label>Paystack secret key</Label>
+              <Input type="password" value={paystackSecretKey} onChange={e => setPaystackSecretKey(e.target.value)} placeholder={data?.paystackConfigured ? "Configured — enter only to replace" : "sk_..."} className="rounded-xl" />
+            </div>
+            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full rounded-xl">
+              <Save className="w-4 h-4 mr-2" /> Save provider keys
             </Button>
           </CardContent>
         </Card>

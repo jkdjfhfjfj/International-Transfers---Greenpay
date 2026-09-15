@@ -27,6 +27,7 @@ import PaymentRequestsPage from "@/pages/payment-requests";
 import TransactionsPage from "@/pages/transactions";
 import VirtualCardPage from "@/pages/virtual-card";
 import VirtualAccountsPage from "@/pages/virtual-accounts";
+import WalletAccountPage from "@/pages/wallet-account";
 import SettingsPage from "@/pages/settings";
 import SupportPage from "@/pages/support";
 import LiveChatPage from "@/pages/live-chat";
@@ -151,6 +152,9 @@ function Router() {
       </Route>
       <Route path="/virtual-accounts">
         <ProtectedRoute component={VirtualAccountsPage} />
+      </Route>
+      <Route path="/wallet/:walletId">
+        <ProtectedRoute component={WalletAccountPage} />
       </Route>
       <Route path="/settings" component={SettingsPage} />
       <Route path="/support" component={SupportPage} />

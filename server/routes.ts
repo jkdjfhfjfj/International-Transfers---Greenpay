@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
+import { payzaApiService } from "./services/payzaapi";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -3430,6 +3431,61 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  // Wallet-bound Paystack card deposit. The ledger amount is stored in the
+  // destination wallet currency; paymentCurrency is only the charge rail.
+  app.post("/api/deposit/paystack", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const { walletId, currency, paymentCurrency, amount } = req.body;
+      const targetCurrency = normalizeCurrency(currency);
+      const chargeCurrency = normalizeCurrency(paymentCurrency || currency);
+      const chargeAmount = Number(amount);
+      if (!walletId || !targetCurrency || !Number.isFinite(chargeAmount) || chargeAmount <= 0) {
+        return res.status(400).json({ message: "walletId, currency, and a valid amount are required" });
+      }
+      const [wallet] = await db.select().from(wallets).where(eq(wallets.id, walletId));
+      if (!wallet || wallet.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
+      if (!wallet.isActive || wallet.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
+      if (normalizeCurrency(wallet.currency) !== targetCurrency) return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
+      const user = await storage.getUser(userId);
+      if (!user?.email) return res.status(400).json({ message: "A valid email is required for card deposits" });
+
+      const exchangeRate = chargeCurrency === targetCurrency
+        ? 1
+        : await createExchangeRateService(storage).getExchangeRate(chargeCurrency, targetCurrency);
+      const targetAmount = chargeAmount * exchangeRate;
+      const reference = paystackService.generateReference();
+      const payment = await paystackService.initializePayment(
+        user.email,
+        chargeAmount,
+        reference,
+        chargeCurrency,
+        user.phone || undefined,
+        `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`,
+        { walletId, currency: targetCurrency, paymentCurrency: chargeCurrency, exchangeRate, gateway: "paystack" },
+      );
+      if (!payment.status) return res.status(400).json({ message: payment.message || "Paystack initialization failed" });
+
+      await db.insert(transactions).values({
+        userId,
+        type: "deposit",
+        amount: targetAmount.toFixed(2),
+        currency: targetCurrency,
+        status: "pending",
+        reference,
+        paystackReference: reference,
+        description: `Paystack card deposit to ${targetCurrency} wallet`,
+        fee: "0.00",
+        exchangeRate: String(exchangeRate),
+        metadata: { walletId, gateway: "paystack", paymentCurrency: chargeCurrency, paymentAmount: chargeAmount } as any,
+      });
+      return res.json({ authorizationUrl: payment.data?.authorization_url, reference, currency: targetCurrency, amount: targetAmount.toFixed(2) });
+    } catch (error: any) {
+      console.error("Wallet Paystack deposit error:", error);
+      return res.status(500).json({ message: error.message || "Could not initialize card deposit" });
+    }
+  });
+
   // ── Public deposit config (enabled methods, bank details, active bonuses) ───
   app.get("/api/deposit/config", requireAuth, async (req, res) => {
     try {
@@ -3788,6 +3844,23 @@ p{color:#6b7280;font-size:14px;}</style>
           ),
         });
         if (transaction && transaction.status !== "completed") {
+          const metadata = (transaction.metadata || {}) as any;
+          if (transaction.type === "deposit" && metadata.walletId) {
+            const [wallet] = await db.select().from(wallets).where(eq(wallets.id, String(metadata.walletId)));
+            if (!wallet || wallet.userId !== transaction.userId || normalizeCurrency(wallet.currency) !== normalizeCurrency(transaction.currency)) {
+              throw new Error("Deposit wallet and transaction currency do not match");
+            }
+            await applyLedgerEntry({
+              walletId: wallet.id,
+              userId: transaction.userId,
+              currency: normalizeCurrency(wallet.currency),
+              amount: parseFloat(transaction.amount),
+              entryType: "deposit",
+              idempotencyKey: `deposit:${transaction.id}`,
+              transactionId: transaction.id,
+              description: transaction.description || "Paystack deposit",
+            });
+          }
           await storage.updateTransactionStatus(transaction.id, "completed");
           if (transaction.type === "card_purchase") {
             const cards = await storage.getVirtualCardsByUserId(transaction.userId);
@@ -3866,8 +3939,18 @@ p{color:#6b7280;font-size:14px;}</style>
           if (user) {
             const depositAmount = parseFloat(transaction.amount);
             const depositCurrency = normalizeCurrency(transaction.currency || "USD");
-            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
+            const metadata = (transaction.metadata || {}) as any;
+            const [boundWallet] = metadata.walletId
+              ? await db.select().from(wallets).where(eq(wallets.id, String(metadata.walletId)))
+              : [];
+            if (boundWallet && boundWallet.userId !== user.id) {
+              throw new Error("Deposit wallet does not belong to user");
+            }
+            const depositWallet = boundWallet || await ensureUserWallet(user.id, depositCurrency);
             if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
+            if (normalizeCurrency(depositWallet.currency) !== depositCurrency) {
+              throw new Error("Deposit wallet and transaction currency do not match");
+            }
             const balanceResult = await applyLedgerEntry({
               walletId: depositWallet.id,
               userId: user.id,
@@ -8989,6 +9072,9 @@ p{color:#6b7280;font-size:14px;}</style>
       const providerSetting = await storage.getSystemSetting("payhero", "provider");
       const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
       const nexusApiKeySetting = await storage.getSystemSetting("payment", "nexuspay_api_key");
+      const payzaPublicKeySetting = await storage.getSystemSetting("payzaapi", "public_key");
+      const payzaSecretKeySetting = await storage.getSystemSetting("payzaapi", "secret_key");
+      const paystackSecretKeySetting = await storage.getSystemSetting("paystack", "secret_key");
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       
       // Parse JSON values from database and prioritize database over env variables
@@ -8999,8 +9085,10 @@ p{color:#6b7280;font-size:14px;}</style>
       const settings = {
         channelId,
         provider: providerSetting?.value || "m-pesa",
-        defaultGateway: gatewaySetting?.value || "payhero",
+        defaultGateway: settingText(gatewaySetting?.value, "payzaapi"),
         nexuspayConfigured: Boolean(nexusApiKeySetting?.value || process.env.NEXUSPAY_API_KEY),
+        payzaConfigured: Boolean(payzaPublicKeySetting?.value || process.env.PAYZA_PUBLIC_KEY) && Boolean(payzaSecretKeySetting?.value || process.env.PAYZA_SECRET_KEY),
+        paystackConfigured: Boolean(paystackSecretKeySetting?.value || process.env.PAYSTACK_SECRET_KEY),
         cardPrice: cardPriceSetting?.value || "60.00",
         username: process.env.PAYHERO_USERNAME ? "****" : "",
         password: process.env.PAYHERO_PASSWORD ? "****" : "",
@@ -9015,7 +9103,11 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.put("/api/admin/payhero-settings", async (req, res) => {
     try {
-      const { channelId, provider, cardPrice, defaultGateway, nexuspayApiKey } = req.body;
+      const { channelId, provider, cardPrice, defaultGateway, nexuspayApiKey, payzaPublicKey, payzaSecretKey, paystackSecretKey } = req.body;
+      const gateway = String(defaultGateway || "payzaapi").trim().toLowerCase();
+      if (!["payhero", "nexuspay", "payzaapi", "paystack"].includes(gateway)) {
+        return res.status(400).json({ message: "Unsupported default gateway" });
+      }
       
       console.log('Admin updated PayHero settings:', { channelId, provider, cardPrice });
       
@@ -9030,7 +9122,7 @@ p{color:#6b7280;font-size:14px;}</style>
       await storage.setSystemSetting({
         category: "payment",
         key: "default_gateway",
-        value: defaultGateway || "payhero",
+         value: gateway,
         description: "Default deposit/payment gateway",
       });
       if (nexuspayApiKey) {
@@ -9041,6 +9133,15 @@ p{color:#6b7280;font-size:14px;}</style>
           description: "Makamesco Nexus Pay API key",
         });
         process.env.NEXUSPAY_API_KEY = nexuspayApiKey;
+      }
+      if (payzaPublicKey) {
+        await storage.setSystemSetting({ category: "payzaapi", key: "public_key", value: payzaPublicKey, description: "PayzaAPI public key" });
+      }
+      if (payzaSecretKey) {
+        await storage.setSystemSetting({ category: "payzaapi", key: "secret_key", value: payzaSecretKey, description: "PayzaAPI secret key" });
+      }
+      if (paystackSecretKey) {
+        await storage.setSystemSetting({ category: "paystack", key: "secret_key", value: paystackSecretKey, description: "Paystack secret key" });
       }
       
       await storage.setSystemSetting({
@@ -14552,7 +14653,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (String(globalSetting?.value || "").toLowerCase() !== "true") {
         return res.status(403).json({ message: "Global deposits are currently disabled" });
       }
-      const { walletId, currency, amount, phone, email, correspondent, description } = req.body;
+      const { walletId, currency, paymentCurrency, amount, phone, email, correspondent, description } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
       const normalizedCurrency = normalizeCurrency(currency);
       if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
@@ -14562,6 +14663,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!Number.isFinite(inputAmount) || inputAmount <= 0) {
         return res.status(400).json({ message: "Amount must be greater than 0" });
       }
+      const normalizedPaymentCurrency = normalizeCurrency(paymentCurrency || normalizedCurrency);
+      const exchangeRate = normalizedPaymentCurrency === normalizedCurrency
+        ? 1
+        : await createExchangeRateService(storage).getExchangeRate(normalizedPaymentCurrency, normalizedCurrency);
+      const creditedAmount = inputAmount * exchangeRate;
       const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
@@ -14571,24 +14677,21 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
       const channel = currencyMeta?.channel || "card";
       const rawGateway = (await storage.getSystemSetting("payment", "default_gateway"))?.value as any;
-      const configuredGateway = settingText(rawGateway, "nexuspay").toLowerCase();
-      const makamescoKesInput = normalizedCurrency === "KES" &&
-        ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
-      const exchangeRate = makamescoKesInput ? await getUsdToKesRate() : 1;
-      const paymentAmount = makamescoKesInput
-        ? Math.max(1, Math.round(inputAmount * exchangeRate))
-        : inputAmount;
-      const canonicalGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+      const configuredGateway = settingText(rawGateway, "payzaapi").toLowerCase();
+      const canonicalGateway = ["makamesco", "makamescopay"].includes(configuredGateway)
         ? "nexuspay"
         : configuredGateway;
       const configuredApiKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
       const hasNexusPayKey = Boolean(String(configuredApiKey?.value ?? configuredApiKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim());
-      const compatibleGateways = new Set(["nexuspay", "payhero", "paystack"]);
+      const hasPayzaKeys = await payzaApiService.isConfigured();
+      const hasPaystackKey = await paystackService.isConfigured();
+      const compatibleGateways = new Set(["nexuspay", "payzaapi", "payhero", "paystack"]);
       const gatewayOrder = Array.from(new Set([
         compatibleGateways.has(canonicalGateway) ? canonicalGateway : "",
         normalizedCurrency === "KES" && phone ? "payhero" : "",
-        email ? "paystack" : "",
-        hasNexusPayKey ? "nexuspay" : "",
+        hasPayzaKeys ? "payzaapi" : "",
+        hasNexusPayKey && phone ? "nexuspay" : "",
+        hasPaystackKey && email ? "paystack" : "",
       ].filter(Boolean)));
       let result: { reference: string; status: string; redirectUrl: string | null } | null = null;
       let selectedGateway = "";
@@ -14596,21 +14699,38 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
       for (const gateway of gatewayOrder) {
         try {
-           if (gateway === "nexuspay") {
+          if (gateway === "payzaapi") {
+            const reference = `DEP-PAYZA-${Date.now()}-${userId.slice(-6)}`;
+            const payment = await payzaApiService.initializePayment({
+              amount: inputAmount,
+              currency: normalizedPaymentCurrency,
+              reference,
+              email: email || (await storage.getUser(userId))?.email || "",
+              name: (await storage.getUser(userId))?.fullName || undefined,
+              phone,
+              callbackUrl: `${req.protocol}://${req.get("host")}/api/payzaapi/callback`,
+              redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}&provider=payzaapi`,
+              cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${walletId}`,
+              description: description || `Deposit to ${normalizedCurrency} wallet`,
+              metadata: { userId, walletId, currency: normalizedCurrency },
+              stkPush: normalizedPaymentCurrency === "KES",
+            });
+            result = { reference: payment.reference, status: payment.status, redirectUrl: payment.paymentUrl };
+          } else if (gateway === "nexuspay") {
              if (!hasNexusPayKey) throw new Error("NexusPay is selected but no API key is configured");
             const checkout = await nexusPayService.checkout({
-               amount: paymentAmount, currency: normalizedCurrency, channel, phone, email, correspondent,
+                amount: inputAmount, currency: normalizedPaymentCurrency, channel, phone, email, correspondent,
               description: description || `Deposit to ${normalizedCurrency} wallet`,
             });
             result = checkout;
-          } else if (gateway === "payhero" && normalizedCurrency === "KES" && phone) {
+          } else if (gateway === "payhero" && normalizedPaymentCurrency === "KES" && phone) {
             const reference = payHeroService.generateReference();
-             const payment = await payHeroService.initiateMpesaPayment(paymentAmount, phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
+              const payment = await payHeroService.initiateMpesaPayment(inputAmount, phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
             if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
             result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
           } else if (gateway === "paystack" && email) {
             const reference = paystackService.generateReference();
-             const payment = await paystackService.initializePayment(email, paymentAmount, reference, normalizedCurrency, phone);
+              const payment = await paystackService.initializePayment(email, inputAmount, reference, normalizedPaymentCurrency, phone, `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`, { walletId, currency: normalizedCurrency, paymentCurrency: normalizedPaymentCurrency, gateway: "paystack" });
             if (!payment.status) throw new Error(payment.message || "Paystack initialization failed");
             result = { reference, status: "pending", redirectUrl: payment.data?.authorization_url || null };
           }
@@ -14626,18 +14746,16 @@ Sitemap: https://geepay.us/sitemap.xml`;
         throw new Error(gatewayErrors.join("; ") || "No configured payment gateway could process this deposit");
       }
       await db.insert(transactions).values({
-         userId, type: "deposit", amount: paymentAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
-        reference: result.reference, description: `NexusPay ${currency} deposit`,
+          userId, type: "deposit", amount: creditedAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
+         reference: result.reference, description: `${selectedGateway} deposit to ${normalizedCurrency} wallet`,
          metadata: {
            walletId,
            channel,
            gateway: selectedGateway,
+           paymentCurrency: normalizedPaymentCurrency,
+           paymentAmount: inputAmount,
+           exchangeRate,
            redirectUrl: result.redirectUrl,
-           ...(makamescoKesInput ? {
-             inputCurrency: "USD",
-             inputAmount: inputAmount.toFixed(2),
-             exchangeRate,
-           } : {}),
          } as any,
       });
        res.json({
@@ -14645,11 +14763,50 @@ Sitemap: https://geepay.us/sitemap.xml`;
          reference: result.reference,
          status: result.status,
          redirectUrl: result.redirectUrl,
-         amount: paymentAmount.toFixed(2),
-         ...(makamescoKesInput ? { inputAmount: inputAmount.toFixed(2), inputCurrency: "USD", exchangeRate } : {}),
+          amount: creditedAmount.toFixed(2),
+          paymentAmount: inputAmount.toFixed(2),
+          paymentCurrency: normalizedPaymentCurrency,
+          exchangeRate,
          message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
        });
     } catch (e: any) { console.error("Global deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
+  });
+
+  app.post("/api/payzaapi/callback", async (req, res) => {
+    try {
+      const reference = String(req.body?.reference || req.body?.data?.reference || "");
+      if (!reference) return res.status(400).json({ message: "Payment reference is required" });
+      const [transaction] = await db.select().from(transactions).where(eq(transactions.reference, reference));
+      if (!transaction) return res.status(404).json({ message: "Transaction not found" });
+      if (transaction.status === "completed") return res.json({ received: true });
+
+      const providerStatus = await payzaApiService.verifyPayment(reference);
+      if (providerStatus.status === "completed") {
+        const metadata = (transaction.metadata || {}) as any;
+        const walletId = metadata.walletId;
+        const [wallet] = await db.select().from(wallets).where(eq(wallets.id, walletId));
+        if (!wallet || wallet.userId !== transaction.userId || normalizeCurrency(wallet.currency) !== normalizeCurrency(transaction.currency)) {
+          throw new Error("Deposit wallet is invalid");
+        }
+        await applyLedgerEntry({
+          walletId: wallet.id,
+          userId: transaction.userId,
+          currency: normalizeCurrency(wallet.currency),
+          amount: parseFloat(transaction.amount),
+          entryType: "deposit",
+          idempotencyKey: `deposit:${transaction.id}`,
+          transactionId: transaction.id,
+          description: transaction.description || "PayzaAPI deposit",
+        });
+        await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.id, transaction.id));
+      } else if (providerStatus.status === "failed") {
+        await db.update(transactions).set({ status: "failed", updatedAt: new Date() }).where(eq(transactions.id, transaction.id));
+      }
+      return res.json({ received: true });
+    } catch (error: any) {
+      console.error("PayzaAPI callback error:", error);
+      return res.status(500).json({ message: error.message || "Callback processing failed" });
+    }
   });
 
   app.get("/api/deposit/nexuspay/status/:reference", requireAuth, async (req, res) => {
@@ -14681,6 +14838,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
           amount: String(Number(providerStatus.data?.amount || existingTransaction?.amount || 0) / 100),
           currency: providerStatus.data?.currency || existingTransaction?.currency || "KES",
         };
+      } else if (gateway === "payzaapi") {
+        status = await payzaApiService.verifyPayment(reference);
       } else {
         status = await nexusPayService.getStatus(reference);
       }
@@ -14701,7 +14860,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
               walletId: wallet.id,
               userId,
               currency: normalizeCurrency(wallet.currency),
-              amount: parseFloat(status.amount),
+              amount: parseFloat(txn.amount),
               entryType: "deposit",
               idempotencyKey: `deposit:${txn.id}`,
               transactionId: txn.id,

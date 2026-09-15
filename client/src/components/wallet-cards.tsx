@@ -195,7 +195,7 @@ export default function WalletCards({
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-white/50 text-[10px]">Available balance</p>
                     <button
-                      onClick={e => { e.stopPropagation(); setLocation(`/virtual-accounts?currency=${wallet.currency}`); }}
+                      onClick={e => { e.stopPropagation(); setLocation(`/wallet/${wallet.id}`); }}
                       className="text-white/85 hover:text-white text-[10px] font-semibold bg-white/15 rounded-full px-2 py-1 flex items-center gap-1"
                     >
                        <Building2 className="w-3 h-3" /> Account

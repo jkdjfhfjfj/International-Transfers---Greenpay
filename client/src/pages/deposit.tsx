@@ -15,7 +15,7 @@ import {
   ChevronRight, AlertCircle, CheckCircle2, Clock, Gift, ArrowLeft,
   RefreshCw, ExternalLink, Info, Loader2, Globe
 } from "lucide-react";
-import { useWallets, useNexusDeposit } from "@/hooks/use-wallets";
+import { useWallets, useNexusDeposit, useCurrencies } from "@/hooks/use-wallets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
@@ -86,6 +86,7 @@ export default function DepositPage() {
   const [selectedCoin, setSelectedCoin] = useState("USDT");
   const [nexusWalletId, setNexusWalletId] = useState<string | null>(null);
   const [nexusCurrency, setNexusCurrency] = useState("KES");
+  const [paymentCurrency, setPaymentCurrency] = useState("KES");
   const [nexusPhone, setNexusPhone] = useState("");
   const [nexusRef, setNexusRef] = useState<string | null>(null);
   const [nexusStatus, setNexusStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
@@ -94,11 +95,13 @@ export default function DepositPage() {
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const { wallets: userWallets } = useWallets();
+  const { currencies } = useCurrencies();
   const { initiate: initiateNexus, isInitiating: nexusInitiating, pollStatus: pollNexusStatus } = useNexusDeposit();
-  const displayWallet = userWallets.find(w => w.id === nexusWalletId)
-    || userWallets.find(w => w.isDefault)
-    || userWallets[0]
-    || null;
+  const displayWallet = userWallets.find(w => w.id === nexusWalletId) || null;
+  const payingCurrencies = Array.from(new Set([
+    displayWallet?.currency,
+    ...currencies.map(currency => currency.code),
+  ].filter(Boolean).map(currency => String(currency).toUpperCase())));
 
   useEffect(() => { refreshUser(); }, []);
 
@@ -118,7 +121,7 @@ export default function DepositPage() {
   const methods = config?.methods || {};
   const isEnabled = (m: string) => {
     const value = methods[`${m}_enabled`];
-    return value === true || String(value).replace(/['"]/g, "").toLowerCase() === "true";
+    return String(value).replace(/['"]/g, "").toLowerCase() === "true";
   };
   const configuredGateway = String(methods.default_gateway || "payhero").toLowerCase();
   const isMakamescoKesDeposit = selectedMethod === "nexuspay"
@@ -139,7 +142,14 @@ export default function DepositPage() {
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("POST", "/api/deposit/mpesa", { amount, phone: mpesaPhone });
+      const r = await apiRequest("POST", "/api/deposit/nexuspay", {
+        walletId: nexusWalletId,
+        currency: nexusCurrency,
+        paymentCurrency,
+        amount,
+        phone: mpesaPhone,
+        email: user?.email,
+      });
       const data = await r.json();
       if (!data.success) throw new Error(data.message || "Failed to initiate payment");
       return data;
@@ -161,7 +171,7 @@ export default function DepositPage() {
   const pollStatus = useCallback(async () => {
     if (!mpesaRef) return;
     try {
-      const r = await apiRequest("GET", `/api/deposit/mpesa/status/${mpesaRef}`);
+      const r = await apiRequest("GET", `/api/deposit/nexuspay/status/${mpesaRef}`);
       const data = await r.json();
       if (data.status === "completed") {
         setMpesaStatus("completed");
@@ -226,6 +236,7 @@ export default function DepositPage() {
       const result = await initiateNexus({
         walletId: nexusWalletId,
         currency: nexusCurrency,
+        paymentCurrency,
         amount: parseFloat(amount),
         phone: nexusPhone || undefined,
         email: user?.email || undefined,
@@ -242,20 +253,27 @@ export default function DepositPage() {
     }
   };
 
-  // Initialize nexus wallet from user's wallets
+  // Always choose a real destination wallet. Never silently fall back to a
+  // wallet in another currency.
   useEffect(() => {
-    if (userWallets.length > 0 && !nexusWalletId) {
-      const target = userWallets.find(w => w.currency === nexusCurrency) || userWallets[0];
+      if (userWallets.length > 0 && !nexusWalletId) {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("walletId");
+      const target = userWallets.find(w => w.id === requested)
+        || userWallets.find(w => w.isDefault)
+        || userWallets[0];
       setNexusWalletId(target?.id || null);
     }
-  }, [userWallets, nexusCurrency]);
+  }, [userWallets, nexusWalletId]);
 
-  // Update nexusWalletId when currency changes
+  // Destination currency follows the selected wallet. The paying currency
+  // remains independently selectable for providers that support conversion.
   useEffect(() => {
-    const target = userWallets.find(w => w.currency === nexusCurrency);
-    if (target) setNexusWalletId(target.id);
-    else setNexusWalletId(userWallets[0]?.id || null);
-  }, [nexusCurrency, userWallets]);
+    if (!displayWallet) return;
+    const targetCurrency = displayWallet.currency.toUpperCase();
+    setNexusCurrency(targetCurrency);
+    setPaymentCurrency(current => payingCurrencies.includes(current) ? current : targetCurrency);
+  }, [displayWallet?.id, displayWallet?.currency, payingCurrencies.join(",")]);
 
   // Poll NexusPay status
   useEffect(() => {
@@ -301,8 +319,8 @@ export default function DepositPage() {
           <p className="text-2xl font-bold" data-testid="text-current-balance">
             {getCurrencySymbol(displayWallet?.currency || "USD")} {formatNumber(Number(displayWallet?.availableBalance ?? 0))}
           </p>
-          {user?.accountNumber && (
-            <p className="text-xs text-white/60 mt-1">Account: {user.accountNumber}</p>
+          {(user as any)?.accountNumber && (
+            <p className="text-xs text-white/60 mt-1">Account: {(user as any).accountNumber}</p>
           )}
         </motion.div>
 
@@ -334,6 +352,30 @@ export default function DepositPage() {
         {/* Method selector */}
         {!selectedMethod && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <div className="bg-card border border-border rounded-2xl p-4 mb-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Destination wallet</p>
+                  <p className="text-xs text-muted-foreground">Choose where this deposit will be credited.</p>
+                </div>
+                <Badge variant="outline">{displayWallet?.currency || "Select a wallet"}</Badge>
+              </div>
+              <Select
+                value={nexusWalletId || ""}
+                onValueChange={id => setNexusWalletId(id)}
+              >
+                <SelectTrigger data-testid="select-deposit-wallet">
+                  <SelectValue placeholder="Select destination wallet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {userWallets.filter(wallet => wallet.isActive && !wallet.isSuspended).map(wallet => (
+                    <SelectItem key={wallet.id} value={wallet.id}>
+                      {wallet.label || wallet.currency} ({wallet.currency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <p className="text-sm font-semibold text-muted-foreground mb-3">Available Deposit Methods</p>
               <div className="space-y-3">
                 {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
@@ -411,7 +453,7 @@ export default function DepositPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Amount (USD)</label>
+                    <label className="text-xs font-medium text-muted-foreground">Amount ({paymentCurrency})</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
                       <Input
@@ -630,7 +672,7 @@ export default function DepositPage() {
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl p-3 flex gap-2 mt-2">
                       <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                       <p className="text-xs text-blue-700 dark:text-blue-300">
-                        Use your account number <span className="font-bold">{user?.accountNumber || ""}</span> as payment reference. After transfer, contact support with your receipt.
+                         Use your account number <span className="font-bold">{(user as any)?.accountNumber || ""}</span> as payment reference. After transfer, contact support with your receipt.
                       </p>
                     </div>
                     <Button variant="outline" className="w-full" onClick={() => setLocation("/live-chat")}>
@@ -670,36 +712,36 @@ export default function DepositPage() {
                     </div>
                   </div>
 
-                  {/* Currency selector */}
+                  {/* Destination and paying currency */}
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Select Currency</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {Object.keys(NEXUS_CURRENCY_FLAGS).map(currency => (
-                        <button
-                          key={currency}
-                          onClick={() => setNexusCurrency(currency)}
-                          className={`py-2.5 px-2 rounded-xl text-sm font-semibold flex items-center justify-center gap-1.5 border transition-all active:scale-95 ${
-                            nexusCurrency === currency
-                              ? "bg-purple-600 text-white border-purple-600 shadow-md scale-105"
-                              : "bg-background border-border text-foreground hover:border-purple-400"
-                          }`}
-                        >
-                          <span>{NEXUS_CURRENCY_FLAGS[currency]}</span>
-                          <span className="text-xs">{currency}</span>
-                        </button>
-                      ))}
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Destination wallet</label>
+                    <div className="rounded-xl border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 px-3 py-2 text-sm font-semibold">
+                      {NEXUS_CURRENCY_FLAGS[nexusCurrency] || "💰"} {displayWallet?.label || nexusCurrency} ({nexusCurrency})
                     </div>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Paying currency</label>
+                    <Select value={paymentCurrency} onValueChange={setPaymentCurrency}>
+                      <SelectTrigger data-testid="select-paying-currency">
+                        <SelectValue placeholder="Choose paying currency" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {payingCurrencies.map(currency => (
+                          <SelectItem key={currency} value={currency}>
+                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <p className="text-xs text-muted-foreground">
-                      {NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency)
-                        ? "📱 Mobile money payment"
-                        : "💳 Card / bank payment"}
+                      {NEXUS_MOBILE_MONEY_CURRENCIES.includes(paymentCurrency)
+                        ? "Mobile money payment"
+                        : "Card / bank payment"}
                     </p>
                   </div>
 
                   {/* Amount */}
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">
-                      Amount ({isMakamescoKesDeposit ? "USD" : nexusCurrency})
+                      Amount ({paymentCurrency})
                     </label>
                     <Input
                       type="number" step="any"
@@ -708,12 +750,8 @@ export default function DepositPage() {
                       placeholder="0.00"
                       className="text-base"
                     />
-                    {isMakamescoKesDeposit && (
-                      <p className="text-xs text-muted-foreground">
-                        {hasUsdToKesRate
-                          ? `Makamesco will charge approximately KES ${quotedKesAmount.toLocaleString()} at ${usdToKesRate.toFixed(2)} KES/USD.`
-                          : "Live USD/KES rate unavailable. Try again shortly."}
-                      </p>
+                    {paymentCurrency !== nexusCurrency && (
+                      <p className="text-xs text-muted-foreground">The provider will convert this payment into your {nexusCurrency} wallet currency before crediting it.</p>
                     )}
                   </div>
 
@@ -837,8 +875,11 @@ export default function DepositPage() {
                       return;
                     }
                     try {
-                      const r = await apiRequest("POST", "/api/deposit/initialize-payment", {
-                        amount, currency: "USD", paymentMethod: "card",
+                      const r = await apiRequest("POST", "/api/deposit/paystack", {
+                        amount,
+                        walletId: nexusWalletId,
+                        currency: nexusCurrency,
+                        paymentCurrency,
                       });
                       const data = await r.json();
                       if (data.authorizationUrl) window.location.href = data.authorizationUrl;
@@ -854,7 +895,7 @@ export default function DepositPage() {
                   Pay with Card
                 </Button>
 
-                <p className="text-xs text-center text-muted-foreground">You will be redirected to Paystack to complete payment securely.</p>
+                 <p className="text-xs text-center text-muted-foreground">You will be redirected to Paystack to complete payment securely. The selected wallet is credited after provider confirmation.</p>
               </div>
             </motion.div>
           )}

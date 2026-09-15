@@ -9,23 +9,43 @@ export interface PaystackResponse {
 export class PaystackService {
   private secretKey: string;
   private baseUrl = 'https://api.paystack.co';
-  private isConfigured: boolean;
+  private configured: boolean;
 
   constructor() {
     // Use KES-specific key if available, otherwise fallback to general key
     const secretKey = process.env.PAYSTACK_SECRET_KEY_KES || process.env.PAYSTACK_SECRET_KEY;
     if (!secretKey) {
       console.warn('Paystack secret key not provided - payment features will be disabled');
-      this.isConfigured = false;
+      this.configured = false;
       this.secretKey = '';
     } else {
-      this.isConfigured = true;
+      this.configured = true;
       this.secretKey = secretKey;
     }
   }
 
+  private async getSecretKey(): Promise<string> {
+    if (this.secretKey) return this.secretKey;
+    try {
+      const { pool } = await import("../db");
+      const result = await pool.query(
+        `SELECT value FROM system_settings WHERE category = 'paystack' AND key = 'secret_key' LIMIT 1`,
+      );
+      const raw = result.rows[0]?.value as any;
+      const value = typeof raw === "object" ? raw?.value : raw;
+      return String(value || "").replace(/^"|"$/g, "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  async isConfigured(): Promise<boolean> {
+    return Boolean(await this.getSecretKey());
+  }
+
   async initializePayment(email: string, amount: number, reference: string, currency: string = 'KES', phoneNumber?: string, callbackUrl?: string, metadata?: Record<string, any>): Promise<PaystackResponse> {
-    if (!this.isConfigured) {
+    const secretKey = await this.getSecretKey();
+    if (!secretKey) {
       return {
         status: false,
         message: 'Paystack is not configured. Please add PAYSTACK_SECRET_KEY to environment variables.'
@@ -63,7 +83,7 @@ export class PaystackService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.secretKey}`,
+          'Authorization': `Bearer ${secretKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
@@ -81,13 +101,15 @@ export class PaystackService {
   }
 
   async verifyPayment(reference: string): Promise<PaystackResponse> {
+    const secretKey = await this.getSecretKey();
+    if (!secretKey) return { status: false, message: "Paystack is not configured" };
     try {
       const url = `${this.baseUrl}/transaction/verify/${reference}`;
       
       const response = await fetch(url, {
         method: 'GET',
         headers: {
-          'Authorization': `Bearer ${this.secretKey}`,
+          'Authorization': `Bearer ${secretKey}`,
         },
       });
 
