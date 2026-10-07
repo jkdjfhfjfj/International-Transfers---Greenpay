@@ -15167,7 +15167,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const normalizedPaymentCurrency = requestedPaymentCurrency === "SLL" ? "SLE" : requestedPaymentCurrency;
       const payzaCurrency = getPayzaApiCurrencyCode(normalizedPaymentCurrency);
       if (normalizedPaymentCurrency !== "KES" && !payzaCurrency) {
-        return res.status(400).json({ message: `${normalizedPaymentCurrency} is not supported by PayzaAPI.` });
+        return res.status(400).json({ message: "This payment currency is not supported." });
       }
       const exchangeRate = normalizedPaymentCurrency === normalizedCurrency
         ? 1
@@ -15189,10 +15189,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
         selectedGateway = "payhero";
         const readiness = await payHeroService.getReadiness();
         if (!readiness.configured) {
-          return res.status(503).json({ message: "PayHero is not configured. Add PAYHERO_USERNAME and PAYHERO_PASSWORD in Replit Secrets and set the channel ID." });
+          console.warn("KES mobile-money deposits are unavailable because payment settings are incomplete.");
+          return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
         }
         const customerPhone = String(phone || customer.phone || "").trim();
-        if (!customerPhone) return res.status(400).json({ message: "Enter a phone number for the PayHero M-Pesa prompt." });
+        if (!customerPhone) return res.status(400).json({ message: "Enter a phone number for the M-Pesa prompt." });
         const reference = payHeroService.generateReference();
         const payment = await payHeroService.initiateMpesaPayment(
           inputAmount,
@@ -15201,13 +15202,16 @@ Sitemap: https://geepay.us/sitemap.xml`;
           customer.fullName || undefined,
           `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`,
         );
-        if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
+        if (!payment.success) {
+          console.error("KES mobile-money deposit initialization failed:", payment.message || payment.status);
+          return res.status(502).json({ message: "Mobile-money payment could not be started. Please try again later." });
+        }
         result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
       } else {
         selectedGateway = "payzaapi";
         if (!payzaCurrency) return res.status(400).json({ message: "This payment currency is not supported." });
         if (!(await payzaApiService.isConfigured())) {
-          return res.status(503).json({ message: "PayzaAPI is not configured. Add PAYZA_PUBLIC_KEY and PAYZA_SECRET_KEY in Replit Secrets." });
+          return res.status(503).json({ message: "Deposits are temporarily unavailable. Please try again later." });
         }
         const reference = `DEP-PAYZA-${Date.now()}-${userId.slice(-6)}`;
         const payment = await payzaApiService.initializePayment({
@@ -15228,7 +15232,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       await db.insert(transactions).values({
           userId, type: "deposit", amount: creditedAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
-         reference: result.reference, description: `${selectedGateway} deposit to ${normalizedCurrency} wallet`,
+          reference: result.reference, description: `Deposit to ${normalizedCurrency} wallet`,
          metadata: {
            walletId,
            channel,
@@ -15250,10 +15254,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
           exchangeRate,
          message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
        });
-    } catch (e: any) {
-      console.error("Deposit initialization error:", e);
-      res.status(400).json({ message: e.message || "Deposit failed" });
-    }
+     } catch (e: any) {
+       console.error("Deposit initialization error:", e);
+       res.status(400).json({ message: "We couldn't start your deposit. Please try again later." });
+     }
   });
 
   app.post("/api/payzaapi/callback", async (req, res) => {
