@@ -1,0 +1,281 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+#root {
+  position: relative;
+  min-height: 100vh;
+}
+
+.with-bottom-nav {
+  padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-nav-safe {
+  padding-bottom: calc(var(--bottom-nav-height) + 24px + env(safe-area-inset-bottom, 0px));
+}
+
+.bottom-sheet-safe {
+  max-height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom, 0px));
+  overflow-y: auto;
+  padding-bottom: calc(1.25rem + var(--bottom-nav-height) + env(safe-area-inset-bottom, 0px));
+}
+
+body, html {
+  height: 100%;
+  overflow-x: hidden;
+}
+
+:root {
+  --bottom-nav-height: 80px;
+  /* Geepay user theme palette */
+  --background: hsl(210, 40%, 98%);       /* #f8fafc */
+  --foreground: hsl(222, 47%, 11%);       /* #0f172a */
+  --card: hsl(0, 0%, 100%);
+  --card-foreground: hsl(222, 47%, 11%);
+  --popover: hsl(0, 0%, 100%);
+  --popover-foreground: hsl(222, 47%, 11%);
+  --primary: hsl(175, 77%, 26%);          /* #0f766e teal-700 */
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(173, 80%, 40%);        /* #14b8a6 teal-500 */
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --muted: hsl(210, 40%, 96%);            /* #f1f5f9 */
+  --muted-foreground: hsl(215, 16%, 47%); /* #64748b */
+  --accent: hsl(210, 40%, 96%);
+  --accent-foreground: hsl(222, 47%, 11%);
+  --destructive: hsl(21, 90%, 48%);       /* #ea580c warning */
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(214, 32%, 91%);           /* #e2e8f0 */
+  --input: hsl(214, 32%, 91%);
+  --ring: hsl(175, 77%, 26%);
+  --chart-1: hsl(175, 77%, 26%);
+  --chart-2: hsl(173, 80%, 40%);
+  --chart-3: hsl(43, 93%, 56%);
+  --chart-4: hsl(147, 79%, 42%);
+  --chart-5: hsl(341, 75%, 51%);
+  --sidebar: hsl(0, 0%, 100%);
+  --sidebar-foreground: hsl(222, 47%, 11%);
+  --sidebar-primary: hsl(175, 77%, 26%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(210, 40%, 96%);
+  --sidebar-accent-foreground: hsl(175, 77%, 26%);
+  --sidebar-border: hsl(214, 32%, 91%);
+  --sidebar-ring: hsl(175, 77%, 26%);
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-serif: Georgia, serif;
+  --font-mono: Menlo, monospace;
+  --radius: 12px;
+
+  /* Geepay brand tokens */
+  --gp-brand: #0f766e;
+  --gp-brand-rgb: 15, 118, 110;
+  --gp-brand-soft: #14b8a6;
+  --gp-gradient: linear-gradient(135deg, var(--gp-brand) 0%, var(--gp-brand-soft) 100%);
+  --gp-header-radius: 24px;
+}
+
+.dark {
+  --background: hsl(222, 47%, 8%);
+  --foreground: hsl(210, 40%, 95%);
+  --card: hsl(222, 47%, 11%);
+  --card-foreground: hsl(210, 40%, 95%);
+  --popover: hsl(222, 47%, 8%);
+  --popover-foreground: hsl(210, 40%, 95%);
+  --primary: hsl(175, 77%, 26%);
+  --primary-foreground: hsl(0, 0%, 100%);
+  --secondary: hsl(173, 80%, 40%);
+  --secondary-foreground: hsl(0, 0%, 100%);
+  --muted: hsl(222, 47%, 14%);
+  --muted-foreground: hsl(215, 16%, 60%);
+  --accent: hsl(222, 47%, 14%);
+  --accent-foreground: hsl(210, 40%, 95%);
+  --destructive: hsl(21, 90%, 48%);
+  --destructive-foreground: hsl(0, 0%, 100%);
+  --border: hsl(222, 47%, 18%);
+  --input: hsl(222, 47%, 14%);
+  --ring: hsl(175, 77%, 26%);
+  --sidebar: hsl(222, 47%, 11%);
+  --sidebar-foreground: hsl(210, 40%, 95%);
+  --sidebar-primary: hsl(175, 77%, 26%);
+  --sidebar-primary-foreground: hsl(0, 0%, 100%);
+  --sidebar-accent: hsl(222, 47%, 14%);
+  --sidebar-accent-foreground: hsl(175, 77%, 26%);
+  --sidebar-border: hsl(222, 47%, 18%);
+  --sidebar-ring: hsl(175, 77%, 26%);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .slide-up {
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  }
+
+  .slide-up.active {
+    transform: translateY(0);
+  }
+
+  .fade-in {
+    opacity: 0;
+    transition: opacity 0.3s ease-in-out;
+  }
+
+  .fade-in.active {
+    opacity: 1;
+  }
+
+  .scale-in {
+    transform: scale(0.95);
+    opacity: 0;
+    transition: all 0.2s ease-out;
+  }
+
+  .scale-in.active {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  .ripple {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .ripple::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.3s, height 0.3s;
+  }
+
+  .ripple:active::before {
+    width: 300px;
+    height: 300px;
+  }
+
+  .elevation-1 {
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.12);
+  }
+
+  .elevation-2 {
+    box-shadow: 0 3px 6px rgba(0,0,0,0.10), 0 3px 6px rgba(0,0,0,0.14);
+  }
+
+  .elevation-3 {
+    box-shadow: 0 10px 20px rgba(0,0,0,0.12), 0 6px 6px rgba(0,0,0,0.14);
+  }
+
+  .currency-flag {
+    width: 24px;
+    height: 18px;
+    border-radius: 2px;
+    background-size: cover;
+    background-position: center;
+  }
+
+  .transaction-item:hover {
+    background-color: var(--muted);
+  }
+
+  .material-icons {
+    font-family: 'Material Icons';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Geepay gradient header utility */
+  .gp-gradient-header {
+    background: var(--gp-gradient);
+    border-bottom-left-radius: var(--gp-header-radius);
+    border-bottom-right-radius: var(--gp-header-radius);
+  }
+
+  .gp-splash-orb {
+    animation: gp-float 12s ease-in-out infinite;
+  }
+
+  .gp-splash-orb-delayed {
+    animation: gp-float-reverse 15s ease-in-out infinite;
+  }
+
+  .gp-splash-grid {
+    background-image:
+      linear-gradient(rgba(var(--gp-brand-rgb), 0.09) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(var(--gp-brand-rgb), 0.09) 1px, transparent 1px);
+    background-size: 32px 32px;
+    mask-image: linear-gradient(to bottom, black, transparent 80%);
+  }
+
+  .gp-splash-ring {
+    animation: gp-pulse-ring 2.8s ease-out infinite;
+  }
+}
+
+@keyframes gp-float {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(28px, -18px, 0) scale(1.08); }
+}
+
+@keyframes gp-float-reverse {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-24px, 18px, 0) scale(0.94); }
+}
+
+@keyframes gp-pulse-ring {
+  0% { transform: scale(0.82); opacity: 0.5; }
+  70%, 100% { transform: scale(1.45); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-splash-orb,
+  .gp-splash-orb-delayed,
+  .gp-splash-ring {
+    animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (min-width: 769px) {
+  .bottom-sheet-safe {
+    max-height: min(90vh, 760px);
+    padding-bottom: 1.25rem;
+  }
+}

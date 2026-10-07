@@ -1,0 +1,2 @@
+ALTER TABLE "payment_requests" ADD COLUMN "to_user_id" varchar;--> statement-breakpoint
+ALTER TABLE "payment_requests" ADD CONSTRAINT "payment_requests_to_user_id_users_id_fk" FOREIGN KEY ("to_user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;

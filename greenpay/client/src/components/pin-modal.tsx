@@ -1,0 +1,178 @@
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { Lock } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+
+interface PINModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: (pin: string, authenticatorCode?: string) => void;
+  isLoading?: boolean;
+  title?: string;
+  description?: string;
+  hideHeader?: boolean;
+  requiresPin?: boolean;
+  requiresAuthenticator?: boolean;
+}
+
+export function PINModal({
+  isOpen,
+  onClose,
+  onSuccess,
+  isLoading = false,
+  title = "Enter PIN",
+  description = "Enter your 4-digit PIN to complete this transaction",
+  hideHeader = false,
+  requiresPin = true,
+  requiresAuthenticator = false,
+}: PINModalProps) {
+  const [pin, setPin] = useState("");
+  const [authenticatorCode, setAuthenticatorCode] = useState("");
+  const [method, setMethod] = useState<"pin" | "authenticator">(requiresPin ? "pin" : "authenticator");
+  const { toast } = useToast();
+
+  useEffect(() => {
+    setMethod(requiresPin ? "pin" : "authenticator");
+  }, [requiresPin, requiresAuthenticator]);
+
+  const handleSubmit = () => {
+    if (method === "pin" && pin.length !== 4) {
+      toast({
+        title: "Invalid PIN",
+        description: "PIN must be 4 digits",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (method === "pin" && !/^\d{4}$/.test(pin)) {
+      toast({
+        title: "Invalid PIN",
+        description: "PIN must contain only numbers",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (method === "authenticator" && !/^\d{6}$/.test(authenticatorCode)) {
+      toast({
+        title: "Authenticator code required",
+        description: "Enter the current 6-digit code from your authenticator app.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    onSuccess(method === "pin" ? pin : "", method === "authenticator" ? authenticatorCode : undefined);
+    setPin("");
+    setAuthenticatorCode("");
+  };
+
+  const handleClose = () => {
+    setPin("");
+    setAuthenticatorCode("");
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <motion.div
+          className="fixed inset-0 z-[300] flex items-end bg-black/50"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={handleClose}
+        >
+          <motion.div
+            className="bottom-sheet-safe w-full rounded-t-3xl border-t border-border bg-background p-5 shadow-2xl sm:mx-auto sm:mb-6 sm:max-w-md sm:rounded-2xl sm:border"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 28, stiffness: 280 }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-muted-foreground/30 sm:hidden" />
+            {!hideHeader && (
+              <div className="mb-4 flex items-center gap-2 text-lg font-semibold">
+                <Lock className="w-5 h-5" />
+                {title}
+              </div>
+            )}
+
+            <div className="space-y-4 py-1">
+              {!hideHeader && (
+                <p className="text-sm text-muted-foreground text-center">
+                  {description}
+                </p>
+              )}
+
+              {requiresPin && requiresAuthenticator && (
+                <div className="grid grid-cols-2 gap-2">
+                  <Button type="button" variant={method === "pin" ? "default" : "outline"} onClick={() => setMethod("pin")}>
+                    PIN
+                  </Button>
+                  <Button type="button" variant={method === "authenticator" ? "default" : "outline"} onClick={() => setMethod("authenticator")}>
+                    Authenticator
+                  </Button>
+                </div>
+              )}
+
+              {method === "pin" && requiresPin && (
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  placeholder="••••"
+                  maxLength={4}
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value.replace(/[^0-9]/g, ""))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setPin(e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 4));
+                  }}
+                  className="text-center text-2xl tracking-widest"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSubmit();
+                  }}
+                  autoFocus
+                />
+              )}
+
+              {method === "authenticator" && requiresAuthenticator && (
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="6-digit authenticator code"
+                  maxLength={6}
+                  value={authenticatorCode}
+                  onChange={(e) => setAuthenticatorCode(e.target.value.replace(/[^0-9]/g, ""))}
+                  onPaste={(e) => {
+                    e.preventDefault();
+                    setAuthenticatorCode(e.clipboardData.getData("text").replace(/[^0-9]/g, "").slice(0, 6));
+                  }}
+                  className="text-center tracking-widest"
+                />
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={handleClose} disabled={isLoading} className="flex-1">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  disabled={(method === "pin" && pin.length !== 4) || (method === "authenticator" && authenticatorCode.length !== 6) || isLoading}
+                  className="flex-1"
+                >
+                  {isLoading ? "Verifying..." : "Verify"}
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}

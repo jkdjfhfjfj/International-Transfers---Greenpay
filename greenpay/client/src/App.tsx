@@ -1,0 +1,420 @@
+import { Switch, Route, useLocation } from "wouter";
+import { useEffect, useRef, useState } from "react";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider, useQuery } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { TalkToUs } from "@/components/talk-to-us";
+import NotFound from "@/pages/not-found";
+import DesktopSidebar from "@/components/desktop-sidebar";
+import DesktopTopbar from "@/components/desktop-topbar";
+import SplashPage from "@/pages/splash";
+import LoginPage from "@/pages/auth/login";
+import SignupPage from "@/pages/auth/signup";
+import OtpVerificationPage from "@/pages/auth/otp-verification";
+import GoogleCompletePage from "@/pages/auth/google-complete";
+import KycVerificationPage from "@/pages/auth/kyc-verification";
+import VirtualCardPurchasePage from "@/pages/auth/virtual-card-purchase";
+import ForgotPasswordPage from "@/pages/auth/forgot-password";
+import ResetPasswordPage from "@/pages/auth/reset-password";
+import DashboardPage from "@/pages/dashboard";
+import SendMoneyPage from "@/pages/send-money";
+import SendAmountPage from "@/pages/send-amount";
+import SendConfirmPage from "@/pages/send-confirm";
+import ReceiveMoneyPage from "@/pages/receive-money";
+import PaymentRequestsPage from "@/pages/payment-requests";
+import TransactionsPage from "@/pages/transactions";
+import VirtualCardPage from "@/pages/virtual-card";
+import VirtualAccountsPage from "@/pages/virtual-accounts";
+import WalletAccountPage from "@/pages/wallet-account";
+import SettingsPage from "@/pages/settings";
+import SupportPage from "@/pages/support";
+import LiveChatPage from "@/pages/live-chat";
+import DepositPage from "@/pages/deposit";
+import WithdrawPage from "@/pages/withdraw";
+import ExchangePage from "@/pages/exchange";
+import KycPage from "@/pages/kyc";
+import AirtimePage from "@/pages/airtime";
+import BillsPage from "@/pages/bills";
+import StatusPage from "@/pages/status";
+import MaintenancePage from "@/pages/maintenance";
+import OfflinePage from "@/pages/offline";
+import LoadingScreen from "@/components/loading-screen";
+import BottomNavigation from "@/components/bottom-navigation";
+import { PWAInstallPrompt } from "@/components/pwa-install";
+import { OfflineIndicator } from "@/components/offline-indicator";
+import PaymentCallbackPage from "@/pages/payment-callback";
+import PaymentSuccessPage from "@/pages/payment-success";
+import PaymentFailedPage from "@/pages/payment-failed";
+import PaymentProcessingPage from "@/pages/payment-processing";
+import AdminLogin from "@/pages/admin-login";
+import AdminDashboard from "@/pages/admin-dashboard-new";
+import AdminDashboardPage from "@/pages/admin-dashboard";
+import AdminUsersPage from "@/pages/admin-users";
+import AdminKycPage from "@/pages/admin-kyc";
+import AdminAdvancedKycPage from "@/pages/admin-advanced-kyc";
+import AdminRisksPage from "@/pages/admin-risks";
+import AdminTransactionsPage from "@/pages/admin-transactions";
+import AdminWithdrawalsPage from "@/pages/admin-withdrawals";
+import AdminCardsPage from "@/pages/admin-cards";
+import AdminPricingPage from "@/pages/admin-pricing";
+import AdminNotificationsPage from "@/pages/admin-notifications";
+import AdminMailPage from "@/pages/admin-mail";
+import AdminWhatsAppPage from "@/pages/admin-whatsapp";
+import AdminSupportPage from "@/pages/admin-support";
+import AdminTicketsPage from "@/pages/admin-tickets";
+import AdminLogsPage from "@/pages/admin-logs";
+import AdminTemplatesPage from "@/pages/admin-templates";
+import AdminActivityPage from "@/pages/admin-activity";
+import AdminDatabasePage from "@/pages/admin-database";
+import AdminAnalyticsPage from "@/pages/admin-analytics";
+import AdminSystemSettingsPage from "@/pages/admin-system-settings";
+import AdminManualPaymentSettingsPage from "@/pages/admin-manual-payment-settings";
+import AdminPayHeroSettingsPage from "@/pages/admin-payhero-fresh";
+import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
+import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
+import AdminProfilePage from "@/pages/admin-profile";
+import LandingPage from "@/pages/landing/index";
+import SendMoneyLanding from "@/pages/landing/send-money";
+import VirtualCardsLanding from "@/pages/landing/virtual-cards";
+import ExchangeLanding from "@/pages/landing/exchange";
+import HelpLanding from "@/pages/landing/help";
+import AirtimeLanding from "@/pages/landing/airtime";
+import AboutLanding from "@/pages/landing/about";
+import PricingLanding from "@/pages/landing/pricing";
+import SecurityLanding from "@/pages/landing/security";
+import ContactLanding from "@/pages/landing/contact";
+import TermsAndConditionsPage from "@/pages/terms-and-conditions";
+import PrivacyPolicyPage from "@/pages/privacy-policy";
+import UserSupportTickets from "@/pages/user-support-tickets";
+import CryptoPage from "@/pages/crypto";
+import TransferPage from "@/pages/transfer";
+import AnalyticsPage from "@/pages/analytics";
+import AdminDisputesPage from "@/pages/admin-disputes";
+import AdminCryptoPage from "@/pages/admin-crypto";
+import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
+import AdminWalletsPage from "@/pages/admin-wallets";
+import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
+import AdminBlogsPage from "@/pages/admin-blogs";
+import BlogPage from "@/pages/blog";
+import { useFCM } from "@/hooks/use-fcm";
+import { useSystemSettings } from "@/hooks/use-system-settings";
+import { useMaintenanceState } from "@/hooks/use-maintenance";
+import { Smartphone } from "lucide-react";
+
+// User Route Guard Component
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const [, setLocation] = useLocation();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  
+  // Show loading screen while checking authentication
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+  
+  if (!isAuthenticated) {
+    // Redirect to login if not authenticated
+    setLocation("/login");
+    return null;
+  }
+  
+  return <Component />;
+}
+
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/" component={SplashPage} />
+      <Route path="/login" component={LoginPage} />
+      <Route path="/signup" component={SignupPage} />
+      <Route path="/auth/otp-verification" component={OtpVerificationPage} />
+      <Route path="/auth/google/complete" component={GoogleCompletePage} />
+      <Route path="/auth/kyc-verification" component={KycVerificationPage} />
+      <Route path="/auth/virtual-card-purchase" component={VirtualCardPurchasePage} />
+      <Route path="/auth/forgot-password" component={ForgotPasswordPage} />
+      <Route path="/auth/reset-password" component={ResetPasswordPage} />
+      <Route path="/dashboard">
+        <ProtectedRoute component={DashboardPage} />
+      </Route>
+      <Route path="/send-money" component={SendMoneyPage} />
+      <Route path="/send-amount" component={SendAmountPage} />
+      <Route path="/send-confirm" component={SendConfirmPage} />
+      <Route path="/receive-money" component={ReceiveMoneyPage} />
+      <Route path="/payment-requests">
+        <ProtectedRoute component={PaymentRequestsPage} />
+      </Route>
+      <Route path="/pay-to/:userId" component={ReceiveMoneyPage} />
+      <Route path="/transactions" component={TransactionsPage} />
+      <Route path="/virtual-card">
+        <ProtectedRoute component={VirtualCardPage} />
+      </Route>
+      <Route path="/virtual-accounts">
+        <ProtectedRoute component={VirtualAccountsPage} />
+      </Route>
+      <Route path="/wallet/:walletId">
+        <ProtectedRoute component={WalletAccountPage} />
+      </Route>
+      <Route path="/settings" component={SettingsPage} />
+      <Route path="/support" component={SupportPage} />
+      <Route path="/support/tickets">
+        <ProtectedRoute component={UserSupportTickets} />
+      </Route>
+      <Route path="/live-chat" component={LiveChatPage} />
+      <Route path="/deposit" component={DepositPage} />
+      <Route path="/withdraw" component={WithdrawPage} />
+      <Route path="/exchange" component={ExchangePage} />
+      <Route path="/kyc" component={KycPage} />
+      <Route path="/kyc-callback" component={() => {
+        const [, setLocation] = useLocation();
+        useEffect(() => {
+          const params = new URLSearchParams(window.location.search);
+          const status = params.get("status");
+          setLocation("/kyc");
+        }, []);
+        return null;
+      }} />
+      <Route path="/airtime" component={AirtimePage} />
+      <Route path="/bills" component={BillsPage} />
+      <Route path="/status" component={StatusPage} />
+      <Route path="/payment-callback" component={PaymentCallbackPage} />
+      <Route path="/payment-success" component={PaymentSuccessPage} />
+      <Route path="/payment-failed" component={PaymentFailedPage} />
+      <Route path="/payment-processing" component={PaymentProcessingPage} />
+      {/* Main marketing landing page */}
+      <Route path="/landing" component={LandingPage} />
+      {/* Public SEO landing pages */}
+      <Route path="/features/send-money" component={SendMoneyLanding} />
+      <Route path="/features/virtual-cards" component={VirtualCardsLanding} />
+      <Route path="/features/exchange" component={ExchangeLanding} />
+      <Route path="/features/airtime" component={AirtimeLanding} />
+      <Route path="/help" component={HelpLanding} />
+      <Route path="/about" component={AboutLanding} />
+      <Route path="/pricing" component={PricingLanding} />
+      <Route path="/security" component={SecurityLanding} />
+      <Route path="/contact" component={ContactLanding} />
+      <Route path="/terms" component={TermsAndConditionsPage} />
+      <Route path="/privacy" component={PrivacyPolicyPage} />
+      <Route path="/blog" component={BlogPage} />
+      <Route path="/blog/:slug" component={BlogPage} />
+      <Route path="/crypto">
+        <ProtectedRoute component={CryptoPage} />
+      </Route>
+      <Route path="/transfer">
+        <ProtectedRoute component={TransferPage} />
+      </Route>
+      <Route path="/analytics">
+        <ProtectedRoute component={AnalyticsPage} />
+      </Route>
+      {/* Admin routes — auth handled inside each page via AdminShell */}
+      <Route path="/admin-login" component={AdminLogin} />
+      <Route path="/admin/login" component={AdminLogin} />
+      <Route path="/admin/dashboard" component={AdminDashboard} />
+      <Route path="/admin/home" component={AdminDashboardPage} />
+      <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/kyc" component={AdminKycPage} />
+      <Route path="/admin/advanced-kyc" component={AdminAdvancedKycPage} />
+      <Route path="/admin/risks" component={AdminRisksPage} />
+      <Route path="/admin/transactions" component={AdminTransactionsPage} />
+      <Route path="/admin/withdrawals" component={AdminWithdrawalsPage} />
+      <Route path="/admin/cards" component={AdminCardsPage} />
+      <Route path="/admin/pricing" component={AdminPricingPage} />
+      <Route path="/admin/notifications" component={AdminNotificationsPage} />
+      <Route path="/admin/mail" component={AdminMailPage} />
+      <Route path="/admin/whatsapp" component={AdminWhatsAppPage} />
+      <Route path="/admin/support" component={AdminSupportPage} />
+      <Route path="/admin/tickets" component={AdminTicketsPage} />
+      <Route path="/admin/logs" component={AdminLogsPage} />
+      <Route path="/admin/templates" component={AdminTemplatesPage} />
+      <Route path="/admin/activity" component={AdminActivityPage} />
+      <Route path="/admin/database" component={AdminDatabasePage} />
+      <Route path="/admin/analytics" component={AdminAnalyticsPage} />
+      <Route path="/admin/settings" component={AdminSystemSettingsPage} />
+      <Route path="/admin/manual-payment" component={AdminManualPaymentSettingsPage} />
+      <Route path="/admin/payhero-settings" component={AdminPayHeroSettingsPage} />
+      <Route path="/admin/messaging" component={AdminMessagingSMSPage} />
+      <Route path="/admin/announcements" component={AdminAnnouncementsDBPage} />
+      <Route path="/admin/profile" component={AdminProfilePage} />
+      <Route path="/admin/disputes" component={AdminDisputesPage} />
+      <Route path="/admin/crypto" component={AdminCryptoPage} />
+      <Route path="/admin/deposit-settings" component={AdminDepositSettingsPage} />
+      <Route path="/admin/wallets" component={AdminWalletsPage} />
+      <Route path="/admin/virtual-accounts" component={AdminVirtualAccountsPage} />
+      <Route path="/admin/blogs" component={AdminBlogsPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function MobileOnlyPage() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center">
+      <div className="max-w-sm space-y-4">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <Smartphone className="h-8 w-8 text-primary" />
+        </div>
+        <h1 className="text-2xl font-bold text-foreground">Mobile access only</h1>
+        <p className="text-sm text-muted-foreground">
+          This app is currently optimized for mobile devices. Open Geepay on a phone or smaller screen to continue.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AppContent() {
+  const [location] = useLocation();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const { getMaintenanceMode, getDesktopAccessEnabled } = useSystemSettings();
+  const maintenanceState = useMaintenanceState();
+  const [isDesktopViewport, setIsDesktopViewport] = useState(false);
+  const [isOffline, setIsOffline] = useState(
+    typeof navigator !== "undefined" && !navigator.onLine,
+  );
+  
+  // Initialize FCM push notifications
+  useFCM(isAuthenticated);
+
+  useEffect(() => {
+    const handleOffline = () => setIsOffline(true);
+    const handleOnline = () => setIsOffline(false);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 768px)");
+    const updateViewport = () => setIsDesktopViewport(mediaQuery.matches);
+    updateViewport();
+    mediaQuery.addEventListener("change", updateViewport);
+    return () => mediaQuery.removeEventListener("change", updateViewport);
+  }, []);
+
+  // Use the browser Notification API for web notifications. This is
+  // intentionally separate from Capacitor/FCM; the persisted notification
+  // feed remains the source of truth after refresh.
+  useEffect(() => {
+    if (!isAuthenticated || !("Notification" in window)) return;
+    if (Notification.permission === "default") {
+      Notification.requestPermission().catch(() => {});
+    }
+  }, [isAuthenticated]);
+
+  // Web notifications are delivered from the same persisted notification feed
+  // used by the bell menu, so account actions remain visible after refresh.
+  const lastNotificationIds = useRef<Set<string> | null>(null);
+  const { data: browserNotificationResponse } = useQuery({
+    queryKey: [`/api/notifications/${user?.id}`],
+    enabled: !!user?.id,
+    refetchInterval: 15000,
+    staleTime: 0,
+  });
+  useEffect(() => {
+    if (!user?.id) {
+      lastNotificationIds.current = null;
+      return;
+    }
+    const items = (browserNotificationResponse as any)?.notifications || [];
+    const ids = new Set<string>(items.map((item: any) => String(item.id)));
+    if (!lastNotificationIds.current) {
+      lastNotificationIds.current = ids;
+      return;
+    }
+    if (
+      "Notification" in window &&
+      Notification.permission === "granted" &&
+      "serviceWorker" in navigator
+    ) {
+      const newItems = items
+        .filter((item: any) => !lastNotificationIds.current?.has(item.id) && !item.isRead)
+        .slice(0, 3);
+
+      if (newItems.length > 0) {
+        navigator.serviceWorker.ready
+          .then((registration) =>
+            Promise.all(
+              newItems.map((item: any) =>
+                registration.showNotification(item.title, {
+                  body: item.message,
+                  tag: String(item.id),
+                  icon: "/greenpay-logo.png",
+                  data: { actionUrl: item.actionUrl || "/" },
+                }),
+              ),
+            ),
+          )
+          .catch((error) => {
+            // Notification permission can be revoked while the app is open.
+            console.warn("Unable to show browser notification:", error);
+          });
+      }
+    }
+    lastNotificationIds.current = ids;
+  }, [browserNotificationResponse, user?.id]);
+  
+  // Landing/public pages and admin pages that should not show user widgets
+  const landingPages = ['/', '/landing', '/login', '/signup', '/splash', '/help', '/about', '/pricing', '/security', '/contact', '/terms', '/privacy', '/send-money', '/virtual-cards', '/exchange', '/airtime', '/admin-login'];
+  const isLandingPage = landingPages.some(page => location === page || location.startsWith(page + '/'));
+  // Keep administrators in the admin panel while maintenance is active.
+  // Every other route is replaced by the maintenance screen once either the
+  // settings endpoint or any maintenance 503 confirms the server state.
+  const isAdminPage =
+    location === "/admin-login" ||
+    location === "/admin" ||
+    location.startsWith("/admin/");
+  const showMaintenance =
+    !isAdminPage && (maintenanceState.active || (!isLoading && getMaintenanceMode()));
+  const showMobileOnly =
+    !isAdminPage &&
+    !isLandingPage &&
+    isDesktopViewport &&
+    !getDesktopAccessEnabled();
+
+  const isSupportComposerPage = location.startsWith('/live-chat') || location.startsWith('/support/tickets');
+
+  // Only show user widgets on authenticated non-admin pages where they won't cover message composers
+  const shouldShowWidgets = isAuthenticated && !isLandingPage && !isAdminPage && !isSupportComposerPage;
+
+  const showAppShell =
+    isAuthenticated && !isLandingPage && !isAdminPage && !showMaintenance && !showMobileOnly;
+
+  return (
+    <TooltipProvider>
+      <Toaster />
+      <OfflineIndicator />
+      {showAppShell && <DesktopSidebar />}
+      {showAppShell && <DesktopTopbar />}
+      <div className={showAppShell ? "md:pl-64" : ""}>
+        {isOffline ? (
+          <OfflinePage />
+        ) : showMaintenance ? (
+          <MaintenancePage />
+        ) : showMobileOnly ? (
+          <MobileOnlyPage />
+        ) : (
+          <Router />
+        )}
+      </div>
+      {!isAdminPage && !showMaintenance && <BottomNavigation />}
+      {!isAdminPage && !showMaintenance && <PWAInstallPrompt />}
+      {shouldShowWidgets && !showMaintenance && <TalkToUs />}
+    </TooltipProvider>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;

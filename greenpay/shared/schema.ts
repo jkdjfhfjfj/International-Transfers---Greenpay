@@ -1,0 +1,1039 @@
+import { sql } from "drizzle-orm";
+import { pgTable, text, varchar, decimal, timestamp, boolean, jsonb, json, integer, primaryKey } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
+
+export const users = pgTable("users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fullName: text("full_name").notNull(),
+  email: text("email").notNull().unique(),
+  phone: text("phone").notNull().unique(),
+  country: text("country").notNull(),
+  password: text("password").notNull(),
+  passwordSet: boolean("password_set").default(true),
+  profilePhotoUrl: text("profile_photo_url"),
+  isEmailVerified: boolean("is_email_verified").default(false),
+  isPhoneVerified: boolean("is_phone_verified").default(false),
+  kycStatus: text("kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
+  advancedKycStatus: text("advanced_kyc_status").default("not_submitted"), // not_submitted, pending, verified, rejected
+  advancedKycRequested: boolean("advanced_kyc_requested").default(false), // admin-requested advanced KYC
+  hasVirtualCard: boolean("has_virtual_card").default(false),
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
+  twoFactorBackupCodes: text("two_factor_backup_codes"), // JSON stringified array
+  biometricEnabled: boolean("biometric_enabled").default(false),
+  biometricCredentialId: text("biometric_credentials"), // WebAuthn credential ID - stored as JSON
+  darkMode: boolean("dark_mode").default(false),
+  pushNotificationsEnabled: boolean("push_notifications_enabled").default(true),
+  balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"), // USD balance
+  kesBalance: decimal("kes_balance", { precision: 10, scale: 2 }).default("0.00"), // KES balance
+  hasReceivedWelcomeBonus: boolean("has_received_welcome_bonus").default(false),
+  hasClaimedAirtimeBonus: boolean("has_claimed_airtime_bonus").default(false),
+  otpCode: text("otp_code"),
+  otpExpiry: timestamp("otp_expiry"),
+  paystackCustomerId: text("paystack_customer_id"),
+  defaultCurrency: text("default_currency").default("KES"),
+  pinEnabled: boolean("pin_enabled").default(false),
+  pinCode: text("pin_code"),
+  isSuspended: boolean("is_suspended").default(false),
+  suspendedAt: timestamp("suspended_at"),
+  suspensionReason: text("suspension_reason"),
+  fcmToken: text("fcm_token"), // Firebase Cloud Messaging token for push notifications
+  lastLoginAt: timestamp("last_login_at"),
+  googleId: text("google_id"),
+  // KYC-extracted identity fields (auto-populated on verification, editable by admin only)
+  kycFullName: text("kyc_full_name"),
+  kycDateOfBirth: text("kyc_date_of_birth"),
+  kycIdNumber: text("kyc_id_number"),     // unique per verified identity
+  kycNationality: text("kyc_nationality"),
+  kycGender: text("kyc_gender"),
+  kycAddress: text("kyc_address"),
+  kycDocumentType: text("kyc_document_type"),
+  kycIdExpiryDate: text("kyc_id_expiry_date"),
+  kycIssuingCountry: text("kyc_issuing_country"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const kycDocuments = pgTable("kyc_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  documentType: text("document_type").notNull(), // national_id, passport, drivers_license, didit_verification
+  frontImageUrl: text("front_image_url"),
+  backImageUrl: text("back_image_url"),
+  selfieUrl: text("selfie_url"),
+  dateOfBirth: text("date_of_birth"),
+  address: text("address"),
+  status: text("status").default("pending"), // pending, verified, rejected, re_verification_requested
+  verificationNotes: text("verification_notes"),
+  verifiedAt: timestamp("verified_at"),
+  // Didit automated verification fields
+  diditSessionId: text("didit_session_id"),
+  diditStatus: text("didit_status"), // raw Didit status string
+  diditDecision: jsonb("didit_decision"), // full Didit decision payload with features/extracted data
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const virtualCards = pgTable("virtual_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  cardNumber: text("card_number").notNull(),
+  expiryDate: text("expiry_date").notNull(),
+  cvv: text("cvv").notNull(),
+  balance: decimal("balance", { precision: 10, scale: 2 }).default("0.00"),
+  status: text("status").default("active"), // active, frozen, expired, blocked
+  freezeReason: text("freeze_reason"),
+  blockReason: text("block_reason"),
+  purchaseAmount: decimal("purchase_amount", { precision: 10, scale: 2 }).default("60.00"),
+  paystackReference: text("paystack_reference"),
+  purchaseDate: timestamp("purchase_date").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const transactions = pgTable("transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // send, receive, deposit, withdraw, card_purchase
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull(),
+  recipientId: varchar("recipient_id").references(() => users.id),
+  recipientDetails: jsonb("recipient_details"), // name, phone, email, bank details
+  status: text("status").default("pending"), // pending, processing, completed, failed, cancelled
+  failureReason: text("failure_reason"),
+  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"),
+  exchangeRate: decimal("exchange_rate", { precision: 10, scale: 4 }),
+  description: text("description"),
+  reference: text("reference"),
+  paystackReference: text("paystack_reference"),
+  metadata: jsonb("metadata"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Append-only lifecycle events for withdrawals. The transaction row keeps the
+// current state; this table preserves every provider/admin/user transition.
+export const withdrawalEvents = pgTable("withdrawal_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  status: text("status").notNull(), // pending, processing, retrying, completed, failed, refunded
+  title: text("title").notNull(),
+  description: text("description"),
+  provider: text("provider"),
+  providerReference: text("provider_reference"),
+  retryCount: integer("retry_count").default(0),
+  refundStatus: text("refund_status").default("not_applicable"), // not_applicable, pending, completed, failed
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const recipients = pgTable("recipients", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  accountNumber: text("account_number"),
+  bankName: text("bank_name"),
+  bankCode: text("bank_code"),
+  country: text("country").notNull(),
+  currency: text("currency").notNull().default("KES"),
+  recipientType: text("recipient_type").default("mobile_wallet"), // bank, mobile_wallet, cash_pickup
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const paymentRequests = pgTable("payment_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  fromUserId: varchar("from_user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  toUserId: varchar("to_user_id").references(() => users.id, { onDelete: "cascade" }),
+  recipientId: varchar("recipient_id").references(() => recipients.id),
+  toEmail: text("to_email"),
+  toPhone: text("to_phone"),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("KES"),
+  message: text("message"),
+  paymentLink: text("payment_link"),
+  status: text("status").default("pending"), // pending, paid, expired
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const chatMessages = pgTable("chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  message: text("message").notNull(),
+  isFromAdmin: boolean("is_from_admin").default(false),
+  adminId: varchar("admin_id").references(() => users.id, { onDelete: "cascade" }),
+  conversationId: varchar("conversation_id").notNull(), // Groups messages by support session
+  status: text("status").default("sent"), // sent, delivered, read
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Notifications table for system-wide notifications
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").default("info"), // info, success, warning, error
+  isGlobal: boolean("is_global").default(false), // true for admin broadcasts
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }), // null for global notifications
+  isRead: boolean("is_read").default(false),
+  actionUrl: text("action_url"),
+  metadata: jsonb("metadata"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const supportTickets = pgTable("support_tickets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  issueType: text("issue_type").notNull(),
+  description: text("description").notNull(),
+  status: text("status").default("open"), // open, in_progress, resolved, closed
+  priority: text("priority").default("medium"), // low, medium, high, urgent
+  assignedAdminId: varchar("assigned_admin_id").references(() => users.id, { onDelete: "set null" }),
+  adminNotes: text("admin_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const ticketReplies = pgTable("ticket_replies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  ticketId: varchar("ticket_id").references(() => supportTickets.id, { onDelete: "cascade" }).notNull(),
+  userId: varchar("user_id").notNull(), // Can be user ID or admin ID
+  senderType: text("sender_type").notNull(), // user, admin
+  content: text("content").notNull(),
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const conversations = pgTable("conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  adminId: varchar("admin_id").references(() => admins.id),
+  status: text("status").default("active"), // active, closed
+  title: text("title"),
+  lastMessageAt: timestamp("last_message_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => conversations.id).notNull(),
+  senderId: varchar("sender_id").notNull(),
+  senderType: text("sender_type").notNull(), // user, admin
+  content: text("content").notNull(),
+  messageType: text("message_type").default("text"), // text, file, image
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  isEmailVerified: true,
+  isPhoneVerified: true,
+  kycStatus: true,
+  hasVirtualCard: true,
+  createdAt: true,
+});
+
+export const insertKycDocumentSchema = createInsertSchema(kycDocuments).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+});
+
+export const insertVirtualCardSchema = createInsertSchema(virtualCards).omit({
+  id: true,
+  cardNumber: true,
+  expiryDate: true,
+  cvv: true,
+  balance: true,
+  status: true,
+  purchaseDate: true,
+});
+
+export const insertTransactionSchema = createInsertSchema(transactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWithdrawalEventSchema = createInsertSchema(withdrawalEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertRecipientSchema = createInsertSchema(recipients).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({
+  id: true,
+  status: true,
+  createdAt: true,
+});
+
+export const insertSupportTicketSchema = createInsertSchema(supportTickets).omit({
+  id: true,
+  userId: true, // userId comes from session, not request body
+  status: true,
+  priority: true,
+  resolvedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  status: true,
+  lastMessageAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  senderId: true, // senderId comes from session, not request body
+  senderType: true, // senderType comes from session, not request body
+  readAt: true,
+  createdAt: true,
+});
+
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type KycDocument = typeof kycDocuments.$inferSelect;
+export type InsertKycDocument = z.infer<typeof insertKycDocumentSchema>;
+export type VirtualCard = typeof virtualCards.$inferSelect;
+export type InsertVirtualCard = z.infer<typeof insertVirtualCardSchema>;
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
+export type WithdrawalEvent = typeof withdrawalEvents.$inferSelect;
+export type InsertWithdrawalEvent = z.infer<typeof insertWithdrawalEventSchema>;
+export type Recipient = typeof recipients.$inferSelect;
+export type InsertRecipient = z.infer<typeof insertRecipientSchema>;
+export type PaymentRequest = typeof paymentRequests.$inferSelect;
+export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
+export type SupportTicket = typeof supportTickets.$inferSelect;
+export type InsertSupportTicket = z.infer<typeof insertSupportTicketSchema>;
+export type Conversation = typeof conversations.$inferSelect;
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type Notification = typeof notifications.$inferSelect;
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+
+// Admin schema
+export const admins = pgTable("admins", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  password: text("password").notNull(),
+  fullName: text("full_name").notNull(),
+  role: text("role").notNull().default("admin"),
+  twoFactorSecret: text("two_factor_secret"),
+  twoFactorEnabled: boolean("two_factor_enabled").default(false),
+  lastLoginAt: timestamp("last_login_at"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Admin activity logs
+export const adminLogs = pgTable("admin_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  adminId: varchar("admin_id").references(() => admins.id),
+  action: text("action").notNull(),
+  targetType: text("target_type"), // user, transaction, kyc, etc.
+  targetId: text("target_id"),
+  details: json("details"),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const systemLogs = pgTable("system_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  level: text("level").notNull(), // info, warn, error, debug, api
+  message: text("message").notNull(),
+  source: text("source"),
+  data: json("data"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+// System settings
+export const systemSettings = pgTable("system_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  category: text("category").notNull(), // fees, limits, currencies, etc.
+  key: text("key").notNull(),
+  value: json("value").notNull(),
+  description: text("description"),
+  updatedBy: varchar("updated_by").references(() => admins.id),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// API Configurations for external services
+export const apiConfigurations = pgTable("api_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  provider: text("provider").notNull().unique(), // 'exchange_rate', 'paystack', 'payhero'
+  displayName: text("display_name").notNull(),
+  apiKey: text("api_key"),
+  apiSecret: text("api_secret"),
+  baseUrl: text("base_url"),
+  webhookSecret: text("webhook_secret"),
+  isEnabled: boolean("is_enabled").default(true),
+  configuration: jsonb("configuration"), // Additional provider-specific settings
+  lastTested: timestamp("last_tested"),
+  testStatus: text("test_status"), // 'success', 'failed', 'pending'
+  testMessage: text("test_message"),
+  updatedBy: varchar("updated_by").references(() => admins.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type Admin = typeof admins.$inferSelect;
+export type AdminLog = typeof adminLogs.$inferSelect;
+export type SystemSetting = typeof systemSettings.$inferSelect;
+export type SystemLog = typeof systemLogs.$inferSelect;
+export type ApiConfiguration = typeof apiConfigurations.$inferSelect;
+
+export const insertAdminSchema = createInsertSchema(admins).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertAdminLogSchema = createInsertSchema(adminLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSystemSettingSchema = createInsertSchema(systemSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export const insertSystemLogSchema = createInsertSchema(systemLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
+export const insertApiConfigurationSchema = createInsertSchema(apiConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertAdmin = z.infer<typeof insertAdminSchema>;
+export type InsertAdminLog = z.infer<typeof insertAdminLogSchema>;
+export type InsertSystemLog = z.infer<typeof insertSystemLogSchema>;
+export type InsertSystemSetting = z.infer<typeof insertSystemSettingSchema>;
+export type InsertApiConfiguration = z.infer<typeof insertApiConfigurationSchema>;
+
+// Enhanced Features Tables
+export const savingsGoals = pgTable("savings_goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  title: text("title").notNull(),
+  targetAmount: decimal("target_amount", { precision: 10, scale: 2 }).notNull(),
+  currentAmount: decimal("current_amount", { precision: 10, scale: 2 }).default("0.00"),
+  targetDate: timestamp("target_date"),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const qrPayments = pgTable("qr_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  paymentCode: text("payment_code").notNull().unique(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  processedAt: timestamp("processed_at"),
+});
+
+export const scheduledPayments = pgTable("scheduled_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  recipientId: varchar("recipient_id").references(() => recipients.id),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  frequency: text("frequency").notNull(), // daily, weekly, monthly, yearly
+  nextPaymentDate: timestamp("next_payment_date").notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  lastPaymentAt: timestamp("last_payment_at"),
+  totalPaymentsMade: text("total_payments_made").notNull().default("0"),
+});
+
+export const budgets = pgTable("budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  category: text("category").notNull(),
+  budgetAmount: decimal("budget_amount", { precision: 10, scale: 2 }).notNull(),
+  spentAmount: decimal("spent_amount", { precision: 10, scale: 2 }).default("0.00"),
+  period: text("period").notNull(), // monthly, weekly, yearly
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  alertThreshold: text("alert_threshold").default("80"), // Alert when 80% of budget is spent
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const userPreferences = pgTable("user_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  theme: text("theme").default("light"), // light, dark, auto
+  language: text("language").default("en"),
+  biometricEnabled: boolean("biometric_enabled").default(false),
+  transactionLimit: decimal("transaction_limit", { precision: 10, scale: 2 }).default("1000.00"),
+  dailyLimit: decimal("daily_limit", { precision: 10, scale: 2 }).default("5000.00"),
+  monthlyLimit: decimal("monthly_limit", { precision: 10, scale: 2 }).default("50000.00"),
+  emailNotifications: boolean("email_notifications").default(true),
+  smsNotifications: boolean("sms_notifications").default(true),
+  marketingEmails: boolean("marketing_emails").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const loginHistory = pgTable("login_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  deviceType: text("device_type"), // mobile, desktop, tablet
+  browser: text("browser"),
+  location: text("location"), // City, Country
+  status: text("status").default("success"), // success, failed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Announcements table for system-wide announcements and offers
+export const announcements = pgTable("announcements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  type: text("type").default("announcement"), // announcement, offer, promotion
+  imageUrl: text("image_url"),
+  actionUrl: text("action_url"),
+  isActive: boolean("is_active").default(true),
+  priority: integer("priority").default(0),
+  startsAt: timestamp("starts_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// A dismissal belongs to both the announcement and the authenticated user.
+// This keeps "Do not show again" independent per account and across devices.
+export const announcementDismissals = pgTable("announcement_dismissals", {
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  announcementId: varchar("announcement_id").references(() => announcements.id, { onDelete: "cascade" }).notNull(),
+  dismissedAt: timestamp("dismissed_at").defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.announcementId] }),
+}));
+
+export const insertAnnouncementSchema = createInsertSchema(announcements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Announcement = typeof announcements.$inferSelect;
+export type InsertAnnouncement = z.infer<typeof insertAnnouncementSchema>;
+
+// Public editorial content managed by administrators.
+export const blogs = pgTable("blogs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt"),
+  content: text("content").notNull(),
+  mediaUrl: text("media_url"),
+  mediaType: text("media_type").default("none"), // none, image, video
+  externalUrl: text("external_url"),
+  status: text("status").default("draft"), // draft, published
+  publishedAt: timestamp("published_at"),
+  seoTitle: text("seo_title"),
+  seoDescription: text("seo_description"),
+  seoKeywords: text("seo_keywords"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertBlogSchema = createInsertSchema(blogs).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type Blog = typeof blogs.$inferSelect;
+export type InsertBlog = z.infer<typeof insertBlogSchema>;
+
+// User sessions table for express-session with PostgreSQL store (connect-pg-simple)
+export const userSessions = pgTable("user_sessions", {
+  sid: varchar("sid").primaryKey(),
+  sess: jsonb("sess").notNull(),
+  expire: timestamp("expire").notNull(),
+});
+
+export const whatsappConversations = pgTable("whatsapp_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumber: text("phone_number").notNull().unique(),
+  displayName: text("display_name"),
+  lastMessageAt: timestamp("last_message_at"),
+  status: text("status").default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").references(() => whatsappConversations.id, { onDelete: "cascade" }).notNull(),
+  phoneNumber: text("phone_number").notNull(),
+  content: text("content").notNull(),
+  isFromAdmin: boolean("is_from_admin").default(false),
+  status: text("status").default("sent"),
+  messageId: text("message_id"),
+  messageType: text("message_type").default("text"), // text, file, image, video
+  fileUrl: text("file_url"),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const whatsappConfig = pgTable("whatsapp_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phoneNumberId: text("phone_number_id").notNull(),
+  businessAccountId: text("business_account_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  verifyToken: text("verify_token").notNull().default("greenpay_verify_token_2024"),
+  webhookUrl: text("webhook_url"),
+  isActive: boolean("is_active").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User Activity Log - Track pages visited, actions, attempts
+export const userActivityLog = pgTable("user_activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  activityType: text("activity_type").notNull(), // page_visit, action, attempt, form_submission
+  page: text("page"), // /send-money, /airtime, /dashboard, etc.
+  action: text("action"), // submit_transfer, buy_airtime, fill_kyc, etc.
+  description: text("description"), // Human-readable description
+  status: text("status"), // success, failed, pending
+  metadata: jsonb("metadata"), // Additional details like form data, errors
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Bill Payments table - KPLC, Zuku, StartimesTV, etc
+export const billPayments = pgTable("bill_payments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  provider: text("provider").notNull(), // KPLC, Zuku, StarimesTV, Nairobi_Water, Kenya_Power, Airtel_Money, etc
+  meterNumber: text("meter_number"), // For electricity/water bills
+  accountNumber: text("account_number"), // For cable/internet bills
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").default("KES").notNull(),
+  status: text("status").default("pending"), // pending, processing, completed, failed
+  reference: text("reference"), // Transaction reference from provider
+  description: text("description"),
+  fee: decimal("fee", { precision: 10, scale: 2 }).default("0.00"),
+  metadata: jsonb("metadata"), // Provider-specific response data
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Loans table - Performance-based lending
+export const loans = pgTable("loans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  currency: text("currency").notNull().default("USD"),
+  status: text("status").default("active"), // active, completed, defaulted, cancelled
+  interestRate: decimal("interest_rate", { precision: 5, scale: 2 }).default("5.00"), // Annual percentage
+  repaymentPeriodMonths: integer("repayment_period_months").default(12),
+  monthlyPayment: decimal("monthly_payment", { precision: 10, scale: 2 }).notNull(),
+  remainingBalance: decimal("remaining_balance", { precision: 10, scale: 2 }).notNull(),
+  disbursedAt: timestamp("disbursed_at").defaultNow(),
+  dueDate: timestamp("due_date").notNull(),
+  nextPaymentDate: timestamp("next_payment_date"),
+  totalPaymentsMade: decimal("total_payments_made", { precision: 10, scale: 2 }).default("0.00"),
+  paymentsMissed: integer("payments_missed").default(0),
+  performanceScore: integer("performance_score").default(100), // 0-100 based on account activity
+  adminNotes: text("admin_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Insert schema for bill payments
+export const insertBillPaymentSchema = createInsertSchema(billPayments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+// Insert schemas for new tables
+export const insertSavingsGoalSchema = createInsertSchema(savingsGoals).omit({
+  id: true,
+  currentAmount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertQRPaymentSchema = createInsertSchema(qrPayments).omit({
+  id: true,
+  paymentCode: true,
+  createdAt: true,
+  processedAt: true,
+});
+
+export const insertScheduledPaymentSchema = createInsertSchema(scheduledPayments).omit({
+  id: true,
+  createdAt: true,
+  lastPaymentAt: true,
+  totalPaymentsMade: true,
+});
+
+export const insertBudgetSchema = createInsertSchema(budgets).omit({
+  id: true,
+  spentAmount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserPreferencesSchema = createInsertSchema(userPreferences).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertLoginHistorySchema = createInsertSchema(loginHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWhatsappConversationSchema = createInsertSchema(whatsappConversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertWhatsappMessageSchema = createInsertSchema(whatsappMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertWhatsappConfigSchema = createInsertSchema(whatsappConfig).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertUserActivityLogSchema = createInsertSchema(userActivityLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+// Types for new tables
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type InsertSavingsGoal = z.infer<typeof insertSavingsGoalSchema>;
+export type QRPayment = typeof qrPayments.$inferSelect;
+export type InsertQRPayment = z.infer<typeof insertQRPaymentSchema>;
+export type ScheduledPayment = typeof scheduledPayments.$inferSelect;
+export type InsertScheduledPayment = z.infer<typeof insertScheduledPaymentSchema>;
+export type Budget = typeof budgets.$inferSelect;
+export type InsertBudget = z.infer<typeof insertBudgetSchema>;
+export type UserPreferences = typeof userPreferences.$inferSelect;
+export type InsertUserPreferences = z.infer<typeof insertUserPreferencesSchema>;
+export type LoginHistory = typeof loginHistory.$inferSelect;
+export type InsertLoginHistory = z.infer<typeof insertLoginHistorySchema>;
+export type WhatsappConversation = typeof whatsappConversations.$inferSelect;
+export type InsertWhatsappConversation = z.infer<typeof insertWhatsappConversationSchema>;
+export type WhatsappMessage = typeof whatsappMessages.$inferSelect;
+export type InsertWhatsappMessage = z.infer<typeof insertWhatsappMessageSchema>;
+export type WhatsappConfig = typeof whatsappConfig.$inferSelect;
+export type InsertWhatsappConfig = z.infer<typeof insertWhatsappConfigSchema>;
+export type UserActivityLog = typeof userActivityLog.$inferSelect;
+export type InsertUserActivityLog = z.infer<typeof insertUserActivityLogSchema>;
+export type BillPayment = typeof billPayments.$inferSelect;
+export type InsertBillPayment = z.infer<typeof insertBillPaymentSchema>;
+export type TicketReply = typeof ticketReplies.$inferSelect;
+export const insertTicketReplySchema = createInsertSchema(ticketReplies).omit({ id: true, createdAt: true });
+export type InsertTicketReply = z.infer<typeof insertTicketReplySchema>;
+
+// Transaction Disputes table - users flag unauthorized transactions
+export const transactionDisputes = pgTable("transaction_disputes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "cascade" }).notNull(),
+  reason: text("reason").notNull(), // unauthorized, duplicate, wrong_amount, fraud, other
+  description: text("description"),
+  status: text("status").default("open"), // open, under_review, resolved, rejected
+  adminNotes: text("admin_notes"),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Crypto wallets table - user crypto deposit addresses
+export const cryptoWallets = pgTable("crypto_wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(), // bitcoin, ethereum, tron (for USDT TRC-20)
+  address: text("address").notNull(),
+  balance: decimal("balance", { precision: 18, scale: 8 }).default("0.00000000"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Crypto transactions table - deposits, withdrawals, card purchases via crypto
+export const cryptoTransactions = pgTable("crypto_transactions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type: text("type").notNull(), // deposit, withdrawal, card_purchase
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(),
+  amount: decimal("amount", { precision: 18, scale: 8 }).notNull(), // crypto amount
+  usdValue: decimal("usd_value", { precision: 10, scale: 2 }).notNull(), // equivalent USD
+  txHash: text("tx_hash"), // blockchain transaction hash
+  fromAddress: text("from_address"),
+  toAddress: text("to_address"),
+  status: text("status").default("pending"), // pending, confirming, completed, failed
+  confirmations: integer("confirmations").default(0),
+  requiredConfirmations: integer("required_confirmations").default(3),
+  fee: decimal("fee", { precision: 18, scale: 8 }).default("0.00000000"),
+  adminNotes: text("admin_notes"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const aiUsage = pgTable("ai_usage", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id"), // Can be null for guest users tracked by IP
+  trackingId: varchar("tracking_id").notNull(), // user_id or guest-{ip}
+  dailyCount: integer("daily_count").default(0),
+  lastResetDate: timestamp("last_reset_date").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAiUsageSchema = createInsertSchema(aiUsage).omit({ id: true, createdAt: true, updatedAt: true });
+export type AiUsage = typeof aiUsage.$inferSelect;
+export type InsertAiUsage = z.infer<typeof insertAiUsageSchema>;
+
+export const insertTransactionDisputeSchema = createInsertSchema(transactionDisputes).omit({ id: true, createdAt: true, updatedAt: true, resolvedAt: true, status: true, adminNotes: true });
+export type TransactionDispute = typeof transactionDisputes.$inferSelect;
+export type InsertTransactionDispute = z.infer<typeof insertTransactionDisputeSchema>;
+
+export const insertCryptoWalletSchema = createInsertSchema(cryptoWallets).omit({ id: true, createdAt: true, updatedAt: true, balance: true });
+export type CryptoWallet = typeof cryptoWallets.$inferSelect;
+export type InsertCryptoWallet = z.infer<typeof insertCryptoWalletSchema>;
+
+export const insertCryptoTransactionSchema = createInsertSchema(cryptoTransactions).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type CryptoTransaction = typeof cryptoTransactions.$inferSelect;
+export type InsertCryptoTransaction = z.infer<typeof insertCryptoTransactionSchema>;
+
+// Master crypto deposit addresses (admin configured) - users send to these
+export const cryptoDepositAddresses = pgTable("crypto_deposit_addresses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coin: text("coin").notNull(), // BTC, ETH, USDT, USDC
+  network: text("network").notNull(), // bitcoin, ethereum, tron, bsc, polygon, etc.
+  networkLabel: text("network_label").notNull(), // "Bitcoin Network", "Ethereum (ERC-20)", "TRON (TRC-20)"
+  address: text("address").notNull(),
+  memo: text("memo"), // optional memo/tag for some networks
+  qrCodeUrl: text("qr_code_url"), // optional admin-uploaded QR
+  minDeposit: decimal("min_deposit", { precision: 18, scale: 8 }).default("0.00000000"),
+  isActive: boolean("is_active").default(true),
+  notes: text("notes"), // optional admin notes shown to users
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCryptoDepositAddressSchema = createInsertSchema(cryptoDepositAddresses).omit({ id: true, createdAt: true, updatedAt: true });
+export type CryptoDepositAddress = typeof cryptoDepositAddresses.$inferSelect;
+export type InsertCryptoDepositAddress = z.infer<typeof insertCryptoDepositAddressSchema>;
+
+// Deposit bonuses — admin-configured offers (e.g. deposit $100+ via mpesa → get $10 bonus)
+export const depositBonuses = pgTable("deposit_bonuses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  method: text("method").notNull(), // mpesa | crypto | bank_transfer | card | any
+  minAmount: decimal("min_amount", { precision: 18, scale: 2 }).notNull().default("0.00"),
+  bonusAmount: decimal("bonus_amount", { precision: 18, scale: 2 }).notNull(),
+  bonusType: text("bonus_type").notNull().default("fixed"), // fixed | percentage
+  description: text("description"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDepositBonusSchema = createInsertSchema(depositBonuses).omit({ id: true, createdAt: true, updatedAt: true });
+export type DepositBonus = typeof depositBonuses.$inferSelect;
+export type InsertDepositBonus = z.infer<typeof insertDepositBonusSchema>;
+
+// Advanced KYC documents — facial + address proof (separate from basic KYC)
+export const advancedKycDocuments = pgTable("advanced_kyc_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  facialPhotoUrl: text("facial_photo_url"),
+  addressProofUrl: text("address_proof_url"),
+  addressProofType: text("address_proof_type"), // utility_bill, bank_statement, lease, government_letter, other
+  fullAddress: text("full_address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  country: text("country"),
+  status: text("status").default("pending"), // pending, verified, rejected
+  verificationNotes: text("verification_notes"),
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertAdvancedKycSchema = createInsertSchema(advancedKycDocuments).omit({ id: true, createdAt: true, updatedAt: true });
+export type AdvancedKycDocument = typeof advancedKycDocuments.$inferSelect;
+export type InsertAdvancedKyc = z.infer<typeof insertAdvancedKycSchema>;
+
+// Multi-currency wallets — one per currency per user, admin-controlled
+export const wallets = pgTable("wallets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),           // 'USD', 'KES', 'UGX', etc.
+  label: text("label"),                           // Optional custom name
+  balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+  holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  withdrawalHoldAmount: decimal("withdrawal_hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  isDefault: boolean("is_default").default(false),
+  isActive: boolean("is_active").default(true),
+  isSuspended: boolean("is_suspended").default(false),
+  suspendReason: text("suspend_reason"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, createdAt: true, updatedAt: true });
+export type Wallet = typeof wallets.$inferSelect;
+export type InsertWallet = z.infer<typeof insertWalletSchema>;
+
+// Admin-configured virtual bank account details shared by approved users per currency
+export const virtualAccountSettings = pgTable("virtual_account_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  currency: text("currency").notNull().unique(),
+  accountName: text("account_name").notNull(),
+  bankName: text("bank_name").notNull(),
+  accountNumber: text("account_number").notNull(),
+  routingNumber: text("routing_number"),
+  sortCode: text("sort_code"),
+  iban: text("iban"),
+  swiftCode: text("swift_code"),
+  bankAddress: text("bank_address"),
+  beneficiaryAddress: text("beneficiary_address"),
+  paymentInstructions: text("payment_instructions"),
+  isActive: boolean("is_active").default(true),
+  updatedBy: varchar("updated_by").references(() => admins.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User applications for receiving access to virtual account details
+export const virtualAccountApplications = pgTable("virtual_account_applications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),
+  status: text("status").default("pending"), // pending, approved, rejected
+  sourceOfIncome: text("source_of_income").notNull(),
+  monthlyVolume: text("monthly_volume").notNull(),
+  purpose: text("purpose").notNull(),
+  expectedSenders: text("expected_senders"),
+  declarations: jsonb("declarations").notNull(),
+  adminNotes: text("admin_notes"),
+  reviewedBy: varchar("reviewed_by").references(() => admins.id),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// User-owned virtual accounts. The bank details are still configured centrally
+// in virtual_account_settings, while funds and holds are isolated per user.
+export const virtualAccounts = pgTable("virtual_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  applicationId: varchar("application_id").references(() => virtualAccountApplications.id, { onDelete: "cascade" }).notNull().unique(),
+  currency: text("currency").notNull(),
+  balance: decimal("balance", { precision: 18, scale: 4 }).default("0.0000"),
+  holdAmount: decimal("hold_amount", { precision: 18, scale: 4 }).default("0.0000"),
+  isActive: boolean("is_active").default(true),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Append-only source of truth for every wallet, card, and virtual-account
+// balance change. amount is signed: credits are positive and debits negative.
+export const ledgerEntries = pgTable("ledger_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  currency: text("currency").notNull(),
+  walletId: varchar("wallet_id").references(() => wallets.id, { onDelete: "cascade" }),
+  virtualAccountId: varchar("virtual_account_id").references(() => virtualAccounts.id, { onDelete: "cascade" }),
+  cardId: varchar("card_id").references(() => virtualCards.id, { onDelete: "cascade" }),
+  amount: decimal("amount", { precision: 18, scale: 4 }).notNull(),
+  entryType: text("entry_type").notNull(),
+  idempotencyKey: text("idempotency_key").notNull().unique(),
+  transactionId: varchar("transaction_id").references(() => transactions.id, { onDelete: "set null" }),
+  description: text("description"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertVirtualAccountSchema = createInsertSchema(virtualAccounts).omit({ id: true, createdAt: true, updatedAt: true });
+export type VirtualAccount = typeof virtualAccounts.$inferSelect;
+export type InsertVirtualAccount = z.infer<typeof insertVirtualAccountSchema>;
+
+export const insertLedgerEntrySchema = createInsertSchema(ledgerEntries).omit({ id: true, createdAt: true });
+export type LedgerEntry = typeof ledgerEntries.$inferSelect;
+export type InsertLedgerEntry = z.infer<typeof insertLedgerEntrySchema>;
+
+export const insertVirtualAccountSettingSchema = createInsertSchema(virtualAccountSettings).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVirtualAccountApplicationSchema = createInsertSchema(virtualAccountApplications).omit({ id: true, status: true, adminNotes: true, reviewedBy: true, reviewedAt: true, createdAt: true, updatedAt: true });
+export type VirtualAccountSetting = typeof virtualAccountSettings.$inferSelect;
+export type InsertVirtualAccountSetting = z.infer<typeof insertVirtualAccountSettingSchema>;
+export type VirtualAccountApplication = typeof virtualAccountApplications.$inferSelect;
+export type InsertVirtualAccountApplication = z.infer<typeof insertVirtualAccountApplicationSchema>;
+

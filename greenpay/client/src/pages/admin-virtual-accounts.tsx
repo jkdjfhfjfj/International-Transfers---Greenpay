@@ -1,0 +1,651 @@
+import AdminShell from "@/components/admin/admin-shell";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import {
+  AlertCircle, Building2, Check, Save, X, ChevronDown, ChevronUp,
+  User, Clock, CheckCircle2, XCircle, FileText,
+} from "lucide-react";
+
+const CURRENCIES = ["USD", "GBP", "EUR"] as const;
+type Currency = string;
+
+const CURRENCY_META: Record<Currency, { flag: string; name: string }> = {
+  USD: { flag: "🇺🇸", name: "US Dollar"     },
+  GBP: { flag: "🇬🇧", name: "British Pound" },
+  EUR: { flag: "🇪🇺", name: "Euro"          },
+};
+
+const SETTINGS_FIELDS: { key: string; label: string; multiline?: boolean; optional?: boolean }[] = [
+  { key: "accountName",        label: "Account name"         },
+  { key: "bankName",           label: "Bank name"            },
+  { key: "accountNumber",      label: "Account number"       },
+  { key: "routingNumber",      label: "Routing number",       optional: true },
+  { key: "sortCode",           label: "Sort code",            optional: true },
+  { key: "iban",               label: "IBAN",                 optional: true },
+  { key: "swiftCode",          label: "SWIFT / BIC",          optional: true },
+  { key: "bankAddress",        label: "Bank address",         optional: true, multiline: true },
+  { key: "beneficiaryAddress", label: "Beneficiary address",  optional: true, multiline: true },
+  { key: "paymentInstructions",label: "Payment instructions", optional: true, multiline: true },
+];
+
+// ── Email template UUID config ────────────────────────────────────────────────
+const EMAIL_TEMPLATE_KEYS = [
+  { key: "otp",                       label: "OTP Verification" },
+  { key: "password_reset",            label: "Password Reset" },
+  { key: "welcome",                   label: "Welcome Email" },
+  { key: "kyc_submitted",             label: "KYC Submitted" },
+  { key: "kyc_verified",              label: "KYC Verified" },
+  { key: "login_alert",               label: "Login Alert" },
+  { key: "fund_receipt",              label: "Fund Receipt" },
+  { key: "card_activation",           label: "Card Activation" },
+  { key: "transaction_export",        label: "Transaction Export" },
+  { key: "transaction_completed",     label: "Transaction Completed" },
+  { key: "send",                      label: "Send Money" },
+  { key: "receive",                   label: "Money Received" },
+  { key: "exchange",                  label: "Currency Exchange" },
+  { key: "transfer",                  label: "Wallet Transfer" },
+  { key: "bill_payment",              label: "Bill Payment" },
+  { key: "airtime",                  label: "Airtime Purchase" },
+  { key: "crypto_withdrawal",         label: "Crypto Withdrawal" },
+  { key: "security_alert",            label: "Security Alert" },
+  { key: "password_changed",          label: "Password Changed" },
+  { key: "pin_changed",               label: "PIN Changed" },
+  { key: "security_settings_changed", label: "Security Settings Changed" },
+  { key: "virtual_account_approved", label: "Virtual Account Approved" },
+  { key: "virtual_account_rejected", label: "Virtual Account Rejected" },
+  { key: "beneficiary_added",        label: "Beneficiary Added"        },
+  { key: "beneficiary_updated",      label: "Beneficiary Updated"      },
+  { key: "beneficiary_deleted",      label: "Beneficiary Deleted"      },
+  { key: "withdrawal_pending",       label: "Withdrawal Pending"       },
+  { key: "withdrawal_processing",    label: "Withdrawal Processing"    },
+  { key: "withdrawal_completed",     label: "Withdrawal Completed"     },
+  { key: "withdrawal_failed",        label: "Withdrawal Failed"        },
+  { key: "withdrawal_refunded",      label: "Withdrawal Refunded"      },
+];
+
+function EmailTemplateConfig() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+
+  const { data: uuids, isLoading } = useQuery({
+    queryKey: ["/api/admin/email-templates"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/email-templates")).json(),
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async ({ key, uuid }: { key: string; uuid: string }) =>
+      (await apiRequest("PUT", `/api/admin/email-templates/${key}`, { uuid })).json(),
+    onSuccess: (_d, vars) => {
+      toast({ title: `Template UUID saved`, description: vars.key });
+      qc.invalidateQueries({ queryKey: ["/api/admin/email-templates"] });
+      setDrafts(d => { const n = { ...d }; delete n[vars.key]; return n; });
+    },
+    onError: () => toast({ title: "Save failed", variant: "destructive" }),
+  });
+
+  if (isLoading) return <div className="p-5 text-sm text-muted-foreground">Loading templates…</div>;
+
+  return (
+    <div className="p-5 space-y-3">
+      <p className="text-xs text-muted-foreground">Configure Mailtrap template UUIDs. Changes take effect immediately — all emails use the updated UUID.</p>
+      <div className="grid md:grid-cols-2 gap-3">
+        {EMAIL_TEMPLATE_KEYS.map(({ key, label }) => {
+          const current = (uuids?.templates?.[key]?.uuid) || "";
+          const isCustom = uuids?.templates?.[key]?.isCustom;
+          const draft = drafts[key];
+          const value = draft !== undefined ? draft : current;
+          return (
+            <div key={key} className="space-y-1">
+              <Label className="text-xs font-medium text-foreground flex items-center gap-1.5">
+                {label}
+                {isCustom && <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-semibold">Custom</span>}
+              </Label>
+              <p className="text-[10px] text-muted-foreground">
+                Required: {(uuids?.templates?.[key]?.requiredParameters || []).join(", ") || "none"}
+              </p>
+              <div className="flex gap-1.5">
+                <Input
+                  value={value}
+                  onChange={e => setDrafts(d => ({ ...d, [key]: e.target.value }))}
+                  placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                  className="font-mono text-xs h-8"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-2.5"
+                  disabled={draft === undefined || saveMutation.isPending}
+                  onClick={() => saveMutation.mutate({ key, uuid: draft! })}
+                >
+                  <Save className="w-3 h-3" />
+                </Button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  if (status === "approved") return <Badge className="bg-primary/10 text-primary border-0 gap-1"><CheckCircle2 className="w-3 h-3" />Approved</Badge>;
+  if (status === "rejected") return <Badge className="bg-destructive/10 text-destructive border-0 gap-1"><XCircle className="w-3 h-3" />Rejected</Badge>;
+  return <Badge className="bg-muted text-muted-foreground border-0 gap-1"><Clock className="w-3 h-3" />Pending</Badge>;
+}
+
+export default function AdminVirtualAccountsPage() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [currency, setCurrency] = useState<Currency>("USD");
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saveError, setSaveError] = useState("");
+  const [expandedApp, setExpandedApp] = useState<string | null>(null);
+  const [rejectNotes, setRejectNotes] = useState<Record<string, string>>({});
+  const [accountAmounts, setAccountAmounts] = useState<Record<string, string>>({});
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["/api/admin/virtual-accounts"],
+    queryFn: async () => (await apiRequest("GET", "/api/admin/virtual-accounts")).json(),
+  });
+
+  const settings     = (data?.settings     || []) as any[];
+  const applications = (data?.applications || []) as any[];
+  const accounts     = (data?.accounts     || []) as any[];
+  const supportedCurrencies: string[] = data?.supportedCurrencies || [...CURRENCIES];
+  const allCurrencies: string[] = data?.allCurrencies || supportedCurrencies;
+
+  const setting = settings.find((s: any) => s.currency === currency) || {};
+  const get = (k: string) => draft[k] ?? setting[k] ?? "";
+  const pendingApplications = applications.filter((item: any) => (item.application ?? item).status === "pending").length;
+  const approvedApplications = applications.filter((item: any) => (item.application ?? item).status === "approved").length;
+  const activeSettings = settings.filter((item: any) => item.isActive).length;
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      const payload: Record<string, any> = { isActive: true };
+      SETTINGS_FIELDS.forEach(f => { payload[f.key] = get(f.key) || null; });
+      // required fields
+      payload.accountName  = get("accountName");
+      payload.bankName     = get("bankName");
+      payload.accountNumber = get("accountNumber");
+      return (await apiRequest("PUT", `/api/admin/virtual-accounts/settings/${currency}`, payload)).json();
+    },
+    onSuccess: () => {
+      setSaveError("");
+      setDraft({});
+      toast({ title: `${currency} account details saved` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => {
+      const raw = e?.message || "Failed to save account details";
+      let friendly = raw;
+      try { friendly = JSON.parse(raw.replace(/^\d+:\s*/, "")).message || friendly; } catch {}
+      setSaveError(friendly);
+      toast({ title: "Save failed", description: friendly, variant: "destructive" });
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: async ({ id, status, adminNotes }: { id: string; status: string; adminNotes?: string }) =>
+      (await apiRequest("PATCH", `/api/admin/virtual-accounts/applications/${id}`, { status, adminNotes })).json(),
+    onSuccess: (_data, vars) => {
+      toast({ title: `Application ${vars.status}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+  });
+
+  const currencyMutation = useMutation({
+    mutationFn: async (nextCurrencies: string[]) =>
+      (await apiRequest("PUT", "/api/admin/virtual-accounts/currencies", { currencies: nextCurrencies })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account currencies updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Currency update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const balanceMutation = useMutation({
+    mutationFn: async ({ id, amount, type }: { id: string; amount: string; type: "credit" | "debit" }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/balance`, {
+        amount,
+        type,
+        idempotencyKey: crypto.randomUUID(),
+      })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account balance updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Balance update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const holdMutation = useMutation({
+    mutationFn: async ({ id, amount }: { id: string; amount: string }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/hold`, { amount })).json(),
+    onSuccess: () => {
+      toast({ title: "Virtual-account hold updated" });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Hold update failed", description: e.message, variant: "destructive" }),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "active" | "suspended" | "revoked" }) =>
+      (await apiRequest("PUT", `/api/admin/virtual-accounts/${id}/status`, { status })).json(),
+    onSuccess: (_, variables) => {
+      toast({ title: `Virtual account ${variables.status}` });
+      qc.invalidateQueries({ queryKey: ["/api/admin/virtual-accounts"] });
+    },
+    onError: (e: any) => toast({ title: "Status update failed", description: e.message, variant: "destructive" }),
+  });
+
+  return (
+    <AdminShell title="Virtual Accounts">
+      <div className="max-w-5xl space-y-6">
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-800 via-green-700 to-lime-600 p-5 text-white shadow-lg shadow-green-900/10">
+          <div className="absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/10" />
+          <div className="relative flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                <p className="text-sm font-semibold text-white/80">Virtual account operations</p>
+              </div>
+              <h1 className="mt-2 text-2xl font-bold">Configure, review, and manage accounts</h1>
+              <p className="mt-1 max-w-xl text-sm text-white/75">Keep receiving details current, review compliance applications, and control balances from one workspace.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              {[
+                ["Pending", pendingApplications],
+                ["Approved", approvedApplications],
+                ["Configured", activeSettings],
+              ].map(([label, value]) => (
+                <div key={label as string} className="rounded-2xl bg-white/12 px-3 py-2 backdrop-blur">
+                  <p className="text-lg font-bold">{value}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-white/70">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Settings panel ─────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-primary" />
+            <h2 className="font-semibold text-foreground">Bank account settings</h2>
+            <p className="text-sm text-muted-foreground ml-1">— configure details sent to approved users</p>
+          </div>
+
+          {/* Enabled virtual-account currencies */}
+          <div className="p-5 border-b space-y-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Currencies available to users</p>
+              <p className="text-xs text-muted-foreground">Only enabled currencies appear in the application form.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {allCurrencies.map(c => (
+                <button
+                  key={c}
+                  onClick={() => {
+                    const next = supportedCurrencies.includes(c)
+                      ? supportedCurrencies.filter(item => item !== c)
+                      : [...supportedCurrencies, c];
+                    if (next.length) currencyMutation.mutate(next);
+                  }}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    supportedCurrencies.includes(c)
+                       ? "border-primary/30 bg-primary/10 text-primary"
+                       : "border-border bg-card text-muted-foreground"
+                  }`}
+                >
+                  {CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"} {c}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Currency tabs */}
+           <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/50 px-5 py-3">
+             <div>
+               <p className="text-xs font-semibold text-foreground">Editing receiving details</p>
+               <p className="text-[11px] text-muted-foreground">Choose a currency to update its user-facing account details.</p>
+             </div>
+             <select
+               value={currency}
+               onChange={e => { setCurrency(e.target.value); setDraft({}); setSaveError(""); }}
+               aria-label="Choose currency to edit"
+               className="h-9 rounded-xl border border-border bg-card px-3 text-sm font-semibold text-foreground outline-none focus:ring-2 focus:ring-primary/30"
+             >
+               {supportedCurrencies.map(c => <option key={c} value={c}>{CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"} {c}</option>)}
+             </select>
+           </div>
+          <div className="flex border-b border-border bg-muted/50">
+            {supportedCurrencies.map(c => (
+              <button
+                key={c}
+                onClick={() => { setCurrency(c); setDraft({}); setSaveError(""); }}
+                className={[
+                  "flex items-center gap-2 px-5 py-3 text-sm font-medium border-b-2 transition-colors",
+                  currency === c
+                     ? "border-primary text-primary bg-card"
+                     : "border-transparent text-muted-foreground hover:text-foreground hover:bg-card/60",
+                ].join(" ")}
+              >
+                <span>{CURRENCY_META[c as keyof typeof CURRENCY_META]?.flag || "🌍"}</span>
+                <span>{c}</span>
+                {settings.find((s: any) => s.currency === c) && (
+                  <span className="ml-1 w-1.5 h-1.5 rounded-full bg-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <div className="p-5 space-y-4">
+            {saveError && (
+              <div className="flex gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{saveError}</span>
+              </div>
+            )}
+
+            <div className="grid md:grid-cols-2 gap-4">
+              {SETTINGS_FIELDS.map(f => (
+                <div key={f.key} className={f.multiline ? "md:col-span-2" : ""}>
+                  <Label className="text-sm font-medium text-foreground mb-1 block">
+                    {f.label}
+                    {!f.optional && <span className="text-red-500 ml-0.5">*</span>}
+                    {f.optional && <span className="text-muted-foreground font-normal ml-1">(optional)</span>}
+                  </Label>
+                  {f.multiline ? (
+                    <Textarea
+                      value={get(f.key)}
+                      onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
+                      rows={2}
+                      placeholder={`Enter ${f.label.toLowerCase()}`}
+                    />
+                  ) : (
+                    <Input
+                      value={get(f.key)}
+                      onChange={e => setDraft({ ...draft, [f.key]: e.target.value })}
+                      placeholder={`Enter ${f.label.toLowerCase()}`}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="gap-2"
+              >
+                <Save className="w-4 h-4" />
+                {saveMutation.isPending ? "Saving…" : `Save ${currency} details`}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Email Template Config ──────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center gap-2">
+            <FileText className="w-5 h-5 text-violet-500" />
+            <h2 className="font-semibold text-foreground">Email Template UUIDs</h2>
+            <p className="text-sm text-muted-foreground ml-1">— Mailtrap template UUIDs for virtual account emails</p>
+          </div>
+          <EmailTemplateConfig />
+        </div>
+
+        {/* ── Applications ───────────────────────────────────────────────── */}
+        <div className="bg-card border border-border rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-muted-foreground" />
+              <h2 className="font-semibold text-foreground">Applications</h2>
+            </div>
+            <Badge variant="secondary">{applications.length}</Badge>
+          </div>
+
+          {isLoading ? (
+              <div className="p-10 flex justify-center">
+               <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : applications.length === 0 ? (
+            <div className="p-10 text-center text-muted-foreground text-sm">No applications yet.</div>
+          ) : (
+            <div className="divide-y">
+              {applications.map((item: any) => {
+                const app  = item.application ?? item;
+                const user = item.user;
+                const account = accounts.find((entry: any) => entry.applicationId === app.id);
+                const isOpen = expandedApp === app.id;
+
+                return (
+                  <div key={app.id}>
+                    <div
+                      className="flex items-center gap-3 px-5 py-4 hover:bg-muted/50 cursor-pointer"
+                      onClick={() => setExpandedApp(isOpen ? null : app.id)}
+                    >
+                      {/* avatar */}
+                      <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <User className="w-4 h-4 text-primary" />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-foreground text-sm truncate">
+                          {user?.fullName || user?.email || app.userId}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {user?.email} &nbsp;·&nbsp; {app.currency} account
+                        </p>
+                      </div>
+
+                      <StatusBadge status={app.status} />
+
+                      <button className="text-muted-foreground ml-2">
+                        {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    {isOpen && (
+                      <div className="px-5 pb-5 space-y-4 bg-muted/30 border-t border-border">
+                        {/* Application details */}
+                        <div className="grid sm:grid-cols-2 gap-3 pt-4">
+                          {[
+                            ["Currency",         app.currency],
+                            ["Status",           app.status],
+                            ["Source of income", app.sourceOfIncome],
+                            ["Monthly volume",   app.monthlyVolume],
+                            ["Purpose",          app.purpose],
+                            ["Expected senders", app.expectedSenders || "—"],
+                            ["Applied on",       app.createdAt ? new Date(app.createdAt).toLocaleDateString() : "—"],
+                          ].map(([label, value]) => (
+                            <div key={label as string} className="bg-card rounded-xl border border-border p-3">
+                              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-0.5">{label}</p>
+                              <p className="text-sm text-foreground font-medium">{value}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        {account && (
+                          <div className="bg-card rounded-xl border border-border p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">Account balance controls</p>
+                                <p className="text-xs text-muted-foreground">Ledger-backed balance and hold management</p>
+                              </div>
+                               <StatusBadge status={account.status || (account.isActive ? "active" : "suspended")} />
+                            </div>
+                             <div className="flex flex-wrap gap-2">
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 disabled={statusMutation.isPending || account.isActive}
+                                 onClick={() => statusMutation.mutate({ id: account.id, status: "active" })}
+                               >
+                                 Reactivate
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="outline"
+                                 disabled={statusMutation.isPending || !account.isActive}
+                                 onClick={() => statusMutation.mutate({ id: account.id, status: "suspended" })}
+                               >
+                                 Suspend
+                               </Button>
+                               <Button
+                                 size="sm"
+                                 variant="destructive"
+                                 disabled={statusMutation.isPending || !account.isActive}
+                                 onClick={() => {
+                                   if (window.confirm("Revoke this virtual account? The user will no longer be able to use it.")) {
+                                     statusMutation.mutate({ id: account.id, status: "revoked" });
+                                   }
+                                 }}
+                               >
+                                 Revoke
+                               </Button>
+                             </div>
+                            <div className="grid grid-cols-3 gap-2">
+                              {[
+                                ["Balance", account.balance],
+                                ["On hold", account.holdAmount],
+                                ["Available", account.availableBalance ?? Math.max(0, Number(account.balance || 0) - Number(account.holdAmount || 0))],
+                              ].map(([label, value]) => (
+                                <div key={label as string} className="rounded-lg bg-muted p-2">
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+                                  <p className="font-bold text-sm text-foreground">{Number(value || 0).toFixed(2)} {account.currency}</p>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid sm:grid-cols-2 gap-3">
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Credit or debit</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    placeholder="Amount"
+                                    value={accountAmounts[`balance:${account.id}`] || ""}
+                                    onChange={e => setAccountAmounts({ ...accountAmounts, [`balance:${account.id}`]: e.target.value })}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    disabled={balanceMutation.isPending || !accountAmounts[`balance:${account.id}`]}
+                                    onClick={() => balanceMutation.mutate({ id: account.id, amount: accountAmounts[`balance:${account.id}`], type: "credit" })}
+                                  >
+                                    + Credit
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={balanceMutation.isPending || !accountAmounts[`balance:${account.id}`]}
+                                    onClick={() => balanceMutation.mutate({ id: account.id, amount: accountAmounts[`balance:${account.id}`], type: "debit" })}
+                                  >
+                                    − Debit
+                                  </Button>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-xs text-muted-foreground">Set held amount</Label>
+                                <div className="flex gap-2">
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Hold amount"
+                                    value={accountAmounts[`hold:${account.id}`] ?? String(account.holdAmount || "0")}
+                                    onChange={e => setAccountAmounts({ ...accountAmounts, [`hold:${account.id}`]: e.target.value })}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={holdMutation.isPending || accountAmounts[`hold:${account.id}`] === undefined}
+                                    onClick={() => holdMutation.mutate({ id: account.id, amount: accountAmounts[`hold:${account.id}`] })}
+                                  >
+                                    Save hold
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Declarations */}
+                        {app.declarations && (
+                          <div className="bg-card rounded-xl border border-border p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-2">Compliance declarations</p>
+                            <div className="grid sm:grid-cols-2 gap-1">
+                              {Object.entries(app.declarations).map(([k, v]) => (
+                                <div key={k} className={`flex items-center gap-1.5 text-xs ${v ? "text-primary" : "text-destructive"}`}>
+                                  {v ? <CheckCircle2 className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
+                                  {k.replace(/([A-Z])/g, " $1").replace(/^./, s => s.toUpperCase())}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Admin notes (for rejection) */}
+                        {app.status === "pending" && (
+                          <div>
+                            <Label className="text-sm mb-1 block">Admin notes (shown to user on rejection)</Label>
+                            <Textarea
+                              value={rejectNotes[app.id] || ""}
+                              onChange={e => setRejectNotes({ ...rejectNotes, [app.id]: e.target.value })}
+                              placeholder="Optional reason for rejection…"
+                              rows={2}
+                            />
+                          </div>
+                        )}
+
+                        {app.adminNotes && (
+                          <div className="bg-card rounded-xl border border-border p-3">
+                            <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium mb-1">Admin notes</p>
+                            <p className="text-sm text-foreground">{app.adminNotes}</p>
+                          </div>
+                        )}
+
+                        {/* Actions */}
+                        {app.status === "pending" && (
+                          <div className="flex gap-2 pt-1">
+                            <Button
+                              onClick={() => reviewMutation.mutate({ id: app.id, status: "approved" })}
+                              disabled={reviewMutation.isPending}
+                              className="gap-1.5"
+                            >
+                              <Check className="w-4 h-4" /> Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={() => reviewMutation.mutate({ id: app.id, status: "rejected", adminNotes: rejectNotes[app.id] })}
+                              disabled={reviewMutation.isPending}
+                              className="gap-1.5 text-destructive border-destructive/20 hover:bg-destructive/5"
+                            >
+                              <X className="w-4 h-4" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+      </div>
+    </AdminShell>
+  );
+}

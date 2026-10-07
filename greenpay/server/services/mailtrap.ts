@@ -1,0 +1,402 @@
+import fetch from 'node-fetch';
+import { storage } from '../storage';
+
+interface MailtrapTemplate {
+  uuid: string;
+  variables: Record<string, string>;
+}
+
+// Default template UUIDs — overridden by admin settings in DB
+const DEFAULT_TEMPLATE_UUIDs: Record<string, string> = {
+  otp: '64254a5b-a2ba-4b7d-aa41-5a0907c836db',
+  password_reset: '97fe2c00-4cfd-433b-b262-25632cbdbed7',
+  welcome: '7711c72e-431b-4fb9-bea9-9738d4d8bfe7',
+  kyc_submitted: 'dd087e67-8a7b-4bb8-9645-acbd61666d76',
+  kyc_verified: 'c6353bf3-8e12-4852-8607-82223f49a4aa',
+  login_alert: '42ce5e3b-eed9-41aa-808c-cfecbd906e60',
+  fund_receipt: '5e2a2ec4-37fb-4178-96c4-598977065f9c',
+  card_activation: 'a1b2c3d4-e5f6-4789-0123-456789abcdef',
+  transaction_export: '307e5609-66bb-4235-8653-27f0d5d74a39',
+  transaction_completed: '',
+  send: '',
+  receive: '',
+  exchange: '',
+  transfer: '',
+  bill_payment: '',
+  airtime: '',
+  crypto_withdrawal: '',
+  security_alert: '',
+  password_changed: '',
+  pin_changed: '',
+  security_settings_changed: '',
+  virtual_account_approved: '',
+  virtual_account_rejected: '',
+  beneficiary_added: '',
+  beneficiary_updated: '',
+  beneficiary_deleted: '',
+  withdrawal_pending: '',
+  withdrawal_processing: '',
+  withdrawal_completed: '',
+  withdrawal_failed: '',
+  withdrawal_refunded: '',
+};
+
+const TEMPLATE_PARAMETERS: Record<string, string[]> = {
+  otp: ['first_name', 'last_name', 'otp'],
+  password_reset: ['first_name', 'last_name', 'reset_code'],
+  welcome: ['first_name', 'last_name'],
+  kyc_submitted: ['first_name', 'last_name'],
+  kyc_verified: ['first_name', 'last_name'],
+  login_alert: ['first_name', 'last_name', 'location', 'ip_address', 'device'],
+  fund_receipt: ['first_name', 'last_name', 'amount', 'currency', 'sender'],
+  card_activation: ['first_name', 'last_name', 'card_last_four'],
+  transaction_export: ['first_name', 'last_name'],
+  beneficiary_added: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
+  beneficiary_updated: ['first_name', 'beneficiary_name', 'beneficiary_type', 'beneficiary_reference'],
+  beneficiary_deleted: ['first_name', 'beneficiary_name', 'beneficiary_reference'],
+  withdrawal_pending: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_processing: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_completed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status'],
+  withdrawal_failed: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'reason'],
+  withdrawal_refunded: ['first_name', 'amount', 'currency', 'transaction_id', 'reference', 'status', 'refund_status'],
+  transaction_completed: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  send: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  receive: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  exchange: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description', 'exchange_rate', 'converted_amount', 'target_currency'],
+  transfer: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  bill_payment: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  airtime: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  crypto_withdrawal: ['first_name', 'last_name', 'amount', 'currency', 'transaction_type', 'transaction_id', 'reference', 'fee', 'total', 'status', 'date', 'description'],
+  security_alert: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  password_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  pin_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  security_settings_changed: ['first_name', 'last_name', 'security_event', 'description', 'date', 'ip_address', 'action_url'],
+  virtual_account_approved: [
+    'first_name', 'last_name', 'currency', 'application_id', 'account_name',
+    'bank_name', 'account_number', 'routing_number', 'sort_code', 'iban',
+    'swift_code', 'bank_address', 'beneficiary_address', 'payment_instructions',
+  ],
+  virtual_account_rejected: [
+    'first_name', 'last_name', 'currency', 'application_id', 'payment_instructions',
+  ],
+};
+
+export class MailtrapService {
+  private apiKey: string | null = null;
+  private apiUrl = 'https://send.api.mailtrap.io/api/send';
+  private fromEmail = 'support@geepay.us';
+  private fromName = 'Geepay';
+
+  constructor() {
+    // Load API key from environment only; do not fall back to a hard-coded key.
+    this.apiKey = process.env.MAILTRAP_API_KEY || null;
+    this.loadApiKey().catch(err => console.error('[Mailtrap] Background load error:', err));
+  }
+
+  private async loadApiKey(): Promise<void> {
+    try {
+      const setting = await storage.getSystemSetting('email', 'mailtrap_api_key');
+      if (setting?.value) {
+        this.apiKey = String(setting.value);
+        // Keep env in sync for current process/session
+        process.env.MAILTRAP_API_KEY = String(setting.value);
+      } else {
+        // If DB setting missing, rely on environment only (no hard-coded fallback)
+        this.apiKey = process.env.MAILTRAP_API_KEY || null;
+      }
+    } catch {
+      this.apiKey = process.env.MAILTRAP_API_KEY || null;
+    }
+  }
+
+  async refreshApiKey(): Promise<void> {
+    await this.loadApiKey();
+  }
+
+  /**
+   * Get template UUID — checks DB first, falls back to hardcoded defaults
+   */
+  private async getTemplateUuid(templateName: string): Promise<string | null> {
+    try {
+      const setting = await storage.getSystemSetting('email_templates', templateName);
+        if (setting?.value && String(setting.value).trim()) return String(setting.value).trim();
+    } catch { /* ignore */ }
+    return DEFAULT_TEMPLATE_UUIDs[templateName] || null;
+  }
+
+  /**
+   * Send email using Mailtrap template
+   */
+  async sendTemplate(
+    toEmail: string,
+    templateUuid: string,
+    variables: Record<string, string>,
+    attachments?: Array<{ filename: string; content: string; disposition: string }>
+  ): Promise<boolean> {
+    try {
+      if (!this.apiKey) {
+        console.error('[Mailtrap] API key not configured');
+        return false;
+      }
+
+      if (!templateUuid) {
+        console.warn('[Mailtrap] Template UUID not configured — skipping email');
+        return false;
+      }
+
+      const payload: any = {
+        template_uuid: templateUuid,
+        template_variables: variables,
+        from: { email: this.fromEmail, name: this.fromName },
+        to: [{ email: toEmail }],
+      };
+
+      if (attachments?.length) payload.attachments = attachments;
+
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          'Api-Token': this.apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error(`[Mailtrap] Send failed ${response.status}: ${error}`);
+        return false;
+      }
+
+      const result = await response.json() as any;
+      if (result.success || result.message_id || result.messages) {
+        console.log(`[Mailtrap] ✓ Sent template ${templateUuid} to ${toEmail}`);
+        return true;
+      }
+      console.warn('[Mailtrap] Unexpected response:', result);
+      return true;
+    } catch (error) {
+      console.error('[Mailtrap] Error:', error);
+      return false;
+    }
+  }
+
+  async sendOTP(toEmail: string, firstName: string, lastName: string, otp: string): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('otp');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, otp });
+  }
+
+  async sendPasswordReset(toEmail: string, firstName: string, lastName: string, resetCode: string): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('password_reset');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, reset_code: resetCode });
+  }
+
+  async sendWelcome(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('welcome');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+  }
+
+  async sendKYCSubmitted(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('kyc_submitted');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+  }
+
+  async sendKYCVerified(toEmail: string, firstName: string, lastName: string): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('kyc_verified');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName });
+  }
+
+  async sendLoginAlert(
+    toEmail: string, firstName: string, lastName: string,
+    location: string, ipAddress: string, device: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('login_alert');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName,
+      location, ip_address: ipAddress, device,
+    });
+  }
+
+  async sendFundReceipt(
+    toEmail: string, firstName: string, lastName: string,
+    amount: string, currency: string, sender: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('fund_receipt');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName,
+      amount, currency, sender,
+    });
+  }
+
+  async sendCardActivation(
+    toEmail: string, firstName: string, lastName: string, cardLastFour: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('card_activation');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName, last_name: lastName, card_last_four: cardLastFour,
+    });
+  }
+
+  async sendCustomTemplate(
+    toEmail: string, templateUuid: string, variables: Record<string, string>
+  ): Promise<boolean> {
+    return this.sendTemplate(toEmail, templateUuid, variables);
+  }
+
+  async sendTransactionCompleted(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    amount: string,
+    currency: string,
+    transactionType: string,
+    transactionId: string,
+    date?: string
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('transaction_completed');
+    if (!uuid) {
+      console.warn('[Mailtrap] transaction_completed template UUID not configured — skipping email');
+      return false;
+    }
+    const typeLabel =
+      transactionType === 'deposit' ? 'Deposit' :
+      transactionType === 'withdraw' ? 'Withdrawal' :
+      transactionType === 'send' ? 'Transfer Sent' :
+      transactionType === 'receive' ? 'Transfer Received' : 'Transaction';
+
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      amount,
+      currency,
+      transaction_type: typeLabel,
+      transaction_id: transactionId,
+      reference: transactionId,
+      fee: '0.00',
+      total: amount,
+      status: 'Completed',
+      date: date || new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+      description: typeLabel,
+    });
+  }
+
+  async sendTransactionActivity(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    transaction: any,
+  ): Promise<boolean> {
+    const transactionType = String(transaction.type || "transaction");
+    const specificTemplate = ["send", "receive", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType)
+      ? transactionType
+      : transactionType === "withdraw" ? "crypto_withdrawal" : "transaction_completed";
+    const uuid = await this.getTemplateUuid(specificTemplate) || await this.getTemplateUuid("transaction_completed");
+    if (!uuid) return false;
+
+    const amount = Number(transaction.amount || 0);
+    const fee = Number(transaction.fee ?? transaction.metadata?.fee ?? 0);
+    const outgoing = ["send", "withdraw", "card_purchase", "exchange", "transfer", "bill_payment", "airtime"].includes(transactionType);
+    const typeLabel = transactionType === "send" ? "Send money" :
+      transactionType === "receive" ? "Money received" :
+      transactionType === "exchange" ? "Currency exchange" :
+      transactionType === "transfer" ? "Account transfer" :
+      transactionType === "bill_payment" ? "Bill payment" :
+      transactionType === "airtime" ? "Airtime purchase" :
+      transactionType === "withdraw" ? "Withdrawal" : "Transaction";
+
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      amount: String(transaction.amount ?? ""),
+      currency: String(transaction.currency ?? ""),
+      transaction_type: typeLabel,
+      transaction_id: String(transaction.id ?? ""),
+      reference: String(transaction.reference || transaction.id || ""),
+      fee: fee.toFixed(2),
+      total: (outgoing ? amount + fee : amount - fee).toFixed(2),
+      status: String(transaction.status || "").replace(/^\w/, (letter: string) => letter.toUpperCase()),
+      date: new Date(transaction.completedAt || transaction.createdAt || Date.now()).toLocaleString("en-US"),
+      description: String(transaction.description || ""),
+      exchange_rate: String(transaction.exchangeRate || transaction.metadata?.exchangeRate || ""),
+      converted_amount: String(transaction.metadata?.convertedAmount || transaction.metadata?.toAmount || ""),
+      target_currency: String(transaction.metadata?.targetCurrency || transaction.metadata?.toCurrency || ""),
+    });
+  }
+
+  async sendSecurityAlert(
+    toEmail: string,
+    firstName: string,
+    lastName: string,
+    event: string,
+    description: string,
+    details: Record<string, string> = {},
+  ): Promise<boolean> {
+    const templateName =
+      event === "Password changed" ? "password_changed" :
+      event === "PIN changed" ? "pin_changed" :
+      event === "Security settings changed" ? "security_settings_changed" : "security_alert";
+    const uuid = await this.getTemplateUuid(templateName) || await this.getTemplateUuid("security_alert");
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, {
+      first_name: firstName,
+      last_name: lastName,
+      security_event: event,
+      description,
+      date: new Date().toLocaleString("en-US"),
+      ip_address: details.ip_address || "",
+      action_url: details.action_url || "/settings",
+    });
+  }
+
+  async sendVirtualAccountApproved(toEmail: string, firstName: string, lastName: string, variables: Record<string, string>): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('virtual_account_approved');
+    if (!uuid) {
+      console.warn('[Mailtrap] virtual_account_approved template UUID not configured — skipping email');
+      return false;
+    }
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName, ...variables });
+  }
+
+  async sendAccountAction(toEmail: string, templateName: string, variables: Record<string, string>): Promise<boolean> {
+    const uuid = await this.getTemplateUuid(templateName);
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, variables);
+  }
+
+  async sendTransactionExport(
+    toEmail: string, firstName: string, lastName: string,
+    attachments: Array<{ filename: string; content: string; disposition: string }>
+  ): Promise<boolean> {
+    const uuid = await this.getTemplateUuid('transaction_export');
+    if (!uuid) return false;
+    return this.sendTemplate(toEmail, uuid, { first_name: firstName, last_name: lastName }, attachments);
+  }
+
+  /** Return all template names, UUIDs, and the variables each template must receive. */
+  async getAllTemplateUuids(): Promise<Record<string, { uuid: string; isCustom: boolean; requiredParameters: string[] }>> {
+    const result: Record<string, { uuid: string; isCustom: boolean; requiredParameters: string[] }> = {};
+    for (const name of Object.keys(DEFAULT_TEMPLATE_UUIDs)) {
+      try {
+        const setting = await storage.getSystemSetting('email_templates', name);
+        if (setting?.value && String(setting.value).trim()) {
+          result[name] = { uuid: String(setting.value).trim(), isCustom: true, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
+        } else {
+          result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
+        }
+      } catch {
+        result[name] = { uuid: DEFAULT_TEMPLATE_UUIDs[name], isCustom: false, requiredParameters: TEMPLATE_PARAMETERS[name] || [] };
+      }
+    }
+    return result;
+  }
+}
+
+export const mailtrapService = new MailtrapService();

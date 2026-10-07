@@ -1,0 +1,891 @@
+import { useState, useEffect } from "react";
+import AdminShell from "@/components/admin/admin-shell";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Save, DollarSign, Shield, Bell, Settings, Globe, MessageCircle, Download, Gift, AlertTriangle } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+
+const WITHDRAWAL_FEE_CURRENCIES = [
+  "USD", "KES", "UGX", "GHS", "NGN", "ZAR", "TZS", "XOF",
+  "CDF", "XAF", "RWF", "SLE", "ZMW", "EUR", "GBP",
+];
+
+interface SystemSettings {
+  fees?: {
+    transfer_fee: string;
+    exchange_fee_rate: string;
+    exchange_rate_margin: string;
+    virtual_card_fee: string;
+    withdrawal_fee: string;
+    [key: string]: string | undefined;
+  };
+  security?: {
+    two_factor_required: boolean;
+    kyc_auto_approval: boolean;
+    pin_required: boolean;
+    enable_otp_feature: boolean;
+    otp_email_enabled: boolean;
+    otp_sms_enabled: boolean;
+    otp_whatsapp_enabled: boolean;
+    max_daily_limit: string;
+  };
+  notifications?: {
+    email_notifications: boolean;
+    sms_notifications: boolean;
+    push_notifications: boolean;
+    admin_alerts: boolean;
+  };
+  general?: {
+    platform_name: string;
+    support_email: string;
+    default_currency: string;
+    session_timeout: string;
+    terms_url: string;
+    theme_color: string;
+    maintenance_title: string;
+    maintenance_message: string;
+    maintenance_estimated_time: string;
+    maintenance_affected_services: string;
+    maintenance_severity: string;
+    maintenance_started_at: string;
+    maintenance_status_label: string;
+    maintenance_mode: boolean;
+    desktop_access_enabled: boolean;
+  };
+  whatsapp?: {
+    phone_number_id: string;
+    business_account_id: string;
+    access_token: string;
+    is_active: boolean;
+  };
+  app_downloads?: {
+    play_store_url: string;
+    app_store_url: string;
+    apk_url: string;
+    apk_version: string;
+    huawei_app_gallery_url: string;
+  };
+}
+
+export default function AdminSystemSettingsPage() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  // Fees state
+  const [transferFee, setTransferFee] = useState("");
+  const [exchangeFeeRate, setExchangeFeeRate] = useState("");
+  const [exchangeMargin, setExchangeMargin] = useState("");
+  const [cardFee, setCardFee] = useState("");
+  const [withdrawalFee, setWithdrawalFee] = useState("");
+  const [withdrawalFees, setWithdrawalFees] = useState<Record<string, string>>(
+    Object.fromEntries(WITHDRAWAL_FEE_CURRENCIES.map(code => [code, ""])),
+  );
+
+  // Security state
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [kycAutoApproval, setKycAutoApproval] = useState(true);
+  const [pinRequired, setPinRequired] = useState(false);
+  const [enableOtp, setEnableOtp] = useState(true);
+  const [otpEmail, setOtpEmail] = useState(true);
+  const [otpSms, setOtpSms] = useState(true);
+  const [otpWhatsapp, setOtpWhatsapp] = useState(false);
+  const [maxDailyLimit, setMaxDailyLimit] = useState("");
+
+  // Notifications state
+  const [emailNotif, setEmailNotif] = useState(true);
+  const [smsNotif, setSmsNotif] = useState(true);
+  const [pushNotif, setPushNotif] = useState(true);
+  const [adminAlerts, setAdminAlerts] = useState(true);
+
+  // General state
+  const [platformName, setPlatformName] = useState("");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [currency, setCurrency] = useState("");
+  const [sessionTimeout, setSessionTimeout] = useState("");
+  const [termsUrl, setTermsUrl] = useState("");
+  const [themeColor, setThemeColor] = useState("#0f766e");
+  const [maintenanceTitle, setMaintenanceTitle] = useState("");
+  const [maintenanceMsg, setMaintenanceMsg] = useState("");
+  const [maintenanceEstimatedTime, setMaintenanceEstimatedTime] = useState("");
+  const [maintenanceAffectedServices, setMaintenanceAffectedServices] = useState("");
+  const [maintenanceSeverity, setMaintenanceSeverity] = useState("moderate");
+  const [maintenanceStartedAt, setMaintenanceStartedAt] = useState("");
+  const [maintenanceStatusLabel, setMaintenanceStatusLabel] = useState("Maintenance in progress");
+  const [maintenance, setMaintenance] = useState(false);
+  const [desktopAccessEnabled, setDesktopAccessEnabled] = useState(true);
+
+  // WhatsApp state
+  const [waPhoneId, setWaPhoneId] = useState("");
+  const [waBusinessId, setWaBusinessId] = useState("");
+  const [waToken, setWaToken] = useState("");
+  const [waActive, setWaActive] = useState(false);
+
+  // App Downloads state
+  const [playStoreUrl, setPlayStoreUrl] = useState("");
+  const [appStoreUrl, setAppStoreUrl] = useState("");
+  const [apkUrl, setApkUrl] = useState("");
+  const [apkVersion, setApkVersion] = useState("");
+  const [huaweiUrl, setHuaweiUrl] = useState("");
+
+  // Airtime Bonus state
+  const [airtimeBonusEnabled, setAirtimeBonusEnabled] = useState(true);
+  const [airtimeBonusAmount, setAirtimeBonusAmount] = useState("10");
+  const [airtimeBonusRequireKyc, setAirtimeBonusRequireKyc] = useState("none");
+  const [airtimeBonusRequireEmail, setAirtimeBonusRequireEmail] = useState(false);
+
+  const { data: settingsData, isLoading } = useQuery<SystemSettings>({
+    queryKey: ["/api/admin/settings"],
+    queryFn: async () => {
+      const r = await apiRequest("GET", "/api/admin/settings");
+      const raw = await r.json();
+      // Backend returns { settings: SystemSetting[] } — transform into categorized shape.
+      if (raw && Array.isArray(raw.settings)) {
+        const grouped: any = {};
+        for (const s of raw.settings) {
+          if (!s?.category || !s?.key) continue;
+          if (!grouped[s.category]) grouped[s.category] = {};
+          let v: any = s.value;
+          if (v === "true") v = true;
+          else if (v === "false") v = false;
+          grouped[s.category][s.key] = v;
+        }
+        return grouped as SystemSettings;
+      }
+      return raw as SystemSettings;
+    },
+  });
+
+  useEffect(() => {
+    if (settingsData) {
+      setTransferFee(settingsData.fees?.transfer_fee || "");
+      setExchangeFeeRate(settingsData.fees?.exchange_fee_rate || "");
+      setExchangeMargin(settingsData.fees?.exchange_rate_margin || "");
+      setCardFee(settingsData.fees?.virtual_card_fee || "");
+      setWithdrawalFee(settingsData.fees?.withdrawal_fee || "");
+       const defaultWithdrawalFee = settingsData.fees?.withdrawal_fee || "";
+        setWithdrawalFees(Object.fromEntries(
+          WITHDRAWAL_FEE_CURRENCIES.map(currency => [
+           currency,
+           settingsData.fees?.[`withdrawal_fee_${currency}`] ?? defaultWithdrawalFee,
+         ]),
+       ));
+
+      setTwoFactorRequired(settingsData.security?.two_factor_required || false);
+      setKycAutoApproval(settingsData.security?.kyc_auto_approval || true);
+      setPinRequired(settingsData.security?.pin_required || false);
+      setEnableOtp(settingsData.security?.enable_otp_feature || true);
+      setOtpEmail(settingsData.security?.otp_email_enabled || true);
+      setOtpSms(settingsData.security?.otp_sms_enabled || true);
+      setOtpWhatsapp(settingsData.security?.otp_whatsapp_enabled || false);
+      setMaxDailyLimit(settingsData.security?.max_daily_limit || "");
+
+      setEmailNotif(settingsData.notifications?.email_notifications || true);
+      setSmsNotif(settingsData.notifications?.sms_notifications || true);
+      setPushNotif(settingsData.notifications?.push_notifications || true);
+      setAdminAlerts(settingsData.notifications?.admin_alerts || true);
+
+      setPlatformName(settingsData.general?.platform_name || "");
+      setSupportEmail(settingsData.general?.support_email || "");
+      setCurrency(settingsData.general?.default_currency || "");
+      setSessionTimeout(settingsData.general?.session_timeout || "");
+      setTermsUrl(settingsData.general?.terms_url || "");
+      setThemeColor(settingsData.general?.theme_color || "#0f766e");
+      setMaintenanceTitle(settingsData.general?.maintenance_title || "");
+      setMaintenanceMsg(settingsData.general?.maintenance_message || "");
+      setMaintenanceEstimatedTime(settingsData.general?.maintenance_estimated_time || "");
+      setMaintenanceAffectedServices(settingsData.general?.maintenance_affected_services || "");
+      setMaintenanceSeverity(settingsData.general?.maintenance_severity || "moderate");
+      setMaintenanceStartedAt(settingsData.general?.maintenance_started_at || "");
+      setMaintenanceStatusLabel(settingsData.general?.maintenance_status_label || "Maintenance in progress");
+      setMaintenance(settingsData.general?.maintenance_mode || false);
+      setDesktopAccessEnabled(settingsData.general?.desktop_access_enabled ?? true);
+
+      setWaPhoneId(settingsData.whatsapp?.phone_number_id || "");
+      setWaBusinessId(settingsData.whatsapp?.business_account_id || "");
+      setWaToken(settingsData.whatsapp?.access_token || "");
+      setWaActive(settingsData.whatsapp?.is_active || false);
+
+      setPlayStoreUrl(settingsData.app_downloads?.play_store_url || "");
+      setAppStoreUrl(settingsData.app_downloads?.app_store_url || "");
+      setApkUrl(settingsData.app_downloads?.apk_url || "");
+      setApkVersion(settingsData.app_downloads?.apk_version || "");
+      setHuaweiUrl(settingsData.app_downloads?.huawei_app_gallery_url || "");
+
+      const g = settingsData.general as any;
+      const airtimeEnabledValue = g?.enable_airtime_bonus?.value ?? g?.enable_airtime_bonus;
+      const airtimeAmountValue = g?.airtime_bonus_amount?.value ?? g?.airtime_bonus_amount;
+      const airtimeKycValue = g?.airtime_bonus_require_kyc?.value ?? g?.airtime_bonus_require_kyc;
+      const airtimeEmailValue = g?.airtime_bonus_require_email?.value ?? g?.airtime_bonus_require_email;
+      setAirtimeBonusEnabled(["true", "1", "yes", "on"].includes(String(airtimeEnabledValue ?? "").toLowerCase()));
+      setAirtimeBonusAmount(String(airtimeAmountValue ?? "10"));
+      setAirtimeBonusRequireKyc(String(airtimeKycValue ?? "none"));
+      setAirtimeBonusRequireEmail(["true", "1", "yes", "on"].includes(String(airtimeEmailValue ?? "").toLowerCase()));
+    }
+  }, [settingsData]);
+
+  const feesMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/transfer_fee", { value: transferFee, category: "fees" }),
+        apiRequest("PUT", "/api/admin/settings/exchange_fee_rate", { value: exchangeFeeRate, category: "fees" }),
+        apiRequest("PUT", "/api/admin/settings/exchange_rate_margin", { value: exchangeMargin, category: "fees" }),
+        apiRequest("PUT", "/api/admin/settings/virtual_card_fee", { value: cardFee, category: "fees" }),
+        apiRequest("PUT", "/api/admin/settings/withdrawal_fee", { value: withdrawalFee, category: "fees" }),
+        ...WITHDRAWAL_FEE_CURRENCIES.map(currency =>
+          apiRequest("PUT", `/api/admin/settings/withdrawal_fee_${currency}`, {
+            value: withdrawalFees[currency] || "0",
+            category: "fees",
+          }),
+        ),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Fee settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save fees.", variant: "destructive" }),
+  });
+
+  const securityMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/two_factor_required", { value: String(twoFactorRequired), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/kyc_auto_approval", { value: String(kycAutoApproval), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/pin_required", { value: String(pinRequired), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/enable_otp_feature", { value: String(enableOtp), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_email_enabled", { value: String(otpEmail), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_sms_enabled", { value: String(otpSms), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/otp_whatsapp_enabled", { value: String(otpWhatsapp), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/max_daily_limit", { value: String(maxDailyLimit), category: "security" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Security settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save security settings.", variant: "destructive" }),
+  });
+
+  const notificationsMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/email_notifications", { value: String(emailNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/sms_notifications", { value: String(smsNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/push_notifications", { value: String(pushNotif), category: "notifications" }),
+        apiRequest("PUT", "/api/admin/settings/admin_alerts", { value: String(adminAlerts), category: "notifications" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Notification settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save notifications.", variant: "destructive" }),
+  });
+
+  const generalMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/platform_name", { value: String(platformName), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/support_email", { value: String(supportEmail), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/default_currency", { value: String(currency), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/session_timeout", { value: String(sessionTimeout), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/terms_url", { value: String(termsUrl), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/theme_color", { value: String(themeColor), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_title", { value: String(maintenanceTitle), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_message", { value: String(maintenanceMsg), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_estimated_time", { value: String(maintenanceEstimatedTime), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_affected_services", { value: String(maintenanceAffectedServices), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_severity", { value: String(maintenanceSeverity), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_started_at", { value: String(maintenanceStartedAt), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_status_label", { value: String(maintenanceStatusLabel), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/maintenance_mode", { value: String(maintenance), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/desktop_access_enabled", { value: String(desktopAccessEnabled), category: "general" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "General settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save general settings.", variant: "destructive" }),
+  });
+
+  const whatsappMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/whatsapp_phone_number_id", { value: String(waPhoneId), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_business_account_id", { value: String(waBusinessId), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_access_token", { value: String(waToken), category: "whatsapp" }),
+        apiRequest("PUT", "/api/admin/settings/whatsapp_is_active", { value: String(waActive), category: "whatsapp" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "WhatsApp settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save WhatsApp settings.", variant: "destructive" }),
+  });
+
+  const airtimeBonusMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/enable_airtime_bonus", { value: String(airtimeBonusEnabled), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_amount", { value: String(airtimeBonusAmount), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_require_kyc", { value: String(airtimeBonusRequireKyc), category: "general" }),
+        apiRequest("PUT", "/api/admin/settings/airtime_bonus_require_email", { value: String(airtimeBonusRequireEmail), category: "general" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "Airtime bonus settings updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save airtime bonus settings.", variant: "destructive" }),
+  });
+
+  const appDownloadsMutation = useMutation({
+    mutationFn: async () => {
+      const requests = [
+        apiRequest("PUT", "/api/admin/settings/play_store_url", { value: String(playStoreUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/app_store_url", { value: String(appStoreUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/apk_url", { value: String(apkUrl), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/apk_version", { value: String(apkVersion), category: "app_downloads" }),
+        apiRequest("PUT", "/api/admin/settings/huawei_app_gallery_url", { value: String(huaweiUrl), category: "app_downloads" }),
+      ];
+      const results = await Promise.all(requests);
+      return { success: true, results };
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: "App download links updated." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      qc.invalidateQueries({ queryKey: ["/api/app-downloads"] });
+    },
+    onError: () => toast({ title: "Error", description: "Failed to save app download links.", variant: "destructive" }),
+  });
+
+  if (isLoading) {
+    return (
+      <AdminShell title="System Settings">
+        <div className="space-y-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-40 rounded-2xl bg-gray-200 animate-pulse" />
+          ))}
+        </div>
+      </AdminShell>
+    );
+  }
+
+  return (
+    <AdminShell title="System Settings">
+      <div className="max-w-4xl">
+        <Tabs defaultValue="fees" className="w-full">
+          <TabsList className="grid w-full grid-cols-4 sm:grid-cols-7 rounded-xl bg-gray-100 p-1">
+            <TabsTrigger value="fees">Fees</TabsTrigger>
+            <TabsTrigger value="security">Security</TabsTrigger>
+            <TabsTrigger value="notifications">Notifs</TabsTrigger>
+            <TabsTrigger value="general">General</TabsTrigger>
+            <TabsTrigger value="whatsapp">WhatsApp</TabsTrigger>
+            <TabsTrigger value="airtime_bonus" data-testid="tab-airtime-bonus">Bonus</TabsTrigger>
+            <TabsTrigger value="app_downloads" data-testid="tab-app-downloads">App Links</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="fees" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-green-50">
+                    <DollarSign className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Transaction Fees</CardTitle>
+                    <CardDescription>Configure transaction and service fees</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Transfer Fee (%)</Label>
+                    <Input value={transferFee} onChange={(e) => setTransferFee(e.target.value)} placeholder="2.50" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Exchange / Wallet Transfer Fee (%)</Label>
+                    <Input value={exchangeFeeRate} onChange={(e) => setExchangeFeeRate(e.target.value)} placeholder="1.50" className="rounded-xl" />
+                    <p className="text-xs text-muted-foreground">Applied consistently to exchanges, dashboard transfers, and crypto wallet/card transfers.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Exchange Rate Margin (%)</Label>
+                    <Input value={exchangeMargin} onChange={(e) => setExchangeMargin(e.target.value)} placeholder="0.05" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Card Fee (KES)</Label>
+                    <Input value={cardFee} onChange={(e) => setCardFee(e.target.value)} placeholder="1.00" className="rounded-xl" />
+                  </div>
+                   <div className="space-y-2">
+                     <Label className="text-sm">Default Withdrawal Fee</Label>
+                     <Input value={withdrawalFee} onChange={(e) => setWithdrawalFee(e.target.value)} placeholder="0.50" className="rounded-xl" />
+                   </div>
+                </div>
+                 <div className="space-y-3 rounded-xl border border-border p-4">
+                   <div>
+                     <Label className="text-sm font-medium">Withdrawal Fee by Currency</Label>
+                     <p className="text-xs text-muted-foreground mt-1">
+                       This fee is deducted from the selected wallet in that currency. The default fee is used for other currencies.
+                     </p>
+                   </div>
+                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto pr-1">
+                     {WITHDRAWAL_FEE_CURRENCIES.map(currency => (
+                       <div key={currency} className="space-y-2">
+                         <Label className="text-sm">{currency} Fee</Label>
+                         <Input
+                           type="number"
+                           min="0"
+                           step="0.01"
+                           value={withdrawalFees[currency] || ""}
+                           onChange={e => setWithdrawalFees(prev => ({ ...prev, [currency]: e.target.value }))}
+                           placeholder="0.00"
+                           className="rounded-xl"
+                         />
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+                <Button onClick={() => feesMutation.mutate()} disabled={feesMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
+                  <Save className="w-4 h-4 mr-2" />
+                  {feesMutation.isPending ? "Saving..." : "Save Fees"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="security" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-blue-50">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Security Settings</CardTitle>
+                    <CardDescription>Configure authentication and security options</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Two-Factor Authentication Required</Label>
+                    <Switch checked={twoFactorRequired} onCheckedChange={setTwoFactorRequired} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">KYC Auto-Approval</Label>
+                    <Switch checked={kycAutoApproval} onCheckedChange={setKycAutoApproval} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">PIN Required for Transactions</Label>
+                    <Switch checked={pinRequired} onCheckedChange={setPinRequired} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Enable OTP Feature</Label>
+                    <Switch checked={enableOtp} onCheckedChange={setEnableOtp} />
+                  </div>
+                  {enableOtp && (
+                    <>
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
+                        <Label className="text-sm font-medium">OTP via Email</Label>
+                        <Switch checked={otpEmail} onCheckedChange={setOtpEmail} />
+                      </div>
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
+                        <Label className="text-sm font-medium">OTP via SMS</Label>
+                        <Switch checked={otpSms} onCheckedChange={setOtpSms} />
+                      </div>
+                      <div className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100">
+                        <Label className="text-sm font-medium">OTP via WhatsApp</Label>
+                        <Switch checked={otpWhatsapp} onCheckedChange={setOtpWhatsapp} />
+                      </div>
+                    </>
+                  )}
+                  <div className="space-y-2">
+                    <Label className="text-sm">Max Daily Limit (KES)</Label>
+                    <Input value={maxDailyLimit} onChange={(e) => setMaxDailyLimit(e.target.value)} placeholder="50000" className="rounded-xl" />
+                  </div>
+                </div>
+                <Button onClick={() => securityMutation.mutate()} disabled={securityMutation.isPending} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">
+                  <Save className="w-4 h-4 mr-2" />
+                  {securityMutation.isPending ? "Saving..." : "Save Security"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="notifications" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-green-50">
+                    <Bell className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Notification Settings</CardTitle>
+                    <CardDescription>Configure how users receive notifications</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Email Notifications</Label>
+                    <Switch checked={emailNotif} onCheckedChange={setEmailNotif} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">SMS Notifications</Label>
+                    <Switch checked={smsNotif} onCheckedChange={setSmsNotif} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Push Notifications</Label>
+                    <Switch checked={pushNotif} onCheckedChange={setPushNotif} />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Admin Alerts</Label>
+                    <Switch checked={adminAlerts} onCheckedChange={setAdminAlerts} />
+                  </div>
+                </div>
+                <Button onClick={() => notificationsMutation.mutate()} disabled={notificationsMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
+                  <Save className="w-4 h-4 mr-2" />
+                  {notificationsMutation.isPending ? "Saving..." : "Save Notifications"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="general" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-orange-50">
+                    <Settings className="w-5 h-5 text-orange-600" />
+                  </div>
+                  <div>
+                    <CardTitle>General Settings</CardTitle>
+                    <CardDescription>Configure general platform settings</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Platform Name</Label>
+                    <Input value={platformName} onChange={(e) => setPlatformName(e.target.value)} placeholder="Geepay" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Support Email</Label>
+                    <Input value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@example.com" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Default Currency</Label>
+                    <Input value={currency} onChange={(e) => setCurrency(e.target.value)} placeholder="KES" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Session Timeout (seconds)</Label>
+                    <Input value={sessionTimeout} onChange={(e) => setSessionTimeout(e.target.value)} placeholder="3600" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2 col-span-2">
+                    <Label className="text-sm">Terms URL</Label>
+                    <Input value={termsUrl} onChange={(e) => setTermsUrl(e.target.value)} placeholder="https://..." className="rounded-xl" />
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-border bg-muted/20 p-4 col-span-full">
+                    <div>
+                      <Label className="text-sm font-semibold">User App Theme Color</Label>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Choose the primary color used across the user-facing app, navigation, headers, and controls.
+                      </p>
+                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <input
+                        type="color"
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        aria-label="Choose user app theme color"
+                        className="h-12 w-16 cursor-pointer rounded-xl border border-border bg-background p-1"
+                      />
+                      <Input
+                        value={themeColor}
+                        onChange={(e) => setThemeColor(e.target.value)}
+                        pattern="^#[0-9a-fA-F]{6}$"
+                        placeholder="#0f766e"
+                        className="rounded-xl sm:max-w-xs"
+                      />
+                      <div className="h-10 flex-1 rounded-xl border border-border shadow-inner" style={{ backgroundColor: themeColor }} />
+                    </div>
+                  </div>
+                   <div className="col-span-full mt-2 rounded-2xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-900/60 dark:bg-amber-950/20">
+                     <div className="mb-4 flex items-start gap-3">
+                       <div className="rounded-xl bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300">
+                         <AlertTriangle className="h-5 w-5" />
+                       </div>
+                       <div>
+                         <h3 className="font-semibold text-amber-900 dark:text-amber-100">Maintenance experience</h3>
+                         <p className="mt-1 text-xs leading-5 text-amber-800/80 dark:text-amber-200/80">
+                           These details appear on the user-facing maintenance page. Add one affected service per line.
+                         </p>
+                       </div>
+                     </div>
+                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                       <div className="space-y-2">
+                         <Label className="text-sm">Page Title</Label>
+                         <Input value={maintenanceTitle} onChange={(e) => setMaintenanceTitle(e.target.value)} placeholder="We’ll be back shortly" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Status Label</Label>
+                         <Input value={maintenanceStatusLabel} onChange={(e) => setMaintenanceStatusLabel(e.target.value)} placeholder="Maintenance in progress" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2 md:col-span-2">
+                         <Label className="text-sm">User Message</Label>
+                         <Textarea value={maintenanceMsg} onChange={(e) => setMaintenanceMsg(e.target.value)} placeholder="We’re making a few improvements..." className="min-h-24 rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Estimated Time</Label>
+                         <Input value={maintenanceEstimatedTime} onChange={(e) => setMaintenanceEstimatedTime(e.target.value)} placeholder="Back within 30 minutes" className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Severity</Label>
+                         <Select value={maintenanceSeverity} onValueChange={setMaintenanceSeverity}>
+                           <SelectTrigger className="rounded-xl bg-white dark:bg-slate-950"><SelectValue placeholder="Choose severity" /></SelectTrigger>
+                           <SelectContent>
+                             <SelectItem value="minor">Minor impact</SelectItem>
+                             <SelectItem value="moderate">Moderate impact</SelectItem>
+                             <SelectItem value="major">Major impact</SelectItem>
+                             <SelectItem value="critical">Critical impact</SelectItem>
+                           </SelectContent>
+                         </Select>
+                       </div>
+                       <div className="space-y-2">
+                         <Label className="text-sm">Started At</Label>
+                         <Input type="datetime-local" value={maintenanceStartedAt} onChange={(e) => setMaintenanceStartedAt(e.target.value)} className="rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                       <div className="space-y-2 md:col-span-2">
+                         <Label className="text-sm">Affected Services</Label>
+                         <Textarea value={maintenanceAffectedServices} onChange={(e) => setMaintenanceAffectedServices(e.target.value)} placeholder={"Wallets and transfers\nDeposits and withdrawals\nCrypto services"} className="min-h-28 rounded-xl bg-white dark:bg-slate-950" />
+                       </div>
+                     </div>
+                   </div>
+                </div>
+                 <div className="flex items-center justify-between rounded-xl border border-border bg-muted/20 p-3">
+                   <div>
+                     <Label className="text-sm font-medium">Desktop User Access</Label>
+                     <p className="mt-1 text-xs text-muted-foreground">
+                       Allow authenticated users to use the app on desktop screens. Mobile access is always available.
+                     </p>
+                   </div>
+                   <Switch checked={desktopAccessEnabled} onCheckedChange={setDesktopAccessEnabled} />
+                 </div>
+                <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100">
+                  <Label className="text-sm font-medium text-red-700">Maintenance Mode</Label>
+                  <Switch checked={maintenance} onCheckedChange={setMaintenance} />
+                </div>
+                <Button onClick={() => generalMutation.mutate()} disabled={generalMutation.isPending} className="w-full rounded-xl bg-orange-600 hover:bg-orange-500">
+                  <Save className="w-4 h-4 mr-2" />
+                  {generalMutation.isPending ? "Saving..." : "Save General"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="whatsapp" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-green-50">
+                    <MessageCircle className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div>
+                    <CardTitle>WhatsApp Configuration</CardTitle>
+                    <CardDescription>Configure WhatsApp Business API credentials</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label className="text-sm">Phone Number ID</Label>
+                    <Input value={waPhoneId} onChange={(e) => setWaPhoneId(e.target.value)} placeholder="Enter phone number ID" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Business Account ID</Label>
+                    <Input value={waBusinessId} onChange={(e) => setWaBusinessId(e.target.value)} placeholder="Enter business account ID" className="rounded-xl" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-sm">Access Token</Label>
+                    <Input value={waToken} onChange={(e) => setWaToken(e.target.value)} type="password" placeholder="Enter access token" className="rounded-xl" />
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                    <Label className="text-sm font-medium">Active</Label>
+                    <Switch checked={waActive} onCheckedChange={setWaActive} />
+                  </div>
+                </div>
+                <Button onClick={() => whatsappMutation.mutate()} disabled={whatsappMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
+                  <Save className="w-4 h-4 mr-2" />
+                  {whatsappMutation.isPending ? "Saving..." : "Save WhatsApp"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="airtime_bonus" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-amber-50">
+                    <Gift className="w-5 h-5 text-amber-600" />
+                  </div>
+                  <div>
+                    <CardTitle>Welcome Airtime Bonus</CardTitle>
+                    <CardDescription>Configure the one-time KES bonus for new users. Set requirements to control who qualifies.</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+                  <div>
+                    <Label className="text-sm font-medium">Enable Airtime Bonus</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Allow new users to claim a one-time welcome bonus</p>
+                  </div>
+                  <Switch checked={airtimeBonusEnabled} onCheckedChange={setAirtimeBonusEnabled} data-testid="toggle-airtime-bonus-enabled" />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">Bonus Amount (KES)</Label>
+                  <Input
+                    type="number" min="0" step="1"
+                    value={airtimeBonusAmount}
+                    onChange={e => setAirtimeBonusAmount(e.target.value)}
+                    placeholder="10"
+                    className="rounded-xl"
+                    data-testid="input-airtime-bonus-amount"
+                  />
+                  <p className="text-xs text-muted-foreground">This amount in KES is credited to the user's KES balance when they claim the bonus.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm">KYC Requirement</Label>
+                  <Select value={airtimeBonusRequireKyc} onValueChange={setAirtimeBonusRequireKyc} data-testid="select-airtime-kyc-requirement">
+                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No KYC required (anyone can claim)</SelectItem>
+                      <SelectItem value="basic">Basic KYC required (ID + selfie)</SelectItem>
+                      <SelectItem value="advanced">Advanced KYC required (face + address proof)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Set the minimum KYC level a user must have before claiming the bonus.</p>
+                </div>
+
+                <div className="flex items-center justify-between p-3 rounded-xl bg-muted/40">
+                  <div>
+                    <Label className="text-sm font-medium">Require Email Verification</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">User must verify their email before claiming</p>
+                  </div>
+                  <Switch checked={airtimeBonusRequireEmail} onCheckedChange={setAirtimeBonusRequireEmail} data-testid="toggle-airtime-require-email" />
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 text-xs text-amber-700 dark:text-amber-300">
+                  Each user can only claim the bonus once. Once claimed, the <strong>hasClaimedAirtimeBonus</strong> flag is permanently set on their account.
+                </div>
+
+                <Button onClick={() => airtimeBonusMutation.mutate()} disabled={airtimeBonusMutation.isPending} className="w-full rounded-xl bg-amber-600 hover:bg-amber-500" data-testid="button-save-airtime-bonus">
+                  <Save className="w-4 h-4 mr-2" />
+                  {airtimeBonusMutation.isPending ? "Saving..." : "Save Bonus Settings"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="app_downloads" className="space-y-4 mt-6">
+            <Card className="rounded-2xl border-0 shadow-sm">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Download className="w-5 h-5" /> App Download Links</CardTitle>
+                <CardDescription>
+                  Configure the download URLs shown to users on the Settings page. Leave any field blank to hide that option.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="play-store-url">Google Play Store URL</Label>
+                  <Input
+                    id="play-store-url"
+                    placeholder="https://play.google.com/store/apps/details?id=com.greenpay.app"
+                    value={playStoreUrl}
+                    onChange={(e) => setPlayStoreUrl(e.target.value)}
+                    data-testid="input-play-store-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="app-store-url">Apple App Store URL</Label>
+                  <Input
+                    id="app-store-url"
+                    placeholder="https://apps.apple.com/app/idXXXXXXXXX"
+                    value={appStoreUrl}
+                    onChange={(e) => setAppStoreUrl(e.target.value)}
+                    data-testid="input-app-store-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="huawei-url">Huawei AppGallery URL (optional)</Label>
+                  <Input
+                    id="huawei-url"
+                    placeholder="https://appgallery.huawei.com/app/CXXXXXXX"
+                    value={huaweiUrl}
+                    onChange={(e) => setHuaweiUrl(e.target.value)}
+                    data-testid="input-huawei-url"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apk-url">Direct APK Download URL</Label>
+                  <Input
+                    id="apk-url"
+                    placeholder="https://cdn.example.com/greenpay.apk or /greenpay.apk"
+                    value={apkUrl}
+                    onChange={(e) => setApkUrl(e.target.value)}
+                    data-testid="input-apk-url"
+                  />
+                  <p className="text-xs text-muted-foreground">Use a fully qualified URL (https://...) for an externally hosted APK, or a relative path (/greenpay.apk) for the bundled file.</p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="apk-version">APK Version (shown in label)</Label>
+                  <Input
+                    id="apk-version"
+                    placeholder="1.0.1"
+                    value={apkVersion}
+                    onChange={(e) => setApkVersion(e.target.value)}
+                    data-testid="input-apk-version"
+                  />
+                </div>
+                <Button onClick={() => appDownloadsMutation.mutate()} disabled={appDownloadsMutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500" data-testid="button-save-app-downloads">
+                  <Save className="w-4 h-4 mr-2" />
+                  {appDownloadsMutation.isPending ? "Saving..." : "Save App Download Links"}
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </AdminShell>
+  );
+}

@@ -1,6 +1,6 @@
-# [Project name]
+# GreenPay
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+GreenPay is a cross-border money transfer application. Its imported GitHub source is in `greenpay/`.
 
 ## Run & Operate
 
@@ -22,7 +22,8 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `greenpay/` — imported GreenPay application, documentation, and original package manifests
+- `artifacts/api-server/` and `artifacts/mockup-sandbox/` — existing Replit workspace services
 
 ## Architecture decisions
 
@@ -30,7 +31,7 @@ _Populate as you build — non-obvious choices a reader couldn't infer from the 
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+GreenPay supports international money transfers. Refer to `greenpay/readme.md` and the documents in `greenpay/` for the imported product details.
 
 ## User preferences
 
@@ -38,7 +39,8 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- The imported repo contains a `.env.example`; configure environment values through Replit Secrets, not committed files.
+- Sensitive credentials, signing keys, cookies, and database dumps from the public source repo were not copied into `greenpay/`.
 
 ## Pointers
 
