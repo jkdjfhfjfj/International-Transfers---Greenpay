@@ -9016,17 +9016,11 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
       }
       
-      // Try to update existing setting
-      let updatedSetting = await storage.updateSystemSetting(key, stringValue);
-      
-      // If setting doesn't exist, create it
-      if (!updatedSetting) {
-        updatedSetting = await storage.createSystemSetting({
-          category: category,
-          key: key,
-          value: stringValue
-        });
-      }
+      const updatedSetting = await storage.setSystemSetting({
+        category,
+        key,
+        value: stringValue,
+      });
 
       res.json({ setting: updatedSetting });
     } catch (error) {

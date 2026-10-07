@@ -40,6 +40,12 @@ interface SystemSettings {
     active_card_required_exchange: boolean;
     active_card_required_withdrawal: boolean;
   };
+  messaging?: {
+    enable_otp_messages: boolean;
+    otp_email_enabled: boolean;
+    otp_sms_enabled: boolean;
+    otp_whatsapp_enabled: boolean;
+  };
   notifications?: {
     email_notifications: boolean;
     sms_notifications: boolean;
@@ -189,13 +195,25 @@ export default function AdminSystemSettingsPage() {
          ]),
        ));
 
-      setTwoFactorRequired(settingsData.security?.two_factor_required || false);
-      setKycAutoApproval(settingsData.security?.kyc_auto_approval || true);
-      setPinRequired(settingsData.security?.pin_required || false);
-      setEnableOtp(settingsData.security?.enable_otp_feature || true);
-      setOtpEmail(settingsData.security?.otp_email_enabled || true);
-      setOtpSms(settingsData.security?.otp_sms_enabled || true);
-      setOtpWhatsapp(settingsData.security?.otp_whatsapp_enabled || false);
+      setTwoFactorRequired(readBooleanSetting(settingsData.security?.two_factor_required, false));
+      setKycAutoApproval(readBooleanSetting(settingsData.security?.kyc_auto_approval, true));
+      setPinRequired(readBooleanSetting(settingsData.security?.pin_required, false));
+      setEnableOtp(readBooleanSetting(
+        settingsData.messaging?.enable_otp_messages ?? settingsData.security?.enable_otp_feature,
+        true,
+      ));
+      setOtpEmail(readBooleanSetting(
+        settingsData.messaging?.otp_email_enabled ?? settingsData.security?.otp_email_enabled,
+        true,
+      ));
+      setOtpSms(readBooleanSetting(
+        settingsData.messaging?.otp_sms_enabled ?? settingsData.security?.otp_sms_enabled,
+        true,
+      ));
+      setOtpWhatsapp(readBooleanSetting(
+        settingsData.messaging?.otp_whatsapp_enabled ?? settingsData.security?.otp_whatsapp_enabled,
+        false,
+      ));
       setMaxDailyLimit(settingsData.security?.max_daily_limit || "");
       setCardRequiredForSend(readBooleanSetting(settingsData.security?.active_card_required_send, true));
       setCardRequiredForExchange(readBooleanSetting(settingsData.security?.active_card_required_exchange, true));
@@ -272,19 +290,22 @@ export default function AdminSystemSettingsPage() {
 
   const securityMutation = useMutation({
     mutationFn: async () => {
-      const requests = [
-        apiRequest("PUT", "/api/admin/settings/two_factor_required", { value: String(twoFactorRequired), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/kyc_auto_approval", { value: String(kycAutoApproval), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/pin_required", { value: String(pinRequired), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/enable_otp_feature", { value: String(enableOtp), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_email_enabled", { value: String(otpEmail), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_sms_enabled", { value: String(otpSms), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/otp_whatsapp_enabled", { value: String(otpWhatsapp), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/max_daily_limit", { value: String(maxDailyLimit), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/active_card_required_send", { value: String(cardRequiredForSend), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/active_card_required_exchange", { value: String(cardRequiredForExchange), category: "security" }),
-        apiRequest("PUT", "/api/admin/settings/active_card_required_withdrawal", { value: String(cardRequiredForWithdrawal), category: "security" }),
+      const updates = [
+        { key: "two_factor_required", value: twoFactorRequired, category: "security" },
+        { key: "kyc_auto_approval", value: kycAutoApproval, category: "security" },
+        { key: "pin_required", value: pinRequired, category: "security" },
+        { key: "enable_otp_messages", value: enableOtp, category: "messaging" },
+        { key: "otp_email_enabled", value: otpEmail, category: "messaging" },
+        { key: "otp_sms_enabled", value: otpSms, category: "messaging" },
+        { key: "otp_whatsapp_enabled", value: otpWhatsapp, category: "messaging" },
+        { key: "max_daily_limit", value: maxDailyLimit, category: "security" },
+        { key: "active_card_required_send", value: cardRequiredForSend, category: "security" },
+        { key: "active_card_required_exchange", value: cardRequiredForExchange, category: "security" },
+        { key: "active_card_required_withdrawal", value: cardRequiredForWithdrawal, category: "security" },
       ];
+      const requests = updates.map(({ key, value, category }) =>
+        apiRequest("PUT", `/api/admin/settings/${key}`, { value: String(value), category }),
+      );
       const results = await Promise.all(requests);
       return { success: true, results };
     },
@@ -293,7 +314,11 @@ export default function AdminSystemSettingsPage() {
       qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
       qc.invalidateQueries({ queryKey: ["/api/transaction-policy"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to save security settings.", variant: "destructive" }),
+    onError: (error: unknown) => toast({
+      title: "Error",
+      description: error instanceof Error ? error.message : "Failed to save security settings.",
+      variant: "destructive",
+    }),
   });
 
   const notificationsMutation = useMutation({
