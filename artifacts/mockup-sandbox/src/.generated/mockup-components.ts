@@ -2,5 +2,6 @@
 type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/greenpay-accounts/Current.tsx": () => import("../components/mockups/greenpay-accounts/Current.tsx"),
-  "./components/mockups/greenpay-accounts/Refined.tsx": () => import("../components/mockups/greenpay-accounts/Refined.tsx")
+  "./components/mockups/greenpay-accounts/Refined.tsx": () => import("../components/mockups/greenpay-accounts/Refined.tsx"),
+  "./components/mockups/wallet-cards/WalletCardPreview.tsx": () => import("../components/mockups/wallet-cards/WalletCardPreview.tsx")
 };

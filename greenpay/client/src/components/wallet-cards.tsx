@@ -123,7 +123,7 @@ export default function WalletCards({
               transition={{ delay: i * 0.05 }}
               onClick={() => { onWalletSelect?.(wallet); setActiveIndex(i); }}
               className={`
-                group snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl relative overflow-hidden cursor-pointer
+                group snap-center flex-shrink-0 w-[272px] min-h-[180px] rounded-2xl relative overflow-hidden cursor-pointer
                 transition-all duration-200 ease-out hover:-translate-y-1 hover:shadow-2xl
                 border-2 border-white/80
                 ${isSelected ? 'border-white shadow-2xl scale-[1.02]' : 'shadow-lg hover:shadow-xl'}
@@ -144,7 +144,7 @@ export default function WalletCards({
               <div className="absolute inset-0 opacity-5"
                 style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'60\' height=\'60\' viewBox=\'0 0 60 60\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cg fill=\'none\' fill-rule=\'evenodd\'%3E%3Cg fill=\'%23ffffff\' fill-opacity=\'1\'%3E%3Cpath d=\'M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z\'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")' }} />
 
-              <div className="relative p-4 h-full flex flex-col justify-between">
+              <div className="relative p-4 min-h-[180px] flex flex-col justify-between">
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center gap-1.5 mb-0.5">
@@ -222,7 +222,7 @@ export default function WalletCards({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             onClick={onAddWallet || (() => setLocation("/settings"))}
-            className="snap-center flex-shrink-0 w-[272px] h-[152px] rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
+            className="snap-center flex-shrink-0 w-[272px] min-h-[180px] rounded-2xl border-2 border-dashed border-border bg-muted/30 flex flex-col items-center justify-center gap-2 cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
           >
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
               <Plus className="w-5 h-5 text-primary" />
