@@ -1,0 +1,1 @@
+- [GreenPay virtual-account scope](greenpay-virtual-account-scope.md) — Keep EUR, USD, and GBP visible together on the account overview.

@@ -73,33 +73,30 @@ export default function WalletAccountPage() {
     const applicationStatus = String(application?.status || "").toLowerCase();
     const account = application?.virtualAccount || null;
     const enabled = enabledVirtualCurrencies.has(currency.code);
-    const status = isAccountsLoading
-      ? "Loading"
-      : isAccountsError
-      ? "Could not load"
-      : applicationStatus === "approved"
-      ? account?.isActive === false ? "Inactive" : account ? "Available" : "Setup pending"
-      : applicationStatus === "pending" ? "Under review"
-      : applicationStatus === "rejected" ? "Action needed"
-      : enabled ? "Not requested" : "Unavailable";
+    let status = enabled ? "Not requested" : "Unavailable";
+    if (isAccountsLoading) status = "Loading";
+    else if (isAccountsError) status = "Could not load";
+    else if (applicationStatus === "approved") {
+      status = account?.isActive === false ? "Inactive" : account ? "Available" : "Setup pending";
+    } else if (applicationStatus === "pending") status = "Under review";
+    else if (applicationStatus === "rejected") status = "Action needed";
+    else if (application) status = "In progress";
+
     const accountBalance = Number(account?.balance || 0);
     const accountHold = Number(account?.holdAmount || 0);
     const accountAvailable = Number(account?.availableBalance ?? Math.max(0, accountBalance - accountHold));
-    const helperText = isAccountsLoading
-      ? "Loading virtual-account status."
-      : isAccountsError
-      ? "Could not load this account's status."
-      : applicationStatus === "pending"
-      ? "Your application is being reviewed."
-      : applicationStatus === "rejected"
-      ? "Review your application for the next steps."
-      : applicationStatus === "approved" && !account
-      ? "Your approved account details are being prepared."
-      : !application && !enabled
-      ? "Applications are not currently enabled for this currency."
-      : !application
-      ? "No virtual account has been requested yet."
-      : "Receive bank payments into this currency account.";
+    let helperText = "No virtual account has been requested yet.";
+    if (isAccountsLoading) helperText = "Loading virtual-account status.";
+    else if (isAccountsError) helperText = "Could not load this account's status.";
+    else if (applicationStatus === "pending") helperText = "Your application is being reviewed.";
+    else if (applicationStatus === "rejected") helperText = "Review your application for the next steps.";
+    else if (applicationStatus === "approved" && !account) helperText = "Your approved account details are being prepared.";
+    else if (applicationStatus === "approved" && account?.isActive === false) helperText = "This virtual account is inactive.";
+    else if (!application && !enabled) helperText = "Applications are not currently enabled for this currency.";
+    else if (application && !["approved", "pending", "rejected"].includes(applicationStatus)) {
+      helperText = "Your application is being processed.";
+    } else if (application) helperText = "Receive bank payments into this currency account.";
+
     const actionLabel = isAccountsLoading || isAccountsError
       ? null
       : application
