@@ -8,7 +8,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
-import ncbaLogo from "@assets/images_(9)_1767703865615.png";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
 

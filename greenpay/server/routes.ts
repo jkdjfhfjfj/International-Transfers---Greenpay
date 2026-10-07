@@ -3369,7 +3369,7 @@ p{color:#6b7280;font-size:14px;}</style>
           channel: "mobile_money",
           phone: user.phone,
           email: user.email,
-          description: "Virtual card purchase via Makamesco NexusPay",
+          description: "Virtual card purchase",
         });
         paymentReference = payment.reference || reference;
         paymentStatus = payment.status || "pending";
@@ -3422,7 +3422,7 @@ p{color:#6b7280;font-size:14px;}</style>
               channel: "mobile_money",
               phone: user.phone,
               email: user.email,
-              description: "Virtual card purchase via NexusPay M-Pesa fallback",
+              description: "Virtual card purchase using M-Pesa",
             });
             if (["failed", "cancelled", "rejected"].includes(String(fallbackPayment.status).toLowerCase())) {
               throw new Error(`NexusPay returned ${fallbackPayment.status}`);
@@ -3676,7 +3676,7 @@ p{color:#6b7280;font-size:14px;}</style>
           channel: "mobile_money",
           phone: phoneToUse,
           email: user.email,
-          description: "M-Pesa deposit via Makamesco Nexus Pay",
+          description: "M-Pesa deposit",
         });
         await db.insert(transactions).values({
           userId,
@@ -3684,7 +3684,7 @@ p{color:#6b7280;font-size:14px;}</style>
           amount: usdAmount.toFixed(2),
           currency: "USD",
           status: "pending",
-          description: "M-Pesa deposit via Makamesco Nexus Pay",
+          description: "M-Pesa deposit",
           fee: "0.00",
           reference: result.reference || reference,
           exchangeRate: exchangeRate.toString(),
@@ -3728,7 +3728,8 @@ p{color:#6b7280;font-size:14px;}</style>
         if (paymentData.status === 'TIMEOUT') {
           return res.status(504).json({ message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.", status: 'TIMEOUT' });
         }
-        return res.status(400).json({ message: paymentData.message || "Could not initiate M-Pesa payment. Please try again.", status: paymentData.status });
+        console.error("[Deposit/Mpesa] Mobile-money payment initialization failed:", paymentData.message || paymentData.status);
+        return res.status(502).json({ message: "M-Pesa payment could not be started. Please try again later.", status: paymentData.status });
       }
 
       await storage.createTransaction({
@@ -3738,7 +3739,7 @@ p{color:#6b7280;font-size:14px;}</style>
         currency: 'USD',
         status: 'pending',
         reference: paymentData.reference || reference,
-        description: `M-Pesa deposit via PayHero`,
+        description: "M-Pesa deposit",
         fee: '0.00',
         exchangeRate: exchangeRate.toString(),
         paystackReference: paymentData.reference || reference,
@@ -4301,7 +4302,7 @@ p{color:#6b7280;font-size:14px;}</style>
               entryType: "deposit",
               idempotencyKey: `deposit:${transaction.id}`,
               transactionId: transaction.id,
-              description: transaction.description || "Paystack deposit",
+              description: transaction.description || "Card deposit",
             });
           }
           if (transaction.type === "card_purchase") {
@@ -15288,7 +15289,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           entryType: "deposit",
           idempotencyKey: `deposit:${transaction.id}`,
           transactionId: transaction.id,
-          description: transaction.description || "PayzaAPI deposit",
+          description: transaction.description || "Wallet deposit",
         });
         await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.id, transaction.id));
       } else if (providerStatus.status === "failed") {
@@ -15356,7 +15357,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
               entryType: "deposit",
               idempotencyKey: `deposit:${txn.id}`,
               transactionId: txn.id,
-              description: txn.description || "NexusPay deposit",
+              description: txn.description || "Wallet deposit",
             });
 
             // Apply the highest matching configured bonus exactly once.
