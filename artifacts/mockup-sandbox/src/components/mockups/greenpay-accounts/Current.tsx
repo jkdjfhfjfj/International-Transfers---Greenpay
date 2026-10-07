@@ -10,6 +10,12 @@ const actions = [
   { label: "Withdraw", Icon: ArrowUpRight },
 ];
 
+const virtualAccounts = [
+  { code: "EUR", name: "Euro", flag: "🇪🇺", total: "€740.00", hold: "€40.00", available: "€700.00" },
+  { code: "USD", name: "US Dollar", flag: "🇺🇸", total: "$640.00", hold: "$40.00", available: "$600.00" },
+  { code: "GBP", name: "British Pound", flag: "🇬🇧", total: "£528.80", hold: "£28.80", available: "£500.00" },
+];
+
 export function Current() {
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -55,15 +61,41 @@ export function Current() {
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold">Virtual account</h2>
+          <div className="mb-3 flex items-center gap-2">
+            <Building2 className="h-4 w-4 text-primary" />
+            <div>
+              <h2 className="font-semibold">Virtual accounts</h2>
+              <p className="text-xs text-muted-foreground">EUR, USD, and GBP</p>
             </div>
-            <Badge variant="outline">Available</Badge>
           </div>
-          <p className="text-sm text-muted-foreground">Receive money into your USD wallet using its account details.</p>
-          <Button variant="outline" className="mt-3 w-full">View account details</Button>
+          <div className="space-y-2">
+            {virtualAccounts.map(account => (
+              <div key={account.code} className="rounded-xl border border-border p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg" aria-hidden="true">{account.flag}</span>
+                    <div>
+                      <p className="text-sm font-semibold">{account.code} account</p>
+                      <p className="text-[10px] text-muted-foreground">{account.name}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline">Available</Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Total", amount: account.total },
+                    { label: "On hold", amount: account.hold },
+                    { label: "Available", amount: account.available },
+                  ].map(figure => (
+                    <div key={figure.label} className="min-w-0 rounded-lg bg-muted p-2">
+                      <p className="text-[10px] text-muted-foreground">{figure.label}</p>
+                      <p className={`mt-0.5 truncate text-xs font-semibold ${figure.label === "Available" ? "text-primary" : ""}`}>{figure.amount}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4">

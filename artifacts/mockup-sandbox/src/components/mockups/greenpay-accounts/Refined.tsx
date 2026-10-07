@@ -26,10 +26,10 @@ const walletFigures = [
   { label: "Withdrawal reserve", amount: "$210.00", note: "Reserved for withdrawal", kind: "reserve" },
 ];
 
-const accountFigures = [
-  { label: "Total", amount: "$640.00" },
-  { label: "On hold", amount: "$40.00" },
-  { label: "Available", amount: "$600.00", kind: "available" },
+const virtualAccounts = [
+  { code: "EUR", name: "Euro", flag: "🇪🇺", total: "€740.00", hold: "€40.00", available: "€700.00" },
+  { code: "USD", name: "US Dollar", flag: "🇺🇸", total: "$640.00", hold: "$40.00", available: "$600.00" },
+  { code: "GBP", name: "British Pound", flag: "🇬🇧", total: "£528.80", hold: "£28.80", available: "£500.00" },
 ];
 
 export function Refined() {
@@ -107,46 +107,46 @@ export function Refined() {
         </section>
 
         <section className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
-                <Building2 className="h-4 w-4 text-primary" />
-              </span>
-              <div>
-                <h2 className="font-semibold">Virtual account</h2>
-                <p className="mt-0.5 text-xs text-muted-foreground">USD · Approved account</p>
-              </div>
+          <div className="mb-3 flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+              <Building2 className="h-4 w-4 text-primary" />
+            </span>
+            <div>
+              <h2 className="font-semibold">Virtual accounts</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground">Balances by currency · EUR, USD, GBP</p>
             </div>
-            <Badge variant="outline" className="shrink-0 gap-1.5 border-primary/20 bg-primary/5 text-primary">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-              Available
-            </Badge>
           </div>
-          <p className="text-sm leading-5 text-muted-foreground">
-            Receive money into your USD wallet using its account details.
-          </p>
-          <div className="mt-4 grid grid-cols-3 gap-2">
-            {accountFigures.map((figure) => (
-              <div
-                key={figure.label}
-                className={`min-w-0 rounded-xl border p-3 ${
-                  figure.kind === "available"
-                    ? "border-primary/20 bg-primary/[0.06]"
-                    : "border-border bg-muted/60"
-                }`}
-              >
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  {figure.label}
-                </p>
-                <p className={`mt-1.5 text-sm font-bold tabular-nums sm:text-base ${figure.kind === "available" ? "text-primary" : ""}`}>
-                  {figure.amount}
-                </p>
-              </div>
+          <div className="space-y-2.5">
+            {virtualAccounts.map(account => (
+              <article key={account.code} className="rounded-xl border border-border bg-card p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg" aria-hidden="true">{account.flag}</span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground">{account.code} account</p>
+                      <p className="text-[10px] text-muted-foreground">{account.name}</p>
+                    </div>
+                  </div>
+                  <Badge variant="outline" className="shrink-0 gap-1.5 border-primary/20 bg-primary/5 text-primary">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                    Available
+                  </Badge>
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Total", amount: account.total },
+                    { label: "On hold", amount: account.hold },
+                    { label: "Available", amount: account.available, available: true },
+                  ].map(figure => (
+                    <div key={figure.label} className={`min-w-0 rounded-lg border p-2.5 ${figure.available ? "border-primary/20 bg-primary/[0.06]" : "border-border bg-muted/60"}`}>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{figure.label}</p>
+                      <p className={`mt-1 text-xs font-bold tabular-nums sm:text-sm ${figure.available ? "text-primary" : "text-foreground"}`}>{figure.amount}</p>
+                    </div>
+                  ))}
+                </div>
+              </article>
             ))}
           </div>
-          <Button variant="outline" className="mt-4 w-full border-border text-foreground">
-            View account details
-          </Button>
         </section>
 
         <section className="flex gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/80 p-4">
@@ -179,7 +179,7 @@ export function Refined() {
             </p>
           </div>
         </section>
-        <p className="pb-2 text-center text-[10px] text-muted-foreground">Balances shown in USD</p>
+        <p className="pb-2 text-center text-[10px] text-muted-foreground">Wallet balance in USD · Virtual account balances in their listed currencies</p>
       </main>
     </div>
   );

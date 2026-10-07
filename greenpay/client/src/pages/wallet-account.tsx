@@ -11,6 +11,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 
 const incomingTransactionTypes = new Set(["deposit", "receive", "refund"]);
+const virtualAccountCurrencies = [
+  { code: "EUR", name: "Euro", flag: "🇪🇺" },
+  { code: "USD", name: "US Dollar", flag: "🇺🇸" },
+  { code: "GBP", name: "British Pound", flag: "🇬🇧" },
+] as const;
 
 function transactionLabel(transaction: any): string {
   return String(transaction.description || transaction.type || "Transaction")
@@ -37,7 +42,12 @@ export default function WalletAccountPage() {
     enabled: !!user?.id,
     queryFn: async () => (await apiRequest("GET", `/api/transactions/${user?.id}`)).json(),
   });
-  const { data: accountData } = useQuery({
+  const {
+    data: accountData,
+    isLoading: isAccountsLoading,
+    isError: isAccountsError,
+    refetch: refetchAccounts,
+  } = useQuery({
     queryKey: ["/api/virtual-accounts", wallet?.currency],
     enabled: !!wallet,
     queryFn: async () => (await apiRequest("GET", "/api/virtual-accounts")).json(),
@@ -49,20 +59,71 @@ export default function WalletAccountPage() {
     return list.filter((transaction: any) => String(transaction.currency).toUpperCase() === walletCurrency).slice(0, 8);
   }, [transactionData, walletCurrency]);
   const applications = (accountData as any)?.applications || [];
-  const virtualAccountApplication = applications.find((application: any) =>
-    String(application.currency).toUpperCase() === walletCurrency && application.status === "approved"
+  const configuredVirtualCurrencies = (accountData as any)?.supportedCurrencies;
+  const enabledVirtualCurrencies = new Set(
+    (Array.isArray(configuredVirtualCurrencies)
+      ? configuredVirtualCurrencies
+      : virtualAccountCurrencies.map(({ code }) => code)
+    ).map((currency: string) => String(currency).toUpperCase()),
   );
-  const virtualAccount = virtualAccountApplication?.virtualAccount || null;
+  const virtualAccountSummaries = virtualAccountCurrencies.map(currency => {
+    const application = applications.find((item: any) =>
+      String(item.currency).toUpperCase() === currency.code
+    );
+    const applicationStatus = String(application?.status || "").toLowerCase();
+    const account = application?.virtualAccount || null;
+    const enabled = enabledVirtualCurrencies.has(currency.code);
+    const status = isAccountsLoading
+      ? "Loading"
+      : isAccountsError
+      ? "Could not load"
+      : applicationStatus === "approved"
+      ? account?.isActive === false ? "Inactive" : account ? "Available" : "Setup pending"
+      : applicationStatus === "pending" ? "Under review"
+      : applicationStatus === "rejected" ? "Action needed"
+      : enabled ? "Not requested" : "Unavailable";
+    const accountBalance = Number(account?.balance || 0);
+    const accountHold = Number(account?.holdAmount || 0);
+    const accountAvailable = Number(account?.availableBalance ?? Math.max(0, accountBalance - accountHold));
+    const helperText = isAccountsLoading
+      ? "Loading virtual-account status."
+      : isAccountsError
+      ? "Could not load this account's status."
+      : applicationStatus === "pending"
+      ? "Your application is being reviewed."
+      : applicationStatus === "rejected"
+      ? "Review your application for the next steps."
+      : applicationStatus === "approved" && !account
+      ? "Your approved account details are being prepared."
+      : !application && !enabled
+      ? "Applications are not currently enabled for this currency."
+      : !application
+      ? "No virtual account has been requested yet."
+      : "Receive bank payments into this currency account.";
+    const actionLabel = isAccountsLoading || isAccountsError
+      ? null
+      : application
+      ? applicationStatus === "approved" ? "View account details" : "View application"
+      : enabled ? `Request ${currency.code} account` : null;
+
+    return {
+      ...currency,
+      application,
+      account,
+      status,
+      helperText,
+      actionLabel,
+      symbol: getCurrencySymbol(currency.code),
+      accountBalance,
+      accountHold,
+      accountAvailable,
+    };
+  });
   const balance = Number(wallet?.balance || 0);
   const hold = Number(wallet?.holdAmount || 0);
   const withdrawalHold = Number(wallet?.withdrawalHoldAmount || 0);
   const reserved = hold + withdrawalHold;
   const available = Math.max(0, Number(wallet?.availableBalance ?? (balance - reserved)));
-  const virtualAccountBalance = Number(virtualAccount?.balance || 0);
-  const virtualAccountHold = Number(virtualAccount?.holdAmount || 0);
-  const virtualAccountAvailable = Number(
-    virtualAccount?.availableBalance ?? Math.max(0, virtualAccountBalance - virtualAccountHold),
-  );
   const symbol = getCurrencySymbol(walletCurrency);
   const walletSuspended = Boolean(wallet?.isSuspended || !wallet?.isActive);
 
@@ -72,7 +133,7 @@ export default function WalletAccountPage() {
   return (
     <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader size="sm" />
-      <main className="max-w-2xl mx-auto p-4 space-y-4">
+      <main className="max-w-2xl mx-auto p-4 pb-8 space-y-4">
         <section className="rounded-3xl bg-gradient-to-br from-primary to-emerald-600 p-5 text-white shadow-lg">
           <div className="flex items-start justify-between">
             <div><p className="text-sm text-white/75">{wallet.label || "Wallet account"}</p><h1 className="text-2xl font-bold mt-1">{walletCurrency} account</h1></div>
@@ -105,21 +166,79 @@ export default function WalletAccountPage() {
           </section>
         )}
 
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between mb-3"><div className="flex items-center gap-2"><Building2 className="w-4 h-4 text-primary" /><h2 className="font-semibold">Virtual account</h2></div><Badge variant="outline">{virtualAccount ? "Available" : "Not requested"}</Badge></div>
-          {virtualAccount ? (
-            <div className="space-y-2 text-sm">
-              <p className="text-muted-foreground">Receive money into your {walletCurrency} wallet using its account details.</p>
-              <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">Total</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountBalance, 2)}</p></div>
-                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">On hold</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountHold, 2)}</p></div>
-                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">Available</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountAvailable, 2)}</p></div>
+        <section aria-labelledby="virtual-accounts-heading" data-testid="section-virtual-accounts" className="rounded-2xl border border-border bg-card p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-primary" />
+              <div>
+                <h2 id="virtual-accounts-heading" className="font-semibold">Virtual accounts</h2>
+                <p className="text-xs text-muted-foreground">EUR, USD, and GBP account balances</p>
               </div>
-              <Button variant="outline" className="w-full" onClick={() => setLocation(`/virtual-accounts?currency=${walletCurrency}`)}>View account details</Button>
             </div>
-          ) : (
-            <div className="space-y-2 text-sm"><p className="text-muted-foreground">Request a virtual account for this wallet to receive bank payments.</p><Button variant="outline" className="w-full" onClick={() => setLocation(`/virtual-accounts?currency=${walletCurrency}`)}>Request {walletCurrency} account</Button></div>
-          )}
+              {isAccountsError ? (
+                <Button variant="ghost" size="sm" data-testid="button-retry-virtual-accounts" onClick={() => void refetchAccounts()}>Retry</Button>
+              ) : (
+                <Button variant="ghost" size="sm" data-testid="button-manage-virtual-accounts" onClick={() => setLocation("/virtual-accounts")}>Manage</Button>
+              )}
+          </div>
+          <div className="space-y-3">
+            {virtualAccountSummaries.map(account => {
+              const badgeClass = account.status === "Available"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+                : account.status === "Under review"
+                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300"
+                : account.status === "Action needed"
+                ? "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-900/20 dark:text-rose-300"
+                : "border-border text-muted-foreground";
+
+              return (
+                <article key={account.code} data-testid={`card-virtual-account-${account.code.toLowerCase()}`} className="rounded-xl border border-border p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-lg" aria-hidden="true">{account.flag}</span>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-foreground" data-testid={`text-virtual-account-currency-${account.code.toLowerCase()}`}>{account.code} account</p>
+                        <p className="text-xs text-muted-foreground">{account.name}</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className={`shrink-0 ${badgeClass}`} data-testid={`status-virtual-account-${account.code.toLowerCase()}`}>{account.status}</Badge>
+                  </div>
+                  {account.account ? (
+                    <div className="mt-3 grid grid-cols-3 gap-2">
+                      {[
+                        { label: "Total", amount: account.accountBalance },
+                        { label: "On hold", amount: account.accountHold },
+                        { label: "Available", amount: account.accountAvailable, available: true },
+                      ].map(figure => (
+                        <div key={figure.label} className={`min-w-0 rounded-lg p-2 ${figure.available ? "bg-primary/10" : "bg-muted"}`}>
+                          <p className="text-[10px] text-muted-foreground">{figure.label}</p>
+                          <p
+                            className={`mt-0.5 truncate text-sm font-semibold tabular-nums ${figure.available ? "text-primary" : "text-foreground"}`}
+                            data-testid={figure.available ? `text-virtual-account-available-${account.code.toLowerCase()}` : undefined}
+                          >
+                            {account.symbol}{formatNumber(figure.amount, 2)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">{account.helperText}</p>
+                  )}
+                  {account.actionLabel && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full"
+                      data-testid={`button-virtual-account-open-${account.code.toLowerCase()}`}
+                      onClick={() => setLocation(`/virtual-accounts?currency=${account.code}`)}
+                    >
+                      {account.actionLabel}
+                    </Button>
+                  )}
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         {(hold > 0 || withdrawalHold > 0) && (
