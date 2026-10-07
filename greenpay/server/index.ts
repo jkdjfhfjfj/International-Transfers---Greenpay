@@ -93,9 +93,11 @@ app.use((req, res, next) => {
   if (isProduction && req.headers['x-forwarded-proto'] !== 'https') {
     const trustedHosts = [
       process.env.PUBLIC_APP_HOST,
+        process.env.PUBLIC_APP_URL,
       ...(process.env.REPLIT_DOMAINS || "").split(","),
     ]
-      .map(host => host.trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""))
+        .filter((host): host is string => typeof host === "string")
+        .map(host => host.trim().replace(/^https?:\/\//, "").replace(/\/+$/, ""))
       .filter(Boolean);
     const requestHost = req.hostname;
     const redirectHost = trustedHosts.includes(requestHost) ? requestHost : trustedHosts[0];
