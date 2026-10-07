@@ -38,7 +38,7 @@ git push -u origin main
 1. Go to **[render.com](https://render.com)** and sign in
 2. Click **"New +"** → **"Web Service"**
 3. Connect your GitHub repository
-4. Select the **greenpay** repository
+4. Select the repository containing GreenPay
 
 ### B. Configure Build Settings
 
@@ -46,9 +46,11 @@ git push -u origin main
 
 **Environment:** `Node`
 
+**Root Directory:** `greenpay`
+
 **Build Command:**
 ```bash
-npm install && npm run build
+npm ci && npm run build
 ```
 
 **Start Command:**
@@ -57,6 +59,10 @@ npm start
 ```
 
 **Plan:** Free (or select paid for better performance)
+
+The repository root is a pnpm workspace. The `greenpay` root directory setting
+ensures these npm commands run against GreenPay's own `package.json` and
+`package-lock.json`, rather than the workspace-level pnpm guard.
 
 ---
 

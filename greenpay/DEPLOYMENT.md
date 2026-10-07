@@ -124,8 +124,12 @@ Before deploying, ensure you have:
 
 3. **Create New Web Service**
    - Connect your GitHub repository
-   - Build Command: `npm install && npm run build`
+   - Root Directory: `greenpay`
+   - Build Command: `npm ci && npm run build`
    - Start Command: `npm start`
+
+   The repository root is a pnpm workspace; set the service root to `greenpay`
+   so Render uses GreenPay's own `package.json` and `package-lock.json`.
 
 4. **Add PostgreSQL**
    - Create a new PostgreSQL database in Render
