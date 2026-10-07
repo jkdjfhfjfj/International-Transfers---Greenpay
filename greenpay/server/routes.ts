@@ -3388,11 +3388,12 @@ p{color:#6b7280;font-size:14px;}</style>
           { type: "virtual_card", usd_amount: usdAmount.toFixed(2), exchange_rate: exchangeRate.toString() },
         );
         if (!payment.status) {
+          console.error("[Card Purchase] Payment initialization failed:", payment.message);
           await storage.updateTransaction(transaction.id, {
             status: "failed",
-            failureReason: payment.message || "Payment initialization failed",
+            failureReason: "Card payment initialization failed",
           });
-          return res.status(400).json({ message: payment.message || "Payment initialization failed.", status: "FAILED" });
+          return res.status(503).json({ message: "Card payment could not be started. Please try again later.", status: "FAILED" });
         }
         paymentReference = payment.data?.reference || reference;
         paymentStatus = payment.data?.status || "pending";
@@ -3445,17 +3446,17 @@ p{color:#6b7280;font-size:14px;}</style>
               },
             });
           } catch (fallbackError: any) {
-            const primaryReason = payment.message || payment.status || "PayHero payment initialization failed";
-            const fallbackReason = fallbackError?.message || "NexusPay payment initialization failed";
-            const failureReason = `${primaryReason}; NexusPay fallback failed: ${fallbackReason}`;
+            const primaryReason = payment.message || payment.status || "Mobile-money payment initialization failed";
+            const fallbackReason = fallbackError?.message || "Alternative payment initialization failed";
+            console.error("[Card Purchase] M-Pesa payment initialization failed:", { primaryReason, fallbackReason });
+            const failureReason = "M-Pesa payment initialization failed";
             await storage.updateTransaction(transaction.id, {
               status: "failed",
               failureReason,
             });
             return res.status(502).json({
-              message: `M-Pesa payment could not be started. ${failureReason}`,
-              status: "PAYMENT_PROVIDERS_FAILED",
-              details: failureReason,
+              message: "M-Pesa payment could not be started. Please try again later.",
+              status: "PAYMENT_UNAVAILABLE",
             });
           }
         } else {
@@ -3834,7 +3835,10 @@ p{color:#6b7280;font-size:14px;}</style>
         `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`,
         { walletId, currency: targetCurrency, paymentCurrency: chargeCurrency, exchangeRate, gateway: "paystack" },
       );
-      if (!payment.status) return res.status(400).json({ message: payment.message || "Paystack initialization failed" });
+      if (!payment.status) {
+        console.error("Card deposit initialization failed:", payment.message);
+        return res.status(503).json({ message: "Card payment could not be started. Please try again later." });
+      }
 
       await db.insert(transactions).values({
         userId,
@@ -3844,16 +3848,16 @@ p{color:#6b7280;font-size:14px;}</style>
         status: "pending",
         reference,
         paystackReference: reference,
-        description: `Paystack card deposit to ${targetCurrency} wallet`,
+        description: `Card deposit to ${targetCurrency} wallet`,
         fee: "0.00",
         exchangeRate: String(exchangeRate),
         metadata: { walletId, gateway: "paystack", paymentCurrency: chargeCurrency, paymentAmount: chargeAmount } as any,
       });
       return res.json({ authorizationUrl: payment.data?.authorization_url, reference, currency: targetCurrency, amount: targetAmount.toFixed(2) });
-    } catch (error: any) {
-      console.error("Wallet Paystack deposit error:", error);
-      return res.status(500).json({ message: error.message || "Could not initialize card deposit" });
-    }
+     } catch (error: any) {
+       console.error("Wallet card deposit error:", error);
+       return res.status(500).json({ message: "Card payment could not be started. Please try again later." });
+     }
   });
 
   // ── Public deposit config (enabled methods, bank details, active bonuses) ───
