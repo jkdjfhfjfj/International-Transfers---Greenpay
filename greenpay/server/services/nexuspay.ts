@@ -46,21 +46,7 @@ export class NexusPayService {
   }
 
   async getApiKey(): Promise<string | null> {
-    if (this.envApiKey) return this.envApiKey;
-    try {
-      const { pool } = await import('../db');
-      if (pool) {
-        const result = await pool.query(
-          `SELECT value FROM system_settings WHERE key = $1 AND category = $2 LIMIT 1`,
-          ['nexuspay_api_key', 'payment']
-        );
-        if (result.rows.length > 0 && result.rows[0].value) {
-          const raw = result.rows[0].value as any;
-          return typeof raw === 'object' ? String(raw.value || '') : String(raw).replace(/^"|"$/g, '');
-        }
-      }
-    } catch {}
-    return null;
+    return String(process.env.NEXUSPAY_API_KEY || this.envApiKey || "").trim() || null;
   }
 
   private headers(apiKey: string) {
@@ -80,7 +66,7 @@ export class NexusPayService {
     description?: string;
   }): Promise<{ reference: string; status: string; redirectUrl: string | null }> {
     const apiKey = await this.getApiKey();
-    if (!apiKey) throw new Error('NexusPay API key not configured. Set NEXUSPAY_API_KEY or configure it in admin settings.');
+    if (!apiKey) throw new Error('NexusPay API key is not configured. Set NEXUSPAY_API_KEY in Replit Secrets.');
 
     if (!params.phone) {
       throw new Error('NexusPay STK Push requires a customer phone number');

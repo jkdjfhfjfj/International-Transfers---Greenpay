@@ -7,7 +7,7 @@ import { storage } from "./storage";
 import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
-import { payzaApiService } from "./services/payzaapi";
+import { getPayzaApiCurrencyCode, PAYZA_API_CURRENCIES, payzaApiService } from "./services/payzaapi";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -34,6 +34,65 @@ import { getCryptoPrice, getCryptoPrices, invalidateCryptoPriceCache, SUPPORTED_
 const cloudinaryStorage = new CloudinaryStorageService();
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
+const VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST = ["USD", "EUR", "GBP"] as const;
+const ACTIVE_CARD_REQUIRED_DEFAULTS = { send: true, exchange: true, withdrawal: false } as const;
+type CardProtectedAction = keyof typeof ACTIVE_CARD_REQUIRED_DEFAULTS;
+
+function isSensitiveSystemSetting(setting: { category?: unknown; key?: unknown }) {
+  const category = String(setting.category || "").toLowerCase();
+  const key = String(setting.key || "").toLowerCase();
+  if ((category === "payhero" && key === "username") ||
+      (/(payhero|payza|paystack|nexuspay|makamesco)[_-].*username/.test(key))) return true;
+  return /(api[_-]?key|secret|password|access[_-]?token|private[_-]?key|credential)/i.test(key);
+}
+
+function isPaymentProviderCredential(setting: { category?: unknown; key?: unknown }) {
+  const category = String(setting.category || "").toLowerCase();
+  const key = String(setting.key || "").toLowerCase();
+  const providerNamedKey = ["payhero", "payza", "paystack", "nexuspay", "makamesco"].some(name => key.includes(name));
+  return ["payment", "payhero", "payzaapi", "paystack", "nexuspay"].includes(category) &&
+    (isSensitiveSystemSetting(setting) || (category === "payhero" && key === "username")) ||
+    (providerNamedKey && (isSensitiveSystemSetting(setting) || /username/.test(key)));
+}
+
+function isPaymentProviderName(provider: unknown) {
+  return ["payhero", "payzaapi", "paystack", "nexuspay", "makamesco", "makamescopay"]
+    .includes(String(provider || "").trim().toLowerCase());
+}
+
+function safeApiConfiguration(configuration: any) {
+  if (!isPaymentProviderName(configuration?.provider)) return configuration;
+  const { apiKey, apiSecret, webhookSecret, configuration: privateConfiguration, ...safe } = configuration;
+  return {
+    ...safe,
+    hasApiKey: Boolean(apiKey),
+    hasApiSecret: Boolean(apiSecret),
+    hasWebhookSecret: Boolean(webhookSecret),
+    hasPrivateConfiguration: Boolean(privateConfiguration),
+  };
+}
+
+async function hasActiveVirtualCard(userId: string): Promise<boolean> {
+  const [card] = await db.select({ id: virtualCards.id }).from(virtualCards)
+    .where(and(eq(virtualCards.userId, userId), eq(virtualCards.status, "active")))
+    .limit(1);
+  return Boolean(card);
+}
+
+async function isActiveCardRequired(action: CardProtectedAction): Promise<boolean> {
+  const configured = await storage.getSystemSetting("security", `active_card_required_${action}`);
+  return settingEnabled(configured?.value, ACTIVE_CARD_REQUIRED_DEFAULTS[action]);
+}
+
+async function enforceActiveCardPolicy(userId: string, action: CardProtectedAction, res: any): Promise<boolean> {
+  if (!(await isActiveCardRequired(action)) || await hasActiveVirtualCard(userId)) return true;
+  res.status(403).json({
+    message: `An active virtual card is required to ${action === "withdrawal" ? "withdraw" : action}.`,
+    requiresActiveCard: true,
+    action,
+  });
+  return false;
+}
 
 function slugify(value: unknown): string {
   const slug = String(value || "")
@@ -964,8 +1023,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  const defaultVirtualAccountCurrencies = ["USD", "GBP", "EUR"];
-  const allVirtualAccountCurrencies = getSupportedCurrencyCodes();
+  const defaultVirtualAccountCurrencies = [...VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST];
+  const allVirtualAccountCurrencies = [...VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST];
 
   async function getVirtualAccountCurrencies() {
     try {
@@ -988,7 +1047,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const supportedCurrencies = await getVirtualAccountCurrencies();
       res.json({
         supportedCurrencies,
-        applications: applications.map((app: any) => ({
+        applications: applications
+          .filter((app: any) => allVirtualAccountCurrencies.includes(normalizeCurrency(app.currency) as any))
+          .map((app: any) => ({
           ...app,
           accountDetails: app.status === "approved" ? settings.find((s: any) => s.currency === app.currency) || null : null,
           virtualAccount: app.status === "approved"
@@ -1001,11 +1062,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 } : null;
               })()
             : null,
-        })),
+          })),
       });
     } catch (error) {
       console.error("Virtual accounts fetch error:", error);
       res.status(500).json({ message: "Failed to load virtual accounts" });
+    }
+  });
+
+  app.get("/api/transaction-policy", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session.userId;
+      const [send, exchange, withdrawal, activeCard] = await Promise.all([
+        isActiveCardRequired("send"),
+        isActiveCardRequired("exchange"),
+        isActiveCardRequired("withdrawal"),
+        hasActiveVirtualCard(userId),
+      ]);
+      res.json({ activeCard, activeCardRequired: { send, exchange, withdrawal } });
+    } catch (error) {
+      console.error("Transaction policy fetch error:", error);
+      res.status(500).json({ message: "Failed to load transaction policy" });
     }
   });
 
@@ -3802,6 +3879,12 @@ p{color:#6b7280;font-size:14px;}</style>
         methods: { ...settingsMap, default_gateway: defaultGateway },
         bonuses: activeBonuses,
         usdToKesRate: await getUsdToKesRate(),
+        providerCurrencies: [
+          { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya", provider: "PayHero" },
+          ...PAYZA_API_CURRENCIES.filter(currency => currency.code !== "KES")
+            .map(currency => ({ ...currency, provider: "PayzaAPI" })),
+        ],
+        currencyAvailabilityNote: "Currency and region labels describe the provider's documented currency list. The provider confirms country and payment-method availability at checkout.",
       });
     } catch (error) {
       console.error("[Deposit Config Error]:", error);
@@ -5142,18 +5225,13 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Security: users can only send from their own account
       const userId = sessionUserId;
-      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
-      if (!security.ok) return res.status(security.status || 400).json(security);
-      
-      // Verify user exists and has virtual card
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
-      if (!user?.hasVirtualCard) {
-        return res.status(400).json({ message: "Virtual card required for transactions" });
-      }
+      if (!(await enforceActiveCardPolicy(userId, "send", res))) return;
+      const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
+      if (!security.ok) return res.status(security.status || 400).json(security);
 
       // Get real-time exchange rate
       const exchangeRate = await exchangeRateService.getExchangeRate(currency, targetCurrency);
@@ -5940,20 +6018,17 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Real-time exchange and currency conversion - supports dual wallet (USD/KES)
-  app.post("/api/exchange/convert", optionalApiKey, async (req, res) => {
+  app.post("/api/exchange/convert", requireAuth, async (req, res) => {
     try {
-      const { amount, fromCurrency, toCurrency, userId } = req.body;
+      const { amount, fromCurrency, toCurrency } = req.body;
+      const userId = (req as any).session?.userId;
       
       // Get user
       const user = await storage.getUser(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-
-      // Verify user has virtual card for exchanges
-      if (!user.hasVirtualCard) {
-        return res.status(400).json({ message: "Virtual card required for currency exchanges" });
-      }
+      if (!(await enforceActiveCardPolicy(userId, "exchange", res))) return;
 
       const exchangeAmount = parseFloat(amount);
       const fee = (exchangeAmount * 0.015).toFixed(2); // 1.5% exchange fee
@@ -8904,7 +8979,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // System Settings Management
   app.get("/api/admin/settings", requireAdminAuth, async (req, res) => {
     try {
-      const settings = await storage.getSystemSettings();
+      const settings = (await storage.getSystemSettings()).filter(setting => !isPaymentProviderCredential(setting));
       res.json({ settings });
     } catch (error) {
       console.error('Settings fetch error:', error);
@@ -8929,6 +9004,17 @@ p{color:#6b7280;font-size:14px;}</style>
           category = "fees";
         }
       }
+      if (isPaymentProviderCredential({ category, key })) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
+      }
+      const providerSettingMatches = await Promise.all(
+        ["payment", "payhero", "payzaapi", "paystack", "nexuspay"].map(providerCategory =>
+          storage.getSystemSetting(providerCategory, key),
+        ),
+      );
+      if (providerSettingMatches.some(Boolean)) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
+      }
       
       // Try to update existing setting
       let updatedSetting = await storage.updateSystemSetting(key, stringValue);
@@ -8949,9 +9035,12 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/admin/settings", async (req, res) => {
+  app.post("/api/admin/settings", requireAdminAuth, async (req, res) => {
     try {
       const settingData = req.body;
+      if (isPaymentProviderCredential(settingData || {})) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
+      }
       const newSetting = await storage.createSystemSetting(settingData);
       res.json({ setting: newSetting });
     } catch (error) {
@@ -8964,7 +9053,7 @@ p{color:#6b7280;font-size:14px;}</style>
   app.get("/api/admin/api-configurations", requireAdminAuth, async (req, res) => {
     try {
       const configurations = await storage.getAllApiConfigurations();
-      res.json({ configurations });
+      res.json({ configurations: configurations.map(safeApiConfiguration) });
     } catch (error) {
       console.error('API configurations fetch error:', error);
       res.status(500).json({ message: "Failed to fetch API configurations" });
@@ -8979,8 +9068,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!configuration) {
         return res.status(404).json({ message: "Configuration not found" });
       }
-      
-      res.json({ configuration });
+      res.json({ configuration: safeApiConfiguration(configuration) });
     } catch (error) {
       console.error('API configuration fetch error:', error);
       res.status(500).json({ message: "Failed to fetch API configuration" });
@@ -8990,6 +9078,9 @@ p{color:#6b7280;font-size:14px;}</style>
   app.post("/api/admin/api-configurations", requireAdminAuth, async (req, res) => {
     try {
       const configData = req.body;
+      if (isPaymentProviderName(configData?.provider)) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+      }
       const configuration = await storage.createApiConfiguration(configData);
       res.json({ configuration, message: "API configuration created successfully" });
     } catch (error) {
@@ -9002,6 +9093,9 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const { provider } = req.params;
       const updates = req.body;
+      if (isPaymentProviderName(provider)) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+      }
       
       const configuration = await storage.updateApiConfiguration(provider, updates);
       
@@ -9494,35 +9588,25 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // PayHero admin settings endpoints
-  app.get("/api/admin/payhero-settings", async (req, res) => {
+  app.get("/api/admin/payhero-settings", requireAdminAuth, async (req, res) => {
     try {
-      // Get settings from database first, fallback to environment
       const channelIdSetting = await storage.getSystemSetting("payhero", "channel_id");
       const providerSetting = await storage.getSystemSetting("payhero", "provider");
       const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
-      const nexusApiKeySetting = await storage.getSystemSetting("payment", "nexuspay_api_key");
-      const payzaPublicKeySetting = await storage.getSystemSetting("payzaapi", "public_key");
-      const payzaSecretKeySetting = await storage.getSystemSetting("payzaapi", "secret_key");
-      const paystackSecretKeySetting = await storage.getSystemSetting("paystack", "secret_key");
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
-      
-      // Parse JSON values from database and prioritize database over env variables
-      const channelId = channelIdSetting?.value 
-        ? (typeof channelIdSetting.value === 'string' ? channelIdSetting.value : JSON.stringify(channelIdSetting.value)).replace(/"/g, '')
-        : "3407"; // Default to 3407, not env variable
-      
+      const readiness = await payHeroService.getReadiness();
       const settings = {
-        channelId,
+        channelId: settingText(channelIdSetting?.value, process.env.PAYHERO_CHANNEL_ID || ""),
         provider: providerSetting?.value || "m-pesa",
         defaultGateway: settingText(gatewaySetting?.value, "payzaapi"),
-        nexuspayConfigured: Boolean(nexusApiKeySetting?.value || process.env.NEXUSPAY_API_KEY),
-        payzaConfigured: Boolean(payzaPublicKeySetting?.value || process.env.PAYZA_PUBLIC_KEY) && Boolean(payzaSecretKeySetting?.value || process.env.PAYZA_SECRET_KEY),
-        paystackConfigured: Boolean(paystackSecretKeySetting?.value || process.env.PAYSTACK_SECRET_KEY),
+        nexuspayConfigured: await nexusPayService.isConfigured(),
+        payzaConfigured: await payzaApiService.isConfigured(),
+        paystackConfigured: await paystackService.isConfigured(),
+        payheroConfigured: readiness.configured,
+        payheroUsernameConfigured: readiness.usernameConfigured,
+        payheroPasswordConfigured: readiness.passwordConfigured,
         cardPrice: cardPriceSetting?.value || "60.00",
-        username: process.env.PAYHERO_USERNAME ? "****" : "",
-        password: process.env.PAYHERO_PASSWORD ? "****" : "",
       };
-      
       res.json(settings);
     } catch (error) {
       console.error('Error fetching PayHero settings:', error);
@@ -9530,53 +9614,46 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.put("/api/admin/payhero-settings", async (req, res) => {
+  app.put("/api/admin/payhero-settings", requireAdminAuth, async (req, res) => {
     try {
-      const { channelId, provider, cardPrice, defaultGateway, nexuspayApiKey, payzaPublicKey, payzaSecretKey, paystackSecretKey } = req.body;
-      const gateway = String(defaultGateway || "payzaapi").trim().toLowerCase();
-      if (!["payhero", "nexuspay", "payzaapi", "paystack"].includes(gateway)) {
+      const { channelId, provider, cardPrice, defaultGateway } = req.body;
+      const secretFields = ["username", "password", "nexuspayApiKey", "payzaPublicKey", "payzaSecretKey", "paystackSecretKey"];
+      if (secretFields.some(field => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
+        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+      }
+      const gateway = defaultGateway === undefined ? undefined : String(defaultGateway).trim().toLowerCase();
+      const providerName = String(provider || "m-pesa").trim().toLowerCase();
+      if (gateway && !["payhero", "nexuspay", "payzaapi", "paystack"].includes(gateway)) {
         return res.status(400).json({ message: "Unsupported default gateway" });
       }
-      
-      console.log('Admin updated PayHero settings:', { channelId, provider, cardPrice });
-      
-      // Save settings to database for persistence
-      await storage.setSystemSetting({
-        category: "payhero",
-        key: "channel_id",
-        value: channelId,
-        description: "PayHero payment channel ID"
-      });
 
-      await storage.setSystemSetting({
-        category: "payment",
-        key: "default_gateway",
-         value: gateway,
-        description: "Default deposit/payment gateway",
-      });
-      if (nexuspayApiKey) {
+      if (gateway) {
         await storage.setSystemSetting({
           category: "payment",
-          key: "nexuspay_api_key",
-          value: nexuspayApiKey,
-          description: "Makamesco Nexus Pay API key",
+          key: "default_gateway",
+          value: gateway,
+          description: "Default payment gateway for legacy integrations",
         });
-        process.env.NEXUSPAY_API_KEY = nexuspayApiKey;
       }
-      if (payzaPublicKey) {
-        await storage.setSystemSetting({ category: "payzaapi", key: "public_key", value: payzaPublicKey, description: "PayzaAPI public key" });
+      const normalizedChannelId = channelId === undefined || String(channelId).trim() === ""
+        ? undefined
+        : Number.parseInt(String(channelId), 10);
+      if (channelId !== undefined && String(channelId).trim() !== "" && (!Number.isSafeInteger(normalizedChannelId) || Number(normalizedChannelId) <= 0)) {
+        return res.status(400).json({ message: "PayHero channel ID must be a positive integer." });
       }
-      if (payzaSecretKey) {
-        await storage.setSystemSetting({ category: "payzaapi", key: "secret_key", value: payzaSecretKey, description: "PayzaAPI secret key" });
-      }
-      if (paystackSecretKey) {
-        await storage.setSystemSetting({ category: "paystack", key: "secret_key", value: paystackSecretKey, description: "Paystack secret key" });
+      if (normalizedChannelId !== undefined) {
+        await storage.setSystemSetting({
+          category: "payhero",
+          key: "channel_id",
+          value: String(normalizedChannelId),
+          description: "PayHero payment channel ID",
+        });
       }
       
       await storage.setSystemSetting({
         category: "payhero",
         key: "provider",
-        value: provider,
+        value: providerName,
         description: "PayHero payment provider"
       });
       
@@ -9589,14 +9666,13 @@ p{color:#6b7280;font-size:14px;}</style>
         });
       }
       
-      // Update the PayHero service channel ID in memory using the proper setter
-      payHeroService.updateSettings(parseInt(channelId));
+      if (normalizedChannelId !== undefined) payHeroService.updateSettings(normalizedChannelId);
       
       res.json({ 
         success: true, 
         message: "PayHero settings updated successfully",
         channelId,
-        provider,
+        provider: providerName,
         cardPrice 
       });
     } catch (error) {
@@ -9605,35 +9681,24 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.post("/api/admin/test-payhero", async (req, res) => {
+  app.post("/api/admin/test-payhero", requireAdminAuth, async (req, res) => {
     try {
-      const { amount, phone, reference } = req.body;
-      
-      console.log('Admin testing PayHero connection:', { amount, phone, reference });
-      
-      // Test PayHero connection with minimal transaction
-      const testResult = await payHeroService.initiateMpesaPayment(
-        amount || 1,
-        phone || "0700000000", 
-        reference || `TEST-${Date.now()}`,
-        "Test User",
-        null // No callback for test
-      );
-      
+      const readiness = await payHeroService.getReadiness();
       res.json({
-        success: testResult.success,
-        status: testResult.status,
-        reference: testResult.reference,
-        message: testResult.success 
-          ? "PayHero connection test successful" 
-          : `Connection test failed: ${testResult.status}`
+        success: readiness.configured,
+        configured: readiness.configured,
+        checks: {
+          username: readiness.usernameConfigured,
+          password: readiness.passwordConfigured,
+          channel: readiness.channelConfigured,
+        },
+        message: readiness.configured
+          ? "PayHero is configured. No payment was initiated."
+          : "PayHero is not fully configured. Check the Replit Secrets and channel ID. No payment was initiated.",
       });
     } catch (error) {
-      console.error('PayHero connection test error:', error);
-      res.status(500).json({ 
-        success: false,
-        message: "Connection test failed: " + error.message 
-      });
+      console.error('PayHero readiness check error:', error);
+      res.status(500).json({ success: false, message: "PayHero readiness check failed. No payment was initiated." });
     }
   });
 
@@ -10307,6 +10372,7 @@ p{color:#6b7280;font-size:14px;}</style>
       if ((req.session as any).userId !== fromUserId) {
         return res.status(403).json({ message: "You can only send money from your own account" });
       }
+      if (!(await enforceActiveCardPolicy(fromUserId, "send", res))) return;
       const security = await verifyTransactionSecurity(fromUserId, { pin, authenticatorCode });
       if (!security.ok) return res.status(security.status || 400).json(security);
 
@@ -10722,7 +10788,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // Get system settings for admin-to-user sync
   app.get("/api/system-settings", async (req, res) => {
     try {
-      const settings = await storage.getSystemSettings();
+      const settings = (await storage.getSystemSettings()).filter(setting => !isSensitiveSystemSetting(setting));
       const settingsMap: any = {};
       
       settings.forEach(setting => {
@@ -11597,6 +11663,8 @@ p{color:#6b7280;font-size:14px;}</style>
       if (type !== 'withdraw') {
         return res.status(400).json({ message: "This endpoint only handles withdrawal requests" });
       }
+      const userId = sessionUserId;
+      if (!(await enforceActiveCardPolicy(userId, "withdrawal", res))) return;
       
       const withdrawAmount = parseFloat(amount);
       
@@ -11605,7 +11673,6 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       
       // Security: users can only create transactions for themselves
-      const userId = sessionUserId;
       const security = await verifyTransactionSecurity(userId, req.body || {});
       if (!security.ok) return res.status(security.status || 400).json(security);
       
@@ -15089,7 +15156,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const userId = (req.session as any).userId;
       const globalSetting = await storage.getSystemSetting("deposit_methods", "global_enabled");
-      if (String(globalSetting?.value || "").toLowerCase() !== "true") {
+      if (!settingEnabled(globalSetting?.value)) {
         return res.status(403).json({ message: "Global deposits are currently disabled" });
       }
       const { walletId, currency, paymentCurrency, amount, phone, email, correspondent, description } = req.body;
@@ -15102,7 +15169,12 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!Number.isFinite(inputAmount) || inputAmount <= 0) {
         return res.status(400).json({ message: "Amount must be greater than 0" });
       }
-      const normalizedPaymentCurrency = normalizeCurrency(paymentCurrency || normalizedCurrency);
+      const requestedPaymentCurrency = normalizeCurrency(paymentCurrency || normalizedCurrency);
+      const normalizedPaymentCurrency = requestedPaymentCurrency === "SLL" ? "SLE" : requestedPaymentCurrency;
+      const payzaCurrency = getPayzaApiCurrencyCode(normalizedPaymentCurrency);
+      if (normalizedPaymentCurrency !== "KES" && !payzaCurrency) {
+        return res.status(400).json({ message: `${normalizedPaymentCurrency} is not supported by PayzaAPI.` });
+      }
       const exchangeRate = normalizedPaymentCurrency === normalizedCurrency
         ? 1
         : await createExchangeRateService(storage).getExchangeRate(normalizedPaymentCurrency, normalizedCurrency);
@@ -15113,76 +15185,52 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (normalizeCurrency(wallet_.currency) !== normalizedCurrency) {
         return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
       }
-      const currencyMeta = NEXUSPAY_CURRENCIES.find(c => c.code === normalizedCurrency);
-      const channel = currencyMeta?.channel || "card";
-      const rawGateway = (await storage.getSystemSetting("payment", "default_gateway"))?.value as any;
-      const configuredGateway = settingText(rawGateway, "payzaapi").toLowerCase();
-      const canonicalGateway = ["makamesco", "makamescopay"].includes(configuredGateway)
-        ? "nexuspay"
-        : configuredGateway;
-      const configuredApiKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
-      const hasNexusPayKey = Boolean(String(configuredApiKey?.value ?? configuredApiKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim());
-      const hasPayzaKeys = await payzaApiService.isConfigured();
-      const hasPaystackKey = await paystackService.isConfigured();
-      const compatibleGateways = new Set(["nexuspay", "payzaapi", "payhero", "paystack"]);
-      const gatewayOrder = Array.from(new Set([
-        compatibleGateways.has(canonicalGateway) ? canonicalGateway : "",
-        normalizedCurrency === "KES" && phone ? "payhero" : "",
-        hasPayzaKeys ? "payzaapi" : "",
-        hasNexusPayKey && phone ? "nexuspay" : "",
-        hasPaystackKey && email ? "paystack" : "",
-      ].filter(Boolean)));
-      let result: { reference: string; status: string; redirectUrl: string | null } | null = null;
-      let selectedGateway = "";
-      const gatewayErrors: string[] = [];
+      const customer = await storage.getUser(userId);
+      if (!customer) return res.status(404).json({ message: "User not found" });
+      const channel = normalizedPaymentCurrency === "KES" ? "mobile_money" : "payzaapi";
+      let result: { reference: string; status: string; redirectUrl: string | null };
+      let selectedGateway: "payhero" | "payzaapi";
 
-      for (const gateway of gatewayOrder) {
-        try {
-          if (gateway === "payzaapi") {
-            const reference = `DEP-PAYZA-${Date.now()}-${userId.slice(-6)}`;
-            const payment = await payzaApiService.initializePayment({
-              amount: inputAmount,
-              currency: normalizedPaymentCurrency,
-              reference,
-              email: email || (await storage.getUser(userId))?.email || "",
-              name: (await storage.getUser(userId))?.fullName || undefined,
-              phone,
-              callbackUrl: `${req.protocol}://${req.get("host")}/api/payzaapi/callback`,
-              redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}&provider=payzaapi`,
-              cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${walletId}`,
-              description: description || `Deposit to ${normalizedCurrency} wallet`,
-              metadata: { userId, walletId, currency: normalizedCurrency },
-              stkPush: normalizedPaymentCurrency === "KES",
-            });
-            result = { reference: payment.reference, status: payment.status, redirectUrl: payment.paymentUrl };
-          } else if (gateway === "nexuspay") {
-             if (!hasNexusPayKey) throw new Error("NexusPay is selected but no API key is configured");
-            const checkout = await nexusPayService.checkout({
-                amount: inputAmount, currency: normalizedPaymentCurrency, channel, phone, email, correspondent,
-              description: description || `Deposit to ${normalizedCurrency} wallet`,
-            });
-            result = checkout;
-          } else if (gateway === "payhero" && normalizedPaymentCurrency === "KES" && phone) {
-            const reference = payHeroService.generateReference();
-              const payment = await payHeroService.initiateMpesaPayment(inputAmount, phone, reference, undefined, `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`);
-            if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
-            result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
-          } else if (gateway === "paystack" && email) {
-            const reference = paystackService.generateReference();
-              const payment = await paystackService.initializePayment(email, inputAmount, reference, normalizedPaymentCurrency, phone, `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`, { walletId, currency: normalizedCurrency, paymentCurrency: normalizedPaymentCurrency, gateway: "paystack" });
-            if (!payment.status) throw new Error(payment.message || "Paystack initialization failed");
-            result = { reference, status: "pending", redirectUrl: payment.data?.authorization_url || null };
-          }
-          if (result) {
-            selectedGateway = gateway;
-            break;
-          }
-        } catch (error: any) {
-          gatewayErrors.push(`${gateway}: ${error?.message || "failed"}`);
+      if (normalizedPaymentCurrency === "KES") {
+        selectedGateway = "payhero";
+        const readiness = await payHeroService.getReadiness();
+        if (!readiness.configured) {
+          return res.status(503).json({ message: "PayHero is not configured. Add PAYHERO_USERNAME and PAYHERO_PASSWORD in Replit Secrets and set the channel ID." });
         }
-      }
-      if (!result) {
-        throw new Error(gatewayErrors.join("; ") || "No configured payment gateway could process this deposit");
+        const customerPhone = String(phone || customer.phone || "").trim();
+        if (!customerPhone) return res.status(400).json({ message: "Enter a phone number for the PayHero M-Pesa prompt." });
+        const reference = payHeroService.generateReference();
+        const payment = await payHeroService.initiateMpesaPayment(
+          inputAmount,
+          customerPhone,
+          reference,
+          customer.fullName || undefined,
+          `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`,
+        );
+        if (!payment.success) throw new Error(payment.message || `PayHero returned ${payment.status}`);
+        result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
+      } else {
+        selectedGateway = "payzaapi";
+        if (!payzaCurrency) return res.status(400).json({ message: "This payment currency is not supported." });
+        if (!(await payzaApiService.isConfigured())) {
+          return res.status(503).json({ message: "PayzaAPI is not configured. Add PAYZA_PUBLIC_KEY and PAYZA_SECRET_KEY in Replit Secrets." });
+        }
+        const reference = `DEP-PAYZA-${Date.now()}-${userId.slice(-6)}`;
+        const payment = await payzaApiService.initializePayment({
+          amount: inputAmount,
+          currency: normalizedPaymentCurrency,
+          reference,
+          email: email || customer.email || "",
+          name: customer.fullName || undefined,
+          phone,
+          callbackUrl: `${req.protocol}://${req.get("host")}/api/payzaapi/callback`,
+          redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}&provider=payzaapi`,
+          cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${walletId}`,
+          description: description || `Deposit to ${normalizedCurrency} wallet`,
+          metadata: { userId, walletId, currency: normalizedCurrency },
+          stkPush: false,
+        });
+        result = { reference: payment.reference, status: payment.status, redirectUrl: payment.paymentUrl };
       }
       await db.insert(transactions).values({
           userId, type: "deposit", amount: creditedAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
@@ -15208,7 +15256,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
           exchangeRate,
          message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
        });
-    } catch (e: any) { console.error("Global deposit error:", e); res.status(500).json({ message: e.message || "Deposit failed" }); }
+    } catch (e: any) {
+      console.error("Deposit initialization error:", e);
+      res.status(400).json({ message: e.message || "Deposit failed" });
+    }
   });
 
   app.post("/api/payzaapi/callback", async (req, res) => {
@@ -15361,6 +15412,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = (req.session as any).userId;
       const { fromWalletId, toWalletId, amount, pin, authenticatorCode } = req.body;
       if (!fromWalletId || !toWalletId || !amount) return res.status(400).json({ message: "fromWalletId, toWalletId, and amount are required" });
+      if (!(await enforceActiveCardPolicy(userId, "exchange", res))) return;
       const security = await verifyTransactionSecurity((req.session as any).userId, { pin, authenticatorCode });
       if (!security.ok) return res.status(security.status || 400).json(security);
       const fromAmt = parseFloat(amount);
@@ -15554,7 +15606,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.get("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
     try {
-      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'nexuspay_api_key', 'default_gateway')`);
+      const result = await pool.query(`SELECT key, value FROM system_settings WHERE key IN ('default_currency', 'enabled_currencies', 'default_gateway')`);
       const map: Record<string, string> = {};
       for (const row of result.rows) {
         const value = row.value as any;
@@ -15566,8 +15618,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
       res.json({
         defaultCurrency: map.default_currency || "USD",
         enabledCurrencies: (map.enabled_currencies || "USD,KES").split(",").map(code => code.trim()).filter(Boolean),
-        nexusApiKey: map.nexuspay_api_key || "",
-        defaultGateway: map.default_gateway || "nexuspay",
+        nexusPayConfigured: await nexusPayService.isConfigured(),
+        defaultGateway: map.default_gateway || "payhero",
         fallbackRates,
       });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
@@ -15575,23 +15627,23 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.put("/api/admin/currencies/settings", requireAdminAuth, async (req, res) => {
     try {
-      const { defaultCurrency, enabledCurrencies, nexusApiKey, defaultGateway, fallbackRates } = req.body;
+      const { defaultCurrency, enabledCurrencies, defaultGateway, fallbackRates } = req.body;
+      if (Object.prototype.hasOwnProperty.call(req.body || {}, "nexusApiKey")) {
+        return res.status(400).json({ message: "NexusPay credentials must be configured as Replit Secrets." });
+      }
       const upsert = async (key: string, value: string, category: string) => {
         await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = EXCLUDED.category, updated_at = NOW()`, [key, value, category]);
       };
       if (defaultCurrency) await upsert("default_currency", defaultCurrency, "general");
       if (enabledCurrencies) await upsert("enabled_currencies", Array.isArray(enabledCurrencies) ? enabledCurrencies.join(",") : enabledCurrencies, "general");
-      if (nexusApiKey !== undefined) { await upsert("nexuspay_api_key", nexusApiKey, "payment"); if (nexusApiKey) process.env.NEXUSPAY_API_KEY = nexusApiKey; }
       if (defaultGateway) {
         const gateway = String(defaultGateway).trim().toLowerCase();
         if (!["nexuspay", "payhero", "paystack"].includes(gateway)) {
           return res.status(400).json({ message: "Unsupported payment gateway" });
         }
         if (gateway === "nexuspay") {
-          const key = String(nexusApiKey ?? "").trim();
-          const existingKey = (await storage.getSystemSetting("payment", "nexuspay_api_key"))?.value as any;
-          if (!key && !String(existingKey?.value ?? existingKey ?? process.env.NEXUSPAY_API_KEY ?? "").trim()) {
-            return res.status(400).json({ message: "Configure a NexusPay secret key before selecting NexusPay as the default gateway" });
+          if (!(await nexusPayService.isConfigured())) {
+            return res.status(400).json({ message: "Configure NEXUSPAY_API_KEY in Replit Secrets before selecting NexusPay." });
           }
         }
         await upsert("default_gateway", gateway, "payment");

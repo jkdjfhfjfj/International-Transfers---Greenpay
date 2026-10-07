@@ -112,7 +112,7 @@ export default function WalletCards({
           const balance = parseFloat(wallet.balance || "0");
           const hold = parseFloat(wallet.holdAmount || "0");
           const withdrawalHold = parseFloat(wallet.withdrawalHoldAmount || "0");
-           const available = Number(wallet.availableBalance ?? (balance - hold - withdrawalHold));
+          const available = Number(wallet.availableBalance ?? (balance - hold - withdrawalHold));
           const isSelected = wallet.id === selectedWalletId || (!selectedWalletId && i === activeIndex);
 
           return (
@@ -183,14 +183,16 @@ export default function WalletCards({
                           {formatNumber(available, 2)}
                         </span>
                       </div>
-                      {hold > 0 && (
-                        <p className="text-white/50 text-[10px] mt-0.5">
-                          {symbol}{formatNumber(hold, 2)} on hold
-                        </p>
-                      )}
+                      <p className="text-white/55 text-[9px] leading-3 mt-0.5">
+                        Total {symbol}{formatNumber(balance, 2)} · On hold {symbol}{formatNumber(hold, 2)}
+                        <span className="block">Withdrawal reserve {symbol}{formatNumber(withdrawalHold, 2)}</span>
+                      </p>
                     </div>
                   ) : (
-                    <span className="text-white font-bold text-2xl tracking-widest">••••••</span>
+                    <div>
+                      <span className="text-white font-bold text-2xl tracking-widest">••••••</span>
+                      <p className="text-white/55 text-[9px] mt-0.5">Total · On hold · Withdrawal reserve hidden</p>
+                    </div>
                   )}
                   <div className="flex items-center justify-between mt-1">
                     <p className="text-white/50 text-[10px]">Available balance</p>

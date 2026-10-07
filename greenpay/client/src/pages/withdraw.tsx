@@ -41,6 +41,13 @@ export default function WithdrawPage() {
   const [saveBeneficiary, setSaveBeneficiary] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
+  const { data: transactionPolicy, isLoading: cardPolicyLoading } = useQuery<{
+    activeCard: boolean;
+    activeCardRequired: { withdrawal: boolean };
+  }>({
+    queryKey: ["/api/transaction-policy"],
+    enabled: !!user?.id,
+  });
   const { data: recipientData, refetch: refetchRecipients } = useQuery({
     queryKey: ["/api/recipients", user?.id],
     enabled: !!user?.id,
@@ -211,6 +218,26 @@ export default function WithdrawPage() {
   const getWithdrawFee = () => {
     return `${activeSymbol} ${withdrawalFee.toFixed(2)}`;
   };
+
+  if (cardPolicyLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><span className="text-sm text-muted-foreground">Checking account requirements…</span></div>;
+  }
+
+  if ((transactionPolicy?.activeCardRequired?.withdrawal ?? false) && !transactionPolicy?.activeCard) {
+    return (
+      <div className="min-h-screen bg-background bottom-nav-safe">
+        <WavyHeader size="sm" />
+        <div className="max-w-lg mx-auto p-6 text-center py-16">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+            <span className="material-icons text-3xl">credit_card</span>
+          </div>
+          <h2 className="text-lg font-bold mb-2">Active virtual card required</h2>
+          <p className="text-sm text-muted-foreground mb-6">Withdrawals are currently configured to require an active virtual card. Get or reactivate a card to continue.</p>
+          <Button onClick={() => setLocation("/virtual-card")}>View virtual cards</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">

@@ -36,6 +36,9 @@ interface SystemSettings {
     otp_sms_enabled: boolean;
     otp_whatsapp_enabled: boolean;
     max_daily_limit: string;
+    active_card_required_send: boolean;
+    active_card_required_exchange: boolean;
+    active_card_required_withdrawal: boolean;
   };
   notifications?: {
     email_notifications: boolean;
@@ -75,6 +78,11 @@ interface SystemSettings {
   };
 }
 
+function readBooleanSetting(value: unknown, fallback: boolean): boolean {
+  if (value === undefined || value === null || value === "") return fallback;
+  return ["true", "1", "yes", "on"].includes(String(value).toLowerCase());
+}
+
 export default function AdminSystemSettingsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -98,6 +106,9 @@ export default function AdminSystemSettingsPage() {
   const [otpSms, setOtpSms] = useState(true);
   const [otpWhatsapp, setOtpWhatsapp] = useState(false);
   const [maxDailyLimit, setMaxDailyLimit] = useState("");
+  const [cardRequiredForSend, setCardRequiredForSend] = useState(true);
+  const [cardRequiredForExchange, setCardRequiredForExchange] = useState(true);
+  const [cardRequiredForWithdrawal, setCardRequiredForWithdrawal] = useState(false);
 
   // Notifications state
   const [emailNotif, setEmailNotif] = useState(true);
@@ -186,6 +197,9 @@ export default function AdminSystemSettingsPage() {
       setOtpSms(settingsData.security?.otp_sms_enabled || true);
       setOtpWhatsapp(settingsData.security?.otp_whatsapp_enabled || false);
       setMaxDailyLimit(settingsData.security?.max_daily_limit || "");
+      setCardRequiredForSend(readBooleanSetting(settingsData.security?.active_card_required_send, true));
+      setCardRequiredForExchange(readBooleanSetting(settingsData.security?.active_card_required_exchange, true));
+      setCardRequiredForWithdrawal(readBooleanSetting(settingsData.security?.active_card_required_withdrawal, false));
 
       setEmailNotif(settingsData.notifications?.email_notifications || true);
       setSmsNotif(settingsData.notifications?.sms_notifications || true);
@@ -267,6 +281,9 @@ export default function AdminSystemSettingsPage() {
         apiRequest("PUT", "/api/admin/settings/otp_sms_enabled", { value: String(otpSms), category: "security" }),
         apiRequest("PUT", "/api/admin/settings/otp_whatsapp_enabled", { value: String(otpWhatsapp), category: "security" }),
         apiRequest("PUT", "/api/admin/settings/max_daily_limit", { value: String(maxDailyLimit), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/active_card_required_send", { value: String(cardRequiredForSend), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/active_card_required_exchange", { value: String(cardRequiredForExchange), category: "security" }),
+        apiRequest("PUT", "/api/admin/settings/active_card_required_withdrawal", { value: String(cardRequiredForWithdrawal), category: "security" }),
       ];
       const results = await Promise.all(requests);
       return { success: true, results };
@@ -274,6 +291,7 @@ export default function AdminSystemSettingsPage() {
     onSuccess: () => {
       toast({ title: "Saved", description: "Security settings updated." });
       qc.invalidateQueries({ queryKey: ["/api/admin/settings"] });
+      qc.invalidateQueries({ queryKey: ["/api/transaction-policy"] });
     },
     onError: () => toast({ title: "Error", description: "Failed to save security settings.", variant: "destructive" }),
   });
@@ -526,6 +544,22 @@ export default function AdminSystemSettingsPage() {
                   <div className="space-y-2">
                     <Label className="text-sm">Max Daily Limit (KES)</Label>
                     <Input value={maxDailyLimit} onChange={(e) => setMaxDailyLimit(e.target.value)} placeholder="50000" className="rounded-xl" />
+                  </div>
+                  <div className="border-t border-gray-200 pt-4 space-y-2">
+                    <p className="text-sm font-semibold">Active virtual-card requirements</p>
+                    <p className="text-xs text-muted-foreground">Only cards with an active status satisfy these rules.</p>
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                      <Label className="text-sm font-medium">Require active card to send money</Label>
+                      <Switch checked={cardRequiredForSend} onCheckedChange={setCardRequiredForSend} />
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                      <Label className="text-sm font-medium">Require active card to exchange currency</Label>
+                      <Switch checked={cardRequiredForExchange} onCheckedChange={setCardRequiredForExchange} />
+                    </div>
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                      <Label className="text-sm font-medium">Require active card to withdraw</Label>
+                      <Switch checked={cardRequiredForWithdrawal} onCheckedChange={setCardRequiredForWithdrawal} />
+                    </div>
                   </div>
                 </div>
                 <Button onClick={() => securityMutation.mutate()} disabled={securityMutation.isPending} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">

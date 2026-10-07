@@ -8,14 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, CreditCard, Info } from "lucide-react";
+import { Save, CreditCard, Info, CheckCircle2, CircleAlert } from "lucide-react";
 
 interface PayHeroData {
   channelId?: string;
-  username?: string;
-  password?: string;
-  provider?: string;
-  defaultGateway?: string;
+  payheroConfigured?: boolean;
   nexuspayConfigured?: boolean;
   payzaConfigured?: boolean;
   paystackConfigured?: boolean;
@@ -27,14 +24,7 @@ export default function AdminPayHeroSettingsPage() {
   const qc = useQueryClient();
 
   const [channelId, setChannelId] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
   const [cardPrice, setCardPrice] = useState("");
-  const [defaultGateway, setDefaultGateway] = useState("payhero");
-  const [nexuspayApiKey, setNexuspayApiKey] = useState("");
-  const [payzaPublicKey, setPayzaPublicKey] = useState("");
-  const [payzaSecretKey, setPayzaSecretKey] = useState("");
-  const [paystackSecretKey, setPaystackSecretKey] = useState("");
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -47,9 +37,7 @@ export default function AdminPayHeroSettingsPage() {
   useEffect(() => {
     if (data) {
       setChannelId(String(data.channelId || ""));
-      setUsername(String(data.username || ""));
       setCardPrice(String(data.cardPrice || ""));
-      setDefaultGateway(String(data.defaultGateway || "payhero"));
     }
   }, [data]);
 
@@ -57,25 +45,42 @@ export default function AdminPayHeroSettingsPage() {
     mutationFn: async () => {
       const r = await apiRequest("PUT", "/api/admin/payhero-settings", {
         channelId,
-        username,
-        password: password || undefined,
         cardPrice,
-        defaultGateway,
-        nexuspayApiKey: nexuspayApiKey || undefined,
-        payzaPublicKey: payzaPublicKey || undefined,
-        payzaSecretKey: payzaSecretKey || undefined,
-        paystackSecretKey: paystackSecretKey || undefined,
       });
-      return r.json();
+      const result = await r.json();
+      if (!r.ok) throw new Error(result.message || "Failed to save PayHero settings.");
+      return result;
     },
     onSuccess: () => {
       toast({ title: "Saved", description: "PayHero settings updated successfully." });
-      setPassword("");
-      setNexuspayApiKey("");
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
-    onError: () => toast({ title: "Error", description: "Failed to save PayHero settings.", variant: "destructive" }),
+    onError: (error: any) => toast({ title: "Error", description: error.message || "Failed to save PayHero settings.", variant: "destructive" }),
   });
+
+  const readinessMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/admin/test-payhero");
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Readiness check failed");
+      return result;
+    },
+    onSuccess: (result) => {
+      toast({
+        title: result.configured ? "PayHero is ready" : "PayHero setup incomplete",
+        description: `${result.message} This check never sends a payment.`,
+        variant: result.configured ? "default" : "destructive",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
+    },
+    onError: (error: any) => toast({ title: "Readiness check failed", description: error.message, variant: "destructive" }),
+  });
+  const providerStatusRows: Array<{ label: string; configured?: boolean }> = [
+    { label: "PayHero (KES)", configured: data?.payheroConfigured },
+    { label: "PayzaAPI (other supported deposit currencies)", configured: data?.payzaConfigured },
+    { label: "Paystack (separate card deposits)", configured: data?.paystackConfigured },
+    { label: "NexusPay (legacy integrations)", configured: data?.nexuspayConfigured },
+  ];
 
   if (isLoading) {
     return (
@@ -95,8 +100,8 @@ export default function AdminPayHeroSettingsPage() {
                 <CreditCard className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <CardTitle>PayHero Gateway Setup</CardTitle>
-                <CardDescription>Configure your PayHero credentials for card and mobile money payments</CardDescription>
+                <CardTitle>PayHero KES deposits</CardTitle>
+                <CardDescription>Configure the PayHero channel used for Kenyan shilling M-Pesa deposits.</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -113,29 +118,6 @@ export default function AdminPayHeroSettingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Username</Label>
-              <Input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="Your PayHero username"
-                className="rounded-xl"
-              />
-              <p className="text-xs text-gray-500">PayHero account username</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Password</Label>
-              <Input
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                type="password"
-                placeholder="Only enter if updating password"
-                className="rounded-xl"
-              />
-              <p className="text-xs text-gray-500">Leave empty to keep current password</p>
-            </div>
-
-            <div className="space-y-2">
               <Label className="text-sm font-medium">Virtual Card Price (KES)</Label>
               <Input
                 value={cardPrice}
@@ -143,76 +125,41 @@ export default function AdminPayHeroSettingsPage() {
                 placeholder="e.g., 100"
                 className="rounded-xl"
               />
-              <p className="text-xs text-gray-500">Cost charged to users for virtual card issuance</p>
+              <p className="text-xs text-gray-500">Price charged when a user requests a virtual card.</p>
             </div>
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700">Ensure all credentials are correct. PayHero enables seamless payments across multiple channels.</p>
+              <p className="text-xs text-blue-700">Store PAYHERO_USERNAME and PAYHERO_PASSWORD in Replit Secrets. Wallet deposits route KES through PayHero, other supported currencies through PayzaAPI, and card deposits through Paystack. Provider keys are not stored in this admin form.</p>
             </div>
 
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full rounded-xl bg-blue-600 hover:bg-blue-500">
-              <Save className="w-4 h-4 mr-2" />
-              {mutation.isPending ? "Saving..." : "Save PayHero Configuration"}
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="flex-1 rounded-xl bg-blue-600 hover:bg-blue-500">
+                <Save className="w-4 h-4 mr-2" />
+                {mutation.isPending ? "Saving..." : "Save settings"}
+              </Button>
+              <Button onClick={() => readinessMutation.mutate()} disabled={readinessMutation.isPending} variant="outline" className="flex-1 rounded-xl">
+                {readinessMutation.isPending ? "Checking…" : "Check readiness"}
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Default payment gateway</CardTitle>
-            <CardDescription>Choose which configured provider handles new M-Pesa/card deposits.</CardDescription>
+            <CardTitle>Provider readiness</CardTitle>
+            <CardDescription>Only status is shown here; secrets never leave Replit Secrets.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <select
-              value={defaultGateway}
-              onChange={(event) => setDefaultGateway(event.target.value)}
-              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm"
-            >
-              <option value="payhero">PayHero</option>
-              <option value="nexuspay">Makamesco Nexus Pay</option>
-              <option value="payzaapi">PayzaAPI (multi-currency)</option>
-              <option value="paystack">Paystack (card)</option>
-            </select>
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">Makamesco Nexus Pay API key</Label>
-              <Input
-                value={nexuspayApiKey}
-                onChange={(event) => setNexuspayApiKey(event.target.value)}
-                type="password"
-                placeholder={data?.nexuspayConfigured ? "Configured — enter only to replace" : "Paste the Nexus Pay API key"}
-                className="rounded-xl"
-              />
-              <p className="text-xs text-gray-500">Stored in the database and never shown back in full.</p>
-            </div>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} variant="outline" className="w-full rounded-xl">
-              <Save className="w-4 h-4 mr-2" />
-              Save gateway selection
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="rounded-2xl border-0 shadow-sm">
-          <CardHeader>
-            <CardTitle>Multi-currency provider keys</CardTitle>
-            <CardDescription>Optional fallback credentials. Existing values are never returned to the browser.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>PayzaAPI public key</Label>
-              <Input value={payzaPublicKey} onChange={e => setPayzaPublicKey(e.target.value)} placeholder={data?.payzaConfigured ? "Configured — enter only to replace" : "pk_live_..."} className="rounded-xl" />
-            </div>
-            <div className="space-y-2">
-              <Label>PayzaAPI secret key</Label>
-              <Input type="password" value={payzaSecretKey} onChange={e => setPayzaSecretKey(e.target.value)} placeholder={data?.payzaConfigured ? "Configured — enter only to replace" : "sk_live_..."} className="rounded-xl" />
-            </div>
-            <div className="space-y-2">
-              <Label>Paystack secret key</Label>
-              <Input type="password" value={paystackSecretKey} onChange={e => setPaystackSecretKey(e.target.value)} placeholder={data?.paystackConfigured ? "Configured — enter only to replace" : "sk_..."} className="rounded-xl" />
-            </div>
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full rounded-xl">
-              <Save className="w-4 h-4 mr-2" /> Save provider keys
-            </Button>
+          <CardContent className="space-y-3">
+            {providerStatusRows.map(({ label, configured }) => (
+              <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-gray-50 p-3">
+                <span className="text-sm">{label}</span>
+                <Badge variant="outline" className={configured ? "text-green-700 border-green-200" : "text-amber-700 border-amber-200"}>
+                  {configured ? <><CheckCircle2 className="mr-1 h-3 w-3" />Ready</> : <><CircleAlert className="mr-1 h-3 w-3" />Not configured</>}
+                </Badge>
+              </div>
+            ))}
+            <p className="text-xs text-muted-foreground">Readiness checks only inspect local configuration. They do not call payment providers or initiate charges.</p>
           </CardContent>
         </Card>
 
@@ -225,10 +172,6 @@ export default function AdminPayHeroSettingsPage() {
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">Channel ID</span>
                 <Badge variant="outline" className="font-mono text-xs">{data.channelId || "—"}</Badge>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">Username</span>
-                <Badge variant="outline" className="font-mono text-xs">{data.username ? "●●●●●●" : "—"}</Badge>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">Card Price</span>

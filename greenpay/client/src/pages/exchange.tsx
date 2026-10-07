@@ -56,6 +56,12 @@ export default function ExchangePage() {
     queryKey: ["/api/transaction-fees"],
     queryFn: async () => (await apiRequest("GET", "/api/transaction-fees")).json(),
   });
+  const { data: transactionPolicy, isLoading: cardPolicyLoading } = useQuery<{
+    activeCard: boolean;
+    activeCardRequired: { exchange: boolean };
+  }>({
+    queryKey: ["/api/transaction-policy"],
+  });
 
   const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);
   const fiatRates: Record<string, number> = (fiatRatesData as any)?.rates || {};
@@ -146,10 +152,26 @@ export default function ExchangePage() {
     }
   };
 
-  if (isLoading) {
+  if (isLoading || cardPolicyLoading) {
     return (
       <div className="min-h-screen bg-background bottom-nav-safe flex items-center justify-center">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if ((transactionPolicy?.activeCardRequired?.exchange ?? true) && !transactionPolicy?.activeCard) {
+    return (
+      <div className="min-h-screen bg-background bottom-nav-safe">
+        <WavyHeader size="sm" />
+        <div className="max-w-lg mx-auto p-6 text-center py-16">
+          <div className="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+            <span className="material-icons text-3xl">credit_card</span>
+          </div>
+          <h2 className="text-lg font-bold mb-2">Active virtual card required</h2>
+          <p className="text-sm text-muted-foreground mb-6">Currency exchange is configured to require an active virtual card. Get or reactivate a card to continue.</p>
+          <Button onClick={() => setLocation("/virtual-card")}>View virtual cards</Button>
+        </div>
       </div>
     );
   }

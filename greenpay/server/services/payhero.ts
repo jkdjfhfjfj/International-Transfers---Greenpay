@@ -49,33 +49,20 @@ export class PayHeroService {
   }
 
   /**
-   * Load credentials from database settings
+   * Load the non-secret channel identifier from system settings.
+   * Usernames and passwords must only come from Replit Secrets.
    */
   private async loadCredentialsFromDatabase(): Promise<void> {
     try {
       const settings = await storage.getSystemSettingsByCategory('payhero');
-      
-      const username = settings.find((s: any) => s.key === 'username')?.value;
-      const password = settings.find((s: any) => s.key === 'password')?.value;
       const channelId = settings.find((s: any) => s.key === 'channel_id')?.value;
 
-      // Parse values that might have extra quotes from JSON
-      if (username) this.username = this.parseValue(username);
-      if (password) this.password = this.parseValue(password);
-      if (channelId) this.channelId = parseInt(this.parseValue(channelId));
-
-      if (this.hasCredentials()) {
-        console.log('PayHero credentials loaded from database:', {
-          hasUsername: !!this.username,
-          hasPassword: !!this.password,
-          channelId: this.channelId
-        });
-      } else {
-        console.warn('PayHero credentials not fully configured - payment processing may not be available');
+      if (!process.env.PAYHERO_CHANNEL_ID && channelId) {
+        const parsedChannelId = parseInt(this.parseValue(channelId), 10);
+        if (Number.isFinite(parsedChannelId) && parsedChannelId > 0) this.channelId = parsedChannelId;
       }
     } catch (error) {
-      console.error('Error loading PayHero credentials from database:', error);
-      console.warn('Using environment variable credentials as fallback');
+      console.error('Error loading PayHero channel configuration:', error);
     }
   }
 
@@ -103,8 +90,6 @@ export class PayHeroService {
    * Get credentials (fetches from database if needed)
    */
   async getCredentials(): Promise<{ username?: string; password?: string; channelId?: number }> {
-    // Always load from database to ensure we have the latest settings
-    // Database settings take priority over environment variables
     await this.loadCredentialsFromDatabase();
     
     return {
@@ -115,12 +100,28 @@ export class PayHeroService {
   }
 
   /**
-   * Update PayHero settings (for admin configuration)
+   * Update PayHero's non-secret channel identifier.
    */
-  updateSettings(channelId?: number, username?: string, password?: string): void {
+  updateSettings(channelId?: number): void {
     if (channelId !== undefined) this.channelId = channelId;
-    if (username !== undefined) this.username = username;
-    if (password !== undefined) this.password = password;
+  }
+
+  async getReadiness(): Promise<{
+    configured: boolean;
+    usernameConfigured: boolean;
+    passwordConfigured: boolean;
+    channelConfigured: boolean;
+  }> {
+    await this.loadCredentialsFromDatabase();
+    const usernameConfigured = Boolean(process.env.PAYHERO_USERNAME?.trim());
+    const passwordConfigured = Boolean(process.env.PAYHERO_PASSWORD?.trim());
+    const channelConfigured = Boolean(this.channelId && this.channelId > 0);
+    return {
+      configured: usernameConfigured && passwordConfigured && channelConfigured,
+      usernameConfigured,
+      passwordConfigured,
+      channelConfigured,
+    };
   }
 
   /**

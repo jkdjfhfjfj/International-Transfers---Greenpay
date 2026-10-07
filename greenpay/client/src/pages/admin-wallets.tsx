@@ -64,8 +64,7 @@ export default function AdminWalletsPage() {
   const [newCurrency, setNewCurrency] = useState("USD");
   const [settingsTab, setSettingsTab] = useState(false);
   const [defaultCurrency, setDefaultCurrency] = useState("USD");
-  const [nexusApiKey, setNexusApiKey] = useState("");
-  const [defaultGateway, setDefaultGateway] = useState("nexuspay");
+  const [defaultGateway, setDefaultGateway] = useState("payhero");
   const [fallbackRates, setFallbackRates] = useState<Record<string, string>>({});
   const [enabledCurrencies, setEnabledCurrencies] = useState<string[]>([]);
 
@@ -77,14 +76,13 @@ export default function AdminWalletsPage() {
     },
   });
 
-  const { data: settingsData } = useQuery<{ defaultCurrency: string; enabledCurrencies: string[]; nexusApiKey: string; defaultGateway: string; fallbackRates: Record<string, string> }>({
+  const { data: settingsData } = useQuery<{ defaultCurrency: string; enabledCurrencies: string[]; nexusPayConfigured: boolean; defaultGateway: string; fallbackRates: Record<string, string> }>({
     queryKey: ["/api/admin/currencies/settings"],
     queryFn: async () => {
       const r = await apiRequest("GET", "/api/admin/currencies/settings");
       const d = await r.json();
       setDefaultCurrency(d.defaultCurrency || "USD");
-      setNexusApiKey(d.nexusApiKey || "");
-      setDefaultGateway(d.defaultGateway || "nexuspay");
+      setDefaultGateway(d.defaultGateway || "payhero");
       setEnabledCurrencies(d.enabledCurrencies || []);
       setFallbackRates(d.fallbackRates || {});
       return d;
@@ -179,7 +177,6 @@ export default function AdminWalletsPage() {
       const r = await apiRequest("PUT", "/api/admin/currencies/settings", {
         defaultCurrency,
         enabledCurrencies,
-        nexusApiKey,
         defaultGateway,
         fallbackRates,
       });
@@ -227,7 +224,7 @@ export default function AdminWalletsPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
               <Globe className="w-4 h-4 text-green-600" />
-              Currency & NexusPay Settings
+              Currency & Payment Settings
             </h3>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -249,17 +246,7 @@ export default function AdminWalletsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>NexusPay API Key</Label>
-                <Input
-                  type="password"
-                  placeholder="npsk_..."
-                  value={nexusApiKey}
-                  onChange={e => setNexusApiKey(e.target.value)}
-                />
-                <p className="text-xs text-gray-500">From your NexusPay dashboard → API Keys</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Default Payment Gateway</Label>
+                <Label>Legacy integration default</Label>
                 <Select value={defaultGateway} onValueChange={setDefaultGateway}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -268,7 +255,8 @@ export default function AdminWalletsPage() {
                     <SelectItem value="paystack">Paystack</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">The selected gateway is tried first; configured compatible gateways are used as fallback.</p>
+                <p className="text-xs text-gray-500">Wallet deposits use fixed routing (KES via PayHero; other supported currencies via PayzaAPI). This setting only affects legacy payment integrations.</p>
+                <p className="text-xs text-gray-500">NexusPay configuration status: {settingsData?.nexusPayConfigured ? "ready" : "not configured"}. Set provider credentials in Replit Secrets.</p>
               </div>
             </div>
 

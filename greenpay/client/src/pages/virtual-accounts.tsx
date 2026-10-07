@@ -265,7 +265,7 @@ export default function VirtualAccountsPage() {
 
       <div className="grid grid-cols-3 gap-2">
         {[
-          ["Balance", balance],
+          ["Total balance", balance],
           ["On hold", held],
           ["Available", available],
         ].map(([label, value]) => (

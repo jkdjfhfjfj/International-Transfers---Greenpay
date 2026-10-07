@@ -25,18 +25,32 @@ export class PaystackService {
   }
 
   private async getSecretKey(): Promise<string> {
-    if (this.secretKey) return this.secretKey;
+    return String(
+      process.env.PAYSTACK_SECRET_KEY_KES ||
+      process.env.PAYSTACK_SECRET_KEY ||
+      this.secretKey ||
+      "",
+    ).trim();
+  }
+
+  private async readResponse(response: any): Promise<PaystackResponse> {
+    let data: any;
     try {
-      const { pool } = await import("../db");
-      const result = await pool.query(
-        `SELECT value FROM system_settings WHERE category = 'paystack' AND key = 'secret_key' LIMIT 1`,
-      );
-      const raw = result.rows[0]?.value as any;
-      const value = typeof raw === "object" ? raw?.value : raw;
-      return String(value || "").replace(/^"|"$/g, "").trim();
+      data = await response.json();
     } catch {
-      return "";
+      data = null;
     }
+    if (!response.ok) {
+      return {
+        status: false,
+        message: data?.message || `Paystack request failed (${response.status})`,
+        ...(data?.data ? { data: data.data } : {}),
+      };
+    }
+    if (!data || typeof data.status !== "boolean") {
+      return { status: false, message: "Paystack returned an invalid response" };
+    }
+    return data as PaystackResponse;
   }
 
   async isConfigured(): Promise<boolean> {
@@ -89,8 +103,7 @@ export class PaystackService {
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json() as PaystackResponse;
-      return data;
+      return await this.readResponse(response);
     } catch (error) {
       console.error('Paystack initialization error:', error);
       return {
@@ -104,7 +117,7 @@ export class PaystackService {
     const secretKey = await this.getSecretKey();
     if (!secretKey) return { status: false, message: "Paystack is not configured" };
     try {
-      const url = `${this.baseUrl}/transaction/verify/${reference}`;
+      const url = `${this.baseUrl}/transaction/verify/${encodeURIComponent(reference)}`;
       
       const response = await fetch(url, {
         method: 'GET',
@@ -113,8 +126,7 @@ export class PaystackService {
         },
       });
 
-      const data = await response.json() as PaystackResponse;
-      return data;
+      return await this.readResponse(response);
     } catch (error) {
       console.error('Paystack verification error:', error);
       return {
@@ -125,6 +137,8 @@ export class PaystackService {
   }
 
   async createCustomer(email: string, firstName: string, lastName: string, phone?: string): Promise<PaystackResponse> {
+    const secretKey = await this.getSecretKey();
+    if (!secretKey) return { status: false, message: "Paystack is not configured" };
     try {
       const url = `${this.baseUrl}/customer`;
       
@@ -138,14 +152,13 @@ export class PaystackService {
       const response = await fetch(url, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${this.secretKey}`,
+          'Authorization': `Bearer ${secretKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
       });
 
-      const data = await response.json() as PaystackResponse;
-      return data;
+      return await this.readResponse(response);
     } catch (error) {
       console.error('Paystack customer creation error:', error);
       return {

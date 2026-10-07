@@ -15,7 +15,7 @@ import {
   ChevronRight, AlertCircle, CheckCircle2, Clock, Gift, ArrowLeft,
   RefreshCw, ExternalLink, Info, Loader2, Globe
 } from "lucide-react";
-import { useWallets, useNexusDeposit, useCurrencies } from "@/hooks/use-wallets";
+import { useWallets, useNexusDeposit } from "@/hooks/use-wallets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
@@ -23,6 +23,14 @@ type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 interface DepositConfig {
   methods: Record<string, string>;
   usdToKesRate?: number;
+  providerCurrencies?: Array<{
+    code: string;
+    providerCode?: string;
+    name: string;
+    countryOrRegion: string;
+    provider: string;
+  }>;
+  currencyAvailabilityNote?: string;
   bonuses: Array<{
     id: string;
     method: string;
@@ -51,16 +59,16 @@ const METHOD_META: Record<string, { label: string; icon: any; color: string; des
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
-  nexuspay: { label: "Global (All Countries)", icon: Globe, color: "from-purple-500 to-violet-600", description: "Mobile money and card deposits across supported countries" },
+  nexuspay: { label: "Supported currencies", icon: Globe, color: "from-purple-500 to-violet-600", description: "KES uses PayHero; other listed currencies use PayzaAPI" },
 };
 
 const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
-  USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬',
+  USD: '🇺🇸', KES: '🇰🇪', UGX: '🇺🇬', GHS: '🇬🇭', NGN: '🇳🇬', MWK: '🇲🇼',
   ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
-  RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', EUR: '🇪🇺', GBP: '🇬🇧',
+  RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', MZN: '🇲🇿', EUR: '🇪🇺', GBP: '🇬🇧',
 };
 
-const NEXUS_MOBILE_MONEY_CURRENCIES = ['KES', 'UGX', 'GHS', 'TZS', 'XOF', 'CDF', 'XAF', 'RWF', 'SLE', 'ZMW'];
+const PAYHERO_CURRENCIES = ["KES"];
 
 const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
@@ -82,6 +90,7 @@ export default function DepositPage() {
   const [amount, setAmount] = useState("");
   const [mpesaPhone, setMpesaPhone] = useState("");
   const [mpesaRef, setMpesaRef] = useState<string | null>(null);
+  const [mpesaCreditedAmount, setMpesaCreditedAmount] = useState<string | null>(null);
   const [mpesaStatus, setMpesaStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
   const [selectedCoin, setSelectedCoin] = useState("USDT");
   const [nexusWalletId, setNexusWalletId] = useState<string | null>(null);
@@ -95,13 +104,8 @@ export default function DepositPage() {
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const { wallets: userWallets } = useWallets();
-  const { currencies } = useCurrencies();
   const { initiate: initiateNexus, isInitiating: nexusInitiating, pollStatus: pollNexusStatus } = useNexusDeposit();
   const displayWallet = userWallets.find(w => w.id === nexusWalletId) || null;
-  const payingCurrencies = Array.from(new Set([
-    displayWallet?.currency,
-    ...currencies.map(currency => currency.code),
-  ].filter(Boolean).map(currency => String(currency).toUpperCase())));
 
   useEffect(() => { refreshUser(); }, []);
 
@@ -111,6 +115,8 @@ export default function DepositPage() {
     queryFn: async () => { const r = await apiRequest("GET", "/api/deposit/config"); return r.json(); },
     enabled: !!user?.id,
   });
+  const providerCurrencies = config?.providerCurrencies || [];
+  const payingCurrencies = providerCurrencies.map(currency => currency.code);
 
   const { data: cryptoData } = useQuery({
     queryKey: ["/api/crypto/deposit-addresses"],
@@ -123,22 +129,11 @@ export default function DepositPage() {
     const value = methods[`${m}_enabled`];
     return String(value).replace(/['"]/g, "").toLowerCase() === "true";
   };
-  const configuredGateway = String(methods.default_gateway || "payhero").toLowerCase();
-  const isMakamescoKesDeposit = selectedMethod === "nexuspay"
-    && nexusCurrency === "KES"
-    && ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway);
-  const usdToKesRate = Number(config?.usdToKesRate);
-  const hasUsdToKesRate = Number.isFinite(usdToKesRate) && usdToKesRate > 0;
-  const quotedKesAmount = isMakamescoKesDeposit && amount
-    ? hasUsdToKesRate ? Math.round(parseFloat(amount) * usdToKesRate) : 0
-    : 0;
-
   const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).filter(m =>
     m === "nexuspay" ? true : isEnabled(m)
   );
-  // NexusPay is the live multi-currency gateway and must not be shown as "Coming Soon"
-  // when an older external-DB settings row is missing or still has the legacy flag.
-  const nexuspayEnabled = true;
+  // Wallet deposits are controlled by the same master switch enforced by the server.
+  const nexuspayEnabled = isEnabled("global");
 
   const mpesaMutation = useMutation({
     mutationFn: async () => {
@@ -160,6 +155,7 @@ export default function DepositPage() {
         return;
       }
       setMpesaRef(data.reference);
+      setMpesaCreditedAmount(String(data.amount || ""));
       setMpesaStatus("pending");
       toast({ title: "STK Push Sent", description: data.message });
     },
@@ -178,13 +174,13 @@ export default function DepositPage() {
         refreshUser();
         queryClient.invalidateQueries({ queryKey: ["/api/wallets"] });
         queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-        toast({ title: "Deposit Successful!", description: `${getCurrencySymbol(displayWallet?.currency || "USD")} ${amount} has been credited to your wallet.` });
+        toast({ title: "Deposit Successful!", description: `${getCurrencySymbol(displayWallet?.currency || "USD")} ${mpesaCreditedAmount || amount} has been credited to your wallet.` });
       } else if (data.status === "failed") {
         setMpesaStatus("failed");
         toast({ title: "Payment Failed", description: "M-Pesa payment was declined or cancelled.", variant: "destructive" });
       }
     } catch (e) {}
-  }, [mpesaRef, amount, displayWallet?.currency, refreshUser, queryClient, toast]);
+  }, [mpesaRef, amount, mpesaCreditedAmount, displayWallet?.currency, refreshUser, queryClient, toast]);
 
   useEffect(() => {
     if (mpesaStatus !== "pending") return;
@@ -216,7 +212,7 @@ export default function DepositPage() {
     additional: methods.bank_additional_info || "",
   };
 
-  function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); }
+  function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); setMpesaCreditedAmount(null); }
   function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); setNexusPhone(""); setNexusRedirectUrl(null); }
 
   const handleNexusDeposit = async () => {
@@ -224,7 +220,7 @@ export default function DepositPage() {
       toast({ title: "Invalid amount", description: "Enter a valid amount", variant: "destructive" });
       return;
     }
-    if (NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency) && !nexusPhone) {
+    if (PAYHERO_CURRENCIES.includes(paymentCurrency) && !nexusPhone) {
       toast({ title: "Phone required", description: "Enter your mobile money phone number", variant: "destructive" });
       return;
     }
@@ -391,7 +387,15 @@ export default function DepositPage() {
                     <motion.button
                       key={method}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => enabled ? setSelectedMethod(method) : undefined}
+                      onClick={() => {
+                        if (!enabled) return;
+                        setSelectedMethod(method);
+                        if (method === "mpesa") setPaymentCurrency("KES");
+                        if (method === "nexuspay") {
+                          const preferred = String(displayWallet?.currency || "").toUpperCase();
+                          setPaymentCurrency(payingCurrencies.includes(preferred) ? preferred : "USD");
+                        }
+                      }}
                       disabled={!enabled}
                       data-testid={`method-card-${method}`}
                       className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left ${
@@ -406,7 +410,7 @@ export default function DepositPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="font-semibold text-sm">{meta.label}</p>
-                          {!enabled && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Coming Soon</Badge>}
+                          {!enabled && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{method === "nexuspay" ? "Disabled" : "Coming Soon"}</Badge>}
                           {methodBonuses.length > 0 && enabled && (
                             <Badge className="text-[10px] px-1.5 py-0 bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-0">
                               <Gift className="w-2.5 h-2.5 mr-0.5" /> Bonus
@@ -420,6 +424,23 @@ export default function DepositPage() {
                   );
                 })}
               </div>
+              <details className="mt-4 rounded-2xl border border-border bg-card p-4">
+                <summary className="cursor-pointer text-sm font-semibold">Supported deposit currencies and regions</summary>
+                <div className="mt-3 space-y-2">
+                  {providerCurrencies.map(currency => (
+                    <div key={currency.code} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-medium">
+                        {NEXUS_CURRENCY_FLAGS[currency.code] || "◈"} {currency.code} · {currency.name}
+                        {currency.code === "SLE" ? " (PayzaAPI code SLL)" : ""}
+                      </span>
+                      <span className="text-right text-muted-foreground">{currency.countryOrRegion}</span>
+                    </div>
+                  ))}
+                  <p className="pt-2 text-[11px] leading-relaxed text-muted-foreground">
+                    {config?.currencyAvailabilityNote || "The provider confirms country and payment-method availability at checkout."}
+                  </p>
+                </div>
+              </details>
           </motion.div>
         )}
 
@@ -459,7 +480,7 @@ export default function DepositPage() {
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">Amount ({paymentCurrency})</label>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">{getCurrencySymbol(paymentCurrency)}</span>
                       <Input
                         type="number" step="0.01" value={amount}
                         onChange={e => setAmount(e.target.value)}
@@ -467,7 +488,7 @@ export default function DepositPage() {
                         data-testid="input-mpesa-amount"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">Min. $5.00</p>
+                    <p className="text-xs text-muted-foreground">Enter the amount in {paymentCurrency}.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -499,7 +520,7 @@ export default function DepositPage() {
                   </div>
                   <div>
                     <p className="font-semibold">Check Your Phone</p>
-                    <p className="text-sm text-muted-foreground mt-1">Enter your M-Pesa PIN in the prompt to complete the ${amount} deposit.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Enter your M-Pesa PIN to complete the {getCurrencySymbol(paymentCurrency)}{amount} deposit.</p>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -524,7 +545,7 @@ export default function DepositPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-green-700 dark:text-green-400">Deposit Successful!</p>
-                    <p className="text-sm text-muted-foreground mt-1">${amount} has been credited to your wallet.</p>
+                    <p className="text-sm text-muted-foreground mt-1">{getCurrencySymbol(displayWallet?.currency || nexusCurrency)}{mpesaCreditedAmount || amount} has been credited to your wallet.</p>
                   </div>
                   <div className="flex gap-2">
                     <Button className="flex-1 bg-green-600 hover:bg-green-500" onClick={() => setLocation("/dashboard")}>Go to Dashboard</Button>
@@ -711,8 +732,8 @@ export default function DepositPage() {
                       <Globe className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm">Global Deposit (All Countries)</p>
-                      <p className="text-xs text-muted-foreground">Mobile money and cards across supported countries</p>
+                  <p className="font-semibold text-sm">Wallet deposit</p>
+                  <p className="text-xs text-muted-foreground">KES uses PayHero; other listed payment currencies use PayzaAPI.</p>
                     </div>
                   </div>
 
@@ -730,15 +751,13 @@ export default function DepositPage() {
                       <SelectContent>
                         {payingCurrencies.map(currency => (
                           <SelectItem key={currency} value={currency}>
-                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}
+                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}{currency === "SLE" ? " (PayzaAPI code SLL)" : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {NEXUS_MOBILE_MONEY_CURRENCIES.includes(paymentCurrency)
-                        ? "Mobile money payment"
-                        : "Card / bank payment"}
+                      {paymentCurrency === "KES" ? "PayHero M-Pesa STK prompt" : "PayzaAPI checkout"}
                     </p>
                   </div>
 
@@ -760,7 +779,7 @@ export default function DepositPage() {
                   </div>
 
                   {/* Phone — mobile money only */}
-                  {NEXUS_MOBILE_MONEY_CURRENCIES.includes(nexusCurrency) && (
+                  {PAYHERO_CURRENCIES.includes(paymentCurrency) && (
                     <div className="space-y-2">
                       <label className="text-xs font-medium text-muted-foreground">Mobile Money Phone</label>
                       <Input

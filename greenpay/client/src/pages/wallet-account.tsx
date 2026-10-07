@@ -48,13 +48,21 @@ export default function WalletAccountPage() {
     const list = (transactionData as any)?.transactions || [];
     return list.filter((transaction: any) => String(transaction.currency).toUpperCase() === walletCurrency).slice(0, 8);
   }, [transactionData, walletCurrency]);
-  const accounts = (accountData as any)?.accounts || (accountData as any)?.virtualAccounts || [];
-  const virtualAccount = accounts.find((account: any) => String(account.currency).toUpperCase() === walletCurrency);
+  const applications = (accountData as any)?.applications || [];
+  const virtualAccountApplication = applications.find((application: any) =>
+    String(application.currency).toUpperCase() === walletCurrency && application.status === "approved"
+  );
+  const virtualAccount = virtualAccountApplication?.virtualAccount || null;
   const balance = Number(wallet?.balance || 0);
   const hold = Number(wallet?.holdAmount || 0);
   const withdrawalHold = Number(wallet?.withdrawalHoldAmount || 0);
   const reserved = hold + withdrawalHold;
   const available = Math.max(0, Number(wallet?.availableBalance ?? (balance - reserved)));
+  const virtualAccountBalance = Number(virtualAccount?.balance || 0);
+  const virtualAccountHold = Number(virtualAccount?.holdAmount || 0);
+  const virtualAccountAvailable = Number(
+    virtualAccount?.availableBalance ?? Math.max(0, virtualAccountBalance - virtualAccountHold),
+  );
   const symbol = getCurrencySymbol(walletCurrency);
   const walletSuspended = Boolean(wallet?.isSuspended || !wallet?.isActive);
 
@@ -72,9 +80,8 @@ export default function WalletAccountPage() {
           </div>
           <p className="text-xs text-white/70 mt-7">Available balance</p>
           <p className="text-4xl font-bold mt-1">{symbol}{formatNumber(available, 2)}</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-sm">
+          <div className="grid grid-cols-3 gap-3 mt-5 text-sm">
             <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">Total balance</p><p className="font-semibold">{symbol}{formatNumber(balance, 2)}</p></div>
-            <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">Available</p><p className="font-semibold">{symbol}{formatNumber(available, 2)}</p></div>
             <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">On hold</p><p className="font-semibold">{symbol}{formatNumber(hold, 2)}</p></div>
             <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">Withdrawal hold</p><p className="font-semibold">{symbol}{formatNumber(withdrawalHold, 2)}</p></div>
           </div>
@@ -103,6 +110,11 @@ export default function WalletAccountPage() {
           {virtualAccount ? (
             <div className="space-y-2 text-sm">
               <p className="text-muted-foreground">Receive money into your {walletCurrency} wallet using its account details.</p>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">Total</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountBalance, 2)}</p></div>
+                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">On hold</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountHold, 2)}</p></div>
+                <div className="rounded-xl bg-muted p-3"><p className="text-[10px] text-muted-foreground">Available</p><p className="font-semibold">{symbol}{formatNumber(virtualAccountAvailable, 2)}</p></div>
+              </div>
               <Button variant="outline" className="w-full" onClick={() => setLocation(`/virtual-accounts?currency=${walletCurrency}`)}>View account details</Button>
             </div>
           ) : (

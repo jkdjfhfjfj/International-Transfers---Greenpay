@@ -43,14 +43,15 @@ export default function SendMoneyPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Source of truth for "has active card": fetch the card itself.
-  // The user.hasVirtualCard flag can lag behind admin reissues/restores.
-  const { data: cardData, isLoading: cardLoading } = useQuery({
-    queryKey: ["/api/virtual-card", user?.id],
+  const { data: transactionPolicy, isLoading: cardPolicyLoading } = useQuery<{
+    activeCard: boolean;
+    activeCardRequired: { send: boolean };
+  }>({
+    queryKey: ["/api/transaction-policy"],
     enabled: !!user?.id,
   });
-  const activeCard = (cardData as any)?.card;
-  const hasActiveCard = !!user?.hasVirtualCard || (activeCard && activeCard.status !== "blocked" && activeCard.status !== "expired");
+  const cardRequired = transactionPolicy?.activeCardRequired?.send ?? true;
+  const hasActiveCard = transactionPolicy?.activeCard ?? false;
 
   // Get transactions for real-time balance calculation
   const { data: transactionData } = useQuery({
@@ -239,8 +240,11 @@ export default function SendMoneyPage() {
     greenPayTransferMutation.mutate(pendingTransferData);
   };
 
-  // Check if user has virtual card requirement (use real card data, not just user flag)
-  if (!cardLoading && !hasActiveCard) {
+  if (cardPolicyLoading) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><span className="text-sm text-muted-foreground">Checking account requirements…</span></div>;
+  }
+
+  if (cardRequired && !hasActiveCard) {
     return (
       <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
         <WavyHeader  size="sm" />
@@ -256,8 +260,7 @@ export default function SendMoneyPage() {
             <div className="bg-card border border-border rounded-2xl p-6 shadow-sm text-center space-y-3 mb-4">
               <h2 className="text-xl font-bold">Virtual Card Required</h2>
               <p className="text-muted-foreground text-sm leading-relaxed">
-                To send money to other Geepay users, you first need an active virtual card.
-                Get yours in seconds and unlock full access.
+                Sending is currently configured to require an active virtual card. Your account does not have one active.
               </p>
 
               <div className="space-y-2 text-left mt-2">
