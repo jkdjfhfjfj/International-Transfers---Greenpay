@@ -48,14 +48,14 @@ export default function AdminPayHeroSettingsPage() {
         cardPrice,
       });
       const result = await r.json();
-      if (!r.ok) throw new Error(result.message || "Failed to save PayHero settings.");
+      if (!r.ok) throw new Error(result.message || "Failed to save payment settings.");
       return result;
     },
     onSuccess: () => {
-      toast({ title: "Saved", description: "PayHero settings updated successfully." });
+      toast({ title: "Saved", description: "Payment settings updated successfully." });
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
-    onError: (error: any) => toast({ title: "Error", description: error.message || "Failed to save PayHero settings.", variant: "destructive" }),
+    onError: () => toast({ title: "Error", description: "Failed to save payment settings.", variant: "destructive" }),
   });
 
   const readinessMutation = useMutation({
@@ -67,31 +67,33 @@ export default function AdminPayHeroSettingsPage() {
     },
     onSuccess: (result) => {
       toast({
-        title: result.configured ? "PayHero is ready" : "PayHero setup incomplete",
-        description: `${result.message} This check never sends a payment.`,
+        title: result.configured ? "Payment settings are ready" : "Payment setup is incomplete",
+        description: result.configured
+          ? "Required settings are present. This check does not send a payment."
+          : "Some required settings are missing. This check does not send a payment.",
         variant: result.configured ? "default" : "destructive",
       });
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
-    onError: (error: any) => toast({ title: "Readiness check failed", description: error.message, variant: "destructive" }),
+    onError: () => toast({ title: "Readiness check failed", description: "Unable to check payment settings.", variant: "destructive" }),
   });
   const providerStatusRows: Array<{ label: string; configured?: boolean }> = [
-    { label: "PayHero (KES)", configured: data?.payheroConfigured },
-    { label: "PayzaAPI (other supported deposit currencies)", configured: data?.payzaConfigured },
-    { label: "Paystack (separate card deposits)", configured: data?.paystackConfigured },
-    { label: "NexusPay (legacy integrations)", configured: data?.nexuspayConfigured },
+    { label: "KES mobile-money deposits", configured: data?.payheroConfigured },
+    { label: "Other supported deposit currencies", configured: data?.payzaConfigured },
+    { label: "Card deposits", configured: data?.paystackConfigured },
+    { label: "Legacy payment flow", configured: data?.nexuspayConfigured },
   ];
 
   if (isLoading) {
     return (
-      <AdminShell title="PayHero Configuration">
+      <AdminShell title="Payment Settings">
         <div className="h-40 rounded-2xl bg-gray-200 animate-pulse" />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="PayHero Configuration">
+    <AdminShell title="Payment Settings">
       <div className="max-w-2xl space-y-6">
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
@@ -100,8 +102,8 @@ export default function AdminPayHeroSettingsPage() {
                 <CreditCard className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <CardTitle>PayHero KES deposits</CardTitle>
-                <CardDescription>Configure the PayHero channel used for Kenyan shilling M-Pesa deposits.</CardDescription>
+                <CardTitle>KES mobile-money deposits</CardTitle>
+                <CardDescription>Configure the channel used for Kenyan shilling M-Pesa deposits.</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -114,7 +116,7 @@ export default function AdminPayHeroSettingsPage() {
                 placeholder="e.g., 133"
                 className="rounded-xl"
               />
-              <p className="text-xs text-gray-500">Your PayHero channel ID from the dashboard</p>
+              <p className="text-xs text-gray-500">The channel ID for M-Pesa payments in Kenya.</p>
             </div>
 
             <div className="space-y-2">
@@ -130,7 +132,7 @@ export default function AdminPayHeroSettingsPage() {
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700">Store PAYHERO_USERNAME and PAYHERO_PASSWORD in Replit Secrets. Wallet deposits route KES through PayHero, other supported currencies through PayzaAPI, and card deposits through Paystack. Provider keys are not stored in this admin form.</p>
+              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. Wallet deposits continue to route by currency, and card deposits use a separate payment flow. Credentials are not stored in this form.</p>
             </div>
 
             <div className="flex gap-2">

@@ -252,20 +252,13 @@ export default function VirtualCardPurchasePage() {
             transition={{ delay: 0.55 }}
             className="bg-card p-4 rounded-xl border border-border mb-6 elevation-1"
           >
-            <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-widest">Powered By</p>
+            <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-widest">Accepted cards</p>
             <div className="flex items-center justify-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
-                <img src={ncbaLogo} alt="NCBA Loop DFS" className="h-7 w-14 object-contain" />
-              </div>
               <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
                 <img src={visaLogo} alt="Visa" className="h-7 w-7 object-contain" />
               </div>
               <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
                 <img src={mastercardLogo} alt="Mastercard" className="h-7 w-11 object-contain" />
-              </div>
-              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
-                <span className="material-icons text-primary text-sm">security</span>
-                <span className="text-sm font-bold text-foreground">PayHero</span>
               </div>
             </div>
           </motion.div>
@@ -307,7 +300,7 @@ export default function VirtualCardPurchasePage() {
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">
-                        Instant activation via PayHero M-Pesa STK Push
+                        Instant activation with an M-Pesa payment prompt
                       </p>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="material-icons text-green-500 text-xs">bolt</span>
@@ -399,7 +392,7 @@ export default function VirtualCardPurchasePage() {
                   {initializePayment.isPending ? "Processing..." : `Pay with M-Pesa · $${currentCardPrice}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Secure payment powered by PayHero
+                  Complete your payment using the secure prompt sent to your phone.
                 </p>
               </motion.div>
             )}

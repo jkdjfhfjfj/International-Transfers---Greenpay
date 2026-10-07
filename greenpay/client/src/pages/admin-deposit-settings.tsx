@@ -46,7 +46,7 @@ const METHOD_LABELS: Record<string, string> = {
   mpesa: "M-Pesa",
   crypto: "Cryptocurrency",
   bank_transfer: "Bank Transfer",
-  card: "Card (Paystack)",
+  card: "Card",
   global: "Global (All Countries)",
   any: "Any Method",
 };
@@ -234,10 +234,10 @@ export default function AdminDepositSettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {[
-                  { key: "mpesa_enabled" as const, label: "M-Pesa (PayHero STK Push)", icon: Smartphone, desc: "Instant KES deposit with M-Pesa PIN prompt", color: "text-green-600" },
+                  { key: "mpesa_enabled" as const, label: "M-Pesa", icon: Smartphone, desc: "Instant KES deposit with M-Pesa PIN prompt", color: "text-green-600" },
                   { key: "crypto_enabled" as const, label: "Cryptocurrency", icon: Bitcoin, desc: "BTC, ETH, USDT, USDC — admin-configured addresses", color: "text-orange-500" },
                   { key: "bank_transfer_enabled" as const, label: "Bank Transfer (SWIFT)", icon: Building2, desc: "International wire transfer with bank details", color: "text-blue-600" },
-                  { key: "card_enabled" as const, label: "Debit / Credit Card (Paystack)", icon: CreditCard, desc: "Visa & Mastercard via Paystack gateway", color: "text-blue-600" },
+                  { key: "card_enabled" as const, label: "Debit / Credit Card", icon: CreditCard, desc: "Visa and Mastercard payments", color: "text-blue-600" },
                   { key: "global_enabled" as const, label: "Global (All Countries)", icon: Globe, desc: "Mobile money and card deposits across supported countries", color: "text-purple-600" },
                 ].map(({ key, label, icon: Icon, desc, color }) => (
                   <div key={key} className="flex items-center justify-between gap-4 p-3 rounded-xl bg-muted/40">
@@ -458,7 +458,7 @@ export default function AdminDepositSettingsPage() {
                 <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl p-3 flex gap-2">
                   <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <p className="text-xs text-amber-700 dark:text-amber-300">
-                    Bonuses are applied automatically when a deposit is confirmed. Only the first matching bonus is applied per deposit. M-Pesa bonuses trigger via PayHero callback.
+                    Bonuses are applied automatically when a deposit is confirmed. Only the first matching bonus is applied per deposit. M-Pesa bonuses trigger after payment confirmation.
                   </p>
                 </div>
               </CardContent>

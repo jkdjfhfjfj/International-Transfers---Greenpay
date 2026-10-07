@@ -246,17 +246,17 @@ export default function AdminWalletsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Legacy integration default</Label>
+                <Label>Legacy payment default</Label>
                 <Select value={defaultGateway} onValueChange={setDefaultGateway}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="nexuspay">Makamesco / Nexus Pay</SelectItem>
-                    <SelectItem value="payhero">PayHero M-Pesa</SelectItem>
-                    <SelectItem value="paystack">Paystack</SelectItem>
+                    <SelectItem value="nexuspay">Alternative payment method</SelectItem>
+                    <SelectItem value="payhero">Mobile money</SelectItem>
+                    <SelectItem value="paystack">Card payments</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-gray-500">Wallet deposits use fixed routing (KES via PayHero; other supported currencies via PayzaAPI). This setting only affects legacy payment integrations.</p>
-                <p className="text-xs text-gray-500">NexusPay configuration status: {settingsData?.nexusPayConfigured ? "ready" : "not configured"}. Set provider credentials in Replit Secrets.</p>
+                <p className="text-xs text-gray-500">Wallet deposits continue to route by currency. This setting only affects legacy payment flows.</p>
+                <p className="text-xs text-gray-500">Legacy payment setup: {settingsData?.nexusPayConfigured ? "ready" : "not configured"}. Store credentials in Replit Secrets.</p>
               </div>
             </div>
 

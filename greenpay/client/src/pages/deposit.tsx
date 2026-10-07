@@ -55,11 +55,11 @@ interface CryptoAddress {
 }
 
 const METHOD_META: Record<string, { label: string; icon: any; color: string; description: string }> = {
-  mpesa: { label: "M-Pesa", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Instant via PayHero STK Push" },
+  mpesa: { label: "M-Pesa", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Instant mobile-money prompt" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
-  card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa, Mastercard via Paystack" },
-  nexuspay: { label: "Supported currencies", icon: Globe, color: "from-purple-500 to-violet-600", description: "KES uses PayHero; other listed currencies use PayzaAPI" },
+  card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa and Mastercard" },
+  nexuspay: { label: "Supported currencies", icon: Globe, color: "from-purple-500 to-violet-600", description: "Deposit using a supported currency" },
 };
 
 const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
@@ -431,13 +431,12 @@ export default function DepositPage() {
                     <div key={currency.code} className="flex items-center justify-between gap-3 text-xs">
                       <span className="font-medium">
                         {NEXUS_CURRENCY_FLAGS[currency.code] || "◈"} {currency.code} · {currency.name}
-                        {currency.code === "SLE" ? " (PayzaAPI code SLL)" : ""}
                       </span>
                       <span className="text-right text-muted-foreground">{currency.countryOrRegion}</span>
                     </div>
                   ))}
                   <p className="pt-2 text-[11px] leading-relaxed text-muted-foreground">
-                    {config?.currencyAvailabilityNote || "The provider confirms country and payment-method availability at checkout."}
+                    Country and payment-method availability is confirmed at checkout.
                   </p>
                 </div>
               </details>
@@ -473,7 +472,7 @@ export default function DepositPage() {
                     </div>
                     <div>
                       <p className="font-semibold text-sm">M-Pesa Deposit</p>
-                      <p className="text-xs text-muted-foreground">STK Push via PayHero</p>
+                      <p className="text-xs text-muted-foreground">M-Pesa payment prompt</p>
                     </div>
                   </div>
 
@@ -733,7 +732,7 @@ export default function DepositPage() {
                     </div>
                     <div>
                   <p className="font-semibold text-sm">Wallet deposit</p>
-                  <p className="text-xs text-muted-foreground">KES uses PayHero; other listed payment currencies use PayzaAPI.</p>
+                  <p className="text-xs text-muted-foreground">Choose a listed currency to see the available payment flow.</p>
                     </div>
                   </div>
 
@@ -751,13 +750,13 @@ export default function DepositPage() {
                       <SelectContent>
                         {payingCurrencies.map(currency => (
                           <SelectItem key={currency} value={currency}>
-                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}{currency === "SLE" ? " (PayzaAPI code SLL)" : ""}
+                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}
                           </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      {paymentCurrency === "KES" ? "PayHero M-Pesa STK prompt" : "PayzaAPI checkout"}
+                      {paymentCurrency === "KES" ? "M-Pesa payment prompt" : "Secure online checkout"}
                     </p>
                   </div>
 
@@ -774,7 +773,7 @@ export default function DepositPage() {
                       className="text-base"
                     />
                     {paymentCurrency !== nexusCurrency && (
-                      <p className="text-xs text-muted-foreground">The provider will convert this payment into your {nexusCurrency} wallet currency before crediting it.</p>
+                      <p className="text-xs text-muted-foreground">The amount will be converted to your {nexusCurrency} wallet currency before it is credited.</p>
                     )}
                   </div>
 
@@ -788,7 +787,7 @@ export default function DepositPage() {
                         onChange={e => setNexusPhone(e.target.value)}
                         placeholder={user?.phone || "e.g. +254712345678"}
                       />
-                      <p className="text-xs text-muted-foreground">Phone registered with your mobile money provider</p>
+                      <p className="text-xs text-muted-foreground">Enter the phone number linked to your mobile money account.</p>
                     </div>
                   )}
 
@@ -874,7 +873,7 @@ export default function DepositPage() {
                   </div>
                   <div>
                     <p className="font-semibold text-sm">Card Deposit</p>
-                    <p className="text-xs text-muted-foreground">Visa, Mastercard via Paystack</p>
+                    <p className="text-xs text-muted-foreground">Visa and Mastercard</p>
                   </div>
                 </div>
 
@@ -906,9 +905,9 @@ export default function DepositPage() {
                       });
                       const data = await r.json();
                       if (data.authorizationUrl) window.location.href = data.authorizationUrl;
-                      else toast({ title: "Error", description: data.message || "Failed to initialize", variant: "destructive" });
+                      else toast({ title: "Error", description: "Card payment could not be started. Please try again later.", variant: "destructive" });
                     } catch (e: any) {
-                      toast({ title: "Error", description: e.message || "Card payment error", variant: "destructive" });
+                      toast({ title: "Error", description: "Card payment could not be started. Please try again later.", variant: "destructive" });
                     }
                   }}
                   disabled={!amount || parseFloat(amount) < 10}
@@ -918,7 +917,7 @@ export default function DepositPage() {
                   Pay with Card
                 </Button>
 
-                 <p className="text-xs text-center text-muted-foreground">You will be redirected to Paystack to complete payment securely. The selected wallet is credited after provider confirmation.</p>
+                 <p className="text-xs text-center text-muted-foreground">Complete your card payment securely. Your selected wallet is credited after confirmation.</p>
               </div>
             </motion.div>
           )}

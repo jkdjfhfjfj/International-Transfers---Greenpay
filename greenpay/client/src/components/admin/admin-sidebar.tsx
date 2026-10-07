@@ -35,7 +35,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout }: Admin
     { id: "card-pricing", label: "Card Pricing", icon: Zap },
     { id: "notifications", label: "Notifications", icon: Bell },
     { id: "messaging", label: "Messaging Settings", icon: Mail },
-    { id: "payhero", label: "PayHero Settings", icon: Zap },
+    { id: "payhero", label: "Payment Settings", icon: Zap },
     { id: "manual-payment", label: "Manual Payment", icon: DollarSign },
     { id: "whatsapp", label: "WhatsApp Messaging", icon: MessageCircle },
     { id: "live-chat", label: "Live Support", icon: LifeBuoy },

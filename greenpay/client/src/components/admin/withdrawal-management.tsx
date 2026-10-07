@@ -470,8 +470,8 @@ export default function WithdrawalManagement() {
 
               {actionType === 'edit' && (
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Provider</Label><Input value={provider} onChange={e => setProvider(e.target.value)} placeholder="PayHero, bank..." /></div>
-                  <div><Label>Provider reference</Label><Input value={providerReference} onChange={e => setProviderReference(e.target.value)} placeholder="Provider transaction ID" /></div>
+                  <div><Label>Payment source</Label><Input value={provider} onChange={e => setProvider(e.target.value)} placeholder="Bank, mobile money, or other source" /></div>
+                  <div><Label>Payment reference</Label><Input value={providerReference} onChange={e => setProviderReference(e.target.value)} placeholder="Transaction ID" /></div>
                   <div><Label>Retry count</Label><Input type="number" min="0" value={retryCount} onChange={e => setRetryCount(e.target.value)} /></div>
                   <div><Label>Refund status</Label><Select value={refundStatus} onValueChange={setRefundStatus}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="not_applicable">Not applicable</SelectItem><SelectItem value="pending">Pending</SelectItem><SelectItem value="completed">Completed</SelectItem><SelectItem value="failed">Failed</SelectItem></SelectContent></Select></div>
                 </div>
