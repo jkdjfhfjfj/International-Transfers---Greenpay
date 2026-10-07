@@ -130,6 +130,9 @@ Before deploying, ensure you have:
 
    The repository root is a pnpm workspace; set the service root to `greenpay`
    so Render uses GreenPay's own `package.json` and `package-lock.json`.
+   Before deploying dependency changes, run `npm install` from `greenpay/` and
+   commit the updated `greenpay/package-lock.json`; Render's `npm ci` requires
+   the manifest and lockfile to be synchronized.
 
 4. **Add PostgreSQL**
    - Create a new PostgreSQL database in Render

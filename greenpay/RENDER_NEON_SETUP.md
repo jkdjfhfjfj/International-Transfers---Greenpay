@@ -63,6 +63,9 @@ npm start
 The repository root is a pnpm workspace. The `greenpay` root directory setting
 ensures these npm commands run against GreenPay's own `package.json` and
 `package-lock.json`, rather than the workspace-level pnpm guard.
+Before deploying dependency changes, run `npm install` inside `greenpay/` and
+commit the updated `package-lock.json`; Render's `npm ci` requires both files
+to be in sync.
 
 ---
 
