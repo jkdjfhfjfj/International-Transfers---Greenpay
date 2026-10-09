@@ -58,7 +58,7 @@ function getCurrencyFractionDigits(currency: string): number {
   try {
     return new Intl.NumberFormat(undefined, { style: "currency", currency })
       .resolvedOptions()
-      .maximumFractionDigits;
+      .maximumFractionDigits ?? 2;
   } catch {
     return 2;
   }

@@ -11,6 +11,27 @@ env = { "CI" = "true" }
 [workflows]
 runButton = "Project"
 
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "GreenPay Preview"
+
+[[workflows.workflow]]
+name = "GreenPay Preview"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd greenpay && env -u DATABASE_URL -u PGHOST -u PGPORT -u PGUSER -u PGPASSWORD -u PGDATABASE NODE_ENV=development PORT=5173 ./node_modules/.bin/tsx server/index.ts"
+waitForPort = 5173
+
 [agent]
 stack = "PNPM_WORKSPACE"
 expertMode = true
