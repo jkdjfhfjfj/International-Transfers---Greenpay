@@ -232,7 +232,7 @@ export default function WithdrawPage() {
             <span className="material-icons text-3xl">credit_card</span>
           </div>
           <h2 className="text-lg font-bold mb-2">Active virtual card required</h2>
-          <p className="text-sm text-muted-foreground mb-6">Your account has no active virtual card. If your card is inactive, you’ll need a new one to withdraw. Admins can control this in Admin → System Settings → Security → Require active card to withdraw.</p>
+          <p className="text-sm text-muted-foreground mb-6">Your account has no active virtual card. If your card is inactive, you’ll need a new one to withdraw.</p>
           <Button onClick={() => setLocation("/virtual-card")}>View virtual cards</Button>
         </div>
       </div>

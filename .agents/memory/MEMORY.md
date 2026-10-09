@@ -1,2 +1,3 @@
 - [GreenPay virtual-account scope](greenpay-virtual-account-scope.md) — Keep EUR, USD, and GBP visible together on the account overview.
 - [GreenPay payment copy](greenpay-payment-copy.md) — Keep payment-integration names out of visible payment text while preserving internal routing.
+- [GreenPay card requirement copy](greenpay-card-requirement-copy.md) — Keep active-card notices focused on the user’s next step, not settings controls.
