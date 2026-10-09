@@ -3,7 +3,9 @@ type ModuleMap = Record<string, () => Promise<Record<string, unknown>>>;
 export const modules: ModuleMap = {
   "./components/mockups/greenpay-accounts/Current.tsx": () => import("../components/mockups/greenpay-accounts/Current.tsx"),
   "./components/mockups/greenpay-accounts/Refined.tsx": () => import("../components/mockups/greenpay-accounts/Refined.tsx"),
+  "./components/mockups/wallet-cards/WalletCardPreview.tsx": () => import("../components/mockups/wallet-cards/WalletCardPreview.tsx"),
+  "./components/mockups/greenpay-payment-refresh/CardPurchaseMethodsCurrent.tsx": () => import("../components/mockups/greenpay-payment-refresh/CardPurchaseMethodsCurrent.tsx"),
+  "./components/mockups/greenpay-payment-refresh/CardPurchaseMethodsImproved.tsx": () => import("../components/mockups/greenpay-payment-refresh/CardPurchaseMethodsImproved.tsx"),
   "./components/mockups/greenpay-payment-refresh/CardPurchaseRefresh.tsx": () => import("../components/mockups/greenpay-payment-refresh/CardPurchaseRefresh.tsx"),
-  "./components/mockups/greenpay-payment-refresh/DepositRefresh.tsx": () => import("../components/mockups/greenpay-payment-refresh/DepositRefresh.tsx"),
-  "./components/mockups/wallet-cards/WalletCardPreview.tsx": () => import("../components/mockups/wallet-cards/WalletCardPreview.tsx")
+  "./components/mockups/greenpay-payment-refresh/DepositRefresh.tsx": () => import("../components/mockups/greenpay-payment-refresh/DepositRefresh.tsx")
 };
