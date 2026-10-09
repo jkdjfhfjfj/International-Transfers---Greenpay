@@ -9030,7 +9030,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const settingData = req.body;
       if (isPaymentProviderCredential(settingData || {})) {
-          return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
+        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
       }
       const newSetting = await storage.createSystemSetting(settingData);
       res.json({ setting: newSetting });
