@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { getPaymentCredential } from './payment-credentials';
 
 const NEXUSPAY_BASE_URL = 'https://makamescopay.com/api';
 
@@ -37,16 +38,14 @@ export const CURRENCY_MAP: Record<string, NexusCurrency> = Object.fromEntries(
 );
 
 export class NexusPayService {
-  private envApiKey: string | null;
   private baseUrl: string;
 
   constructor() {
-    this.envApiKey = process.env.NEXUSPAY_API_KEY || null;
     this.baseUrl = NEXUSPAY_BASE_URL;
   }
 
   async getApiKey(): Promise<string | null> {
-    return String(process.env.NEXUSPAY_API_KEY || this.envApiKey || "").trim() || null;
+    return getPaymentCredential("NEXUSPAY_API_KEY");
   }
 
   private headers(apiKey: string) {
@@ -66,7 +65,7 @@ export class NexusPayService {
     description?: string;
   }): Promise<{ reference: string; status: string; redirectUrl: string | null }> {
     const apiKey = await this.getApiKey();
-    if (!apiKey) throw new Error('NexusPay API key is not configured. Set NEXUSPAY_API_KEY in Replit Secrets.');
+    if (!apiKey) throw new Error('Payment service credentials are not configured.');
 
     if (!params.phone) {
       throw new Error('NexusPay STK Push requires a customer phone number');
@@ -145,8 +144,12 @@ export class NexusPayService {
     }));
   }
 
-  isConfigured(): boolean {
-    return !!this.envApiKey;
+  async isConfigured(): Promise<boolean> {
+    try {
+      return Boolean(await this.getApiKey());
+    } catch {
+      return false;
+    }
   }
 
   getSupportedCurrencies(): NexusCurrency[] {

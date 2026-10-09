@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { getPaymentCredential } from "./payment-credentials";
 
 const PAYZA_BASE_URL = "https://payzaapi.co.ke";
 
@@ -114,7 +115,7 @@ export function getPayzaApiCurrencyCode(currency: string): string | undefined {
 export function verifyPayzaWebhookSignature(
   rawBody: string,
   signature: string,
-  secret = String(process.env.PAYZA_WEBHOOK_SECRET || "").trim(),
+  secret: string,
 ): boolean {
   const normalizedSignature = String(signature || "").trim();
   if (!secret || !/^[a-f\d]{64}$/i.test(normalizedSignature)) return false;
@@ -126,11 +127,15 @@ export function verifyPayzaWebhookSignature(
 
 export class PayzaApiService {
   private async getKeys(): Promise<PayzaKeys | null> {
-    const keys = {
-      publicKey: String(process.env.PAYZA_PUBLIC_KEY || "").trim(),
-      secretKey: String(process.env.PAYZA_SECRET_KEY || "").trim(),
-    };
-    return keys.publicKey && keys.secretKey ? keys : null;
+    const [publicKey, secretKey] = await Promise.all([
+      getPaymentCredential("PAYZA_PUBLIC_KEY"),
+      getPaymentCredential("PAYZA_SECRET_KEY"),
+    ]);
+    return publicKey && secretKey ? { publicKey, secretKey } : null;
+  }
+
+  async getWebhookSecret(): Promise<string | null> {
+    return getPaymentCredential("PAYZA_WEBHOOK_SECRET");
   }
 
   private headers(keys: PayzaKeys) {
@@ -239,10 +244,11 @@ export class PayzaApiService {
   }
 
   async isConfigured() {
-    return Boolean(
-      (await this.getKeys()) &&
-      String(process.env.PAYZA_WEBHOOK_SECRET || "").trim(),
-    );
+    try {
+      return Boolean((await this.getKeys()) && (await this.getWebhookSecret()));
+    } catch {
+      return false;
+    }
   }
 }
 

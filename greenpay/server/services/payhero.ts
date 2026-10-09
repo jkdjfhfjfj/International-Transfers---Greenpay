@@ -1,6 +1,10 @@
 import fetch from 'node-fetch';
 import { storage } from '../storage';
 import { formatPayHeroAmount, formatPayHeroPhone } from './payhero-format';
+import {
+  getPaymentCredential,
+  getPaymentCredentialStatus,
+} from './payment-credentials';
 
 export interface PayHeroResponse {
   success: boolean;
@@ -27,30 +31,21 @@ export interface PayHeroCallbackResponse {
 }
 
 export class PayHeroService {
-  private username?: string;
-  private password?: string;
   private channelId?: number;
   private baseUrl = 'https://backend.payhero.co.ke/api/v2';
 
   constructor() {
-    // Initialize from environment variables as fallback
-    const username = process.env.PAYHERO_USERNAME;
-    const password = process.env.PAYHERO_PASSWORD;
+    // The channel ID is non-secret and can be set in admin payment settings.
     const channelId = process.env.PAYHERO_CHANNEL_ID;
-    
-    this.username = username;
-    this.password = password;
     // PayHero requires the merchant's registered channel ID. Do not guess a
     // fallback channel because that produces an opaque provider HTTP 400.
     this.channelId = channelId ? parseInt(channelId, 10) : undefined;
-    
-    // Load credentials from database on initialization
+
     this.loadCredentialsFromDatabase();
   }
 
   /**
    * Load the non-secret channel identifier from system settings.
-   * Usernames and passwords must only come from Replit Secrets.
    */
   private async loadCredentialsFromDatabase(): Promise<void> {
     try {
@@ -82,19 +77,25 @@ export class PayHeroService {
     return parsed;
   }
 
-  private hasCredentials(): boolean {
-    return !!(this.username && this.password && this.channelId);
+  private hasCredentials(
+    credentials: { username?: string; password?: string; channelId?: number },
+  ): boolean {
+    return !!(credentials.username && credentials.password && credentials.channelId);
   }
 
   /**
-   * Get credentials (fetches from database if needed)
+   * Provider usernames and passwords use Replit Secrets first, then the
+   * encrypted admin fallback.
    */
   async getCredentials(): Promise<{ username?: string; password?: string; channelId?: number }> {
     await this.loadCredentialsFromDatabase();
-    
+    const [username, password] = await Promise.all([
+      getPaymentCredential("PAYHERO_USERNAME"),
+      getPaymentCredential("PAYHERO_PASSWORD"),
+    ]);
     return {
-      username: this.username,
-      password: this.password,
+      username: username || undefined,
+      password: password || undefined,
       channelId: this.channelId
     };
   }
@@ -113,8 +114,12 @@ export class PayHeroService {
     channelConfigured: boolean;
   }> {
     await this.loadCredentialsFromDatabase();
-    const usernameConfigured = Boolean(process.env.PAYHERO_USERNAME?.trim());
-    const passwordConfigured = Boolean(process.env.PAYHERO_PASSWORD?.trim());
+    const [usernameStatus, passwordStatus] = await Promise.all([
+      getPaymentCredentialStatus("PAYHERO_USERNAME"),
+      getPaymentCredentialStatus("PAYHERO_PASSWORD"),
+    ]);
+    const usernameConfigured = usernameStatus.configured;
+    const passwordConfigured = passwordStatus.configured;
     const channelConfigured = Boolean(this.channelId && this.channelId > 0);
     return {
       configured: usernameConfigured && passwordConfigured && channelConfigured,
@@ -151,10 +156,9 @@ export class PayHeroService {
     callbackUrl?: string
   ): Promise<PayHeroResponse> {
     try {
-      // Ensure credentials are loaded from database
-      await this.getCredentials();
+      const credentials = await this.getCredentials();
       
-      if (!this.hasCredentials()) {
+      if (!this.hasCredentials(credentials)) {
         console.error('PayHero credentials not available');
         return {
           success: false,
@@ -204,8 +208,8 @@ export class PayHeroService {
       };
 
       // Create proper Basic Auth header
-      const credentials = Buffer.from(`${this.username}:${this.password}`).toString('base64');
-      const authHeader = `Basic ${credentials}`;
+      const authorization = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+      const authHeader = `Basic ${authorization}`;
 
       console.log('PayHero payment request:', { 
         amount: payload.amount, 
@@ -295,8 +299,8 @@ export class PayHeroService {
    */
   async checkTransactionStatus(reference: string): Promise<{ success: boolean; status: string; data?: any; message?: string }> {
     try {
-      await this.getCredentials();
-      if (!this.hasCredentials()) {
+      const credentials = await this.getCredentials();
+      if (!this.hasCredentials(credentials)) {
         return {
           success: false,
           status: "CREDENTIALS_MISSING",
@@ -307,8 +311,8 @@ export class PayHeroService {
       const url = `${this.baseUrl}/transaction-status?reference=${reference}`;
       
       // Create proper Basic Auth header
-      const credentials = Buffer.from(`${this.username}:${this.password}`).toString('base64');
-      const authHeader = `Basic ${credentials}`;
+      const authorization = Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64');
+      const authHeader = `Basic ${authorization}`;
 
       console.log('Checking PayHero transaction status:', { reference, url });
 

@@ -20,7 +20,46 @@ interface PayHeroData {
   payzaConfigured?: boolean;
   paystackConfigured?: boolean;
   cardPrice?: string;
+  encryptionKeyConfigured?: boolean;
+  credentialSources?: Record<string, {
+    configured: boolean;
+    envConfigured: boolean;
+    fallbackStored: boolean;
+    source: "environment" | "encrypted_database" | "missing" | "locked" | "unavailable";
+  }>;
 }
+
+const paymentCredentialGroups = [
+  {
+    provider: "PayHero mobile money",
+    note: "Set the non-secret channel ID in the payment settings above.",
+    fields: [
+      { key: "PAYHERO_USERNAME", label: "Username" },
+      { key: "PAYHERO_PASSWORD", label: "Password" },
+    ],
+  },
+  {
+    provider: "MakamescoPay mobile money",
+    fields: [{ key: "NEXUSPAY_API_KEY", label: "API key" }],
+  },
+  {
+    provider: "PayzaAPI hosted checkout",
+    note: "The webhook signing secret is separate from the API key pair.",
+    fields: [
+      { key: "PAYZA_PUBLIC_KEY", label: "Public key" },
+      { key: "PAYZA_SECRET_KEY", label: "Secret key" },
+      { key: "PAYZA_WEBHOOK_SECRET", label: "Webhook signing secret" },
+    ],
+  },
+  {
+    provider: "Paystack checkout",
+    note: "Virtual-card checkout is restricted to the card payment channel.",
+    fields: [
+      { key: "PAYSTACK_SECRET_KEY_KES", label: "KES secret key" },
+      { key: "PAYSTACK_SECRET_KEY", label: "General secret key fallback" },
+    ],
+  },
+] as const;
 
 export default function AdminPayHeroSettingsPage() {
   const { toast } = useToast();
@@ -30,6 +69,7 @@ export default function AdminPayHeroSettingsPage() {
   const [cardPrice, setCardPrice] = useState("");
   const [kenyaMobileMoneyGateway, setKenyaMobileMoneyGateway] = useState("payhero");
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null);
+  const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -63,6 +103,52 @@ export default function AdminPayHeroSettingsPage() {
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
     onError: () => toast({ title: "Error", description: "Failed to save payment settings.", variant: "destructive" }),
+  });
+
+  const credentialsMutation = useMutation({
+    mutationFn: async () => {
+      const credentials = Object.fromEntries(
+        Object.entries(credentialValues).filter(([, value]) => value.trim()),
+      );
+      if (Object.keys(credentials).length === 0) {
+        throw new Error("Enter at least one credential to save.");
+      }
+      const response = await apiRequest("PUT", "/api/admin/payment-provider-credentials", { credentials });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to save encrypted credentials.");
+      return result;
+    },
+    onSuccess: () => {
+      setCredentialValues({});
+      toast({
+        title: "Credentials saved",
+        description: "Values are encrypted before storage. Replit Secrets still take priority.",
+      });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
+    },
+    onError: (error: Error) => toast({
+      title: "Could not save credentials",
+      description: error.message || "Check the encryption-key setup and try again.",
+      variant: "destructive",
+    }),
+  });
+
+  const clearCredentialMutation = useMutation({
+    mutationFn: async (key: string) => {
+      const response = await apiRequest("PUT", "/api/admin/payment-provider-credentials", { clearKeys: [key] });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to clear the saved fallback.");
+      return result;
+    },
+    onSuccess: () => {
+      toast({ title: "Saved fallback cleared", description: "Any matching Replit Secret remains active." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
+    },
+    onError: (error: Error) => toast({
+      title: "Could not clear saved fallback",
+      description: error.message || "Try again.",
+      variant: "destructive",
+    }),
   });
 
   const readinessMutation = useMutation({
@@ -199,7 +285,7 @@ export default function AdminPayHeroSettingsPage() {
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. This form stores only non-secret pricing and provider selection.</p>
+              <p className="text-xs text-blue-700">Provider credentials can come from Replit Secrets or the encrypted fallback below. Replit Secrets take priority.</p>
             </div>
 
             <div className="flex gap-2">
@@ -217,7 +303,7 @@ export default function AdminPayHeroSettingsPage() {
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
             <CardTitle>Provider readiness</CardTitle>
-            <CardDescription>Only status is shown here; secrets never leave Replit Secrets.</CardDescription>
+            <CardDescription>Only status is shown here; saved credentials are never returned to the page.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {providerStatusRows.map(({ label, configured }) => (
@@ -234,41 +320,106 @@ export default function AdminPayHeroSettingsPage() {
 
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Provider credential setup</CardTitle>
-            <CardDescription>Add these values in Replit Secrets for this project. This page only shows readiness and never stores or displays secret values.</CardDescription>
+            <CardTitle>Provider credentials</CardTitle>
+            <CardDescription>Replit Secrets take priority. Values saved here are encrypted in the database and never read back into the page.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">PayHero mobile money</h3>
-              <p className="text-xs text-muted-foreground">
-                Add <code>PAYHERO_USERNAME</code> and <code>PAYHERO_PASSWORD</code>. Set the non-secret channel ID in the payment settings above.
-              </p>
-            </section>
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">MakamescoPay mobile money</h3>
-              <p className="text-xs text-muted-foreground">
-                Add <code>NEXUSPAY_API_KEY</code> if this is the selected Kenyan mobile-money service.
-              </p>
-            </section>
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">PayzaAPI requirements</h3>
-              <p className="text-xs text-muted-foreground">
-                Add PAYZA_PUBLIC_KEY, PAYZA_SECRET_KEY, and PAYZA_WEBHOOK_SECRET. The webhook signing secret is separate from the API key pair.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Use matching test or live keys. Configure the same webhook signing secret in Replit Secrets as in the PayzaAPI dashboard.
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Hosted checkout uses the customer’s profile-country currency, disables STK push, and lets the customer choose an available method on the hosted page.
-              </p>
-            </section>
+            <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
+              <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
+              <div className="space-y-1">
+                <p className="text-xs text-blue-700">
+                  Encryption key: {data?.encryptionKeyConfigured ? "configured" : "missing"}.
+                </p>
+                {!data?.encryptionKeyConfigured && (
+                  <p className="text-xs text-blue-700">
+                    Add <code>PAYMENT_CREDENTIALS_ENCRYPTION_KEY</code> in Replit Secrets before saving database fallbacks. Use a random value of at least 32 characters.
+                  </p>
+                )}
+                <p className="text-xs text-blue-700">
+                  Leave an input blank to keep its saved value. Replit Secrets override the database fallback.
+                </p>
+              </div>
+            </div>
 
-            <section className="space-y-2">
-              <h3 className="text-sm font-semibold">Paystack requirements</h3>
-              <p className="text-xs text-muted-foreground">
-                Add PAYSTACK_SECRET_KEY_KES or PAYSTACK_SECRET_KEY. Virtual-card checkout is restricted to the card payment channel.
-              </p>
-            </section>
+            {paymentCredentialGroups.map((group) => (
+              <section key={group.provider} className="space-y-3">
+                <h3 className="text-sm font-semibold">{group.provider}</h3>
+                {"note" in group && group.note && (
+                  <p className="text-xs text-muted-foreground">{group.note}</p>
+                )}
+                {group.fields.map((field) => {
+                  const status = data?.credentialSources?.[field.key];
+                  const sourceLabel = status?.source === "environment"
+                    ? "Using Replit Secrets"
+                    : status?.source === "encrypted_database"
+                      ? "Using encrypted admin fallback"
+                      : status?.source === "locked"
+                        ? "Saved fallback cannot be decrypted; check the encryption key"
+                        : status?.source === "unavailable"
+                          ? "Credential source could not be checked; verify database availability"
+                        : "Not configured";
+                  return (
+                    <div key={field.key} className="space-y-2 rounded-xl border border-border p-3">
+                      <Label htmlFor={`provider-credential-${field.key}`} className="text-sm font-medium">
+                        {field.label} <code className="ml-1 text-xs text-muted-foreground">{field.key}</code>
+                      </Label>
+                      <div className="flex flex-col gap-2 sm:flex-row">
+                        <Input
+                          id={`provider-credential-${field.key}`}
+                          type="password"
+                          autoComplete="new-password"
+                          value={credentialValues[field.key] || ""}
+                          disabled={credentialsMutation.isPending}
+                          onChange={(event) => setCredentialValues((current) => ({
+                            ...current,
+                            [field.key]: event.target.value,
+                          }))}
+                          placeholder="Enter a new value; blank keeps the saved value"
+                          className="rounded-xl"
+                        />
+                        {status?.fallbackStored && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={clearCredentialMutation.isPending}
+                            onClick={() => {
+                              const shouldClear = window.confirm(
+                                `Clear the encrypted fallback for ${field.key}? If no matching Replit Secret is set, this provider credential will no longer be available.`,
+                              );
+                              if (shouldClear) clearCredentialMutation.mutate(field.key);
+                            }}
+                          >
+                            Clear fallback
+                          </Button>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {sourceLabel}
+                        {status?.envConfigured && status.fallbackStored ? " · encrypted fallback is saved but inactive" : ""}
+                      </p>
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
+
+            <Button
+              type="button"
+              onClick={() => credentialsMutation.mutate()}
+              disabled={
+                !data?.encryptionKeyConfigured ||
+                !Object.values(credentialValues).some((value) => value.trim()) ||
+                credentialsMutation.isPending
+              }
+              className="w-full rounded-xl"
+            >
+              <Save className="mr-2 h-4 w-4" />
+              {credentialsMutation.isPending ? "Saving encrypted credentials…" : "Save encrypted fallback"}
+            </Button>
+
+            <p className="text-xs text-muted-foreground">
+              Keep the encryption key stable: changing it without re-encrypting saved credentials makes those database fallbacks unreadable.
+            </p>
 
             <div className="space-y-3">
               <h3 className="text-sm font-semibold">Callback URLs for this app host</h3>

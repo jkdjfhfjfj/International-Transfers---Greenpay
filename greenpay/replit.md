@@ -84,13 +84,19 @@ CLOUDINARY_API_SECRET # Cloudinary API secret
 ```
 SMS_API_KEY / SMS_APP_ID / SMS_SENDER_ID       # Umeskia Software SMS
 PAYHERO_USERNAME / PAYHERO_PASSWORD            # M-Pesa payments
-PAYSTACK_SECRET_KEY                            # Card payments
+NEXUSPAY_API_KEY                               # MakamescoPay mobile money
+PAYZA_PUBLIC_KEY / PAYZA_SECRET_KEY            # PayzaAPI checkout
+PAYZA_WEBHOOK_SECRET                           # PayzaAPI callback signatures
+PAYSTACK_SECRET_KEY_KES / PAYSTACK_SECRET_KEY  # Paystack card payments
+PAYMENT_CREDENTIALS_ENCRYPTION_KEY             # Random value, 32+ characters; keep stable
 STATUM_CONSUMER_KEY / SECRET                   # Airtime purchases
 WHATSAPP_ACCESS_TOKEN / PHONE_NUMBER_ID        # WhatsApp messaging
 MAILTRAP_API_KEY                               # Email delivery
 GOOGLE_AI_API_KEY                              # AI chat support
 EXCHANGERATE_API_KEY                           # Currency exchange rates
 ```
+
+Payment-provider credentials can also be saved through the admin Payment Setup page. Replit Secrets take precedence; admin-saved fallbacks are encrypted in the database with `PAYMENT_CREDENTIALS_ENCRYPTION_KEY`. Keep that key stable unless the saved values are re-encrypted.
 
 ### Deployment Platforms
 - **Recommended**: Render.com with Neon PostgreSQL

@@ -1,4 +1,5 @@
 import fetch from 'node-fetch';
+import { getPaymentCredential } from './payment-credentials';
 
 export interface PaystackResponse {
   status: boolean;
@@ -7,30 +8,12 @@ export interface PaystackResponse {
 }
 
 export class PaystackService {
-  private secretKey: string;
   private baseUrl = 'https://api.paystack.co';
-  private configured: boolean;
-
-  constructor() {
-    // Use KES-specific key if available, otherwise fallback to general key
-    const secretKey = process.env.PAYSTACK_SECRET_KEY_KES || process.env.PAYSTACK_SECRET_KEY;
-    if (!secretKey) {
-      console.warn('Paystack secret key not provided - payment features will be disabled');
-      this.configured = false;
-      this.secretKey = '';
-    } else {
-      this.configured = true;
-      this.secretKey = secretKey;
-    }
-  }
 
   private async getSecretKey(): Promise<string> {
-    return String(
-      process.env.PAYSTACK_SECRET_KEY_KES ||
-      process.env.PAYSTACK_SECRET_KEY ||
-      this.secretKey ||
-      "",
-    ).trim();
+    const kesKey = await getPaymentCredential("PAYSTACK_SECRET_KEY_KES");
+    if (kesKey) return kesKey;
+    return (await getPaymentCredential("PAYSTACK_SECRET_KEY")) || "";
   }
 
   private async readResponse(response: any): Promise<PaystackResponse> {
@@ -54,7 +37,11 @@ export class PaystackService {
   }
 
   async isConfigured(): Promise<boolean> {
-    return Boolean(await this.getSecretKey());
+    try {
+      return Boolean(await this.getSecretKey());
+    } catch {
+      return false;
+    }
   }
 
   async initializePayment(
@@ -71,7 +58,7 @@ export class PaystackService {
     if (!secretKey) {
       return {
         status: false,
-        message: 'Paystack is not configured. Please add PAYSTACK_SECRET_KEY to environment variables.'
+        message: 'Payment service is not configured.'
       };
     }
     try {

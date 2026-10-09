@@ -38,6 +38,13 @@ import { validateApiKey, optionalApiKey } from "./middleware/api-key";
 import { openaiService } from "./services/ai";
 import { aiRateLimiter } from "./services/ai-rate-limiter";
 import { getCryptoPrice, getCryptoPrices, invalidateCryptoPriceCache, SUPPORTED_CRYPTO_COINS } from "./services/crypto-prices";
+import {
+  clearPaymentCredentialFallback,
+  getPaymentCredentialStatuses,
+  isPaymentCredentialEncryptionConfigured,
+  isPaymentProviderCredentialKey,
+  savePaymentCredential,
+} from "./services/payment-credentials";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
@@ -49,14 +56,16 @@ type CardProtectedAction = keyof typeof ACTIVE_CARD_REQUIRED_DEFAULTS;
 function isSensitiveSystemSetting(setting: { category?: unknown; key?: unknown }) {
   const category = String(setting.category || "").toLowerCase();
   const key = String(setting.key || "").toLowerCase();
+  if (category === "payment_credentials") return true;
   if ((category === "payhero" && key === "username") ||
       (/(payhero|payza|paystack|nexuspay|makamesco)[_-].*username/.test(key))) return true;
-  return /(api[_-]?key|secret|password|access[_-]?token|private[_-]?key|credential)/i.test(key);
+  return /(api[_-]?key|public[_-]?key|secret|password|access[_-]?token|private[_-]?key|credential)/i.test(key);
 }
 
 function isPaymentProviderCredential(setting: { category?: unknown; key?: unknown }) {
   const category = String(setting.category || "").toLowerCase();
   const key = String(setting.key || "").toLowerCase();
+  if (category === "payment_credentials") return true;
   const providerNamedKey = ["payhero", "payza", "paystack", "nexuspay", "makamesco"].some(name => key.includes(name));
   return ["payment", "payhero", "payzaapi", "paystack", "nexuspay"].includes(category) &&
     (isSensitiveSystemSetting(setting) || (category === "payhero" && key === "username")) ||
@@ -9138,7 +9147,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
       if (isPaymentProviderCredential({ category, key })) {
-        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
+        return res.status(400).json({ message: "Use Payment Setup or Replit Secrets to configure provider credentials." });
       }
       
       const updatedSetting = await storage.setSystemSetting({
@@ -9158,7 +9167,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const settingData = req.body;
       if (isPaymentProviderCredential(settingData || {})) {
-        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
+        return res.status(400).json({ message: "Use Payment Setup or Replit Secrets to configure provider credentials." });
       }
       const newSetting = await storage.createSystemSetting(settingData);
       res.json({ setting: newSetting });
@@ -9198,7 +9207,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const configData = req.body;
       if (isPaymentProviderName(configData?.provider)) {
-        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets." });
+        return res.status(400).json({ message: "Use Payment Setup or Replit Secrets to configure payment credentials." });
       }
       const configuration = await storage.createApiConfiguration(configData);
       res.json({ configuration, message: "API configuration created successfully" });
@@ -9213,7 +9222,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const { provider } = req.params;
       const updates = req.body;
       if (isPaymentProviderName(provider)) {
-        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets." });
+        return res.status(400).json({ message: "Use Payment Setup or Replit Secrets to configure payment credentials." });
       }
       
       const configuration = await storage.updateApiConfiguration(provider, updates);
@@ -9735,6 +9744,8 @@ p{color:#6b7280;font-size:14px;}</style>
         payheroConfigured: readiness.configured,
         payheroUsernameConfigured: readiness.usernameConfigured,
         payheroPasswordConfigured: readiness.passwordConfigured,
+        credentialSources: await getPaymentCredentialStatuses(),
+        encryptionKeyConfigured: isPaymentCredentialEncryptionConfigured(),
         cardPrice: cardPriceSetting?.value || "60.00",
       };
       res.json(settings);
@@ -9755,9 +9766,17 @@ p{color:#6b7280;font-size:14px;}</style>
         "payzaSecretKey",
         "payzaWebhookSecret",
         "paystackSecretKey",
+        "PAYHERO_USERNAME",
+        "PAYHERO_PASSWORD",
+        "NEXUSPAY_API_KEY",
+        "PAYZA_PUBLIC_KEY",
+        "PAYZA_SECRET_KEY",
+        "PAYZA_WEBHOOK_SECRET",
+        "PAYSTACK_SECRET_KEY_KES",
+        "PAYSTACK_SECRET_KEY",
       ];
       if (secretFields.some(field => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+        return res.status(400).json({ message: "Use the secure payment-provider credential settings to save credentials." });
       }
       const gateway = defaultGateway === undefined ? undefined : String(defaultGateway).trim().toLowerCase();
       const requestedMobileGateway = kenyaMobileMoneyGateway ?? virtualCardGateway;
@@ -9842,6 +9861,70 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('Error updating PayHero settings:', error);
       res.status(500).json({ message: "Error updating PayHero settings" });
+    }
+  });
+
+  app.put("/api/admin/payment-provider-credentials", requireAdminAuth, async (req, res) => {
+    try {
+      const body = req.body && typeof req.body === "object" && !Array.isArray(req.body)
+        ? req.body as Record<string, unknown>
+        : {};
+      const unknownFields = Object.keys(body).filter(key => !["credentials", "clearKeys"].includes(key));
+      if (unknownFields.length > 0) {
+        return res.status(400).json({ message: "Unsupported payment credential settings." });
+      }
+
+      const credentials = body.credentials === undefined
+        ? {}
+        : body.credentials;
+      if (!credentials || typeof credentials !== "object" || Array.isArray(credentials)) {
+        return res.status(400).json({ message: "Payment credentials must be provided as named text fields." });
+      }
+      const credentialEntries = Object.entries(credentials as Record<string, unknown>);
+      if (credentialEntries.some(([key, value]) =>
+        !isPaymentProviderCredentialKey(key) ||
+        typeof value !== "string" ||
+        value.length > 8192
+      )) {
+        return res.status(400).json({ message: "One or more payment credential fields are invalid." });
+      }
+
+      const clearKeys = body.clearKeys === undefined ? [] : body.clearKeys;
+      if (!Array.isArray(clearKeys) || clearKeys.some(key =>
+        typeof key !== "string" || !isPaymentProviderCredentialKey(key)
+      )) {
+        return res.status(400).json({ message: "One or more saved credential fields cannot be cleared." });
+      }
+
+      const normalizedClearKeys = clearKeys as string[];
+      const valuesToSave = credentialEntries.filter(([, value]) => String(value).trim().length > 0);
+      const keysToSave = valuesToSave.map(([key]) => key);
+      if (keysToSave.some(key => normalizedClearKeys.includes(key))) {
+        return res.status(400).json({ message: "A credential cannot be saved and cleared in the same request." });
+      }
+      if (valuesToSave.length === 0 && normalizedClearKeys.length === 0) {
+        return res.status(400).json({ message: "Enter a credential or choose a saved fallback to clear." });
+      }
+      if (valuesToSave.length > 0 && !isPaymentCredentialEncryptionConfigured()) {
+        return res.status(503).json({
+          message: "Set PAYMENT_CREDENTIALS_ENCRYPTION_KEY in Replit Secrets before saving encrypted payment credentials.",
+        });
+      }
+
+      for (const [key, value] of valuesToSave) {
+        await savePaymentCredential(key, String(value));
+      }
+      for (const key of normalizedClearKeys) {
+        await clearPaymentCredentialFallback(key);
+      }
+
+      res.json({
+        success: true,
+        credentialSources: await getPaymentCredentialStatuses(),
+      });
+    } catch {
+      console.error("Payment-provider credential update failed.");
+      res.status(500).json({ message: "Payment credentials could not be saved securely." });
     }
   });
 
@@ -15588,7 +15671,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
 
   app.post("/api/payzaapi/callback", async (req, res) => {
     try {
-      const webhookSecret = String(process.env.PAYZA_WEBHOOK_SECRET || "").trim();
+      const webhookSecret = await payzaApiService.getWebhookSecret().catch(() => null);
       if (!webhookSecret) {
         return res.status(503).json({ message: "PayzaAPI webhook verification is not configured" });
       }
@@ -16011,7 +16094,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const { defaultCurrency, enabledCurrencies, defaultGateway, fallbackRates } = req.body;
       if (Object.prototype.hasOwnProperty.call(req.body || {}, "nexusApiKey")) {
-        return res.status(400).json({ message: "NexusPay credentials must be configured as Replit Secrets." });
+        return res.status(400).json({ message: "Use Payment Setup or Replit Secrets to configure payment credentials." });
       }
       const upsert = async (key: string, value: string, category: string) => {
         await pool.query(`INSERT INTO system_settings (key, value, category) VALUES ($1, to_json($2::text), $3) ON CONFLICT (key) DO UPDATE SET value = to_json($2::text), category = EXCLUDED.category, updated_at = NOW()`, [key, value, category]);
@@ -16025,7 +16108,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         }
         if (gateway === "nexuspay") {
           if (!(await nexusPayService.isConfigured())) {
-            return res.status(400).json({ message: "Configure NEXUSPAY_API_KEY in Replit Secrets before selecting NexusPay." });
+            return res.status(400).json({ message: "Configure provider credentials in Payment Setup or Replit Secrets before selecting this method." });
           }
         }
         await upsert("default_gateway", gateway, "payment");
