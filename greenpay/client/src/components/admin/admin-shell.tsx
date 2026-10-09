@@ -78,7 +78,7 @@ const navSections = [
       { href: "/admin/settings", label: "System Settings", icon: Settings },
       { href: "/admin/deposit-settings", label: "Deposit Settings", icon: ArrowDownToLine },
       { href: "/admin/manual-payment", label: "Manual Payment", icon: Smartphone },
-      { href: "/admin/payhero-settings", label: "Payment Settings", icon: Smartphone },
+      { href: "/admin/payhero-settings", label: "Payment Setup & Keys", icon: Smartphone },
       { href: "/admin/messaging", label: "Messaging & SMS", icon: MessageCircle },
       { href: "/admin/announcements", label: "Announcements", icon: Megaphone },
       { href: "/admin/blogs", label: "Blogs", icon: Newspaper },

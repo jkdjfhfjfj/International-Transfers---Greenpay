@@ -22,7 +22,7 @@ type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
-  usdToKesRate?: number;
+  usdToKesRate?: number | null;
   country?: string;
   isKenya?: boolean;
   countryPaymentCurrency?: string | null;
@@ -121,11 +121,18 @@ export default function DepositPage() {
   });
   const providerCurrencies = config?.providerCurrencies || [];
 
-  const { data: cryptoData } = useQuery({
+  const { data: cryptoData, isLoading: cryptoAddressesLoading } = useQuery({
     queryKey: ["/api/crypto/deposit-addresses"],
     queryFn: async () => { const r = await apiRequest("GET", "/api/crypto/deposit-addresses"); return r.json(); },
-    enabled: !!user?.id && selectedMethod === "crypto",
+    enabled: !!user?.id,
   });
+  const allAddresses: CryptoAddress[] = (cryptoData as any)?.addresses || [];
+  const availableCryptoCoins = Array.from(new Set(
+    allAddresses
+      .filter(address => String(address.address || "").trim())
+      .map(address => String(address.coin || "").toUpperCase())
+      .filter(Boolean),
+  ));
 
   const methods = config?.methods || {};
   const isEnabled = (m: string) => {
@@ -133,20 +140,22 @@ export default function DepositPage() {
     return String(value).replace(/['"]/g, "").toLowerCase() === "true";
   };
   const depositsEnabled = isEnabled("global");
-  const minimumCardDeposit = Math.ceil(10 * Math.max(1, Number(config?.usdToKesRate) || 1));
-  const enabledMethods = (config?.isKenya
-    ? ["mpesa", "card", "crypto"] as const
-    : ["nexuspay", "crypto"] as const
-  ).filter(method => {
-    if (method === "mpesa") return depositsEnabled && isEnabled("mpesa") && config?.paymentReadiness?.mobileMoney === true;
-    if (method === "card") return depositsEnabled && isEnabled("card") && config?.paymentReadiness?.card === true;
-    if (method === "nexuspay") {
-      return Boolean(config?.countryPaymentCurrency) &&
-        depositsEnabled &&
-        config?.paymentReadiness?.hostedCheckout === true;
+  const usdToKesRate = Number(config?.usdToKesRate);
+  const hasUsdToKesRate = Number.isFinite(usdToKesRate) && usdToKesRate > 0;
+  const minimumCardDeposit = hasUsdToKesRate ? Math.ceil(10 * usdToKesRate) : 0;
+  const bankTransferConfigured = ["bank_name", "bank_account_name", "bank_account_number"]
+    .every(key => String(methods[key] || "").trim().length > 0);
+  const enabledMethods: Exclude<Method, null>[] = [];
+  if (depositsEnabled) {
+    if (config?.isKenya) {
+      if (isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) enabledMethods.push("mpesa");
+      if (isEnabled("card") && config.paymentReadiness?.card === true && hasUsdToKesRate) enabledMethods.push("card");
+    } else if (config?.countryPaymentCurrency && config.paymentReadiness?.hostedCheckout === true) {
+      enabledMethods.push("nexuspay");
     }
-    return isEnabled(method);
-  });
+    if (isEnabled("crypto") && availableCryptoCoins.length > 0) enabledMethods.push("crypto");
+    if (isEnabled("bank_transfer") && bankTransferConfigured) enabledMethods.push("bank_transfer");
+  }
   // Wallet deposits are controlled by the same master switch enforced by the server.
   const mpesaMutation = useMutation({
     mutationFn: async () => {
@@ -203,14 +212,16 @@ export default function DepositPage() {
     return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [mpesaStatus, pollStatus]);
 
-  const allAddresses: CryptoAddress[] = (cryptoData as any)?.addresses || [];
   const addressesByCoin = allAddresses.reduce((acc: Record<string, CryptoAddress[]>, a) => {
     const c = (a.coin || "").toUpperCase();
     if (!acc[c]) acc[c] = [];
     acc[c].push(a);
     return acc;
   }, {});
-  const selectedAddresses = addressesByCoin[selectedCoin] || [];
+  const displayedCoin = availableCryptoCoins.includes(selectedCoin.toUpperCase())
+    ? selectedCoin.toUpperCase()
+    : availableCryptoCoins[0] || selectedCoin.toUpperCase();
+  const selectedAddresses = addressesByCoin[displayedCoin] || [];
 
   const bonuses = config?.bonuses || [];
   const relevantBonuses = bonuses.filter(b => b.isActive && (b.method === (selectedMethod || "any") || b.method === "any"));
@@ -306,7 +317,7 @@ export default function DepositPage() {
     return () => { clearInterval(interval); clearTimeout(timeout); };
   }, [nexusStatus, nexusRef]);
 
-  if (configLoading) {
+  if (configLoading || cryptoAddressesLoading) {
     return (
       <div className="min-h-screen bg-background bottom-nav-safe md:pb-6">
         <WavyHeader size="sm" />
@@ -434,6 +445,11 @@ export default function DepositPage() {
                     </motion.button>
                   );
                 })}
+                {enabledMethods.length === 0 && (
+                  <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground" role="status">
+                    Deposits are temporarily unavailable. Please contact support or try again later.
+                  </div>
+                )}
               </div>
               <details className="mt-4 rounded-2xl border border-border bg-card p-4">
                 <summary className="cursor-pointer text-sm font-semibold">Supported deposit currencies and regions</summary>
@@ -594,13 +610,13 @@ export default function DepositPage() {
                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border-b border-border p-4">
                   <p className="text-xs font-semibold text-muted-foreground mb-3 uppercase tracking-wide">Select Coin</p>
                   <div className="grid grid-cols-4 gap-2">
-                    {["BTC", "ETH", "USDT", "USDC"].map(coin => (
+                    {availableCryptoCoins.map(coin => (
                       <button
                         key={coin}
                         onClick={() => setSelectedCoin(coin)}
                         data-testid={`coin-btn-${coin}`}
                         className={`py-3 rounded-xl transition-all flex flex-col items-center gap-1 ${
-                          selectedCoin === coin
+                          displayedCoin === coin
                             ? `bg-gradient-to-br ${COIN_COLORS[coin] || "from-primary to-primary/80"} text-white shadow-lg scale-105`
                             : "bg-background border border-border text-muted-foreground hover:border-primary/30"
                         }`}
@@ -616,7 +632,7 @@ export default function DepositPage() {
                   {selectedAddresses.length === 0 ? (
                     <div className="border border-dashed border-border rounded-xl p-6 text-center">
                       <Bitcoin className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                      <p className="text-sm font-medium text-muted-foreground">No {selectedCoin} addresses configured</p>
+                      <p className="text-sm font-medium text-muted-foreground">No {displayedCoin} addresses configured</p>
                       <p className="text-xs text-muted-foreground/70 mt-1">Contact support or try another coin.</p>
                     </div>
                   ) : (
@@ -875,6 +891,14 @@ export default function DepositPage() {
 
                 <Button
                   onClick={async () => {
+                    if (!hasUsdToKesRate) {
+                      toast({
+                        title: "Card deposits are temporarily unavailable",
+                        description: "The exchange rate needed to validate this deposit is unavailable.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     if (!amount || parseFloat(amount) < minimumCardDeposit) {
                       toast({
                         title: `Minimum KES ${formatNumber(minimumCardDeposit)}`,
@@ -899,7 +923,7 @@ export default function DepositPage() {
                       toast({ title: "Error", description: e.message || "Card payment could not be started. Please try again later.", variant: "destructive" });
                     }
                   }}
-                  disabled={!amount || parseFloat(amount) < minimumCardDeposit}
+                  disabled={!hasUsdToKesRate || !amount || parseFloat(amount) < minimumCardDeposit}
                   className="w-full"
                   data-testid="button-pay-with-card"
                 >

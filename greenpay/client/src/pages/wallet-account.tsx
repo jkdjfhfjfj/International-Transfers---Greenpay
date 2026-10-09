@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownToLine, ArrowLeftRight, ArrowUpRight, Building2, Clock3, Lock, Send } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, ArrowRightLeft, ArrowUpRight, Building2, Clock3, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WavyHeader } from "@/components/wavy-header";
@@ -148,7 +148,7 @@ export default function WalletAccountPage() {
         <section className="grid grid-cols-4 gap-2">
           {[
             { label: "Deposit", icon: ArrowDownToLine, path: `/deposit?walletId=${wallet.id}` },
-            { label: "Send", icon: Send, path: `/transfer?walletId=${wallet.id}` },
+            { label: "Transfer", icon: ArrowRightLeft, path: `/transfer?walletId=${encodeURIComponent(wallet.id)}` },
             { label: "Exchange", icon: ArrowLeftRight, path: `/exchange?walletId=${wallet.id}` },
             { label: "Withdraw", icon: ArrowUpRight, path: `/withdraw?walletId=${wallet.id}` },
           ].map(action => (

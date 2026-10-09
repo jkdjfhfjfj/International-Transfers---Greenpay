@@ -16,7 +16,7 @@ type Option = { value: string; label: string };
 export default function TransferPage() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
-  const { wallets: userWallets } = useWallets();
+  const { wallets: userWallets, isLoading: walletsLoading } = useWallets();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [source, setSource] = useState("");
@@ -24,6 +24,7 @@ export default function TransferPage() {
   const [amount, setAmount] = useState("");
   const [review, setReview] = useState(false);
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
+  const requestedWalletId = new URLSearchParams(window.location.search).get("walletId");
 
   const { data: cryptoData } = useQuery({
     queryKey: ["/api/crypto/wallets", user?.id],
@@ -63,7 +64,17 @@ export default function TransferPage() {
     ...cards.map((card) => ({ value: `card:${card.id}`, label: `Virtual card •••• ${String(card.cardNumber || "").slice(-4)}` })),
   ], [cards, cryptoWallets, userWallets]);
 
-  const selectedSource = source || sourceOptions[0]?.value || "";
+  const requestedSource = requestedWalletId ? `wallet:${requestedWalletId}` : "";
+  const preferredSource = source || requestedSource;
+  const selectedSource = preferredSource
+    ? sourceOptions.some((option) => option.value === preferredSource) ? preferredSource : ""
+    : sourceOptions[0]?.value || "";
+  const requestedWalletUnavailable = Boolean(
+    requestedWalletId &&
+    !walletsLoading &&
+    !userWallets.some((wallet) => wallet.id === requestedWalletId && wallet.isActive && !wallet.isSuspended) &&
+    !source,
+  );
   const selectedDestination = destinationOptions.some((option) => option.value === destination && option.value !== selectedSource)
     ? destination
     : destinationOptions.find((option) => option.value !== selectedSource)?.value || "";
@@ -136,7 +147,7 @@ export default function TransferPage() {
     onSuccess: (data) => {
       toast({
         title: "Transfer completed",
-        description: `${Number(data.sourceAmount || amount).toFixed(8)} ${data.sourceCoin || "funds"} moved successfully.`,
+        description: `${Number(data.sourceAmount || amount).toFixed(8)} ${data.sourceCoin || "funds"} transferred successfully.`,
       });
       setAmount("");
       setReview(false);
@@ -179,7 +190,7 @@ export default function TransferPage() {
               <ArrowRightLeft className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="font-bold">Move money</h1>
+              <h1 className="font-bold">Transfer</h1>
               <p className="text-xs text-muted-foreground">Transfer between fiat wallets, crypto wallets, and active cards.</p>
             </div>
           </div>
@@ -236,6 +247,11 @@ export default function TransferPage() {
         {!sourceOptions.length && (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 p-4 text-sm text-amber-700 dark:text-amber-300">
             No active accounts are available for transfer.
+          </div>
+        )}
+        {requestedWalletUnavailable && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-300">
+            The selected wallet is unavailable for transfers. Choose another active source account.
           </div>
         )}
 

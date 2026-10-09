@@ -282,6 +282,13 @@ export default function CryptoPage() {
   const availableUsdBalance = Number(userWallets.find(wallet => wallet.currency === "USD")?.availableBalance ?? 0);
   const history: any[] = (historyData as any)?.transactions || [];
   const allDepositAddresses: any[] = (depositAddressesData as any)?.addresses || [];
+  const availableDepositCoins = Array.from(new Set(
+    allDepositAddresses
+      .filter((address) => String(address.address || "").trim())
+      .map((address) => String(address.coin || "").toUpperCase())
+      .filter(Boolean),
+  ));
+  const availableDepositCoinsKey = availableDepositCoins.join("|");
   const cards: any[] = (cardsData as any)?.cards || [];
   const sourceOptions = [
     ...wallets.map((wallet) => ({ value: `crypto:${wallet.coin}`, label: `${wallet.coin} wallet` })),
@@ -305,6 +312,13 @@ export default function CryptoPage() {
     acc[c].push(addr);
     return acc;
   }, {} as Record<string, any[]>);
+
+  useEffect(() => {
+    const configuredCoins = availableDepositCoinsKey.split("|").filter(Boolean);
+    if (configuredCoins.length > 0 && !configuredCoins.includes(selectedCoin)) {
+      setSelectedCoin(configuredCoins[0]);
+    }
+  }, [availableDepositCoinsKey, selectedCoin]);
 
   const selectedWallet = wallets.find(w => w.coin === selectedCoin);
   const selectedCoinAddresses = addressesByCoin[selectedCoin] || [];
@@ -457,12 +471,15 @@ export default function CryptoPage() {
 
                   <button
                     onClick={() => { setSelectedCoin(wallet.coin); setActiveTab("deposit"); }}
-                    className="w-full rounded-xl p-3 flex items-center justify-between transition-colors"
+                    disabled={!addressesByCoin[wallet.coin]?.length}
+                    className="w-full rounded-xl p-3 flex items-center justify-between transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: coinMeta.tint }}
                     data-testid={`button-deposit-${wallet.coin}`}
                   >
                     <span className="text-xs font-medium" style={{ color: coinMeta.accent }}>
-                      View Deposit Addresses ({(addressesByCoin[wallet.coin] || []).length} networks)
+                      {addressesByCoin[wallet.coin]?.length
+                        ? `View Deposit Addresses (${addressesByCoin[wallet.coin].length} networks)`
+                        : "Deposits unavailable for this coin"}
                     </span>
                     <ArrowDownToLine className="w-4 h-4" style={{ color: coinMeta.accent }} />
                   </button>
@@ -547,7 +564,7 @@ export default function CryptoPage() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-muted-foreground">Select Coin</label>
                   <div className="grid grid-cols-4 gap-2">
-                    {["BTC", "ETH", "USDT", "USDC"].map(coin => {
+                    {availableDepositCoins.map(coin => {
                       const active = selectedCoin === coin;
                       return (
                         <button
@@ -646,7 +663,7 @@ export default function CryptoPage() {
 
                 <button
                   onClick={() => setDepositReview(true)}
-                  disabled={!depositAmount || parseFloat(depositAmount) <= 0 || depositMutation.isPending}
+                  disabled={!selectedCoinAddresses.length || !depositAmount || parseFloat(depositAmount) <= 0 || depositMutation.isPending}
                   className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm disabled:opacity-50 flex items-center justify-center gap-2"
                 >
                   <ArrowDownToLine className="w-4 h-4" />

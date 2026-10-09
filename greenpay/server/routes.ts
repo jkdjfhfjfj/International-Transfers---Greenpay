@@ -4145,10 +4145,16 @@ p{color:#6b7280;font-size:14px;}</style>
         (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
         settingText((await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value, "payhero"),
       ).toLowerCase();
+      let usdToKesRate: number | null = null;
+      try {
+        usdToKesRate = await getUsdToKesRate();
+      } catch (error) {
+        console.error("[Deposit Config] USD/KES rate is unavailable:", error);
+      }
       res.json({
         methods: { ...settingsMap, default_gateway: defaultGateway },
         bonuses: activeBonuses,
-        usdToKesRate: await getUsdToKesRate(),
+        usdToKesRate,
         country,
         isKenya: isKenyanCountry(country),
         countryPaymentCurrency: isKenyanCountry(country) ? "KES" : getPayzaCurrencyForCountry(country),
@@ -14464,11 +14470,15 @@ Sitemap: https://geepay.us/sitemap.xml`;
   // GET available admin-configured deposit addresses (public to authed users)
   app.get("/api/crypto/deposit-addresses", requireAuth, async (req, res) => {
     try {
-      const priceSnapshot = await getCryptoPrices();
+      const globalDepositSetting = await storage.getSystemSetting("deposit_methods", "global_enabled");
+      const cryptoDepositSetting = await storage.getSystemSetting("deposit_methods", "crypto_enabled");
+      if (!settingEnabled(globalDepositSetting?.value) || !settingEnabled(cryptoDepositSetting?.value)) {
+        return res.json({ addresses: [] });
+      }
       const addrs = await db.select().from(cryptoDepositAddresses)
         .where(eq(cryptoDepositAddresses.isActive, true))
         .orderBy(cryptoDepositAddresses.coin);
-      res.json({ addresses: addrs, ...priceSnapshot });
+      res.json({ addresses: addrs });
     } catch (error) {
       console.error("Deposit addresses fetch error:", error);
       res.status(500).json({ message: "Failed to fetch deposit addresses" });
@@ -14773,6 +14783,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.post("/api/crypto/deposit", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
+      const globalDepositSetting = await storage.getSystemSetting("deposit_methods", "global_enabled");
+      const cryptoDepositSetting = await storage.getSystemSetting("deposit_methods", "crypto_enabled");
+      if (!settingEnabled(globalDepositSetting?.value) || !settingEnabled(cryptoDepositSetting?.value)) {
+        return res.status(403).json({ message: "Crypto deposits are currently unavailable." });
+      }
       const { coin, amount, network, pin, authenticatorCode } = req.body;
       if (!coin || !amount) return res.status(400).json({ message: "coin and amount required" });
       const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
@@ -15387,6 +15402,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const requestedMethod = String(req.body.paymentMethod || "mobile_money").trim().toLowerCase();
       if (isKenya && !["mobile_money", "card"].includes(requestedMethod)) {
         return res.status(400).json({ message: "Choose mobile money or card." });
+      }
+      if (isKenya) {
+        const methodKey = requestedMethod === "card" ? "card_enabled" : "mpesa_enabled";
+        const methodSetting = await storage.getSystemSetting("deposit_methods", methodKey);
+        if (!settingEnabled(methodSetting?.value)) {
+          return res.status(403).json({ message: "This deposit method is currently disabled." });
+        }
       }
       if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || !Number.isFinite(creditedAmount) || creditedAmount <= 0) {
         return res.status(503).json({ message: "The deposit exchange rate is temporarily unavailable." });

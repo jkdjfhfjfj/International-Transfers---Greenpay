@@ -137,14 +137,14 @@ export default function AdminPayHeroSettingsPage() {
 
   if (isLoading) {
     return (
-      <AdminShell title="Payment Settings">
+      <AdminShell title="Payment Setup & Keys">
         <div className="h-40 rounded-2xl bg-gray-200 animate-pulse" />
       </AdminShell>
     );
   }
 
   return (
-    <AdminShell title="Payment Settings">
+    <AdminShell title="Payment Setup & Keys">
       <div className="max-w-2xl space-y-6">
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
@@ -234,10 +234,22 @@ export default function AdminPayHeroSettingsPage() {
 
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
-            <CardTitle>Paystack and PayzaAPI setup</CardTitle>
-            <CardDescription>Store credentials in Replit Secrets. This page shows status only and never displays secret values.</CardDescription>
+            <CardTitle>Provider credential setup</CardTitle>
+            <CardDescription>Add these values in Replit Secrets for this project. This page only shows readiness and never stores or displays secret values.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">PayHero mobile money</h3>
+              <p className="text-xs text-muted-foreground">
+                Add <code>PAYHERO_USERNAME</code> and <code>PAYHERO_PASSWORD</code>. Set the non-secret channel ID in the payment settings above.
+              </p>
+            </section>
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">MakamescoPay mobile money</h3>
+              <p className="text-xs text-muted-foreground">
+                Add <code>NEXUSPAY_API_KEY</code> if this is the selected Kenyan mobile-money service.
+              </p>
+            </section>
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">PayzaAPI requirements</h3>
               <p className="text-xs text-muted-foreground">

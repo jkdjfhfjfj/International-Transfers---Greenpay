@@ -288,7 +288,7 @@ export default function DashboardPage() {
     { 
       id: "send", 
       icon: Send, 
-      label: "Move Money", 
+      label: "Send",
       path: "/send-money", 
        accent: 'var(--gp-brand)',
        tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
