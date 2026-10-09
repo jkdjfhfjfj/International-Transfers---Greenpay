@@ -3885,11 +3885,11 @@ p{color:#6b7280;font-size:14px;}</style>
         bonuses: activeBonuses,
         usdToKesRate: await getUsdToKesRate(),
         providerCurrencies: [
-          { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya", provider: "PayHero" },
+          { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya" },
           ...PAYZA_API_CURRENCIES.filter(currency => currency.code !== "KES")
-            .map(currency => ({ ...currency, provider: "PayzaAPI" })),
+            .map(currency => ({ code: currency.code, name: currency.name, countryOrRegion: currency.countryOrRegion })),
         ],
-        currencyAvailabilityNote: "Currency and region labels describe the provider's documented currency list. The provider confirms country and payment-method availability at checkout.",
+        currencyAvailabilityNote: "Country and payment-method availability is confirmed at checkout.",
       });
     } catch (error) {
       console.error("[Deposit Config Error]:", error);
@@ -9010,15 +9010,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
       if (isPaymentProviderCredential({ category, key })) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
-      }
-      const providerSettingMatches = await Promise.all(
-        ["payment", "payhero", "payzaapi", "paystack", "nexuspay"].map(providerCategory =>
-          storage.getSystemSetting(providerCategory, key),
-        ),
-      );
-      if (providerSettingMatches.some(Boolean)) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
+        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
       }
       
       const updatedSetting = await storage.setSystemSetting({
@@ -9038,7 +9030,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const settingData = req.body;
       if (isPaymentProviderCredential(settingData || {})) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets, not stored in system settings." });
+          return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets, not stored in system settings." });
       }
       const newSetting = await storage.createSystemSetting(settingData);
       res.json({ setting: newSetting });
@@ -9078,7 +9070,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       const configData = req.body;
       if (isPaymentProviderName(configData?.provider)) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets." });
       }
       const configuration = await storage.createApiConfiguration(configData);
       res.json({ configuration, message: "API configuration created successfully" });
@@ -9093,7 +9085,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const { provider } = req.params;
       const updates = req.body;
       if (isPaymentProviderName(provider)) {
-        return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
+        return res.status(400).json({ message: "Payment credentials must be configured in Replit Secrets." });
       }
       
       const configuration = await storage.updateApiConfiguration(provider, updates);
@@ -9692,12 +9684,12 @@ p{color:#6b7280;font-size:14px;}</style>
           channel: readiness.channelConfigured,
         },
         message: readiness.configured
-          ? "PayHero is configured. No payment was initiated."
-          : "PayHero is not fully configured. Check the Replit Secrets and channel ID. No payment was initiated.",
+          ? "Payment settings are complete. No payment was initiated."
+          : "Payment settings are incomplete. Check the saved credentials and channel ID. No payment was initiated.",
       });
     } catch (error) {
       console.error('PayHero readiness check error:', error);
-      res.status(500).json({ success: false, message: "PayHero readiness check failed. No payment was initiated." });
+      res.status(500).json({ success: false, message: "Payment settings could not be checked. No payment was initiated." });
     }
   });
 
@@ -15227,7 +15219,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           name: customer.fullName || undefined,
           phone,
           callbackUrl: `${req.protocol}://${req.get("host")}/api/payzaapi/callback`,
-          redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}&provider=payzaapi`,
+          redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${reference}`,
           cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${walletId}`,
           description: description || `Deposit to ${normalizedCurrency} wallet`,
           metadata: { userId, walletId, currency: normalizedCurrency },
