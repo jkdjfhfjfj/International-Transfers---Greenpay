@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLeft, ChevronLeft, ChevronRight, CreditCard } from "lucide-react";
 import ncbaLogo from "@assets/images_(9)_1767703865615.png";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
@@ -22,7 +22,7 @@ export default function VirtualCardPage() {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual' | 'crypto'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto'>('auto');
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
@@ -30,6 +30,7 @@ export default function VirtualCardPage() {
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const touchStartX = useRef<number | null>(null);
   const { user } = useAuth();
+  const isKenyanUser = ["ke", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -44,24 +45,6 @@ export default function VirtualCardPage() {
 
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
-  });
-
-  const { data: kesAmountData } = useQuery({
-    queryKey: ["/api/convert-to-kes", settingsData],
-    queryFn: async () => {
-      const usdAmount = (settingsData as any)?.price || "60.00";
-      const response = await apiRequest("POST", "/api/convert-to-kes", { usdAmount: parseFloat(usdAmount) });
-      return response.json();
-    },
-    enabled: !!settingsData,
-  });
-
-  const { data: manualPaymentSettings } = useQuery({
-    queryKey: ["/api/manual-payment-settings"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/manual-payment-settings");
-      return response.json();
-    },
   });
 
   const { data: discountData } = useQuery({
@@ -104,7 +87,10 @@ export default function VirtualCardPage() {
 
   const purchaseCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", { userId: user?.id });
+      const response = await apiRequest("POST", "/api/virtual-card/initialize-payment", {
+        userId: user?.id,
+        paymentMethod: paymentMethod === "card" ? "card" : "mobile_money",
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -113,10 +99,10 @@ export default function VirtualCardPage() {
           window.location.href = data.redirectUrl;
           return;
         }
-        toast({ title: "STK Push Sent!", description: data.message || "Check your phone and enter your M-Pesa PIN." });
+        toast({ title: "Payment prompt sent", description: data.message || "Check your phone and complete the payment." });
         setTimeout(() => setLocation(`/payment-processing?reference=${data.reference}&type=virtual-card`), 2000);
       } else {
-        throw new Error(data.message || "Unable to initialize M-Pesa payment");
+        throw new Error(data.message || "Unable to start mobile-money payment.");
       }
     },
     onError: (error: any) => {
@@ -277,7 +263,7 @@ export default function VirtualCardPage() {
                 {[
                   "Works for international online payments & subscriptions",
                   "Accepted wherever Visa is supported worldwide",
-                  "Reload your card balance any time via M-Pesa",
+                  "Reload your card balance using available local payment options",
                 ].map((note, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
                     <span className="text-green-500 mt-0.5">✓</span>
@@ -301,16 +287,19 @@ export default function VirtualCardPage() {
                     paymentMethod === 'auto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
                   }`} data-testid="button-payment-auto"
                 >
-                  M-Pesa
+                  {isKenyanUser ? "Mobile money" : "Secure checkout"}
                   {paymentMethod === 'auto' && <span className="text-[9px] bg-white/20 text-primary-foreground px-1 py-0.5 rounded-full">Auto</span>}
                 </button>
-                <button onClick={() => setPaymentMethod('manual')}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors ${
-                    paymentMethod === 'manual' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
-                  }`} data-testid="button-payment-manual"
-                >
-                  Manual
-                </button>
+                {isKenyanUser && (
+                  <button onClick={() => setPaymentMethod("card")}
+                    className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                      paymentMethod === "card" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                    }`} data-testid="button-payment-card"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    Card
+                  </button>
+                )}
                 <button onClick={() => setPaymentMethod('crypto')}
                   className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
                     paymentMethod === 'crypto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
@@ -321,35 +310,21 @@ export default function VirtualCardPage() {
                 </button>
               </div>
 
-              {paymentMethod === 'auto' ? (
+              {paymentMethod === 'auto' || paymentMethod === 'card' ? (
                 <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
                   onClick={() => purchaseCardMutation.mutate()}
                   disabled={purchaseCardMutation.isPending}
                   data-testid="button-purchase-card-auto"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  {purchaseCardMutation.isPending ? "Processing..." : `Pay via M-Pesa · $${currentCardPrice}`}
+                  {purchaseCardMutation.isPending
+                    ? "Processing..."
+                    : paymentMethod === "card"
+                      ? `Pay with card · $${currentCardPrice}`
+                      : isKenyanUser
+                        ? `Pay with mobile money · $${currentCardPrice}`
+                        : `Continue to checkout · $${currentCardPrice}`}
                 </Button>
-              ) : paymentMethod === 'manual' ? (
-                <div className="space-y-3 text-left">
-                  <div className="bg-muted p-4 rounded-xl space-y-2">
-                    <p className="text-sm font-semibold mb-3">How to pay via Paybill</p>
-                    {[
-                      { step: 1, text: "Open M-Pesa on your phone and select Lipa na M-Pesa" },
-                      { step: 2, text: "Select Pay Bill" },
-                      { step: 3, text: `Enter Business No: ${(manualPaymentSettings as any)?.paybill || "—"}` },
-                      { step: 4, text: `Enter Account No: ${(manualPaymentSettings as any)?.account || "440200259037"}` },
-                      { step: 5, text: `Enter Amount: KES ${(kesAmountData as any)?.kesAmount || "..."}` },
-                      { step: 6, text: "Enter your M-Pesa PIN and confirm" },
-                    ].map(({ step, text }) => (
-                      <div key={step} className="flex items-start gap-3 text-sm">
-                        <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-bold shrink-0 mt-0.5">{step}</span>
-                        <span className="text-foreground">{text}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground text-center">After payment, contact support with your M-Pesa reference number.</p>
-                </div>
               ) : (
                 <div className="space-y-3 text-left">
                   <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 p-4 rounded-xl space-y-3">

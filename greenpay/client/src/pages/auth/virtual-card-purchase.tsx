@@ -15,9 +15,10 @@ export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, login } = useAuth();
+  const isKenyanUser = ["ke", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'manual' | 'crypto'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto'>('auto');
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
@@ -25,26 +26,6 @@ export default function VirtualCardPurchasePage() {
   // Fetch card price settings
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
-  });
-
-  // Fetch dynamic KES amount
-  const { data: kesAmountData } = useQuery({
-    queryKey: ["/api/convert-to-kes", settingsData],
-    queryFn: async () => {
-      const usdAmount = (settingsData as any)?.price || "60.00";
-      const response = await apiRequest("POST", "/api/convert-to-kes", { usdAmount: parseFloat(usdAmount) });
-      return response.json();
-    },
-    enabled: !!settingsData,
-  });
-
-  // Fetch manual payment settings from API
-  const { data: manualPaymentSettings } = useQuery({
-    queryKey: ["/api/manual-payment-settings"],
-    queryFn: async () => {
-      const response = await apiRequest("GET", "/api/manual-payment-settings");
-      return response.json();
-    },
   });
 
   const { data: discountData } = useQuery({
@@ -114,7 +95,7 @@ export default function VirtualCardPurchasePage() {
   });
 
   const handlePurchase = () => {
-    initializePayment.mutate(undefined, {
+    initializePayment.mutate(paymentMethod === "card" ? "card" : "mobile_money", {
       onSuccess: (data) => {
         const redirectUrl = data.redirectUrl || data.authorization_url;
         if (redirectUrl) {
@@ -293,13 +274,15 @@ export default function VirtualCardPurchasePage() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold">Automatic Payment</h4>
+                        <h4 className="font-semibold">{isKenyanUser ? "Mobile money" : "Local checkout"}</h4>
                         <span className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs px-2 py-0.5 rounded-full font-medium">
                           Recommended
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">
-                        Instant activation with an M-Pesa payment prompt
+                        {isKenyanUser
+                          ? "Get a payment prompt on your phone."
+                          : "Continue to checkout using the currency available for your country."}
                       </p>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="material-icons text-green-500 text-xs">bolt</span>
@@ -312,38 +295,30 @@ export default function VirtualCardPurchasePage() {
                 </div>
               </motion.div>
 
-              {/* Manual Payment Option */}
+              {isKenyanUser && (
               <motion.div
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setPaymentMethod('manual')}
+                onClick={() => setPaymentMethod("card")}
                 className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === 'manual' 
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-border bg-card hover:border-primary/50'
+                  paymentMethod === "card"
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-card hover:border-primary/50"
                 }`}
+                data-testid="option-card-payment"
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
-                      paymentMethod === 'manual' ? 'border-primary bg-primary' : 'border-border'
-                    }`}>
-                      {paymentMethod === 'manual' && (
-                        <span className="material-icons text-white text-xs">check</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h4 className="font-semibold mb-1">Manual M-Pesa Payment</h4>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Pay via M-Pesa paybill and contact support for activation
-                      </p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="material-icons text-primary text-xs">schedule</span>
-                        <span className="text-muted-foreground">Requires manual activation</span>
-                      </div>
-                    </div>
+                <div className="flex items-start gap-3">
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                    paymentMethod === "card" ? "border-primary bg-primary" : "border-border"
+                  }`}>
+                    {paymentMethod === "card" && <span className="material-icons text-white text-xs">check</span>}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-1">Debit or credit card</h4>
+                    <p className="text-xs text-muted-foreground">Pay securely by card.</p>
                   </div>
                 </div>
               </motion.div>
+              )}
 
               {/* Crypto Payment Option */}
               <motion.div
@@ -376,7 +351,7 @@ export default function VirtualCardPurchasePage() {
             </div>
 
             {/* Auto Payment Details & Button */}
-            {paymentMethod === 'auto' && (
+            {(paymentMethod === 'auto' || paymentMethod === 'card') && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -388,53 +363,21 @@ export default function VirtualCardPurchasePage() {
                   disabled={initializePayment.isPending}
                   data-testid="button-purchase-card"
                 >
-                  {initializePayment.isPending ? "Processing..." : `Pay with M-Pesa · $${currentCardPrice}`}
+                  {initializePayment.isPending
+                    ? "Processing..."
+                    : paymentMethod === "card"
+                      ? `Pay with card · $${currentCardPrice}`
+                      : isKenyanUser
+                        ? `Pay with mobile money · $${currentCardPrice}`
+                        : `Continue to checkout · $${currentCardPrice}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
-                  Complete your payment using the secure prompt sent to your phone.
+                  {paymentMethod === "card"
+                    ? "Your card will be activated after payment confirmation."
+                    : isKenyanUser
+                      ? "Complete the payment using the prompt sent to your phone."
+                      : "Your card will be activated after hosted checkout confirms payment."}
                 </p>
-              </motion.div>
-            )}
-
-            {/* Manual Payment Details */}
-            {paymentMethod === 'manual' && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="bg-primary/5 dark:bg-primary/10 p-4 rounded-xl border border-primary/20 text-left space-y-3"
-              >
-                <h4 className="font-semibold flex items-center">
-                  <span className="material-icons text-primary mr-2 text-sm">payments</span>
-                  Payment Instructions
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between items-center py-2 border-b border-border">
-                    <span className="text-muted-foreground">Paybill Number:</span>
-                    <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.paybill || "247"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2 border-b border-border">
-                    <span className="text-muted-foreground">Account Number:</span>
-                    <span className="font-mono font-semibold">{(manualPaymentSettings as any)?.account || "440200259037"}</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-muted-foreground">Amount (KES):</span>
-                    <span className="font-semibold">{(kesAmountData as any)?.kesAmount ? `KES ${(kesAmountData as any).kesAmount.toLocaleString()}` : "KES 7,740"}</span>
-                  </div>
-                </div>
-                <div className="p-3 bg-primary/5 rounded-lg border border-primary/20">
-                  <p className="text-xs text-primary">
-                    <span className="material-icons text-xs mr-1 align-middle">info</span>
-                    After payment, contact support with your M-Pesa confirmation message to activate your card.
-                  </p>
-                </div>
-                <Button
-                  onClick={() => setLocation('/support')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <span className="material-icons text-sm mr-2">support_agent</span>
-                  Contact Support
-                </Button>
               </motion.div>
             )}
 

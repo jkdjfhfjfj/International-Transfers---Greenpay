@@ -456,7 +456,7 @@ export default function APIServicePage() {
               "POST /api/auth/login",
               "POST /api/transactions/send",
               "GET /api/exchange-rates/:from/:to",
-              "POST /api/deposit/initialize-payment",
+              "POST /api/deposit/nexuspay",
               "POST /api/airtime/purchase",
               "GET /api/notifications",
               "POST /api/support/tickets",

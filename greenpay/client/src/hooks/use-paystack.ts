@@ -8,9 +8,10 @@ export function useInitializeCardPayment() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (paymentMethod: "mobile_money" | "card" = "mobile_money") => {
       const response = await apiRequest('POST', '/api/virtual-card/initialize-payment', {
         userId: user?.id,
+        paymentMethod,
       });
       return response.json();
     },

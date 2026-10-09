@@ -8,11 +8,14 @@ import { db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import {
+  getPayzaCurrencyForCountry,
   getPayzaApiCurrencyCode,
+  isKenyanCountry,
   PAYZA_API_CURRENCIES,
   payzaApiService,
   verifyPayzaWebhookSignature,
 } from "./services/payzaapi";
+import { matchesProviderPayment } from "./services/payment-validation";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcrypt";
@@ -343,62 +346,12 @@ function normalizeProviderPaymentStatus(statusResult: ProviderPaymentStatus): st
   return String(
     statusResult.data?.response?.Status
       || statusResult.data?.response?.status
+      || statusResult.data?.data?.status
+      || statusResult.data?.transaction?.status
       || statusResult.data?.status
       || statusResult.status
       || "",
   ).toLowerCase();
-}
-
-function normalizePayzaCurrency(currency: unknown): string {
-  const normalized = normalizeCurrency(currency);
-  return normalized === "SLL" ? "SLE" : normalized;
-}
-
-function expectedProviderPayment(
-  transaction: { type: string; amount: string; currency: string; metadata: unknown },
-) {
-  const metadata = (transaction.metadata || {}) as Record<string, any>;
-  if (transaction.type === "card_purchase") {
-    return {
-      amount: Number(metadata.gatewayAmount),
-      currency: "KES",
-    };
-  }
-  if (transaction.type === "deposit") {
-    return {
-      amount: Number(metadata.paymentAmount ?? transaction.amount),
-      currency: String(metadata.paymentCurrency || transaction.currency),
-    };
-  }
-  return null;
-}
-
-function matchesProviderPayment(
-  transaction: { type: string; amount: string; currency: string; metadata: unknown },
-  gateway: "paystack" | "payzaapi",
-  actualAmount: unknown,
-  actualCurrency: unknown,
-  amountIsMinorUnits = false,
-): boolean {
-  const expected = expectedProviderPayment(transaction);
-  const amount = Number(actualAmount);
-  const normalizedAmount = amountIsMinorUnits ? amount / 100 : amount;
-  const currency = gateway === "payzaapi"
-    ? normalizePayzaCurrency(actualCurrency)
-    : normalizeCurrency(actualCurrency);
-  const expectedCurrency = gateway === "payzaapi"
-    ? normalizePayzaCurrency(expected?.currency)
-    : normalizeCurrency(expected?.currency);
-
-  return Boolean(
-    expected &&
-    Number.isFinite(expected.amount) &&
-    expected.amount > 0 &&
-    Number.isFinite(normalizedAmount) &&
-    Math.abs(normalizedAmount - expected.amount) < 0.01 &&
-    expectedCurrency &&
-    currency === expectedCurrency,
-  );
 }
 
 async function completeCardPurchase(
@@ -411,60 +364,77 @@ async function completeCardPurchase(
   paymentReference: string,
   statusReason: string,
 ) {
-  const metadata = (transaction.metadata || {}) as Record<string, unknown>;
-  if (metadata.cardId) {
-    const [existingCard] = await db.select().from(virtualCards)
-      .where(eq(virtualCards.id, String(metadata.cardId)));
-    if (existingCard) return { card: existingCard, transaction };
-  }
+  return db.transaction(async (tx) => {
+    const [current] = await tx.select().from(transactions)
+      .where(eq(transactions.id, transaction.id))
+      .for("update");
+    if (!current || current.type !== "card_purchase") {
+      throw new Error("Card purchase transaction not found");
+    }
 
-  const card = await activateVirtualCardForUser(
-    transaction.userId,
-    String(metadata.cardPrice || "60.00"),
-    paymentReference,
-  );
-
-  const updatedTransaction = await storage.updateTransaction(transaction.id, {
-    status: "completed",
-    completedAt: new Date(),
-    failureReason: null,
-    metadata: {
-      ...metadata,
-      status_reason: statusReason,
-      cardId: card.id,
+    const metadata = (current.metadata || {}) as Record<string, unknown>;
+    const [cardById] = metadata.cardId
+      ? await tx.select().from(virtualCards).where(eq(virtualCards.id, String(metadata.cardId)))
+      : [];
+    const card = cardById || await activateVirtualCardForUser(
+      current.userId,
+      String(metadata.cardPrice || "60.00"),
       paymentReference,
-    },
+    );
+    const [updatedTransaction] = await tx.update(transactions)
+      .set({
+        status: "completed",
+        completedAt: current.completedAt || new Date(),
+        failureReason: null,
+        metadata: {
+          ...metadata,
+          status_reason: statusReason,
+          cardId: card.id,
+          paymentReference,
+        },
+      })
+      .where(eq(transactions.id, current.id))
+      .returning();
+
+    if (!updatedTransaction) {
+      throw new Error("Card purchase transaction could not be updated");
+    }
+    return { card, transaction: updatedTransaction };
   });
-
-  if (!updatedTransaction) {
-    throw new Error("Card purchase transaction could not be updated");
-  }
-
-  return { card, transaction: updatedTransaction };
 }
 
-async function completePayzaDeposit(transaction: {
+async function completeWalletDeposit(transaction: {
   id: string;
   userId: string;
   amount: string;
   currency: string;
   description: string | null;
   metadata: unknown;
-}) {
+}, requireWalletBinding = false) {
   const metadata = (transaction.metadata || {}) as Record<string, any>;
   const walletId = String(metadata.walletId || "");
-  const [wallet] = walletId
+  const [boundWallet] = walletId
     ? await db.select().from(wallets).where(eq(wallets.id, walletId))
     : [];
+  if (walletId && (!boundWallet || boundWallet.userId !== transaction.userId)) {
+    throw new Error("Deposit wallet is invalid");
+  }
+  if (requireWalletBinding && !walletId) {
+    throw new Error("Deposit wallet is required");
+  }
+  const currency = normalizeCurrency(transaction.currency);
+  const wallet = boundWallet || await ensureUserWallet(transaction.userId, currency);
   if (
     !wallet ||
     wallet.userId !== transaction.userId ||
-    normalizeCurrency(wallet.currency) !== normalizeCurrency(transaction.currency)
+    normalizeCurrency(wallet.currency) !== currency ||
+    !Number.isFinite(Number(transaction.amount)) ||
+    Number(transaction.amount) <= 0
   ) {
-    throw new Error("PayzaAPI deposit wallet is invalid");
+    throw new Error("Deposit wallet or amount is invalid");
   }
 
-  await applyLedgerEntry({
+  const applied = await applyLedgerEntry({
     walletId: wallet.id,
     userId: transaction.userId,
     currency: normalizeCurrency(wallet.currency),
@@ -477,6 +447,18 @@ async function completePayzaDeposit(transaction: {
   await db.update(transactions)
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
     .where(eq(transactions.id, transaction.id));
+  return { wallet, applied };
+}
+
+async function completePayzaDeposit(transaction: {
+  id: string;
+  userId: string;
+  amount: string;
+  currency: string;
+  description: string | null;
+  metadata: unknown;
+}) {
+  return completeWalletDeposit(transaction, true);
 }
 
 async function failPaymentTransaction(
@@ -1102,7 +1084,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ 
         success: true, 
-        message: "Proof uploaded successfully. Our team will verify and credit your account shortly.",
+        message: "Proof received for review. Your deposit will be credited only after verification.",
         transactionId: transaction.id
       });
     } catch (error) {
@@ -3413,10 +3395,6 @@ p{color:#6b7280;font-size:14px;}</style>
       // Allow card purchase for production - KYC verification can be added later
       // Note: In production environment, additional KYC verification may be required
 
-      // Generate a provider reference. The provider is selected from the
-      // admin payment setting instead of always forcing PayHero.
-      const reference = payHeroService.generateReference();
-      
       // Validate user email
       if (!user.email || !user.email.includes('@') || !user.email.includes('.')) {
         return res.status(400).json({ message: "Invalid user email. Please update your profile with a valid email address." });
@@ -3425,32 +3403,70 @@ p{color:#6b7280;font-size:14px;}</style>
       // Get current card price from system settings
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const usdAmount = parseFloat(cardPriceSetting?.value || "60.00");
-      const exchangeRate = await getUsdToKesRate();
-      const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
-      
-      console.log(`Converting $${usdAmount} USD to ${kesAmount} KES for card purchase`);
-
-      const cardGatewaySetting = await storage.getSystemSetting("payment", "virtual_card_gateway");
-      const configuredGateway = settingText(
-        cardGatewaySetting?.value,
-        "payhero",
+      const isKenya = isKenyanCountry(user.country);
+      const requestedMethod = String(req.body?.paymentMethod || "mobile_money").trim().toLowerCase();
+      if (isKenya && !["mobile_money", "card"].includes(requestedMethod)) {
+        return res.status(400).json({ message: "Choose mobile money or card." });
+      }
+      const mobileGatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
+      const legacyCardGatewaySetting = await storage.getSystemSetting("payment", "virtual_card_gateway");
+      const configuredMobileGateway = settingText(
+        mobileGatewaySetting?.value,
+        settingText(legacyCardGatewaySetting?.value, "payhero"),
       ).toLowerCase();
-      let gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+      const mobileGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredMobileGateway)
         ? "nexuspay"
-        : configuredGateway;
-      if (["payhero", "nexuspay"].includes(gateway) && !user.phone) {
-        return res.status(400).json({ message: "A phone number is required for this payment method. Please update your profile." });
+        : "payhero";
+      const gateway = !isKenya
+        ? "payzaapi"
+        : requestedMethod === "card"
+          ? "paystack"
+          : mobileGateway;
+      const gatewayCurrency = isKenya ? "KES" : getPayzaCurrencyForCountry(user.country);
+      if (!gatewayCurrency) {
+        return res.status(400).json({ message: "Add your country to your profile before starting a payment." });
+      }
+      if (!Number.isFinite(usdAmount) || usdAmount <= 0) {
+        return res.status(503).json({ message: "Virtual card pricing is temporarily unavailable." });
+      }
+
+      const exchangeRate = gatewayCurrency === "KES"
+        ? await getUsdToKesRate()
+        : gatewayCurrency === "USD"
+          ? 1
+          : await createExchangeRateService(storage).getExchangeRate("USD", gatewayCurrency);
+      if (!Number.isFinite(exchangeRate) || exchangeRate <= 0) {
+        return res.status(503).json({ message: "The payment exchange rate is temporarily unavailable." });
+      }
+      const gatewayAmount = gatewayCurrency === "USD"
+        ? Number(usdAmount.toFixed(2))
+        : Math.max(1, Math.round(usdAmount * exchangeRate));
+      const reference = payHeroService.generateReference();
+
+      if (gateway === "payhero" || gateway === "nexuspay") {
+        if (!user.phone) {
+          return res.status(400).json({ message: "A phone number is required for this payment method. Please update your profile." });
+        }
+      }
+      if (gateway === "payhero" && !(await payHeroService.getReadiness()).configured) {
+        return res.status(503).json({ message: "Mobile-money payment is temporarily unavailable. Please try again later." });
+      }
+      if (gateway === "nexuspay" && !(await nexusPayService.isConfigured())) {
+        return res.status(503).json({ message: "Mobile-money payment is temporarily unavailable. Please try again later." });
+      }
+      if (gateway === "paystack" && !(await paystackService.isConfigured())) {
+        return res.status(503).json({ message: "Card payment is temporarily unavailable. Please try again later." });
+      }
+      if (gateway === "payzaapi" && !(await payzaApiService.isConfigured())) {
+        return res.status(503).json({ message: "Payment is temporarily unavailable. Please try again later." });
       }
       const callbackUrl = `${req.protocol}://${req.get('host')}/api/payments/payhero/callback`;
       let paymentReference = reference;
       let checkoutRequestId = "";
       let paymentStatus = "pending";
       let redirectUrl: string | null = null;
-      let paymentMessage = "STK Push sent to your phone. Please enter your M-Pesa PIN to complete payment.";
+      let paymentMessage = "A payment prompt was sent to your phone.";
 
-      // PayHero can send the callback immediately after the STK request. Keep
-      // the pending row available before contacting the provider so the
-      // callback and status polling can always find this purchase.
       const transaction = await storage.createTransaction({
         userId,
         type: "card_purchase",
@@ -3464,33 +3480,40 @@ p{color:#6b7280;font-size:14px;}</style>
         metadata: {
           phoneNumber: user.phone,
           gateway,
-          gatewayAmount: kesAmount.toString(),
+          gatewayAmount: gatewayAmount.toString(),
+          gatewayCurrency,
+          paymentCurrency: gatewayCurrency,
+          paymentMethod: isKenya ? (requestedMethod === "card" ? "card" : "mobile_money") : "hosted_checkout",
           cardPrice: usdAmount.toFixed(2),
-          status_reason: `Awaiting ${gateway} payment confirmation`,
+          status_reason: "Awaiting payment confirmation.",
         },
       });
 
+      try {
       if (gateway === "nexuspay") {
         const payment = await nexusPayService.checkout({
-          amount: kesAmount,
-          currency: "KES",
+          amount: gatewayAmount,
+          currency: gatewayCurrency,
           channel: "mobile_money",
           phone: user.phone,
           email: user.email,
           description: "Virtual card purchase",
         });
+        if (["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())) {
+          throw new Error("Mobile-money checkout was rejected");
+        }
         paymentReference = payment.reference || reference;
         paymentStatus = payment.status || "pending";
         redirectUrl = payment.redirectUrl;
         paymentMessage = redirectUrl
-          ? "Redirecting you to complete the M-Pesa payment."
+          ? "Redirecting you to complete the mobile-money payment."
           : "Check your phone for the payment prompt.";
       } else if (gateway === "paystack") {
         const payment = await paystackService.initializePayment(
           user.email,
-          kesAmount,
+          gatewayAmount,
           reference,
-          "KES",
+          gatewayCurrency,
           undefined,
           `${req.protocol}://${req.get('host')}/api/payment-callback?type=virtual-card`,
           { type: "virtual_card", usd_amount: usdAmount.toFixed(2), exchange_rate: exchangeRate.toString() },
@@ -3512,14 +3535,14 @@ p{color:#6b7280;font-size:14px;}</style>
         if (!(await payzaApiService.isConfigured())) {
           await storage.updateTransaction(transaction.id, {
             status: "failed",
-            failureReason: "PayzaAPI payment setup is incomplete",
+            failureReason: "Payment setup is incomplete.",
           });
           return res.status(503).json({ message: "Card payment is temporarily unavailable. Please try again later.", status: "PAYMENT_UNAVAILABLE" });
         }
         try {
           const payment = await payzaApiService.initializePayment({
-            amount: kesAmount,
-            currency: "KES",
+            amount: gatewayAmount,
+            currency: gatewayCurrency,
             reference,
             email: user.email,
             name: user.fullName || undefined,
@@ -3537,6 +3560,9 @@ p{color:#6b7280;font-size:14px;}</style>
             },
             stkPush: false,
           });
+          if (!payment.paymentUrl || ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())) {
+            throw new Error("Hosted checkout could not be started");
+          }
           paymentReference = payment.reference || reference;
           paymentStatus = payment.status || "pending";
           redirectUrl = payment.paymentUrl;
@@ -3549,69 +3575,48 @@ p{color:#6b7280;font-size:14px;}</style>
           });
           return res.status(503).json({ message: "Card payment could not be started. Please try again later.", status: "PAYMENT_UNAVAILABLE" });
         }
-      } else {
+      } else if (gateway === "payhero") {
+        const readiness = await payHeroService.getReadiness();
+        if (!readiness.configured) {
+          await storage.updateTransaction(transaction.id, {
+            status: "failed",
+            failureReason: "Mobile-money payment setup is incomplete",
+          });
+          return res.status(503).json({ message: "Mobile-money payment is temporarily unavailable. Please try again later." });
+        }
         const payment = await payHeroService.initiateMpesaPayment(
-          kesAmount,
+          gatewayAmount,
           user.phone,
           reference,
           user.fullName,
           callbackUrl,
         );
         if (!payment.success) {
-          console.warn('[Card Purchase] PayHero failed; trying NexusPay M-Pesa fallback:', {
-            status: payment.status,
-            message: payment.message,
+          await storage.updateTransaction(transaction.id, {
+            status: "failed",
+            failureReason: "Mobile-money payment initialization failed",
           });
-
-          try {
-            const fallbackPayment = await nexusPayService.checkout({
-              amount: kesAmount,
-              currency: "KES",
-              channel: "mobile_money",
-              phone: user.phone,
-              email: user.email,
-              description: "Virtual card purchase using M-Pesa",
-            });
-            if (["failed", "cancelled", "rejected"].includes(String(fallbackPayment.status).toLowerCase())) {
-              throw new Error(`NexusPay returned ${fallbackPayment.status}`);
-            }
-
-            gateway = "nexuspay";
-            paymentReference = fallbackPayment.reference || reference;
-            paymentStatus = fallbackPayment.status || "pending";
-            redirectUrl = fallbackPayment.redirectUrl;
-            paymentMessage = redirectUrl
-              ? "Redirecting you to complete the M-Pesa payment."
-              : "Check your phone for the payment prompt.";
-
-            await storage.updateTransaction(transaction.id, {
-              metadata: {
-                ...((transaction.metadata || {}) as object),
-                gateway,
-                fallbackFrom: "payhero",
-                gatewayAmount: kesAmount.toString(),
-                status_reason: "Awaiting M-Pesa payment confirmation via NexusPay fallback",
-              },
-            });
-          } catch (fallbackError: any) {
-            const primaryReason = payment.message || payment.status || "Mobile-money payment initialization failed";
-            const fallbackReason = fallbackError?.message || "Alternative payment initialization failed";
-            console.error("[Card Purchase] M-Pesa payment initialization failed:", { primaryReason, fallbackReason });
-            const failureReason = "M-Pesa payment initialization failed";
-            await storage.updateTransaction(transaction.id, {
-              status: "failed",
-              failureReason,
-            });
-            return res.status(502).json({
-              message: "M-Pesa payment could not be started. Please try again later.",
-              status: "PAYMENT_UNAVAILABLE",
-            });
-          }
-        } else {
-          paymentReference = payment.reference || reference;
-          checkoutRequestId = payment.CheckoutRequestID || "";
-          paymentStatus = payment.status || "pending";
+          return res.status(502).json({
+            message: "Mobile-money payment could not be started. Please try again later.",
+            status: "PAYMENT_UNAVAILABLE",
+          });
         }
+        paymentReference = payment.reference || reference;
+        checkoutRequestId = payment.CheckoutRequestID || "";
+        paymentStatus = payment.status || "pending";
+      } else {
+        await storage.updateTransaction(transaction.id, {
+          status: "failed",
+          failureReason: "Unsupported payment method",
+        });
+        return res.status(400).json({ message: "Choose a supported payment method." });
+      }
+      } catch (error) {
+        await storage.updateTransaction(transaction.id, {
+          status: "failed",
+          failureReason: "Payment initialization failed",
+        });
+        throw error;
       }
 
       if (paymentReference !== reference) {
@@ -3625,7 +3630,6 @@ p{color:#6b7280;font-size:14px;}</style>
         reference: paymentReference,
         checkoutRequestId,
         status: paymentStatus,
-        gateway,
         redirectUrl,
         message: paymentMessage,
       });
@@ -3639,24 +3643,69 @@ p{color:#6b7280;font-size:14px;}</style>
   app.post("/api/payments/payhero/callback", async (req, res) => {
     try {
       const callback = req.body?.response || req.body;
-      const { CheckoutRequestID, ResultCode, ResultDesc, ExternalReference } = callback;
+      const { CheckoutRequestID, ExternalReference } = callback;
+      const callbackReference = String(
+        ExternalReference || callback.external_reference || callback.reference || CheckoutRequestID || "",
+      ).trim();
+      if (!callbackReference) return res.sendStatus(200);
       
       const transaction = await db.query.transactions.findFirst({
-        where: eq(transactions.paystackReference, ExternalReference || CheckoutRequestID)
+        where: or(
+          eq(transactions.paystackReference, callbackReference),
+          eq(transactions.reference, callbackReference),
+        ),
       });
 
       if (!transaction) {
-        console.error(`[PayHero] Transaction not found for ref: ${ExternalReference || CheckoutRequestID}`);
+        console.error(`[PayHero] Transaction not found for ref: ${callbackReference}`);
         return res.sendStatus(200);
       }
 
-      if (Number(ResultCode) === 0) {
+      const metadata = (transaction.metadata || {}) as Record<string, any>;
+      if (
+        (transaction.type !== "deposit" && transaction.type !== "card_purchase") ||
+        String(metadata.gateway || "").trim().toLowerCase() !== "payhero"
+      ) {
+        return res.sendStatus(200);
+      }
+
+      const verificationReference = String(transaction.paystackReference || transaction.reference);
+      const providerStatus = await getProviderPaymentStatus(verificationReference, "payhero");
+      const normalizedStatus = normalizeProviderPaymentStatus(providerStatus);
+      const providerData = (providerStatus.data?.response || providerStatus.data?.data || providerStatus.data || {}) as any;
+      const actualAmount = providerData.Amount ?? providerData.amount ??
+        providerData.amountPaid ?? providerData.AmountPaid ?? providerData.amount_paid;
+      const actualCurrency = String(
+        providerData.Currency ||
+        providerData.currency ||
+        "",
+      );
+      const providerConfirmedSuccess =
+        providerStatus.success && ["success", "completed", "paid"].includes(normalizedStatus);
+      const providerConfirmedFailure =
+        providerStatus.success && ["failed", "cancelled", "rejected"].includes(normalizedStatus);
+
+      if (providerConfirmedSuccess && !matchesProviderPayment(
+        transaction,
+        "payhero",
+        actualAmount,
+        actualCurrency,
+      )) {
+        console.error("[PayHero callback] Verified payment amount or currency did not match:", {
+          transactionId: transaction.id,
+        });
+        return res.sendStatus(200);
+      }
+
+      if (providerConfirmedSuccess) {
+        let depositWallet: any = null;
+        let depositWasApplied = false;
         if (transaction.type === "card_purchase") {
           const wasCompleted = transaction.status === "completed";
           const completed = await completeCardPurchase(
             transaction,
-            ExternalReference || CheckoutRequestID,
-            "M-Pesa payment successful",
+            verificationReference,
+            "Mobile-money payment verified",
           );
           await storage.updateTransaction(completed.transaction.id, {
             metadata: {
@@ -3673,38 +3722,22 @@ p{color:#6b7280;font-size:14px;}</style>
               type: "success"
             }).catch(err => console.error('Notification error:', err));
           }
-        } else {
-          await storage.updateTransaction(transaction.id, {
-            status: "completed",
-            completedAt: new Date(),
-          });
+        } else if (transaction.type === "deposit") {
+          const settlement = await completeWalletDeposit(transaction);
+          depositWallet = settlement.wallet;
+          depositWasApplied = settlement.applied.applied;
         }
 
-        if (transaction.type === 'deposit') {
-          // Credit user balance
+        if (transaction.type === "deposit" && depositWasApplied) {
           const user = await storage.getUser(transaction.userId);
           if (user) {
             const depositAmount = parseFloat(transaction.amount);
-            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
-            const depositWallet = await ensureUserWallet(transaction.userId, depositCurrency);
-            if (!depositWallet) {
-              throw new Error(`${depositCurrency} wallet is not enabled`);
-            }
-            await applyLedgerEntry({
-              walletId: depositWallet.id,
-              userId: transaction.userId,
-              currency: depositCurrency,
-              amount: depositAmount,
-              entryType: "deposit",
-              idempotencyKey: `deposit:${transaction.id}`,
-              transactionId: transaction.id,
-              description: transaction.description || "Deposit",
-            });
+            const depositCurrency = normalizeCurrency(transaction.currency);
 
             notificationService.sendNotification({
               userId: transaction.userId,
               title: "Deposit Successful",
-              message: `Your M-Pesa deposit of $${depositAmount.toFixed(2)} has been credited to your wallet.`,
+              message: `Your ${depositCurrency} deposit of ${depositAmount.toFixed(2)} has been credited to your wallet.`,
               type: "success"
             }).catch(err => console.error('Notification error:', err));
 
@@ -3713,14 +3746,14 @@ p{color:#6b7280;font-size:14px;}</style>
               const { messagingService: depositSms } = await import('./services/messaging');
               const { mailtrapService: depositMailtrap } = await import('./services/mailtrap');
               if (user.phone) {
-                depositSms.sendDepositConfirmation(user.phone, depositAmount.toFixed(2), 'USD', 'M-Pesa', user.email, user.fullName).catch(() => {});
+                depositSms.sendDepositConfirmation(user.phone, depositAmount.toFixed(2), depositCurrency, "Mobile money", user.email, user.fullName).catch(() => {});
               }
               if (user.email) {
                 depositMailtrap.sendTransactionCompleted(
                   user.email,
                   user.firstName || user.fullName?.split(' ')[0] || 'User',
                   user.lastName || user.fullName?.split(' ')[1] || '',
-                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
+                  depositAmount.toFixed(2), depositCurrency, 'deposit', transaction.id
                 ).catch(() => {});
               }
             } catch (_) {}
@@ -3743,45 +3776,48 @@ p{color:#6b7280;font-size:14px;}</style>
 
               if (eligible.length > 0) {
                 const { bonus, value: bonusValue } = eligible[0];
-                await applyLedgerEntry({
+                const bonusApplied = await applyLedgerEntry({
                   walletId: depositWallet.id,
                   userId: transaction.userId,
                   currency: depositCurrency,
                   amount: bonusValue,
                   entryType: "deposit_bonus",
                   idempotencyKey: `deposit-bonus:${transaction.id}:${bonus.id}`,
+                  transactionId: transaction.id,
                   description: bonus.description || "Deposit bonus",
                 });
-                await storage.createTransaction({
-                  userId: transaction.userId,
-                  type: 'deposit',
-                  amount: bonusValue.toFixed(2),
-                  currency: depositCurrency,
-                  status: 'completed',
-                  description: `Deposit bonus: ${bonus.description || `+${depositCurrency} ${bonusValue.toFixed(2)} for depositing via M-Pesa`}`,
-                  fee: '0.00',
-                  metadata: { bonusId: bonus.id, bonusType: 'deposit_bonus', triggerMethod: 'mpesa' }
-                });
-                notificationService.sendNotification({
-                  userId: transaction.userId,
-                  title: "Deposit Bonus Credited!",
-                  message: `You received a $${bonusValue.toFixed(2)} bonus for your M-Pesa deposit!`,
-                  type: "success"
-                }).catch(err => console.error('Bonus notification error:', err));
+                if (bonusApplied.applied) {
+                  await storage.createTransaction({
+                    userId: transaction.userId,
+                    type: 'deposit',
+                    amount: bonusValue.toFixed(2),
+                    currency: depositCurrency,
+                    status: 'completed',
+                    description: `Deposit bonus: ${bonus.description || `+${depositCurrency} ${bonusValue.toFixed(2)} for a mobile-money deposit`}`,
+                    fee: '0.00',
+                    metadata: { bonusId: bonus.id, bonusType: 'deposit_bonus', triggerMethod: 'mpesa' }
+                  });
+                  notificationService.sendNotification({
+                    userId: transaction.userId,
+                    title: "Deposit Bonus Credited!",
+                    message: `You received ${depositCurrency} ${bonusValue.toFixed(2)} as a deposit bonus.`,
+                    type: "success"
+                  }).catch(err => console.error('Bonus notification error:', err));
+                }
               }
             } catch (bonusErr) {
               console.error('[PayHero Bonus Error]:', bonusErr);
             }
           }
         }
-      } else {
-        const failureReason = ResultDesc || "M-Pesa payment failed or cancelled";
-        await failPaymentTransaction(transaction, failureReason, ResultCode);
+      } else if (providerConfirmedFailure && transaction.status !== "completed") {
+        const failureReason = "Mobile-money payment failed or was cancelled.";
+        await failPaymentTransaction(transaction, failureReason);
 
         notificationService.sendNotification({
           userId: transaction.userId,
           title: "Payment Failed",
-          message: `Your ${transaction.type === 'deposit' ? 'deposit' : 'card purchase'} payment failed: ${ResultDesc}`,
+          message: "Your payment did not complete. Please try again or choose another method.",
           type: "error"
         }).catch(err => console.error('Notification error:', err));
       }
@@ -3801,11 +3837,14 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!amount || parseFloat(amount) <= 0) return res.status(400).json({ message: "Valid amount required" });
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "User not found" });
+      if (!isKenyanCountry(user.country)) {
+        return res.status(403).json({ message: "Use the payment options available for your profile country." });
+      }
 
       const phoneToUse = phone || user.phone;
-      if (!phoneToUse) return res.status(400).json({ message: "Phone number required for M-Pesa payment" });
+      if (!phoneToUse) return res.status(400).json({ message: "A phone number is required for mobile-money payment." });
 
-      const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
+      const gatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
       const configuredGateway = settingText(gatewaySetting?.value, "payhero").toLowerCase();
       const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
         ? "nexuspay"
@@ -3824,7 +3863,7 @@ p{color:#6b7280;font-size:14px;}</style>
           channel: "mobile_money",
           phone: phoneToUse,
           email: user.email,
-          description: "M-Pesa deposit",
+          description: "Mobile-money deposit",
         });
         await db.insert(transactions).values({
           userId,
@@ -3832,29 +3871,29 @@ p{color:#6b7280;font-size:14px;}</style>
           amount: usdAmount.toFixed(2),
           currency: "USD",
           status: "pending",
-          description: "M-Pesa deposit",
+          description: "Mobile-money deposit",
           fee: "0.00",
-          reference: result.reference || reference,
+          reference,
           exchangeRate: exchangeRate.toString(),
           paystackReference: result.reference || reference,
           metadata: {
             paymentMethod: "mpesa",
             gateway: "nexuspay",
             gatewayAmount: kesAmount.toFixed(2),
+            gatewayCurrency: "KES",
             exchangeRate,
             redirectUrl: result.redirectUrl,
           } as any,
         });
         return res.json({
           success: true,
-          gateway: "nexuspay",
           reference: result.reference || reference,
           redirectUrl: result.redirectUrl,
           amount: usdAmount.toFixed(2),
           gatewayAmount: kesAmount.toFixed(2),
           gatewayCurrency: "KES",
           exchangeRate,
-          message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
+          message: result.redirectUrl ? "Continue to complete your payment." : "Check your phone for the payment prompt.",
         });
       }
 
@@ -3874,10 +3913,10 @@ p{color:#6b7280;font-size:14px;}</style>
           return res.status(400).json({ message: "Invalid phone number. Use format: 07XXXXXXXX or +2547XXXXXXXX", status: paymentData.status });
         }
         if (paymentData.status === 'TIMEOUT') {
-          return res.status(504).json({ message: "M-Pesa service is taking too long to respond. Please wait a moment and try again.", status: 'TIMEOUT' });
+          return res.status(504).json({ message: "The payment service is taking too long to respond. Please wait a moment and try again.", status: 'TIMEOUT' });
         }
         console.error("[Deposit/Mpesa] Mobile-money payment initialization failed:", paymentData.message || paymentData.status);
-        return res.status(502).json({ message: "M-Pesa payment could not be started. Please try again later.", status: paymentData.status });
+        return res.status(502).json({ message: "Mobile-money payment could not be started. Please try again later.", status: paymentData.status });
       }
 
       await storage.createTransaction({
@@ -3886,23 +3925,30 @@ p{color:#6b7280;font-size:14px;}</style>
         amount: usdAmount.toFixed(2),
         currency: 'USD',
         status: 'pending',
-        reference: paymentData.reference || reference,
-        description: "M-Pesa deposit",
+        reference,
+        description: "Mobile-money deposit",
         fee: '0.00',
         exchangeRate: exchangeRate.toString(),
         paystackReference: paymentData.reference || reference,
-        metadata: { paymentMethod: 'mpesa', phoneNumber: phoneToUse, gateway: 'payhero', gatewayAmount: kesAmount.toFixed(2), exchangeRate }
+        metadata: {
+          paymentMethod: "mpesa",
+          phoneNumber: phoneToUse,
+          gateway: "payhero",
+          gatewayAmount: kesAmount.toFixed(2),
+          gatewayCurrency: "KES",
+          exchangeRate,
+        },
       });
 
       res.json({
         success: true,
         reference: paymentData.reference || reference,
         checkoutRequestId: paymentData.CheckoutRequestID,
-        message: "STK Push sent to your phone. Enter your M-Pesa PIN to complete payment."
+        message: "A payment prompt was sent to your phone."
       });
     } catch (error) {
       console.error('[Deposit/Mpesa Error]:', error);
-      res.status(500).json({ message: "Error initiating M-Pesa deposit" });
+      res.status(500).json({ message: "Error initiating mobile-money deposit" });
     }
   });
 
@@ -3918,32 +3964,64 @@ p{color:#6b7280;font-size:14px;}</style>
       if (transaction.userId !== userId) return res.status(403).json({ message: "Transaction not found" });
 
       const metadata = (transaction.metadata || {}) as any;
+      if (
+        transaction.type !== "deposit" ||
+        !["payhero", "nexuspay", "makamesco", "makamescopay"].includes(String(metadata.gateway || "").toLowerCase())
+      ) {
+        return res.status(404).json({ message: "Mobile-money deposit transaction not found" });
+      }
       let currentStatus = transaction.status;
-      if (metadata.gateway === "nexuspay" && transaction.status !== "completed" && transaction.status !== "failed") {
-        const providerStatus = await nexusPayService.getStatus(reference);
-        if (providerStatus.status === "completed") {
-          const wallet = await ensureUserWallet(userId, "USD");
-          if (!wallet) return res.status(400).json({ message: "USD wallet is not enabled" });
-          await applyLedgerEntry({
-            walletId: wallet.id,
-            userId,
-            currency: "USD",
-            amount: parseFloat(transaction.amount),
-            entryType: "deposit",
-            idempotencyKey: `deposit:${transaction.id}`,
-            transactionId: transaction.id,
-            description: transaction.description || "M-Pesa deposit",
+      const [creditedEntry] = transaction.status === "completed"
+        ? await db.select({ id: ledgerEntries.id })
+            .from(ledgerEntries)
+            .where(and(
+              eq(ledgerEntries.transactionId, transaction.id),
+              eq(ledgerEntries.entryType, "deposit"),
+            ))
+            .limit(1)
+        : [];
+      if (creditedEntry) {
+        return res.json({
+          status: "completed",
+          amount: transaction.amount,
+          currency: transaction.currency,
+          description: transaction.description,
+        });
+      }
+
+      if (currentStatus === "completed") currentStatus = "pending";
+      const providerReference = String(transaction.paystackReference || transaction.reference);
+      const providerStatus = await getProviderPaymentStatus(providerReference, String(metadata.gateway));
+      const normalizedStatus = normalizeProviderPaymentStatus(providerStatus);
+      if (providerStatus.success && ["success", "completed", "paid"].includes(normalizedStatus)) {
+        const providerData = (providerStatus.data?.response || providerStatus.data?.data || providerStatus.data || {}) as any;
+        const provider = ["makamesco", "makamescopay"].includes(String(metadata.gateway).toLowerCase())
+          ? "nexuspay"
+          : String(metadata.gateway).toLowerCase();
+        const actualAmount = providerData.amount ?? providerData.Amount ??
+          providerData.amountPaid ?? providerData.AmountPaid ?? providerData.amount_paid;
+        const actualCurrency = String(
+          providerData.currency ||
+          providerData.Currency ||
+          "",
+        );
+        if (!matchesProviderPayment(transaction, provider as "payhero" | "nexuspay", actualAmount, actualCurrency)) {
+          return res.status(409).json({
+            status: "pending",
+            message: "Payment details need review before this deposit can be credited.",
           });
-          await db.update(transactions)
-            .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
-            .where(eq(transactions.id, transaction.id));
-          currentStatus = "completed";
-        } else if (providerStatus.status === "failed") {
-          await db.update(transactions)
-            .set({ status: "failed", updatedAt: new Date() })
-            .where(eq(transactions.id, transaction.id));
-          currentStatus = "failed";
         }
+        await completeWalletDeposit(transaction);
+        currentStatus = "completed";
+      } else if (
+        transaction.status !== "completed" &&
+        providerStatus.success &&
+        ["failed", "cancelled", "rejected"].includes(normalizedStatus)
+      ) {
+        await db.update(transactions)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(eq(transactions.id, transaction.id));
+        currentStatus = "failed";
       }
       res.json({ status: currentStatus, amount: transaction.amount, currency: transaction.currency, description: transaction.description });
     } catch (error) {
@@ -3954,6 +4032,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // Wallet-bound Paystack card deposit. The ledger amount is stored in the
   // destination wallet currency; paymentCurrency is only the charge rail.
   app.post("/api/deposit/paystack", requireAuth, async (req, res) => {
+    let pendingTransactionId: string | undefined;
     try {
       const userId = (req.session as any).userId;
       const { walletId, currency, paymentCurrency, amount } = req.body;
@@ -3969,27 +4048,31 @@ p{color:#6b7280;font-size:14px;}</style>
       if (normalizeCurrency(wallet.currency) !== targetCurrency) return res.status(400).json({ message: "Selected wallet and deposit currency do not match" });
       const user = await storage.getUser(userId);
       if (!user?.email) return res.status(400).json({ message: "A valid email is required for card deposits" });
+      if (!isKenyanCountry(user.country) || chargeCurrency !== "KES") {
+        return res.status(403).json({ message: "Card deposits are available only in KES for Kenyan profiles." });
+      }
+      const globalDeposits = await storage.getSystemSetting("deposit_methods", "global_enabled");
+      const cardDeposits = await storage.getSystemSetting("deposit_methods", "card_enabled");
+      if (!settingEnabled(globalDeposits?.value) || !settingEnabled(cardDeposits?.value)) {
+        return res.status(403).json({ message: "Card deposits are currently unavailable." });
+      }
+      const minimumAmountKes = 10 * (await getUsdToKesRate());
+      if (chargeAmount < minimumAmountKes) {
+        return res.status(400).json({ message: "The minimum card deposit is the equivalent of USD 10 in KES." });
+      }
+      if (!(await paystackService.isConfigured())) {
+        return res.status(503).json({ message: "Card payments are temporarily unavailable." });
+      }
 
       const exchangeRate = chargeCurrency === targetCurrency
         ? 1
         : await createExchangeRateService(storage).getExchangeRate(chargeCurrency, targetCurrency);
       const targetAmount = chargeAmount * exchangeRate;
-      const reference = paystackService.generateReference();
-      const payment = await paystackService.initializePayment(
-        user.email,
-        chargeAmount,
-        reference,
-        chargeCurrency,
-        user.phone || undefined,
-        `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`,
-        { walletId, currency: targetCurrency, paymentCurrency: chargeCurrency, exchangeRate, gateway: "paystack" },
-      );
-      if (!payment.status) {
-        console.error("Card deposit initialization failed:", payment.message);
-        return res.status(503).json({ message: "Card payment could not be started. Please try again later." });
+      if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || !Number.isFinite(targetAmount) || targetAmount <= 0) {
+        return res.status(503).json({ message: "The deposit exchange rate is temporarily unavailable." });
       }
-
-      await db.insert(transactions).values({
+      const reference = paystackService.generateReference();
+      const [transaction] = await db.insert(transactions).values({
         userId,
         type: "deposit",
         amount: targetAmount.toFixed(2),
@@ -4000,10 +4083,38 @@ p{color:#6b7280;font-size:14px;}</style>
         description: `Card deposit to ${targetCurrency} wallet`,
         fee: "0.00",
         exchangeRate: String(exchangeRate),
-        metadata: { walletId, gateway: "paystack", paymentCurrency: chargeCurrency, paymentAmount: chargeAmount } as any,
-      });
+        metadata: {
+          walletId,
+          gateway: "paystack",
+          paymentCurrency: chargeCurrency,
+          paymentAmount: chargeAmount,
+        } as any,
+      }).returning();
+      pendingTransactionId = transaction.id;
+      const payment = await paystackService.initializePayment(
+        user.email,
+        chargeAmount,
+        reference,
+        chargeCurrency,
+        user.phone || undefined,
+        `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${reference}&type=deposit`,
+        { walletId, currency: targetCurrency, paymentCurrency: chargeCurrency, exchangeRate, gateway: "paystack" },
+        ["card"],
+      );
+      if (!payment.status || !payment.data?.authorization_url) {
+        await db.update(transactions)
+          .set({ status: "failed", failureReason: "Card deposit initialization failed", updatedAt: new Date() })
+          .where(eq(transactions.id, transaction.id));
+        console.error("Card deposit initialization failed:", payment.message);
+        return res.status(503).json({ message: "Card payment could not be started. Please try again later." });
+      }
       return res.json({ authorizationUrl: payment.data?.authorization_url, reference, currency: targetCurrency, amount: targetAmount.toFixed(2) });
      } catch (error: any) {
+       if (pendingTransactionId) {
+         await db.update(transactions)
+           .set({ status: "failed", failureReason: "Card deposit initialization failed", updatedAt: new Date() })
+           .where(eq(transactions.id, pendingTransactionId));
+       }
        console.error("Wallet card deposit error:", error);
        return res.status(500).json({ message: "Card payment could not be started. Please try again later." });
      }
@@ -4028,10 +4139,28 @@ p{color:#6b7280;font-size:14px;}</style>
         (await storage.getSystemSetting("payment", "default_gateway"))?.value,
         "payhero",
       ).toLowerCase();
+      const user = await storage.getUser((req.session as any).userId);
+      const country = String(user?.country || "");
+      const kenyaMobileMoneyGateway = settingText(
+        (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
+        settingText((await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value, "payhero"),
+      ).toLowerCase();
       res.json({
         methods: { ...settingsMap, default_gateway: defaultGateway },
         bonuses: activeBonuses,
         usdToKesRate: await getUsdToKesRate(),
+        country,
+        isKenya: isKenyanCountry(country),
+        countryPaymentCurrency: isKenyanCountry(country) ? "KES" : getPayzaCurrencyForCountry(country),
+        paymentReadiness: {
+          mobileMoney: isKenyanCountry(country)
+            ? (["nexuspay", "makamesco", "makamescopay"].includes(kenyaMobileMoneyGateway)
+              ? await nexusPayService.isConfigured()
+              : (await payHeroService.getReadiness()).configured)
+            : false,
+          hostedCheckout: isKenyanCountry(country) ? false : await payzaApiService.isConfigured(),
+          card: isKenyanCountry(country) ? await paystackService.isConfigured() : false,
+        },
         providerCurrencies: [
           { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya" },
           ...PAYZA_API_CURRENCIES.filter(currency => currency.code !== "KES")
@@ -4340,39 +4469,56 @@ p{color:#6b7280;font-size:14px;}</style>
 
       const metadata = (transaction.metadata || {}) as any;
       if (transaction.status === "completed") {
-        const completed = await completeCardPurchase(
-          transaction,
-          String(reference),
-          "Payment already confirmed",
-        );
-        return res.json({
-          success: true,
-          status: "completed",
-          card: completed.card,
-          message: "Virtual card activated successfully.",
-        });
+        const [existingCard] = metadata.cardId
+          ? await db.select().from(virtualCards).where(eq(virtualCards.id, String(metadata.cardId)))
+          : [];
+        if (existingCard && existingCard.userId === transaction.userId) {
+          return res.json({
+            success: true,
+            status: "completed",
+            card: existingCard,
+            message: "Virtual card activated successfully.",
+          });
+        }
       }
 
       if (transaction.status === "failed") {
         return res.status(400).json({
           success: false,
           status: "failed",
-          message: transaction.failureReason || metadata.status_reason || "Payment failed.",
+          message: "Payment failed or was cancelled. Please try again.",
         });
       }
 
-      const statusResult = await getProviderPaymentStatus(
-        String(reference),
-        String(metadata.gateway || "payhero").toLowerCase(),
-      );
+      const gateway = String(metadata.gateway || "").trim().toLowerCase();
+      if (!["payhero", "nexuspay", "makamesco", "makamescopay", "paystack", "payzaapi"].includes(gateway)) {
+        return res.status(409).json({
+          success: false,
+          status: "pending",
+          message: "Payment details need review before this card can be activated.",
+        });
+      }
+      const providerReference = String(transaction.paystackReference || transaction.reference);
+      const statusResult = await getProviderPaymentStatus(providerReference, gateway);
       const normalizedStatus = normalizeProviderPaymentStatus(statusResult);
-      if (["success", "completed", "paid"].includes(normalizedStatus)) {
-        const gateway = String(metadata.gateway || "").toLowerCase();
+      if (statusResult.success && ["success", "completed", "paid"].includes(normalizedStatus)) {
+        const providerData = (statusResult.data?.response || statusResult.data?.data || statusResult.data || {}) as any;
+        const verifiedAmount = providerData.amount ?? providerData.Amount ??
+          providerData.amountPaid ?? providerData.AmountPaid ?? providerData.amount_paid;
+        const verifiedCurrency = String(
+          providerData.currency ||
+          providerData.Currency ||
+          "",
+        );
         if (
           (gateway === "payzaapi" &&
-            !matchesProviderPayment(transaction, "payzaapi", statusResult.data?.amount, statusResult.data?.currency)) ||
+            !matchesProviderPayment(transaction, "payzaapi", verifiedAmount, verifiedCurrency)) ||
           (gateway === "paystack" &&
-            !matchesProviderPayment(transaction, "paystack", statusResult.data?.amount, statusResult.data?.currency, true))
+            !matchesProviderPayment(transaction, "paystack", verifiedAmount, verifiedCurrency, true)) ||
+          (gateway === "payhero" &&
+            !matchesProviderPayment(transaction, "payhero", verifiedAmount, verifiedCurrency)) ||
+          (["nexuspay", "makamesco", "makamescopay"].includes(gateway) &&
+            !matchesProviderPayment(transaction, "nexuspay", verifiedAmount, verifiedCurrency))
         ) {
           console.error("[Card Purchase] Verified payment amount or currency did not match the purchase:", {
             transactionId: transaction.id,
@@ -4386,7 +4532,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
         const completed = await completeCardPurchase(
           transaction,
-          String(reference),
+          providerReference,
           "Payment provider confirmed successful payment",
         );
         return res.json({
@@ -4397,27 +4543,28 @@ p{color:#6b7280;font-size:14px;}</style>
         });
       }
 
-      if (["failed", "cancelled", "rejected"].includes(normalizedStatus)) {
-        const failed = await failPaymentTransaction(
-          transaction,
-          statusResult.message || `Payment provider returned ${normalizedStatus}`,
-        );
+      if (
+        transaction.status !== "completed" &&
+        statusResult.success &&
+        ["failed", "cancelled", "rejected"].includes(normalizedStatus)
+      ) {
+        await failPaymentTransaction(transaction, "Payment failed or was cancelled.");
         return res.status(400).json({
           success: false,
           status: "failed",
-          message: failed.failureReason,
+          message: "Payment failed or was cancelled. Please try again.",
         });
       }
 
       return res.status(202).json({
         success: false,
         status: "pending",
-        message: statusResult.message || "Payment is still being processed.",
+        message: "Payment is still being processed.",
       });
     } catch (error) {
       console.error('Card payment verification error:', error);
       res.status(500).json({ 
-        message: error instanceof Error ? error.message : "Error verifying card payment",
+        message: "Unable to verify this payment right now.",
         success: false
       });
     }
@@ -4440,7 +4587,7 @@ p{color:#6b7280;font-size:14px;}</style>
       
       if (!verificationResult.status) {
         console.error('Callback payment verification failed:', verificationResult.message);
-        return res.redirect(`/payment-failed?reference=${actualReference}&error=${encodeURIComponent(verificationResult.message)}`);
+        return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-verification-failed`);
       }
 
       const paymentData = verificationResult.data;
@@ -4452,9 +4599,11 @@ p{color:#6b7280;font-size:14px;}</style>
             eq(transactions.paystackReference, String(actualReference)),
           ),
         });
+        const expectedType = type === "virtual-card" ? "card_purchase" : "deposit";
+        if (!transaction || transaction.type !== expectedType) {
+          return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=transaction-not-found`);
+        }
         if (
-          transaction &&
-          ["deposit", "card_purchase"].includes(transaction.type) &&
           !matchesProviderPayment(
             transaction,
             "paystack",
@@ -4468,36 +4617,14 @@ p{color:#6b7280;font-size:14px;}</style>
           });
           return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-details-review`);
         }
-        if (transaction && transaction.status !== "completed") {
-          const metadata = (transaction.metadata || {}) as any;
-          if (transaction.type === "deposit" && metadata.walletId) {
-            const [wallet] = await db.select().from(wallets).where(eq(wallets.id, String(metadata.walletId)));
-            if (!wallet || wallet.userId !== transaction.userId || normalizeCurrency(wallet.currency) !== normalizeCurrency(transaction.currency)) {
-              throw new Error("Deposit wallet and transaction currency do not match");
-            }
-            await applyLedgerEntry({
-              walletId: wallet.id,
-              userId: transaction.userId,
-              currency: normalizeCurrency(wallet.currency),
-              amount: parseFloat(transaction.amount),
-              entryType: "deposit",
-              idempotencyKey: `deposit:${transaction.id}`,
-              transactionId: transaction.id,
-              description: transaction.description || "Card deposit",
-            });
-          }
-          if (transaction.type === "card_purchase") {
-            await completeCardPurchase(
-              transaction,
-              String(actualReference),
-              "Paystack payment confirmed successful",
-            );
-          } else {
-            await storage.updateTransaction(transaction.id, {
-              status: "completed",
-              completedAt: new Date(),
-            });
-          }
+        if (transaction.type === "card_purchase") {
+          await completeCardPurchase(
+            transaction,
+            String(actualReference),
+            "Card payment verified",
+          );
+        } else {
+          await completeWalletDeposit(transaction);
         }
         // Payment successful - redirect to success page
         if (type === 'virtual-card') {
@@ -4507,7 +4634,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       } else {
         // Payment failed - redirect to failure page
-        return res.redirect(`/payment-failed?reference=${actualReference}&status=${paymentData.status}`);
+        return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-failed`);
       }
     } catch (error) {
       console.error('Payment callback error:', error);
@@ -4524,12 +4651,12 @@ p{color:#6b7280;font-size:14px;}</style>
       // Verify webhook authenticity (in production, verify signature)
       if (event.event === 'charge.success') {
         const { reference, status, amount, currency } = event.data;
-        
+
         console.log('Webhook payment success:', { reference, status, amount, currency });
-        
+
         // Handle successful payment here if needed
         // This is a backup to the callback URL method
-        
+
       } else if (event.event === 'charge.failed') {
         const { reference, status } = event.data;
         console.log('Webhook payment failed:', { reference, status });
@@ -4543,248 +4670,62 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  // Payment callback/webhook for verification
-  app.get("/api/payment-callback", async (req, res) => {
-    try {
-      const { reference, type } = req.query;
-      console.log(`Payment callback received: ref=${reference}, type=${type}`);
-
-      if (!reference) {
-        return res.status(400).send("Reference missing");
-      }
-
-      const verification = await paystackService.verifyPayment(reference as string);
-      
-      if (verification.status && verification.data.status === 'success') {
-        const transaction = await db.query.transactions.findFirst({
-          where: eq(transactions.paystackReference, reference as string)
-        });
-
-        if (transaction && transaction.status === 'pending') {
-          // 1. Update transaction status
-          await storage.updateTransactionStatus(transaction.id, 'completed');
-          
-          // 2. Credit user balance
-          const user = await storage.getUser(transaction.userId);
-          if (user) {
-            const depositAmount = parseFloat(transaction.amount);
-            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
-            const metadata = (transaction.metadata || {}) as any;
-            const [boundWallet] = metadata.walletId
-              ? await db.select().from(wallets).where(eq(wallets.id, String(metadata.walletId)))
-              : [];
-            if (boundWallet && boundWallet.userId !== user.id) {
-              throw new Error("Deposit wallet does not belong to user");
-            }
-            const depositWallet = boundWallet || await ensureUserWallet(user.id, depositCurrency);
-            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
-            if (normalizeCurrency(depositWallet.currency) !== depositCurrency) {
-              throw new Error("Deposit wallet and transaction currency do not match");
-            }
-            const balanceResult = await applyLedgerEntry({
-              walletId: depositWallet.id,
-              userId: user.id,
-              currency: depositCurrency,
-              amount: depositAmount,
-              entryType: "deposit",
-              idempotencyKey: `deposit:${transaction.id}`,
-              transactionId: transaction.id,
-              description: transaction.description || "Deposit",
-            });
-            const newBalance = balanceResult.balance.toFixed(2);
-            
-            // 3. Send in-app notification
-            await notificationService.sendNotification({
-              userId: user.id,
-              title: "Deposit Successful",
-              message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
-              type: "transaction"
-            });
-
-            // 4. Send SMS + email on transaction completed
-            try {
-              const { messagingService: psTxSms } = await import('./services/messaging');
-              const { mailtrapService: psTxMailtrap } = await import('./services/mailtrap');
-              if (user.phone) {
-                psTxSms.sendTransactionNotification(user.phone, 'deposit', depositAmount.toFixed(2), 'USD', 'completed', transaction.id)
-                  .catch(() => {});
-              }
-              if (user.email) {
-                psTxMailtrap.sendTransactionCompleted(
-                  user.email,
-                  user.firstName || user.fullName?.split(' ')[0] || 'User',
-                  user.lastName || user.fullName?.split(' ')[1] || '',
-                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
-                ).catch(() => {});
-              }
-            } catch (_) {}
-            
-            console.log(`User ${user.id} credited with $${depositAmount}. New balance: ${newBalance}`);
-          }
-        }
-        
-        // Redirect to dashboard with success message
-        return res.redirect('/dashboard?deposit=success');
-      } else {
-        console.warn(`Payment verification failed for ref=${reference}:`, verification.message);
-        return res.redirect('/deposit?error=payment_failed');
-      }
-    } catch (error) {
-      console.error('Payment callback error:', error);
-      res.redirect('/deposit?error=server_error');
-    }
-  });
-
-  // Verify deposit payment initialization
-  app.post("/api/deposit/initialize-payment", requireAuth, async (req, res) => {
-    try {
-      const { amount, currency, paymentMethod, billingAddress, billingCity, billingCountry } = req.body;
-      const userId = (req.session as any).userId;
-      
-      console.log('Deposit payment request - userId:', userId, 'amount:', amount, 'currency:', currency, 'method:', paymentMethod);
-      
-      if (!userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
-      
-      const user = await storage.getUser(userId);
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // 1. Convert USD to KES using a live provider rate. Never initialize a
-      // payment with an approximate rate when the provider is unavailable.
-      const rateService = createExchangeRateService(storage);
-      const exchangeRate = await rateService.getExchangeRate("USD", "KES");
-      const finalAmountKes = parseFloat(amount) * exchangeRate;
-
-      // Validate user email
-      if (!user.email || !user.email.includes('@')) {
-        return res.status(400).json({ message: "Valid email required for payment" });
-      }
-
-      // 2. Initialize payment with Paystack
-      const reference = paystackService.generateReference();
-      const callbackUrl = `${req.protocol}://${req.get('host')}/api/payment-callback?reference=${reference}&type=deposit`;
-      
-      const paystackAmount = Math.round(finalAmountKes * 100);
-      
-      // Determine channels based on method
-      let channels = ['card', 'mobile_money'];
-      if (paymentMethod === 'card') channels = ['card'];
-      if (paymentMethod === 'mpesa' || paymentMethod === 'airtel') channels = ['mobile_money'];
-
-      const paymentMetadata: Record<string, any> = { paymentMethod };
-      if (billingAddress) paymentMetadata.billing_address = billingAddress;
-      if (billingCity) paymentMetadata.billing_city = billingCity;
-      if (billingCountry) paymentMetadata.billing_country = billingCountry;
-
-      const paymentData = await paystackService.initializePayment(
-        user.email,
-        parseFloat(finalAmountKes.toFixed(2)),
-        reference,
-        'KES',
-        user.phone || undefined,
-        callbackUrl,
-        paymentMetadata
-      );
-      
-      if (!paymentData.status) {
-        return res.status(400).json({ message: paymentData.message });
-      }
-      
-      // 3. Create a pending transaction record
-      await storage.createTransaction({
-        userId,
-        type: 'deposit',
-        amount: amount.toString(),
-        currency: 'USD',
-        status: 'pending',
-        description: `Deposit via ${paymentMethod}`,
-        fee: '0.00',
-        exchangeRate: exchangeRate.toString(),
-        paystackReference: reference,
-        metadata: {
-          paymentMethod,
-          kesAmount: finalAmountKes.toFixed(2),
-          exchangeRate
-        }
-      });
-
-      res.json({ 
-        authorizationUrl: paymentData.data.authorization_url,
-        reference: reference
-      });
-    } catch (error) {
-      console.error('Deposit payment initialization error:', error);
-      res.status(500).json({ message: "Error initializing deposit payment" });
-    }
+  // Retire the pre-country-routing initializer; clients should use the
+  // authenticated wallet deposit route, which derives country from the profile.
+  app.post("/api/deposit/initialize-payment", requireAuth, (_req, res) => {
+    res.status(410).json({
+      message: "This payment endpoint is retired. Use the deposit options available for your profile country.",
+    });
   });
 
   // Verify deposit payment
-  app.post("/api/deposit/verify-payment", async (req, res) => {
+  app.post("/api/deposit/verify-payment", requireAuth, async (req, res) => {
     try {
+      const userId = (req.session as any).userId;
       const { reference } = req.body;
       if (!reference) return res.status(400).json({ message: "Reference required" });
 
-      const verification = await paystackService.verifyPayment(reference);
-      
-      if (verification.status && verification.data.status === 'success') {
-        const transaction = await db.query.transactions.findFirst({
-          where: eq(transactions.paystackReference, reference)
-        });
-
-        if (transaction && transaction.status === 'pending') {
-          await storage.updateTransactionStatus(transaction.id, 'completed');
-          const user = await storage.getUser(transaction.userId);
-          if (user) {
-            const depositAmount = parseFloat(transaction.amount);
-            const depositCurrency = normalizeCurrency(transaction.currency || "USD");
-            const depositWallet = await ensureUserWallet(user.id, depositCurrency);
-            if (!depositWallet) throw new Error(`${depositCurrency} wallet is not enabled`);
-            const balanceResult = await applyLedgerEntry({
-              walletId: depositWallet.id,
-              userId: user.id,
-              currency: depositCurrency,
-              amount: depositAmount,
-              entryType: "deposit",
-              idempotencyKey: `deposit:${transaction.id}`,
-              transactionId: transaction.id,
-              description: transaction.description || "Deposit",
-            });
-            const newBalance = balanceResult.balance.toFixed(2);
-            
-            await notificationService.sendNotification({
-              userId: user.id,
-              title: "Deposit Successful",
-              message: `Your deposit of $${depositAmount} has been credited to your wallet.`,
-              type: "transaction"
-            });
-
-            // SMS + email on transaction completed
-            try {
-              const { messagingService: ps2TxSms } = await import('./services/messaging');
-              const { mailtrapService: ps2TxMailtrap } = await import('./services/mailtrap');
-              if (user.phone) {
-                ps2TxSms.sendTransactionNotification(user.phone, 'deposit', depositAmount.toFixed(2), 'USD', 'completed', transaction.id)
-                  .catch(() => {});
-              }
-              if (user.email) {
-                ps2TxMailtrap.sendTransactionCompleted(
-                  user.email,
-                  user.firstName || user.fullName?.split(' ')[0] || 'User',
-                  user.lastName || user.fullName?.split(' ')[1] || '',
-                  depositAmount.toFixed(2), 'USD', 'deposit', transaction.id
-                ).catch(() => {});
-              }
-            } catch (_) {}
-          }
-        }
-        
-        return res.json({ status: 'success', message: 'Payment verified and credited' });
+      const transaction = await db.query.transactions.findFirst({
+        where: or(
+          eq(transactions.reference, String(reference)),
+          eq(transactions.paystackReference, String(reference)),
+        ),
+      });
+      if (
+        !transaction ||
+        transaction.userId !== userId ||
+        transaction.type !== "deposit" ||
+        String((transaction.metadata as any)?.gateway || "").trim().toLowerCase() !== "paystack"
+      ) {
+        return res.status(404).json({ message: "Deposit transaction not found" });
       }
-      
-      res.status(400).json({ status: 'failed', message: verification.data?.gateway_response || 'Payment not successful' });
+
+      const providerReference = String(transaction.paystackReference || transaction.reference);
+      const verification = await paystackService.verifyPayment(providerReference);
+      if (verification.status && verification.data.status === "success") {
+        if (!matchesProviderPayment(
+          transaction,
+          "paystack",
+          verification.data.amount,
+          verification.data.currency,
+          true,
+        )) {
+          return res.status(409).json({ status: "pending", message: "Payment details need review before crediting." });
+        }
+        await completeWalletDeposit(transaction);
+        return res.json({ status: "success", message: "Payment verified and credited" });
+      }
+
+      if (
+        transaction.status !== "completed" &&
+        ["failed", "cancelled", "rejected"].includes(String(verification.data?.status || "").toLowerCase())
+      ) {
+        await failPaymentTransaction(transaction, "Payment failed or was cancelled.");
+      }
+      return res.status(400).json({
+        status: "pending",
+        message: "Payment has not been completed.",
+      });
     } catch (error) {
       console.error('Verify payment error:', error);
       res.status(500).json({ message: "Error verifying payment" });
@@ -9766,13 +9707,22 @@ p{color:#6b7280;font-size:14px;}</style>
       const providerSetting = await storage.getSystemSetting("payhero", "provider");
       const gatewaySetting = await storage.getSystemSetting("payment", "default_gateway");
       const cardGatewaySetting = await storage.getSystemSetting("payment", "virtual_card_gateway");
+      const mobileGatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const readiness = await payHeroService.getReadiness();
+      const rawMobileGateway = settingText(
+        mobileGatewaySetting?.value,
+        settingText(cardGatewaySetting?.value, "payhero"),
+      ).toLowerCase();
+      const kenyaMobileMoneyGateway = ["nexuspay", "makamesco", "makamescopay"].includes(rawMobileGateway)
+        ? "nexuspay"
+        : "payhero";
       const settings = {
         channelId: settingText(channelIdSetting?.value, process.env.PAYHERO_CHANNEL_ID || ""),
         provider: providerSetting?.value || "m-pesa",
         defaultGateway: settingText(gatewaySetting?.value, "payzaapi"),
-        virtualCardGateway: settingText(cardGatewaySetting?.value, "payhero").toLowerCase(),
+        virtualCardGateway: kenyaMobileMoneyGateway,
+        kenyaMobileMoneyGateway,
         nexuspayConfigured: await nexusPayService.isConfigured(),
         payzaConfigured: await payzaApiService.isConfigured(),
         paystackConfigured: await paystackService.isConfigured(),
@@ -9790,7 +9740,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.put("/api/admin/payhero-settings", requireAdminAuth, async (req, res) => {
     try {
-      const { channelId, provider, cardPrice, defaultGateway, virtualCardGateway } = req.body;
+      const { channelId, provider, cardPrice, defaultGateway, virtualCardGateway, kenyaMobileMoneyGateway } = req.body;
       const secretFields = [
         "username",
         "password",
@@ -9804,15 +9754,16 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(400).json({ message: "Payment-provider credentials must be configured as Replit Secrets." });
       }
       const gateway = defaultGateway === undefined ? undefined : String(defaultGateway).trim().toLowerCase();
-      const cardGateway = virtualCardGateway === undefined
+      const requestedMobileGateway = kenyaMobileMoneyGateway ?? virtualCardGateway;
+      const mobileGateway = requestedMobileGateway === undefined
         ? undefined
-        : String(virtualCardGateway).trim().toLowerCase();
+        : String(requestedMobileGateway).trim().toLowerCase();
       const providerName = String(provider || "m-pesa").trim().toLowerCase();
       if (gateway && !["payhero", "nexuspay", "payzaapi", "paystack"].includes(gateway)) {
         return res.status(400).json({ message: "Unsupported default gateway" });
       }
-      if (cardGateway && !["payhero", "nexuspay", "payzaapi", "paystack"].includes(cardGateway)) {
-        return res.status(400).json({ message: "Unsupported virtual-card payment provider" });
+      if (mobileGateway && !["payhero", "nexuspay", "makamesco", "makamescopay"].includes(mobileGateway)) {
+        return res.status(400).json({ message: "Choose a supported Kenyan mobile-money provider." });
       }
 
       if (gateway) {
@@ -9823,12 +9774,21 @@ p{color:#6b7280;font-size:14px;}</style>
           description: "Default payment gateway for legacy integrations",
         });
       }
-      if (cardGateway) {
+      if (mobileGateway) {
+        const canonicalGateway = ["nexuspay", "makamesco", "makamescopay"].includes(mobileGateway)
+          ? "nexuspay"
+          : "payhero";
+        await storage.setSystemSetting({
+          category: "payment",
+          key: "kenya_mobile_money_gateway",
+          value: canonicalGateway,
+          description: "Mobile-money provider used for Kenyan payments",
+        });
         await storage.setSystemSetting({
           category: "payment",
           key: "virtual_card_gateway",
-          value: cardGateway,
-          description: "Payment provider for virtual-card purchases",
+          value: canonicalGateway,
+          description: "Legacy compatibility setting for Kenyan mobile-money payments",
         });
       }
       const normalizedChannelId = channelId === undefined || String(channelId).trim() === ""
@@ -9869,7 +9829,8 @@ p{color:#6b7280;font-size:14px;}</style>
         message: "PayHero settings updated successfully",
         channelId,
         provider: providerName,
-        virtualCardGateway: cardGateway,
+        virtualCardGateway: mobileGateway,
+        kenyaMobileMoneyGateway: mobileGateway,
         cardPrice 
       });
     } catch (error) {
@@ -9896,6 +9857,37 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('PayHero readiness check error:', error);
       res.status(500).json({ success: false, message: "Payment settings could not be checked. No payment was initiated." });
+    }
+  });
+
+  app.post("/api/admin/test-payment-providers", requireAdminAuth, async (req, res) => {
+    try {
+      const payHeroReadiness = await payHeroService.getReadiness();
+      const providers = {
+        payhero: payHeroReadiness.configured,
+        makamescopay: await nexusPayService.isConfigured(),
+        payzaapi: await payzaApiService.isConfigured(),
+        paystack: await paystackService.isConfigured(),
+      };
+      const mobileGateway = settingText(
+        (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
+        "payhero",
+      ).toLowerCase();
+      const selectedMobileReady = ["nexuspay", "makamesco", "makamescopay"].includes(mobileGateway)
+        ? providers.makamescopay
+        : providers.payhero;
+      return res.json({
+        configured: selectedMobileReady && providers.payzaapi && providers.paystack,
+        selectedMobileMoneyReady: selectedMobileReady,
+        providers,
+        message: "Configuration readiness checked. No payment was initiated.",
+      });
+    } catch (error) {
+      console.error("Payment-provider readiness check failed:", error);
+      return res.status(500).json({
+        configured: false,
+        message: "Payment configuration could not be checked. No payment was initiated.",
+      });
     }
   });
 
@@ -9951,19 +9943,12 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  // Public endpoint for getting manual payment settings (for users)
-  app.get("/api/manual-payment-settings", async (req, res) => {
-    try {
-      const paybillSetting = await storage.getSystemSetting("manual_mpesa", "paybill");
-      
-      res.json({
-        paybill: paybillSetting?.value || "247",
-        account: "440200259037",
-      });
-    } catch (error) {
-      console.error('Error fetching manual payment settings:', error);
-      res.status(500).json({ message: "Error fetching manual payment settings" });
-    }
+  // Manual card-purchase instructions were retired in favor of provider-routed
+  // mobile-money checkout.
+  app.get("/api/manual-payment-settings", requireAuth, (_req, res) => {
+    res.status(410).json({
+      message: "Manual payment instructions are no longer available. Use the payment options in your account.",
+    });
   });
 
   // ── Admin deposit method settings ─────────────────────────────────────────
@@ -11776,37 +11761,78 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "Transaction not found" });
       }
       const metadata = (transaction?.metadata || {}) as any;
-      const gateway = String(metadata.gateway || "payhero").toLowerCase();
+      const isPaymentTransaction = transaction.type === "card_purchase" || transaction.type === "deposit";
+      const gateway = String(metadata.gateway || "").trim().toLowerCase();
 
       if (transaction?.status === "completed") {
         if (transaction.type === "card_purchase") {
-          const completed = await completeCardPurchase(
-            transaction,
-            reference,
-            "Payment already confirmed",
-          );
-          return res.json({
-            success: true,
-            status: "completed",
-            data: { reference, card: completed.card },
-          });
+          const [existingCard] = metadata.cardId
+            ? await db.select().from(virtualCards).where(eq(virtualCards.id, String(metadata.cardId)))
+            : [];
+          if (existingCard && existingCard.userId === transaction.userId) {
+            return res.json({
+              success: true,
+              status: "completed",
+              data: { reference, card: existingCard },
+            });
+          }
         }
-        if (transaction.type === "deposit" && gateway === "payzaapi") {
-          await completePayzaDeposit(transaction);
+        if (transaction.type === "deposit") {
+          const [creditedEntry] = await db.select({ id: ledgerEntries.id })
+            .from(ledgerEntries)
+            .where(and(
+              eq(ledgerEntries.transactionId, transaction.id),
+              eq(ledgerEntries.entryType, "deposit"),
+            ))
+            .limit(1);
+          if (creditedEntry) {
+            return res.json({ success: true, status: "completed", data: { reference } });
+          }
         }
-        return res.json({ success: true, status: "completed", data: { reference } });
+        if (transaction.type !== "card_purchase" && transaction.type !== "deposit") {
+          return res.json({ success: true, status: "completed", data: { reference } });
+        }
       }
 
-      const statusResult = await getProviderPaymentStatus(reference, gateway);
-      const normalizedStatus = normalizeProviderPaymentStatus(statusResult);
-      const completed = ["success", "completed", "paid"].includes(normalizedStatus);
-      const failed = ["failed", "cancelled", "rejected"].includes(normalizedStatus);
       if (
-        completed &&
-        ((gateway === "payzaapi" &&
-          !matchesProviderPayment(transaction, "payzaapi", statusResult.data?.amount, statusResult.data?.currency)) ||
-         (gateway === "paystack" &&
-          !matchesProviderPayment(transaction, "paystack", statusResult.data?.amount, statusResult.data?.currency, true)))
+        isPaymentTransaction &&
+        !["payhero", "nexuspay", "makamesco", "makamescopay", "paystack", "payzaapi"].includes(gateway)
+      ) {
+        return res.json({
+          success: false,
+          status: "pending",
+          message: "Payment details need review before this transaction can be completed.",
+        });
+      }
+      const statusGateway = gateway || "payhero";
+      const providerReference = String(transaction.paystackReference || transaction.reference);
+      const statusResult = await getProviderPaymentStatus(
+        isPaymentTransaction ? providerReference : reference,
+        statusGateway,
+      );
+      const normalizedStatus = normalizeProviderPaymentStatus(statusResult);
+      const completed = statusResult.success && ["success", "completed", "paid"].includes(normalizedStatus);
+      const failed = statusResult.success && ["failed", "cancelled", "rejected"].includes(normalizedStatus);
+      const providerData = (statusResult.data?.response || statusResult.data?.data || statusResult.data || {}) as any;
+      const actualAmount = providerData.amount ?? providerData.Amount ??
+        providerData.amountPaid ?? providerData.AmountPaid ?? providerData.amount_paid;
+      const actualCurrency = String(
+        providerData.currency ||
+        providerData.Currency ||
+        "",
+      );
+      const paymentMatches =
+        gateway === "payzaapi"
+          ? matchesProviderPayment(transaction, "payzaapi", actualAmount, actualCurrency)
+          : gateway === "paystack"
+            ? matchesProviderPayment(transaction, "paystack", actualAmount, actualCurrency, true)
+            : gateway === "payhero"
+              ? matchesProviderPayment(transaction, "payhero", actualAmount, actualCurrency)
+              : ["nexuspay", "makamesco", "makamescopay"].includes(gateway)
+                ? matchesProviderPayment(transaction, "nexuspay", actualAmount, actualCurrency)
+                : false;
+      if (
+        completed && isPaymentTransaction && !paymentMatches
       ) {
         console.error("[Transaction Status] Verified payment amount or currency did not match:", {
           transactionId: transaction.id,
@@ -11818,38 +11844,42 @@ p{color:#6b7280;font-size:14px;}</style>
           message: "Payment details need review before this transaction can be completed.",
         });
       }
-      if (transaction && completed && transaction.status !== "completed") {
+      if (
+        transaction &&
+        completed &&
+        (transaction.status !== "completed" || transaction.type === "deposit" || transaction.type === "card_purchase")
+      ) {
         if (transaction.type === "card_purchase") {
           const finalized = await completeCardPurchase(
             transaction,
-            reference,
+            providerReference,
             "Payment provider confirmed successful payment",
           );
           return res.json({
             success: true,
             status: "completed",
-            data: { ...statusResult.data, card: finalized.card },
+            data: { card: finalized.card },
             message: "Virtual card activated successfully.",
           });
-        } else if (transaction.type === "deposit" && gateway === "payzaapi") {
-          await completePayzaDeposit(transaction);
+        } else if (transaction.type === "deposit") {
+          await completeWalletDeposit(transaction);
         } else {
           await storage.updateTransaction(transaction.id, {
             status: "completed",
             completedAt: new Date(),
           });
         }
-      } else if (transaction && failed) {
+      } else if (transaction && failed && transaction.status !== "completed") {
         await failPaymentTransaction(
           transaction,
-          statusResult.message || `Payment provider returned ${normalizedStatus}`,
+          "Payment failed or was cancelled.",
         );
         if (metadata.billPaymentId) {
           try {
             await refundBillPayment({
               billPaymentId: String(metadata.billPaymentId),
               transactionId: transaction.id,
-              reason: statusResult.message || `Bill provider returned ${normalizedStatus}`,
+              reason: "The bill payment was not completed.",
             });
           } catch (refundError) {
             console.error("Bill provider failure refund error:", refundError);
@@ -11860,8 +11890,11 @@ p{color:#6b7280;font-size:14px;}</style>
       res.json({
         success: statusResult.success,
         status: completed ? "completed" : failed ? "failed" : statusResult.status,
-        data: statusResult.data,
-        message: statusResult.message
+        message: completed
+          ? "Payment confirmed."
+          : failed
+            ? "Payment failed or was cancelled."
+            : "Payment is still being processed.",
       });
     } catch (error) {
       console.error('Transaction status check error:', error);
@@ -11992,108 +12025,10 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  // PayHero callback endpoint
-  app.post("/api/payhero-callback", async (req, res) => {
-    try {
-      console.log('PayHero callback received:', JSON.stringify(req.body, null, 2));
-      
-      const callbackData = req.body;
-      const { reference, type } = req.query;
-      
-      if (!callbackData.response) {
-        console.error('Invalid PayHero callback data - missing response');
-        return res.status(400).json({ message: "Invalid callback data" });
-      }
-
-      const paymentResult = payHeroService.processCallback(callbackData);
-      console.log('Processed payment result:', paymentResult);
-      
-      if (paymentResult.success) {
-        if (type === 'virtual-card') {
-          // Find the user by phone number from the callback data
-          let userId = null;
-          let userPhone = null;
-          
-          // Extract phone from callback data if available
-          if (callbackData.response && callbackData.response.phoneNumber) {
-            userPhone = callbackData.response.phoneNumber;
-          } else if (callbackData.phone) {
-            userPhone = callbackData.phone;
-          }
-          
-          // Find user by phone number
-          if (userPhone) {
-            const users = await storage.getAllUsers();
-            const user = users.find(u => u.phone === userPhone);
-            if (user) {
-              userId = user.id;
-            }
-          }
-          
-          // Fallback: find by payment reference in existing transactions (for existing users)
-          if (!userId) {
-            const transactions = await storage.getAllTransactions();
-            for (const transaction of transactions) {
-              if (transaction.reference === paymentResult.reference) {
-                userId = transaction.userId;
-                break;
-              }
-            }
-          }
-          
-          if (!userId) {
-            console.error('Could not find user for payment reference:', paymentResult.reference, 'phone:', userPhone);
-            return res.status(200).json({ message: "Payment processed but user not found" });
-          }
-
-          // Webhook retries must not create a second active card.
-          const existingCards = await storage.getVirtualCardsByUserId(userId);
-          if (existingCards.length >= 4) {
-            console.log(`Virtual card limit reached for user ${userId}; skipping callback`);
-            return res.status(200).json({ message: "Virtual card limit reached" });
-          }
-
-          // Create virtual card for the user
-          const cardData = {
-            userId: userId,
-            cardNumber: `5399 ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)} ${Math.floor(1000 + Math.random() * 9000)}`,
-            expiryDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000 * 3), // 3 years from now
-            cvv: Math.floor(100 + Math.random() * 900).toString(),
-            balance: 0,
-            status: 'active' as const,
-            type: 'virtual' as const
-          };
-
-          const newCard = await storage.createVirtualCard(cardData);
-          console.log('Virtual card created successfully:', newCard.id);
-
-          // Create a transaction record for the card purchase
-          const transactionData = {
-            userId: userId,
-            amount: paymentResult.amount.toString(),
-            currency: 'KES',
-            status: 'completed' as const,
-            type: 'card_purchase' as const,
-            description: `Virtual card purchase - Payment via M-Pesa (${paymentResult.mpesaReceiptNumber})`,
-            fee: '0.00',
-            reference: paymentResult.reference,
-            recipientDetails: null
-          };
-
-          await storage.createTransaction(transactionData);
-          console.log('Card purchase transaction recorded for user:', userId);
-        }
-        
-        console.log('PayHero payment completed successfully');
-        res.status(200).json({ message: "Payment processed successfully" });
-      } else {
-        console.log('PayHero payment failed:', paymentResult.status);
-        res.status(200).json({ message: "Payment failed", status: paymentResult.status });
-      }
-    } catch (error) {
-      console.error('PayHero callback processing error:', error);
-      res.status(500).json({ message: "Error processing payment callback" });
-    }
+  // Retired legacy callback: it was not bound to a verified pending transaction.
+  // The transaction-bound callback above is the only PayHero settlement path.
+  app.post("/api/payhero-callback", (_req, res) => {
+    res.status(200).json({ received: true, ignored: true });
   });
 
   // System status endpoint - checks app features health
@@ -15378,7 +15313,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!settingEnabled(globalSetting?.value)) {
         return res.status(403).json({ message: "Global deposits are currently disabled" });
       }
-      const { walletId, currency, paymentCurrency, amount, phone, email, correspondent, description } = req.body;
+      const { walletId, currency, amount, phone } = req.body;
       if (!walletId || !currency || !amount) return res.status(400).json({ message: "walletId, currency, and amount are required" });
       const normalizedCurrency = normalizeCurrency(currency);
       if (!(await getEnabledCurrencyCodes()).includes(normalizedCurrency)) {
@@ -15388,16 +15323,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!Number.isFinite(inputAmount) || inputAmount <= 0) {
         return res.status(400).json({ message: "Amount must be greater than 0" });
       }
-      const requestedPaymentCurrency = normalizeCurrency(paymentCurrency || normalizedCurrency);
-      const normalizedPaymentCurrency = requestedPaymentCurrency === "SLL" ? "SLE" : requestedPaymentCurrency;
-      const payzaCurrency = getPayzaApiCurrencyCode(normalizedPaymentCurrency);
-      if (normalizedPaymentCurrency !== "KES" && !payzaCurrency) {
-        return res.status(400).json({ message: "This payment currency is not supported." });
-      }
-      const exchangeRate = normalizedPaymentCurrency === normalizedCurrency
-        ? 1
-        : await createExchangeRateService(storage).getExchangeRate(normalizedPaymentCurrency, normalizedCurrency);
-      const creditedAmount = inputAmount * exchangeRate;
       const [wallet_] = await db.select().from(wallets).where(eq(wallets.id, walletId));
       if (!wallet_ || wallet_.userId !== userId) return res.status(403).json({ message: "Wallet not found" });
       if (!wallet_.isActive || wallet_.isSuspended) return res.status(400).json({ message: "This wallet is not active" });
@@ -15406,130 +15331,196 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       const customer = await storage.getUser(userId);
       if (!customer) return res.status(404).json({ message: "User not found" });
-      const channel = normalizedPaymentCurrency === "KES" ? "mobile_money" : "payzaapi";
-      let result: { reference: string; status: string; redirectUrl: string | null };
-      let selectedGateway: "payhero" | "payzaapi";
-      let payzaTransactionCreated = false;
+      if (!customer.country) {
+        return res.status(400).json({ message: "Add your country to your profile before starting a deposit." });
+      }
 
-      if (normalizedPaymentCurrency === "KES") {
-        selectedGateway = "payhero";
-        const readiness = await payHeroService.getReadiness();
-        if (!readiness.configured) {
-          console.warn("KES mobile-money deposits are unavailable because payment settings are incomplete.");
-          return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
-        }
-        const customerPhone = String(phone || customer.phone || "").trim();
-        if (!customerPhone) return res.status(400).json({ message: "Enter a phone number for the M-Pesa prompt." });
-        const reference = payHeroService.generateReference();
-        const payment = await payHeroService.initiateMpesaPayment(
-          inputAmount,
-          customerPhone,
-          reference,
-          customer.fullName || undefined,
-          `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`,
-        );
-        if (!payment.success) {
-          console.error("KES mobile-money deposit initialization failed:", payment.message || payment.status);
-          return res.status(502).json({ message: "Mobile-money payment could not be started. Please try again later." });
-        }
-        result = { reference: payment.reference || reference, status: "pending", redirectUrl: null };
-      } else {
+      const isKenya = isKenyanCountry(customer.country);
+      const normalizedPaymentCurrency = isKenya
+        ? "KES"
+        : getPayzaCurrencyForCountry(customer.country);
+      if (!normalizedPaymentCurrency) {
+        return res.status(400).json({ message: "A supported payment currency could not be determined for your country." });
+      }
+      const payzaCurrency = getPayzaApiCurrencyCode(normalizedPaymentCurrency);
+      const exchangeRate = normalizedPaymentCurrency === normalizedCurrency
+        ? 1
+        : await createExchangeRateService(storage).getExchangeRate(normalizedPaymentCurrency, normalizedCurrency);
+      const creditedAmount = inputAmount * exchangeRate;
+      const requestedMethod = String(req.body.paymentMethod || "mobile_money").trim().toLowerCase();
+      if (isKenya && !["mobile_money", "card"].includes(requestedMethod)) {
+        return res.status(400).json({ message: "Choose mobile money or card." });
+      }
+      if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || !Number.isFinite(creditedAmount) || creditedAmount <= 0) {
+        return res.status(503).json({ message: "The deposit exchange rate is temporarily unavailable." });
+      }
+      if (isKenya && requestedMethod === "card" && inputAmount < 10 * (await getUsdToKesRate())) {
+        return res.status(400).json({ message: "The minimum card deposit is the equivalent of USD 10 in KES." });
+      }
+      const channel = isKenya ? requestedMethod : "hosted_checkout";
+
+      let selectedGateway: "payhero" | "nexuspay" | "payzaapi" | "paystack";
+      if (!isKenya) {
         selectedGateway = "payzaapi";
-        if (!payzaCurrency) return res.status(400).json({ message: "This payment currency is not supported." });
-        if (!(await payzaApiService.isConfigured())) {
-          return res.status(503).json({ message: "Deposits are temporarily unavailable. Please try again later." });
-        }
-        const reference = `DEP-PAYZA-${Date.now()}-${userId.slice(-6)}`;
-        await db.insert(transactions).values({
-          userId,
-          type: "deposit",
-          amount: creditedAmount.toFixed(2),
-          currency: normalizedCurrency,
-          status: "pending",
-          reference,
-          description: `Deposit to ${normalizedCurrency} wallet`,
-          metadata: {
-            walletId,
-            channel,
-            gateway: selectedGateway,
-            paymentCurrency: normalizedPaymentCurrency,
-            paymentAmount: inputAmount,
-            exchangeRate,
-            redirectUrl: null,
-          } as any,
-        });
-        payzaTransactionCreated = true;
+      } else if (requestedMethod === "card") {
+        selectedGateway = "paystack";
+      } else {
+        const configuredGateway = settingText(
+          (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
+          settingText((await storage.getSystemSetting("payment", "default_gateway"))?.value, "payhero"),
+        ).toLowerCase();
+        selectedGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+          ? "nexuspay"
+          : "payhero";
+      }
+      if (
+        (selectedGateway === "payzaapi" || selectedGateway === "paystack") &&
+        (!customer.email || !customer.email.includes("@"))
+      ) {
+        return res.status(400).json({ message: "A valid email is required to start this payment." });
+      }
 
-        let payment: Awaited<ReturnType<typeof payzaApiService.initializePayment>>;
-        try {
-          payment = await payzaApiService.initializePayment({
+      if (selectedGateway === "payzaapi" && (!payzaCurrency || !(await payzaApiService.isConfigured()))) {
+        return res.status(503).json({ message: "Local payment options are temporarily unavailable. Please try again later." });
+      }
+      if (selectedGateway === "paystack" && !(await paystackService.isConfigured())) {
+        return res.status(503).json({ message: "Card payments are temporarily unavailable. Please try again later." });
+      }
+      if (selectedGateway === "nexuspay" && !(await nexusPayService.isConfigured())) {
+        return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
+      }
+      if (selectedGateway === "payhero" && !(await payHeroService.getReadiness()).configured) {
+        return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
+      }
+
+      const customerPhone = String(phone || customer.phone || "").trim();
+      if (selectedGateway !== "payzaapi" && !customerPhone) {
+        return res.status(400).json({ message: "Enter a phone number for the mobile-money payment prompt." });
+      }
+
+      const reference = selectedGateway === "payhero"
+        ? payHeroService.generateReference()
+        : selectedGateway === "paystack"
+          ? paystackService.generateReference()
+          : `DEP-${selectedGateway.toUpperCase()}-${Date.now()}-${userId.slice(-6)}`;
+      const [transaction] = await db.insert(transactions).values({
+        userId,
+        type: "deposit",
+        amount: creditedAmount.toFixed(2),
+        currency: normalizedCurrency,
+        status: "pending",
+        reference,
+        paystackReference: reference,
+        description: `Deposit to ${normalizedCurrency} wallet`,
+        fee: "0.00",
+        exchangeRate: exchangeRate.toString(),
+        metadata: {
+          walletId,
+          channel,
+          gateway: selectedGateway,
+          paymentCurrency: normalizedPaymentCurrency,
+          paymentAmount: inputAmount,
+          exchangeRate,
+          redirectUrl: null,
+        } as any,
+      }).returning();
+
+      let result: { reference: string; status: string; redirectUrl: string | null };
+      try {
+        if (selectedGateway === "payzaapi") {
+          const payment = await payzaApiService.initializePayment({
             amount: inputAmount,
             currency: normalizedPaymentCurrency,
             reference,
-            email: email || customer.email || "",
+            email: customer.email,
             name: customer.fullName || undefined,
             phone: phone || customer.phone || undefined,
             callbackUrl: `${req.protocol}://${req.get("host")}/api/payzaapi/callback`,
             redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${encodeURIComponent(reference)}&type=deposit`,
             cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${encodeURIComponent(walletId)}`,
-            description: description || `Deposit to ${normalizedCurrency} wallet`,
+            description: `Deposit to ${normalizedCurrency} wallet`,
             metadata: { userId, walletId, currency: normalizedCurrency },
             stkPush: false,
           });
-        } catch (error) {
-          await db.update(transactions)
-            .set({ status: "failed", updatedAt: new Date(), failureReason: "Payment initialization failed" })
-            .where(eq(transactions.reference, reference));
-          throw error;
+          if (!payment.paymentUrl || ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())) {
+            throw new Error("Hosted checkout could not be started");
+          }
+          result = { reference: payment.reference || reference, status: payment.status, redirectUrl: payment.paymentUrl };
+        } else if (selectedGateway === "paystack") {
+          const payment = await paystackService.initializePayment(
+            customer.email || "",
+            inputAmount,
+            reference,
+            normalizedPaymentCurrency,
+            customerPhone || undefined,
+            `${req.protocol}://${req.get("host")}/api/payment-callback?reference=${encodeURIComponent(reference)}&type=deposit`,
+            {
+              walletId,
+              currency: normalizedCurrency,
+              paymentCurrency: normalizedPaymentCurrency,
+              paymentAmount: inputAmount,
+              exchangeRate,
+              gateway: "paystack",
+              paymentMethod: "card",
+            },
+            ["card"],
+          );
+          if (!payment.status || !payment.data?.authorization_url) {
+            throw new Error("Card deposit could not be started");
+          }
+          result = {
+            reference: payment.data.reference || reference,
+            status: payment.data.status || "pending",
+            redirectUrl: payment.data.authorization_url,
+          };
+        } else if (selectedGateway === "nexuspay") {
+          const payment = await nexusPayService.checkout({
+            amount: inputAmount,
+            currency: "KES",
+            channel: "mobile_money",
+            phone: customerPhone,
+            email: customer.email || undefined,
+            description: "Wallet deposit",
+          });
+          result = { reference: payment.reference || reference, status: payment.status, redirectUrl: payment.redirectUrl };
+        } else {
+          const payment = await payHeroService.initiateMpesaPayment(
+            inputAmount,
+            customerPhone,
+            reference,
+            customer.fullName || undefined,
+            `${req.protocol}://${req.get("host")}/api/payments/payhero/callback`,
+          );
+          if (!payment.success) throw new Error("Mobile-money payment initialization failed");
+          result = { reference: payment.reference || reference, status: payment.status || "pending", redirectUrl: null };
         }
-        if (payment.reference !== reference) {
-          await db.update(transactions)
-            .set({ paystackReference: payment.reference })
-            .where(eq(transactions.reference, reference));
-        }
-        result = { reference: payment.reference, status: payment.status, redirectUrl: payment.paymentUrl };
-      }
-      if (!payzaTransactionCreated) {
-        await db.insert(transactions).values({
-          userId, type: "deposit", amount: creditedAmount.toFixed(2), currency: normalizedCurrency, status: "pending",
-          reference: result.reference, description: `Deposit to ${normalizedCurrency} wallet`,
-          metadata: {
-           walletId,
-           channel,
-           gateway: selectedGateway,
-           paymentCurrency: normalizedPaymentCurrency,
-           paymentAmount: inputAmount,
-           exchangeRate,
-           redirectUrl: result.redirectUrl,
-          } as any,
-        });
-      } else {
+      } catch (error) {
         await db.update(transactions)
-          .set({ metadata: {
-            walletId,
-            channel,
-            gateway: selectedGateway,
-            paymentCurrency: normalizedPaymentCurrency,
-            paymentAmount: inputAmount,
-            exchangeRate,
-            redirectUrl: result.redirectUrl,
-          } as any })
-          .where(or(
-            eq(transactions.reference, result.reference),
-            eq(transactions.paystackReference, result.reference),
-          ));
+          .set({ status: "failed", updatedAt: new Date(), failureReason: "Payment initialization failed" })
+          .where(eq(transactions.id, transaction.id));
+        throw error;
       }
-       res.json({
-         success: true,
-         reference: result.reference,
-         status: result.status,
-         redirectUrl: result.redirectUrl,
-          amount: creditedAmount.toFixed(2),
-          paymentAmount: inputAmount.toFixed(2),
-          paymentCurrency: normalizedPaymentCurrency,
-          exchangeRate,
-         message: result.redirectUrl ? "Redirecting to payment page..." : "Check your phone for the payment prompt.",
-       });
+
+      await db.update(transactions)
+        .set({
+          paystackReference: result.reference,
+          metadata: {
+            ...((transaction.metadata || {}) as Record<string, unknown>),
+            redirectUrl: result.redirectUrl,
+          } as any,
+        })
+        .where(eq(transactions.id, transaction.id));
+      res.json({
+        success: true,
+        reference: result.reference,
+        status: result.status,
+        redirectUrl: result.redirectUrl,
+        amount: creditedAmount.toFixed(2),
+        paymentAmount: inputAmount.toFixed(2),
+        paymentCurrency: normalizedPaymentCurrency,
+        exchangeRate,
+        message: result.redirectUrl ? "Continue to complete your deposit." : "A payment prompt was sent to your phone.",
+      });
      } catch (e: any) {
        console.error("Deposit initialization error:", e);
        res.status(400).json({ message: "We couldn't start your deposit. Please try again later." });
@@ -15568,11 +15559,6 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!["deposit", "card_purchase"].includes(transaction.type)) {
         return res.json({ received: true, ignored: true });
       }
-      if (transaction.status === "completed") {
-        if (transaction.type === "deposit") await completePayzaDeposit(transaction);
-        return res.json({ received: true });
-      }
-
       const eventStatus = String(webhookData?.status || req.body?.status || "").toLowerCase();
       const eventSuggestsSuccess = /success|completed|paid/.test(event);
       const eventSuggestsFailure = /failed|cancelled|canceled|rejected/.test(event);
@@ -15603,15 +15589,15 @@ Sitemap: https://geepay.us/sitemap.xml`;
           await completeCardPurchase(
             transaction,
             reference,
-            "PayzaAPI payment confirmed by signed webhook",
+            "Payment verified by signed webhook",
           );
         } else {
           await completePayzaDeposit(transaction);
         }
       } else {
-        if (transaction.type === "card_purchase") {
-          await failPaymentTransaction(transaction, "PayzaAPI payment failed or was cancelled");
-        } else {
+        if (transaction.type === "card_purchase" && transaction.status !== "completed") {
+          await failPaymentTransaction(transaction, "Payment failed or was cancelled.");
+        } else if (transaction.status !== "completed") {
           await db.update(transactions)
             .set({ status: "failed", updatedAt: new Date() })
             .where(eq(transactions.id, transaction.id));
@@ -15632,114 +15618,116 @@ Sitemap: https://geepay.us/sitemap.xml`;
         eq(transactions.reference, reference),
         eq(transactions.paystackReference, reference),
       ));
-      if (!existingTransaction || existingTransaction.userId !== userId) {
+      if (!existingTransaction || existingTransaction.userId !== userId || existingTransaction.type !== "deposit") {
         return res.status(403).json({ message: "Transaction not found" });
       }
-      const gateway = String((existingTransaction?.metadata as any)?.gateway || "nexuspay");
+      const gateway = String((existingTransaction?.metadata as any)?.gateway || "").trim().toLowerCase();
+      if (!["payhero", "paystack", "payzaapi", "nexuspay", "makamesco", "makamescopay"].includes(gateway.toLowerCase())) {
+        return res.status(404).json({ message: "Deposit transaction not found" });
+      }
+      const providerReference = String(existingTransaction.paystackReference || existingTransaction.reference);
       let status: any;
       if (gateway === "payhero") {
-        const providerStatus = await payHeroService.checkTransactionStatus(reference);
-        const normalizedStatus = String(providerStatus.status || "").toLowerCase();
+        const providerStatus = await getProviderPaymentStatus(providerReference, "payhero");
+        const normalizedStatus = normalizeProviderPaymentStatus(providerStatus);
+        const providerData = (providerStatus.data?.response || providerStatus.data?.data || providerStatus.data || {}) as any;
         status = {
           status: providerStatus.success && ["success", "completed", "paid"].includes(normalizedStatus)
             ? "completed"
             : ["failed", "cancelled", "rejected"].includes(normalizedStatus) ? "failed" : "pending",
-          reference,
-          amount: String(providerStatus.data?.amount || existingTransaction?.amount || 0),
-          currency: existingTransaction?.currency || "KES",
+          reference: providerReference,
+          amount: String(providerData.amount ?? providerData.Amount ??
+            providerData.amountPaid ?? providerData.AmountPaid ?? providerData.amount_paid ?? 0),
+          currency: providerData.currency || providerData.Currency ||
+            (existingTransaction.metadata as any)?.gatewayCurrency ||
+            (existingTransaction.metadata as any)?.paymentCurrency ||
+            "KES",
         };
       } else if (gateway === "paystack") {
-        const providerStatus = await paystackService.verifyPayment(reference);
+        const providerStatus = await paystackService.verifyPayment(providerReference);
         status = {
           status: providerStatus.status && providerStatus.data?.status === "success" ? "completed" : "pending",
-          reference,
-          amount: String(Number(providerStatus.data?.amount || existingTransaction?.amount || 0) / 100),
+          reference: providerReference,
+          amount: String(Number(providerStatus.data?.amount || 0) / 100),
+          providerAmount: providerStatus.data?.amount,
           currency: providerStatus.data?.currency || existingTransaction?.currency || "KES",
         };
       } else if (gateway === "payzaapi") {
-        status = await payzaApiService.verifyPayment(reference);
+        status = await payzaApiService.verifyPayment(providerReference);
       } else {
-        status = await nexusPayService.getStatus(reference);
+        status = await nexusPayService.getStatus(providerReference);
       }
       if (
-        gateway === "payzaapi" &&
         status.status === "completed" &&
-        !matchesProviderPayment(existingTransaction, "payzaapi", status.amount, status.currency)
+        ((gateway === "payzaapi" &&
+          !matchesProviderPayment(existingTransaction, "payzaapi", status.amount, status.currency)) ||
+         (gateway === "paystack" &&
+          !matchesProviderPayment(existingTransaction, "paystack", status.providerAmount, status.currency, true)) ||
+         (gateway === "payhero" &&
+          !matchesProviderPayment(existingTransaction, "payhero", status.amount, status.currency)) ||
+         (["nexuspay", "makamesco", "makamescopay"].includes(gateway.toLowerCase()) &&
+          !matchesProviderPayment(existingTransaction, "nexuspay", status.amount, status.currency)))
       ) {
-        console.error("[Deposit Status] PayzaAPI payment amount or currency did not match:", {
+        console.error("[Deposit Status] Verified payment amount or currency did not match:", {
           transactionId: existingTransaction.id,
+          gateway,
         });
         return res.status(409).json({ message: "Payment details need review before this deposit can be credited." });
       }
       if (status.status === "completed") {
         const txn = existingTransaction;
-        if (txn && txn.status !== "completed") {
-          const meta = txn.metadata as any;
-          const walletId = meta?.walletId;
-          if (walletId) {
-            const [wallet] = await db.select().from(wallets).where(eq(wallets.id, walletId));
-            if (!wallet || wallet.userId !== userId) {
-              return res.status(403).json({ message: "Wallet not found" });
-            }
-            await applyLedgerEntry({
-              walletId: wallet.id,
+        const settlement = await completeWalletDeposit(txn);
+        if (settlement.applied.applied && gateway === "nexuspay") {
+          const activeBonuses = await db.select().from(depositBonuses)
+            .where(eq(depositBonuses.isActive, true));
+          const depositAmount = Number(txn.amount);
+          const eligible = activeBonuses
+            .filter((bonus) => (bonus.method === "nexuspay" || bonus.method === "any") &&
+              depositAmount >= parseFloat(bonus.minAmount))
+            .map((bonus) => ({
+              bonus,
+              value: bonus.bonusType === "percentage"
+                ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
+                : parseFloat(bonus.bonusAmount),
+            }))
+            .filter(({ value }) => value > 0)
+            .sort((a, b) => b.value - a.value);
+          if (eligible[0]) {
+            const { bonus, value } = eligible[0];
+            const applied = await applyLedgerEntry({
+              walletId: settlement.wallet.id,
               userId,
-              currency: normalizeCurrency(wallet.currency),
-              amount: parseFloat(txn.amount),
-              entryType: "deposit",
-              idempotencyKey: `deposit:${txn.id}`,
+              currency: normalizeCurrency(settlement.wallet.currency),
+              amount: value,
+              entryType: "deposit_bonus",
+              idempotencyKey: `deposit-bonus:${txn.id}:${bonus.id}`,
               transactionId: txn.id,
-              description: txn.description || "Wallet deposit",
+              description: bonus.description || "Deposit bonus",
             });
-
-            // Apply the highest matching configured bonus exactly once.
-            const activeBonuses = await db.select().from(depositBonuses)
-              .where(eq(depositBonuses.isActive, true));
-            const depositAmount = parseFloat(status.amount);
-            const eligible = activeBonuses
-              .filter((bonus) => (bonus.method === "nexuspay" || bonus.method === "any") &&
-                depositAmount >= parseFloat(bonus.minAmount))
-              .map((bonus) => ({
-                bonus,
-                value: bonus.bonusType === "percentage"
-                  ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
-                  : parseFloat(bonus.bonusAmount),
-              }))
-              .filter(({ value }) => value > 0)
-              .sort((a, b) => b.value - a.value);
-            if (eligible[0]) {
-              const { bonus, value } = eligible[0];
-              const applied = await applyLedgerEntry({
-                walletId: wallet.id,
+            if (applied.applied) {
+              await db.insert(transactions).values({
                 userId,
-                currency: normalizeCurrency(wallet.currency),
-                amount: value,
-                entryType: "deposit_bonus",
-                idempotencyKey: `deposit-bonus:${txn.id}:${bonus.id}`,
-                transactionId: txn.id,
-                description: bonus.description || "Deposit bonus",
+                type: "deposit",
+                amount: value.toFixed(2),
+                currency: normalizeCurrency(settlement.wallet.currency),
+                status: "completed",
+                fee: "0.00",
+                description: `Deposit bonus: ${bonus.description || "Global deposit bonus"}`,
+                metadata: { bonusId: bonus.id, triggerMethod: "nexuspay" } as any,
               });
-              if (applied.applied) {
-                await db.insert(transactions).values({
-                  userId,
-                  type: "deposit",
-                  amount: value.toFixed(2),
-                  currency: normalizeCurrency(wallet.currency),
-                  status: "completed",
-                  fee: "0.00",
-                  description: `Deposit bonus: ${bonus.description || "Global deposit bonus"}`,
-                  metadata: { bonusId: bonus.id, triggerMethod: "nexuspay" } as any,
-                });
-              }
             }
           }
-          await db.update(transactions).set({ status: "completed", completedAt: new Date(), updatedAt: new Date() }).where(eq(transactions.id, txn.id));
         }
       } else if (status.status === "failed") {
-        await db.update(transactions).set({ status: "failed", updatedAt: new Date() }).where(eq(transactions.reference, reference));
+        if (existingTransaction.status !== "completed") {
+          await db.update(transactions).set({ status: "failed", updatedAt: new Date() }).where(eq(transactions.id, existingTransaction.id));
+        }
       }
       res.json({ status: status.status, reference, amount: status.amount, currency: status.currency });
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) {
+      console.error("Deposit status check failed:", e);
+      res.status(500).json({ message: "Unable to check deposit status right now." });
+    }
   });
 
   app.post("/api/exchange/swap", requireAuth, async (req, res) => {

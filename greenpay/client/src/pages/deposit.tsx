@@ -23,6 +23,14 @@ type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 interface DepositConfig {
   methods: Record<string, string>;
   usdToKesRate?: number;
+  country?: string;
+  isKenya?: boolean;
+  countryPaymentCurrency?: string | null;
+  paymentReadiness?: {
+    mobileMoney?: boolean;
+    hostedCheckout?: boolean;
+    card?: boolean;
+  };
   providerCurrencies?: Array<{
     code: string;
     providerCode?: string;
@@ -55,11 +63,11 @@ interface CryptoAddress {
 }
 
 const METHOD_META: Record<string, { label: string; icon: any; color: string; description: string }> = {
-  mpesa: { label: "M-Pesa", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Instant mobile-money prompt" },
+  mpesa: { label: "Mobile money", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Receive a payment prompt on your phone" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa and Mastercard" },
-  nexuspay: { label: "Supported currencies", icon: Globe, color: "from-purple-500 to-violet-600", description: "Deposit using a supported currency" },
+  nexuspay: { label: "Local checkout", icon: Globe, color: "from-purple-500 to-violet-600", description: "Pay in the currency available for your country" },
 };
 
 const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
@@ -67,8 +75,6 @@ const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
   ZAR: '🇿🇦', TZS: '🇹🇿', XOF: '🌍', CDF: '🇨🇩', XAF: '🌍',
   RWF: '🇷🇼', SLE: '🇸🇱', ZMW: '🇿🇲', MZN: '🇲🇿', EUR: '🇪🇺', GBP: '🇬🇧',
 };
-
-const PAYHERO_CURRENCIES = ["KES"];
 
 const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
@@ -96,10 +102,8 @@ export default function DepositPage() {
   const [nexusWalletId, setNexusWalletId] = useState<string | null>(null);
   const [nexusCurrency, setNexusCurrency] = useState("KES");
   const [paymentCurrency, setPaymentCurrency] = useState("KES");
-  const [nexusPhone, setNexusPhone] = useState("");
   const [nexusRef, setNexusRef] = useState<string | null>(null);
   const [nexusStatus, setNexusStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
-  const [nexusRedirectUrl, setNexusRedirectUrl] = useState<string | null>(null);
   const { toast } = useToast();
   const { user, refreshUser } = useAuth();
   const queryClient = useQueryClient();
@@ -116,7 +120,6 @@ export default function DepositPage() {
     enabled: !!user?.id,
   });
   const providerCurrencies = config?.providerCurrencies || [];
-  const payingCurrencies = providerCurrencies.map(currency => currency.code);
 
   const { data: cryptoData } = useQuery({
     queryKey: ["/api/crypto/deposit-addresses"],
@@ -129,18 +132,29 @@ export default function DepositPage() {
     const value = methods[`${m}_enabled`];
     return String(value).replace(/['"]/g, "").toLowerCase() === "true";
   };
-  const enabledMethods = (["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).filter(m =>
-    m === "nexuspay" ? true : isEnabled(m)
-  );
+  const depositsEnabled = isEnabled("global");
+  const minimumCardDeposit = Math.ceil(10 * Math.max(1, Number(config?.usdToKesRate) || 1));
+  const enabledMethods = (config?.isKenya
+    ? ["mpesa", "card", "crypto"] as const
+    : ["nexuspay", "crypto"] as const
+  ).filter(method => {
+    if (method === "mpesa") return depositsEnabled && isEnabled("mpesa") && config?.paymentReadiness?.mobileMoney === true;
+    if (method === "card") return depositsEnabled && isEnabled("card") && config?.paymentReadiness?.card === true;
+    if (method === "nexuspay") {
+      return Boolean(config?.countryPaymentCurrency) &&
+        depositsEnabled &&
+        config?.paymentReadiness?.hostedCheckout === true;
+    }
+    return isEnabled(method);
+  });
   // Wallet deposits are controlled by the same master switch enforced by the server.
-  const nexuspayEnabled = isEnabled("global");
-
   const mpesaMutation = useMutation({
     mutationFn: async () => {
       const r = await apiRequest("POST", "/api/deposit/nexuspay", {
         walletId: nexusWalletId,
         currency: nexusCurrency,
         paymentCurrency,
+        paymentMethod: "mobile_money",
         amount,
         phone: mpesaPhone,
         email: user?.email,
@@ -157,10 +171,10 @@ export default function DepositPage() {
       setMpesaRef(data.reference);
       setMpesaCreditedAmount(String(data.amount || ""));
       setMpesaStatus("pending");
-      toast({ title: "STK Push Sent", description: data.message });
+      toast({ title: "Payment prompt sent", description: data.message });
     },
     onError: (err: any) => {
-      toast({ title: "M-Pesa Error", description: err.message, variant: "destructive" });
+      toast({ title: "Mobile-money payment error", description: err.message, variant: "destructive" });
     },
   });
 
@@ -177,7 +191,7 @@ export default function DepositPage() {
         toast({ title: "Deposit Successful!", description: `${getCurrencySymbol(displayWallet?.currency || "USD")} ${mpesaCreditedAmount || amount} has been credited to your wallet.` });
       } else if (data.status === "failed") {
         setMpesaStatus("failed");
-        toast({ title: "Payment Failed", description: "M-Pesa payment was declined or cancelled.", variant: "destructive" });
+        toast({ title: "Payment Failed", description: "The mobile-money payment was declined or cancelled.", variant: "destructive" });
       }
     } catch (e) {}
   }, [mpesaRef, amount, mpesaCreditedAmount, displayWallet?.currency, refreshUser, queryClient, toast]);
@@ -213,15 +227,11 @@ export default function DepositPage() {
   };
 
   function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); setMpesaCreditedAmount(null); }
-  function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); setNexusPhone(""); setNexusRedirectUrl(null); }
+  function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); }
 
   const handleNexusDeposit = async () => {
     if (!amount || parseFloat(amount) <= 0) {
       toast({ title: "Invalid amount", description: "Enter a valid amount", variant: "destructive" });
-      return;
-    }
-    if (PAYHERO_CURRENCIES.includes(paymentCurrency) && !nexusPhone) {
-      toast({ title: "Phone required", description: "Enter your mobile money phone number", variant: "destructive" });
       return;
     }
     if (!nexusWalletId) {
@@ -234,12 +244,11 @@ export default function DepositPage() {
         currency: nexusCurrency,
         paymentCurrency,
         amount: parseFloat(amount),
-        phone: nexusPhone || undefined,
         email: user?.email || undefined,
       });
       if (result.redirectUrl) {
-        setNexusRedirectUrl(result.redirectUrl);
-        window.open(result.redirectUrl, "_blank");
+        window.location.href = result.redirectUrl;
+        return;
       }
       setNexusRef(result.reference);
       setNexusStatus("pending");
@@ -268,8 +277,13 @@ export default function DepositPage() {
     if (!displayWallet) return;
     const targetCurrency = displayWallet.currency.toUpperCase();
     setNexusCurrency(targetCurrency);
-    setPaymentCurrency(current => payingCurrencies.includes(current) ? current : targetCurrency);
-  }, [displayWallet?.id, displayWallet?.currency, payingCurrencies.join(",")]);
+  }, [displayWallet?.id, displayWallet?.currency]);
+
+  useEffect(() => {
+    if (config?.countryPaymentCurrency) {
+      setPaymentCurrency(config.countryPaymentCurrency.toUpperCase());
+    }
+  }, [config?.countryPaymentCurrency]);
 
   // Poll NexusPay status
   useEffect(() => {
@@ -378,9 +392,9 @@ export default function DepositPage() {
             </div>
             <p className="text-sm font-semibold text-muted-foreground mb-3">Available Deposit Methods</p>
               <div className="space-y-3">
-                {(["mpesa", "crypto", "bank_transfer", "card", "nexuspay"] as const).map(method => {
+                {enabledMethods.map(method => {
                   const meta = METHOD_META[method];
-                  const enabled = method === "nexuspay" ? nexuspayEnabled : isEnabled(method);
+                  const enabled = true;
                   const Icon = meta.icon;
                   const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
                   return (
@@ -390,11 +404,8 @@ export default function DepositPage() {
                       onClick={() => {
                         if (!enabled) return;
                         setSelectedMethod(method);
-                        if (method === "mpesa") setPaymentCurrency("KES");
-                        if (method === "nexuspay") {
-                          const preferred = String(displayWallet?.currency || "").toUpperCase();
-                          setPaymentCurrency(payingCurrencies.includes(preferred) ? preferred : "USD");
-                        }
+                        if (method === "mpesa" || method === "card") setPaymentCurrency("KES");
+                        if (method === "nexuspay") setPaymentCurrency(config?.countryPaymentCurrency || "USD");
                       }}
                       disabled={!enabled}
                       data-testid={`method-card-${method}`}
@@ -443,7 +454,7 @@ export default function DepositPage() {
           </motion.div>
         )}
 
-        {/* M-PESA FLOW */}
+        {/* MOBILE-MONEY FLOW */}
         <AnimatePresence>
           {selectedMethod === "mpesa" && (
             <motion.div key="mpesa" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
@@ -471,8 +482,8 @@ export default function DepositPage() {
                       <Smartphone className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm">M-Pesa Deposit</p>
-                      <p className="text-xs text-muted-foreground">M-Pesa payment prompt</p>
+                      <p className="font-semibold text-sm">Mobile-money deposit</p>
+                      <p className="text-xs text-muted-foreground">A payment prompt will be sent to your phone.</p>
                     </div>
                   </div>
 
@@ -491,7 +502,7 @@ export default function DepositPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">M-Pesa Phone Number</label>
+                    <label className="text-xs font-medium text-muted-foreground">Mobile-money phone number</label>
                     <Input
                       type="tel" value={mpesaPhone}
                       onChange={e => setMpesaPhone(e.target.value)}
@@ -507,7 +518,7 @@ export default function DepositPage() {
                     className="w-full bg-green-600 hover:bg-green-500"
                     data-testid="button-send-stk-push"
                   >
-                    {mpesaMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : "Send STK Push"}
+                    {mpesaMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</> : "Send payment prompt"}
                   </Button>
                 </div>
               )}
@@ -519,7 +530,7 @@ export default function DepositPage() {
                   </div>
                   <div>
                     <p className="font-semibold">Check Your Phone</p>
-                    <p className="text-sm text-muted-foreground mt-1">Enter your M-Pesa PIN to complete the {getCurrencySymbol(paymentCurrency)}{amount} deposit.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Complete the {paymentCurrency} {amount} deposit using the prompt on your phone.</p>
                   </div>
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -558,7 +569,7 @@ export default function DepositPage() {
                   <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
                   <div>
                     <p className="font-semibold text-red-600">Payment Failed</p>
-                    <p className="text-sm text-muted-foreground mt-1">The M-Pesa payment was declined or timed out.</p>
+                    <p className="text-sm text-muted-foreground mt-1">The mobile-money payment was declined or timed out.</p>
                   </div>
                   <Button className="w-full" onClick={resetMpesa} data-testid="button-retry-mpesa">Try Again</Button>
                 </div>
@@ -731,33 +742,22 @@ export default function DepositPage() {
                       <Globe className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                  <p className="font-semibold text-sm">Wallet deposit</p>
-                  <p className="text-xs text-muted-foreground">Choose a listed currency to see the available payment flow.</p>
+                    <p className="font-semibold text-sm">Wallet deposit</p>
+                    <p className="text-xs text-muted-foreground">Pay in the currency available for your profile country.</p>
                     </div>
                   </div>
 
-                  {/* Destination and paying currency */}
+                  {/* Destination and country-based checkout currency */}
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Destination wallet</label>
                     <div className="rounded-xl border border-purple-200 bg-purple-50 dark:bg-purple-900/20 dark:border-purple-800 px-3 py-2 text-sm font-semibold">
                       {NEXUS_CURRENCY_FLAGS[nexusCurrency] || "💰"} {displayWallet?.label || nexusCurrency} ({nexusCurrency})
                     </div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Paying currency</label>
-                    <Select value={paymentCurrency} onValueChange={setPaymentCurrency}>
-                      <SelectTrigger data-testid="select-paying-currency">
-                        <SelectValue placeholder="Choose paying currency" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {payingCurrencies.map(currency => (
-                          <SelectItem key={currency} value={currency}>
-                            {NEXUS_CURRENCY_FLAGS[currency] || "💰"} {currency}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      {paymentCurrency === "KES" ? "M-Pesa payment prompt" : "Secure online checkout"}
-                    </p>
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Checkout currency</label>
+                    <div className="rounded-xl border border-border px-3 py-2 text-sm font-semibold">
+                      {NEXUS_CURRENCY_FLAGS[config?.countryPaymentCurrency || "USD"] || "💰"} {config?.countryPaymentCurrency || "USD"}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Available payment options are shown during checkout.</p>
                   </div>
 
                   {/* Amount */}
@@ -776,20 +776,6 @@ export default function DepositPage() {
                       <p className="text-xs text-muted-foreground">The amount will be converted to your {nexusCurrency} wallet currency before it is credited.</p>
                     )}
                   </div>
-
-                  {/* Phone — mobile money only */}
-                  {PAYHERO_CURRENCIES.includes(paymentCurrency) && (
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground">Mobile Money Phone</label>
-                      <Input
-                        type="tel"
-                        value={nexusPhone}
-                        onChange={e => setNexusPhone(e.target.value)}
-                        placeholder={user?.phone || "e.g. +254712345678"}
-                      />
-                      <p className="text-xs text-muted-foreground">Enter the phone number linked to your mobile money account.</p>
-                    </div>
-                  )}
 
                   <Button
                     onClick={handleNexusDeposit}
@@ -811,16 +797,9 @@ export default function DepositPage() {
                   <div>
                     <p className="font-semibold">Payment Initiated</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {nexusRedirectUrl
-                        ? "Complete payment in the tab that opened."
-                        : `Complete the ${nexusCurrency} prompt on your phone.`}
+                      Complete the payment in the checkout page. Your wallet is credited after confirmation.
                     </p>
                   </div>
-                  {nexusRedirectUrl && (
-                    <Button variant="outline" size="sm" onClick={() => window.open(nexusRedirectUrl, "_blank")}>
-                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Open Payment Link
-                    </Button>
-                  )}
                   <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                     <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                     <span>Waiting for confirmation...</span>
@@ -878,9 +857,13 @@ export default function DepositPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">Amount (USD)</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Amount ({config?.countryPaymentCurrency || "local currency"})
+                  </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">$</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                      {getCurrencySymbol(config?.countryPaymentCurrency || "USD")}
+                    </span>
                     <Input
                       type="number" step="0.01" value={amount}
                       onChange={e => setAmount(e.target.value)}
@@ -892,32 +875,38 @@ export default function DepositPage() {
 
                 <Button
                   onClick={async () => {
-                    if (!amount || parseFloat(amount) < 10) {
-                      toast({ title: "Minimum $10", description: "Enter at least $10 to deposit via card.", variant: "destructive" });
+                    if (!amount || parseFloat(amount) < minimumCardDeposit) {
+                      toast({
+                        title: `Minimum KES ${formatNumber(minimumCardDeposit)}`,
+                        description: `Enter at least KES ${formatNumber(minimumCardDeposit)} to deposit via card.`,
+                        variant: "destructive",
+                      });
                       return;
                     }
                     try {
-                      const r = await apiRequest("POST", "/api/deposit/paystack", {
+                      const r = await apiRequest("POST", "/api/deposit/nexuspay", {
                         amount,
                         walletId: nexusWalletId,
                         currency: nexusCurrency,
-                        paymentCurrency,
+                        paymentCurrency: "KES",
+                        paymentMethod: "card",
+                        email: user?.email,
                       });
                       const data = await r.json();
-                      if (data.authorizationUrl) window.location.href = data.authorizationUrl;
-                      else toast({ title: "Error", description: "Card payment could not be started. Please try again later.", variant: "destructive" });
+                      if (data.redirectUrl) window.location.href = data.redirectUrl;
+                      else throw new Error(data.message || "Card payment could not be started.");
                     } catch (e: any) {
-                      toast({ title: "Error", description: "Card payment could not be started. Please try again later.", variant: "destructive" });
+                      toast({ title: "Error", description: e.message || "Card payment could not be started. Please try again later.", variant: "destructive" });
                     }
                   }}
-                  disabled={!amount || parseFloat(amount) < 10}
+                  disabled={!amount || parseFloat(amount) < minimumCardDeposit}
                   className="w-full"
                   data-testid="button-pay-with-card"
                 >
                   Pay with Card
                 </Button>
 
-                 <p className="text-xs text-center text-muted-foreground">Complete your card payment securely. Your selected wallet is credited after confirmation.</p>
+                 <p className="text-xs text-center text-muted-foreground">Your selected wallet is credited after the payment is confirmed.</p>
               </div>
             </motion.div>
           )}

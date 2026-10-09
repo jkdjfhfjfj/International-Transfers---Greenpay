@@ -14,6 +14,7 @@ import { Save, CreditCard, Info, CheckCircle2, CircleAlert, Copy } from "lucide-
 interface PayHeroData {
   channelId?: string;
   virtualCardGateway?: string;
+  kenyaMobileMoneyGateway?: string;
   payheroConfigured?: boolean;
   nexuspayConfigured?: boolean;
   payzaConfigured?: boolean;
@@ -27,7 +28,7 @@ export default function AdminPayHeroSettingsPage() {
 
   const [channelId, setChannelId] = useState("");
   const [cardPrice, setCardPrice] = useState("");
-  const [virtualCardGateway, setVirtualCardGateway] = useState("payhero");
+  const [kenyaMobileMoneyGateway, setKenyaMobileMoneyGateway] = useState("payhero");
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<PayHeroData>({
@@ -42,7 +43,7 @@ export default function AdminPayHeroSettingsPage() {
     if (data) {
       setChannelId(String(data.channelId || ""));
       setCardPrice(String(data.cardPrice || ""));
-      setVirtualCardGateway(String(data.virtualCardGateway || "payhero"));
+      setKenyaMobileMoneyGateway(String(data.kenyaMobileMoneyGateway || data.virtualCardGateway || "payhero"));
     }
   }, [data]);
 
@@ -51,7 +52,7 @@ export default function AdminPayHeroSettingsPage() {
       const r = await apiRequest("PUT", "/api/admin/payhero-settings", {
         channelId,
         cardPrice,
-        virtualCardGateway,
+        kenyaMobileMoneyGateway,
       });
       const result = await r.json();
       if (!r.ok) throw new Error(result.message || "Failed to save payment settings.");
@@ -66,7 +67,7 @@ export default function AdminPayHeroSettingsPage() {
 
   const readinessMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/admin/test-payhero");
+      const response = await apiRequest("POST", "/api/admin/test-payment-providers");
       const result = await response.json();
       if (!response.ok) throw new Error(result.message || "Readiness check failed");
       return result;
@@ -84,10 +85,10 @@ export default function AdminPayHeroSettingsPage() {
     onError: () => toast({ title: "Readiness check failed", description: "Unable to check payment settings.", variant: "destructive" }),
   });
   const providerStatusRows: Array<{ label: string; configured?: boolean }> = [
-    { label: "KES mobile-money deposits", configured: data?.payheroConfigured },
+    { label: "PayHero mobile-money service", configured: data?.payheroConfigured },
+    { label: "MakamescoPay mobile-money service", configured: data?.nexuspayConfigured },
     { label: "PayzaAPI hosted checkout", configured: data?.payzaConfigured },
     { label: "Paystack checkout", configured: data?.paystackConfigured },
-    { label: "Legacy payment flow", configured: data?.nexuspayConfigured },
   ];
   const appOrigin = typeof window === "undefined" ? "" : window.location.origin;
   const callbackUrls = [
@@ -152,12 +153,13 @@ export default function AdminPayHeroSettingsPage() {
                 <CreditCard className="w-5 h-5 text-blue-600" />
               </div>
               <div>
-                <CardTitle>KES mobile-money deposits</CardTitle>
-                <CardDescription>Configure the channel used for Kenyan shilling M-Pesa deposits.</CardDescription>
+              <CardTitle>Kenyan payments and card pricing</CardTitle>
+              <CardDescription>Customers in Kenya can choose mobile money or card. Other countries use hosted checkout in the currency supported for their profile country.</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            {kenyaMobileMoneyGateway === "payhero" && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">Channel ID</Label>
               <Input
@@ -168,6 +170,7 @@ export default function AdminPayHeroSettingsPage() {
               />
               <p className="text-xs text-gray-500">The channel ID for M-Pesa payments in Kenya.</p>
             </div>
+            )}
 
             <div className="space-y-2">
               <Label className="text-sm font-medium">Virtual Card Price (USD)</Label>
@@ -177,28 +180,26 @@ export default function AdminPayHeroSettingsPage() {
                 placeholder="e.g., 60"
                 className="rounded-xl"
               />
-              <p className="text-xs text-gray-500">Base card price; checkout converts it to KES.</p>
+              <p className="text-xs text-gray-500">Base card price; checkout converts it to the payment currency for the customer’s profile country.</p>
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Virtual-card checkout provider</Label>
-              <Select value={virtualCardGateway} onValueChange={setVirtualCardGateway}>
-                <SelectTrigger className="rounded-xl" data-testid="select-virtual-card-gateway">
+              <Label className="text-sm font-medium">Kenyan mobile-money provider</Label>
+              <Select value={kenyaMobileMoneyGateway} onValueChange={setKenyaMobileMoneyGateway}>
+                <SelectTrigger className="rounded-xl" data-testid="select-kenya-mobile-money-provider">
                   <SelectValue placeholder="Choose a provider" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="payhero">PayHero — M-Pesa prompt</SelectItem>
-                  <SelectItem value="nexuspay">NexusPay — mobile-money checkout</SelectItem>
-                  <SelectItem value="paystack">Paystack — card checkout</SelectItem>
-                  <SelectItem value="payzaapi">PayzaAPI — hosted checkout link</SelectItem>
+                  <SelectItem value="nexuspay">MakamescoPay — mobile-money checkout</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-gray-500">This only controls virtual-card purchases; wallet-deposit routing is unchanged.</p>
+              <p className="text-xs text-gray-500">This choice applies to Kenyan mobile-money deposits and virtual-card purchases. Card payments and international hosted checkout use their designated flows.</p>
             </div>
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. Wallet deposits continue to route by currency; virtual-card purchases use the selected provider. Credentials are not stored in this form.</p>
+              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. This form stores only non-secret pricing and provider selection.</p>
             </div>
 
             <div className="flex gap-2">
@@ -246,7 +247,7 @@ export default function AdminPayHeroSettingsPage() {
                 Use matching test or live keys. Configure the same webhook signing secret in Replit Secrets as in the PayzaAPI dashboard.
               </p>
               <p className="text-xs text-muted-foreground">
-                Hosted checkout sends KES payments with STK push disabled and redirects users to the returned payment URL.
+                Hosted checkout uses the customer’s profile-country currency, disables STK push, and lets the customer choose an available method on the hosted page.
               </p>
             </section>
 
@@ -312,8 +313,8 @@ export default function AdminPayHeroSettingsPage() {
                 <Badge variant="outline" className="font-mono text-xs">USD {data.cardPrice || "—"}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-xs text-gray-600">Virtual-card provider</span>
-                <Badge variant="outline" className="font-mono text-xs">{data.virtualCardGateway || "—"}</Badge>
+                <span className="text-xs text-gray-600">Kenyan mobile-money provider</span>
+                <Badge variant="outline" className="font-mono text-xs">{data.kenyaMobileMoneyGateway || data.virtualCardGateway || "—"}</Badge>
               </div>
             </CardContent>
           </Card>

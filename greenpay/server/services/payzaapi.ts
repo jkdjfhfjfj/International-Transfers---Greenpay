@@ -22,6 +22,91 @@ export const PAYZA_API_CURRENCIES = [
   { code: "XAF", providerCode: "XAF", name: "Central African CFA franc", countryOrRegion: "Central African CFA currency region" },
 ] as const;
 
+const PAYZA_COUNTRY_CURRENCY: Record<string, string> = {
+  KE: "KES",
+  KENYA: "KES",
+  NG: "NGN",
+  NIGERIA: "NGN",
+  GH: "GHS",
+  GHANA: "GHS",
+  TZ: "TZS",
+  TANZANIA: "TZS",
+  BJ: "XOF",
+  BENIN: "XOF",
+  BF: "XOF",
+  "BURKINA FASO": "XOF",
+  CI: "XOF",
+  "COTE D IVOIRE": "XOF",
+  "IVORY COAST": "XOF",
+  GW: "XOF",
+  "GUINEA BISSAU": "XOF",
+  ML: "XOF",
+  MALI: "XOF",
+  NE: "XOF",
+  NIGER: "XOF",
+  SN: "XOF",
+  SENEGAL: "XOF",
+  TG: "XOF",
+  TOGO: "XOF",
+  US: "USD",
+  USA: "USD",
+  "UNITED STATES": "USD",
+  RW: "RWF",
+  RWANDA: "RWF",
+  UG: "UGX",
+  UGANDA: "UGX",
+  ZM: "ZMW",
+  ZAMBIA: "ZMW",
+  MW: "MWK",
+  MALAWI: "MWK",
+  SL: "SLE",
+  "SIERRA LEONE": "SLE",
+  CD: "CDF",
+  "DEMOCRATIC REPUBLIC OF THE CONGO": "CDF",
+  "DR CONGO": "CDF",
+  "CONGO KINSHASA": "CDF",
+  MZ: "MZN",
+  MOZAMBIQUE: "MZN",
+  CM: "XAF",
+  CAMEROON: "XAF",
+  TD: "XAF",
+  CHAD: "XAF",
+  CF: "XAF",
+  "CENTRAL AFRICAN REPUBLIC": "XAF",
+  CG: "XAF",
+  "REPUBLIC OF THE CONGO": "XAF",
+  "CONGO BRAZZAVILLE": "XAF",
+  GA: "XAF",
+  GABON: "XAF",
+  GQ: "XAF",
+  "EQUATORIAL GUINEA": "XAF",
+};
+
+function countryKey(country: unknown): string {
+  return String(country || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+}
+
+export function isKenyanCountry(country: unknown): boolean {
+  const key = countryKey(country);
+  return key === "KE" || key === "KENYA" || key === "REPUBLIC OF KENYA";
+}
+
+/**
+ * Resolve profile country to PayzaAPI's supported checkout currency.
+ * USD is the supported cross-border checkout currency for countries without
+ * a listed local currency; an empty country remains unresolved.
+ */
+export function getPayzaCurrencyForCountry(country: unknown): string | undefined {
+  const key = countryKey(country);
+  if (!key) return undefined;
+  return PAYZA_COUNTRY_CURRENCY[key] || "USD";
+}
+
 export function getPayzaApiCurrencyCode(currency: string): string | undefined {
   return PAYZA_API_CURRENCIES.find(item => item.code === currency.toUpperCase())?.providerCode;
 }

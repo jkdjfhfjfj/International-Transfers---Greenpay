@@ -118,7 +118,7 @@ export class NexusPayService {
       reference: payload.reference || reference,
       status: payload.status === 'success' || payload.status === 'completed' ? 'completed' : payload.status === 'failed' || payload.status === 'cancelled' ? 'failed' : 'pending',
       amount: String(payload.amount || payload.amountPaid || 0),
-      currency: payload.currency || 'KES',
+      currency: payload.currency || '',
     };
   }
 
