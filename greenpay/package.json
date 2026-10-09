@@ -9,7 +9,7 @@
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc",
     "test:manual-mpesa": "tsx --test tests/manual-mpesa.test.ts",
-    "test:money-movement": "tsx --test tests/money-movement.test.ts tests/payhero-format.test.ts tests/payzaapi-webhook.test.ts tests/payment-routing.test.ts tests/payment-credential-crypto.test.ts",
+    "test:money-movement": "tsx --test tests/money-movement.test.ts tests/payhero-format.test.ts tests/payzaapi-webhook.test.ts tests/payment-routing.test.ts tests/payment-credential-crypto.test.ts tests/deposit-bonus-methods.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
