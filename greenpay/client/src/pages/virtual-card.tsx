@@ -22,7 +22,7 @@ export default function VirtualCardPage() {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto' | 'manual'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'mobile_money' | 'card' | 'crypto' | 'manual'>('mobile_money');
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
@@ -30,7 +30,6 @@ export default function VirtualCardPage() {
   const [securityPrompt, setSecurityPrompt] = useState<{ pin: boolean; authenticator: boolean } | null>(null);
   const touchStartX = useRef<number | null>(null);
   const { user } = useAuth();
-  const isKenyanUser = ["ke", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -40,6 +39,15 @@ export default function VirtualCardPage() {
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/virtual-card/${user?.id}`);
       return res.json();
+    },
+  });
+
+  const { data: paymentOptions } = useQuery<any>({
+    queryKey: ["/api/virtual-card/payment-options", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/virtual-card/payment-options");
+      return response.json();
     },
   });
 
@@ -85,8 +93,26 @@ export default function VirtualCardPage() {
   const userFrozen = isFrozen && card?.freezeReason === 'Frozen by cardholder';
 
   useEffect(() => {
-    if (paymentMethod === "manual" && !manualPaymentEnabled) setPaymentMethod("auto");
-  }, [paymentMethod, manualPaymentEnabled]);
+    if (!paymentOptions) return;
+    const methodAvailable = paymentMethod === "mobile_money"
+      ? paymentOptions.mobileMoney === true
+      : paymentMethod === "card"
+        ? paymentOptions.card === true
+        : paymentMethod === "manual"
+          ? manualPaymentEnabled
+          : true;
+    if (!methodAvailable) {
+      setPaymentMethod(
+        paymentOptions.mobileMoney
+          ? "mobile_money"
+          : paymentOptions.card
+            ? "card"
+            : manualPaymentEnabled
+              ? "manual"
+              : "crypto",
+      );
+    }
+  }, [paymentMethod, paymentOptions, manualPaymentEnabled]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -230,6 +256,11 @@ export default function VirtualCardPage() {
                     <p className="text-sm font-semibold">•••</p>
                   </div>
                 </div>
+                {showDiscount && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    The current card price applies to all payment methods available for your country.
+                  </p>
+                )}
               </div>
             </div>
           </motion.div>
@@ -297,15 +328,15 @@ export default function VirtualCardPage() {
               </div>
 
               <div className="flex rounded-xl overflow-hidden border border-border">
-                <button onClick={() => setPaymentMethod('auto')}
+                {paymentOptions?.mobileMoney && <button onClick={() => setPaymentMethod('mobile_money')}
                   className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                    paymentMethod === 'auto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
-                  }`} data-testid="button-payment-auto"
+                    paymentMethod === 'mobile_money' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                  }`} data-testid="button-payment-mobile-money"
                 >
-                  {isKenyanUser ? "Mobile money" : "Secure checkout"}
-                  {paymentMethod === 'auto' && <span className="text-[9px] bg-white/20 text-primary-foreground px-1 py-0.5 rounded-full">Auto</span>}
-                </button>
-                {isKenyanUser && (
+                  Mobile money
+                  {paymentMethod === 'mobile_money' && <span className="text-[9px] bg-white/20 text-primary-foreground px-1 py-0.5 rounded-full">Phone prompt</span>}
+                </button>}
+                {paymentOptions?.card && (
                   <button onClick={() => setPaymentMethod("card")}
                     className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
                       paymentMethod === "card" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
@@ -371,10 +402,17 @@ export default function VirtualCardPage() {
                     </p>
                   </div>
                 </div>
-              ) : paymentMethod === 'auto' || paymentMethod === 'card' ? (
+              ) : (
+                (paymentMethod === 'mobile_money' && paymentOptions?.mobileMoney) ||
+                (paymentMethod === 'card' && paymentOptions?.card)
+              ) ? (
                 <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
                   onClick={() => purchaseCardMutation.mutate()}
-                  disabled={purchaseCardMutation.isPending}
+                  disabled={
+                    purchaseCardMutation.isPending ||
+                    (paymentMethod === "mobile_money" && !paymentOptions?.mobileMoney) ||
+                    (paymentMethod === "card" && !paymentOptions?.card)
+                  }
                   data-testid="button-purchase-card-auto"
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
@@ -382,9 +420,7 @@ export default function VirtualCardPage() {
                     ? "Processing..."
                     : paymentMethod === "card"
                       ? `Pay with card · $${currentCardPrice}`
-                      : isKenyanUser
-                        ? `Pay with mobile money · $${currentCardPrice}`
-                        : `Continue to checkout · $${currentCardPrice}`}
+                      : `Pay with mobile money · $${currentCardPrice}`}
                 </Button>
               ) : paymentMethod === "crypto" ? (
                 <div className="space-y-3 text-left">

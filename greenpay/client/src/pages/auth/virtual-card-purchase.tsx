@@ -15,13 +15,21 @@ export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, login } = useAuth();
-  const isKenyanUser = ["ke", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto' | 'manual'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'mobile_money' | 'card' | 'crypto' | 'manual'>('mobile_money');
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
+
+  const { data: paymentOptions } = useQuery<any>({
+    queryKey: ["/api/virtual-card/payment-options", user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/virtual-card/payment-options");
+      return response.json();
+    },
+  });
 
   // Fetch card price settings
   const { data: settingsData } = useQuery({
@@ -87,8 +95,26 @@ export default function VirtualCardPurchasePage() {
   const cryptoCardAmount = cryptoRate > 0 ? parseFloat(currentCardPrice) / cryptoRate : 0;
 
   useEffect(() => {
-    if (paymentMethod === "manual" && !manualPaymentEnabled) setPaymentMethod("auto");
-  }, [paymentMethod, manualPaymentEnabled]);
+    if (!paymentOptions) return;
+    const methodAvailable = paymentMethod === "mobile_money"
+      ? paymentOptions.mobileMoney === true
+      : paymentMethod === "card"
+        ? paymentOptions.card === true
+        : paymentMethod === "manual"
+          ? manualPaymentEnabled
+          : true;
+    if (!methodAvailable) {
+      setPaymentMethod(
+        paymentOptions.mobileMoney
+          ? "mobile_money"
+          : paymentOptions.card
+            ? "card"
+            : manualPaymentEnabled
+              ? "manual"
+              : "crypto",
+      );
+    }
+  }, [paymentMethod, paymentOptions, manualPaymentEnabled]);
 
   // Listen for payment completion (in real app, use webhooks)
   useState(() => {
@@ -220,6 +246,11 @@ export default function VirtualCardPurchasePage() {
                 )}
               </div>
             </div>
+            {showDiscount && (
+              <p className="mb-3 text-xs text-muted-foreground">
+                The current card price applies to all payment methods available for your country.
+              </p>
+            )}
             <div className="text-left space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center">
                 <span className="material-icons text-green-500 text-sm mr-2">check</span>
@@ -268,12 +299,11 @@ export default function VirtualCardPurchasePage() {
             <div className="space-y-3">
               <h3 className="font-semibold text-sm">Choose Payment Method</h3>
               
-              {/* Auto Payment Option (Recommended) */}
-              <motion.div
+              {paymentOptions?.mobileMoney && <motion.div
                 whileTap={{ scale: 0.98 }}
-                onClick={() => setPaymentMethod('auto')}
+                onClick={() => setPaymentMethod('mobile_money')}
                 className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === 'auto' 
+                  paymentMethod === 'mobile_money'
                     ? 'border-primary bg-primary/5' 
                     : 'border-border bg-card hover:border-primary/50'
                 }`}
@@ -281,23 +311,21 @@ export default function VirtualCardPurchasePage() {
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1">
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
-                      paymentMethod === 'auto' ? 'border-primary bg-primary' : 'border-border'
+                      paymentMethod === 'mobile_money' ? 'border-primary bg-primary' : 'border-border'
                     }`}>
-                      {paymentMethod === 'auto' && (
+                      {paymentMethod === 'mobile_money' && (
                         <span className="material-icons text-white text-xs">check</span>
                       )}
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold">{isKenyanUser ? "Mobile money" : "Local checkout"}</h4>
+                        <h4 className="font-semibold">Mobile money</h4>
                         <span className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs px-2 py-0.5 rounded-full font-medium">
                           Recommended
                         </span>
                       </div>
                       <p className="text-xs text-muted-foreground mb-2">
-                        {isKenyanUser
-                          ? "Get a payment prompt on your phone."
-                          : "Continue to checkout using the currency available for your country."}
+                        Get a payment prompt on your phone.
                       </p>
                       <div className="flex items-center gap-2 text-xs">
                         <span className="material-icons text-green-500 text-xs">bolt</span>
@@ -308,9 +336,9 @@ export default function VirtualCardPurchasePage() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </motion.div>}
 
-              {isKenyanUser && (
+              {paymentOptions?.card && (
               <motion.div
                 whileTap={{ scale: 0.98 }}
                 onClick={() => setPaymentMethod("card")}
@@ -391,7 +419,8 @@ export default function VirtualCardPurchasePage() {
             </div>
 
             {/* Auto Payment Details & Button */}
-            {(paymentMethod === 'auto' || paymentMethod === 'card') && (
+            {((paymentMethod === 'mobile_money' && paymentOptions?.mobileMoney) ||
+              (paymentMethod === 'card' && paymentOptions?.card)) && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -400,23 +429,23 @@ export default function VirtualCardPurchasePage() {
                 <Button
                   onClick={handlePurchase}
                   className="w-full ripple"
-                  disabled={initializePayment.isPending}
+                  disabled={
+                    initializePayment.isPending ||
+                    (paymentMethod === "mobile_money" && !paymentOptions?.mobileMoney) ||
+                    (paymentMethod === "card" && !paymentOptions?.card)
+                  }
                   data-testid="button-purchase-card"
                 >
                   {initializePayment.isPending
                     ? "Processing..."
                     : paymentMethod === "card"
                       ? `Pay with card · $${currentCardPrice}`
-                      : isKenyanUser
-                        ? `Pay with mobile money · $${currentCardPrice}`
-                        : `Continue to checkout · $${currentCardPrice}`}
+                      : `Pay with mobile money · $${currentCardPrice}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   {paymentMethod === "card"
                     ? "Your card will be activated after payment confirmation."
-                    : isKenyanUser
-                      ? "Complete the payment using the prompt sent to your phone."
-                      : "Your card will be activated after hosted checkout confirms payment."}
+                    : "Complete the payment using the prompt sent to your phone."}
                 </p>
               </motion.div>
             )}

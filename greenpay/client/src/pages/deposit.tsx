@@ -17,12 +17,14 @@ import {
 } from "lucide-react";
 import { useWallets, useNexusDeposit } from "@/hooks/use-wallets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { depositBonusMatchesMethod } from "@shared/deposit-bonus-methods";
 
 type Method = "mpesa" | "manual_mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
   usdToKesRate?: number | null;
+  usdToPaymentCurrencyRate?: number | null;
   country?: string;
   isKenya?: boolean;
   countryPaymentCurrency?: string | null;
@@ -150,23 +152,27 @@ export default function DepositPage() {
     return String(value).replace(/['"]/g, "").toLowerCase() === "true";
   };
   const depositsEnabled = isEnabled("global");
-  const usdToKesRate = Number(config?.usdToKesRate);
-  const hasUsdToKesRate = Number.isFinite(usdToKesRate) && usdToKesRate > 0;
-  const minimumCardDeposit = hasUsdToKesRate ? Math.ceil(10 * usdToKesRate) : 0;
+  const usdToPaymentCurrencyRate = Number(config?.usdToPaymentCurrencyRate);
+  const hasUsdToPaymentCurrencyRate = Number.isFinite(usdToPaymentCurrencyRate) && usdToPaymentCurrencyRate > 0;
+  const minimumCardDeposit = hasUsdToPaymentCurrencyRate ? Math.ceil(10 * usdToPaymentCurrencyRate) : 0;
   const bankTransferConfigured = ["bank_name", "bank_account_name", "bank_account_number"]
     .every(key => String(methods[key] || "").trim().length > 0);
   const enabledMethods: Exclude<Method, null>[] = [];
   if (depositsEnabled) {
-    if (config?.isKenya) {
-      if (isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) enabledMethods.push("mpesa");
-      if (
-        config.manualMpesa?.enabled === true &&
-        displayWallet?.currency?.toUpperCase() === "KES"
-      ) enabledMethods.push("manual_mpesa");
-      if (isEnabled("card") && config.paymentReadiness?.card === true && hasUsdToKesRate) enabledMethods.push("card");
-    } else if (config?.countryPaymentCurrency && config.paymentReadiness?.hostedCheckout === true) {
-      enabledMethods.push("nexuspay");
+    if (config?.countryPaymentCurrency && isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) {
+      enabledMethods.push("mpesa");
     }
+    if (
+      config?.isKenya &&
+      config.manualMpesa?.enabled === true &&
+      displayWallet?.currency?.toUpperCase() === "KES"
+    ) enabledMethods.push("manual_mpesa");
+    if (
+      config?.countryPaymentCurrency &&
+      isEnabled("card") &&
+      config.paymentReadiness?.card === true &&
+      hasUsdToPaymentCurrencyRate
+    ) enabledMethods.push("card");
     if (isEnabled("crypto") && availableCryptoCoins.length > 0) enabledMethods.push("crypto");
     if (isEnabled("bank_transfer") && bankTransferConfigured) enabledMethods.push("bank_transfer");
   }
@@ -264,7 +270,10 @@ export default function DepositPage() {
   const selectedAddresses = addressesByCoin[displayedCoin] || [];
 
   const bonuses = config?.bonuses || [];
-  const relevantBonuses = bonuses.filter(b => b.isActive && (b.method === (selectedMethod || "any") || b.method === "any"));
+  const relevantBonuses = bonuses.filter(b => b.isActive && depositBonusMatchesMethod(b.method, selectedMethod));
+  const visibleBonuses = selectedMethod
+    ? relevantBonuses
+    : bonuses.filter(b => b.isActive);
 
   const bankDetails = {
     name: methods.bank_name || "",
@@ -392,7 +401,7 @@ export default function DepositPage() {
         </motion.div>
 
         {/* Deposit Bonuses Banner */}
-        {bonuses.filter(b => b.isActive).length > 0 && (
+        {visibleBonuses.length > 0 && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
             className="bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border border-amber-200 dark:border-amber-700 rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -400,8 +409,10 @@ export default function DepositPage() {
               <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Deposit Bonuses Active</p>
             </div>
             <div className="space-y-1.5">
-              {bonuses.filter(b => b.isActive).map(b => {
-                const methodLabel = METHOD_META[b.method]?.label || (b.method === "any" ? "any method" : b.method);
+              {visibleBonuses.map(b => {
+                  const methodLabel = ["mpesa", "mobile_money", "nexuspay"].includes(b.method)
+                    ? "Mobile Money"
+                    : METHOD_META[b.method]?.label || (b.method === "any" ? "any method" : b.method);
                 const bonusDisplay = b.bonusType === "percentage" ? `${b.bonusAmount}%` : `$${parseFloat(b.bonusAmount).toFixed(2)}`;
                 return (
                   <div key={b.id} className="flex items-center gap-2" data-testid={`bonus-item-${b.id}`}>
@@ -453,7 +464,7 @@ export default function DepositPage() {
                   const meta = METHOD_META[method];
                   const enabled = true;
                   const Icon = meta.icon;
-                  const methodBonuses = bonuses.filter(b => b.isActive && (b.method === method || b.method === "any"));
+                  const methodBonuses = bonuses.filter(b => b.isActive && depositBonusMatchesMethod(b.method, method));
                   return (
                     <motion.button
                       key={method}
@@ -461,7 +472,8 @@ export default function DepositPage() {
                       onClick={() => {
                         if (!enabled) return;
                         setSelectedMethod(method);
-                        if (method === "mpesa" || method === "manual_mpesa" || method === "card") setPaymentCurrency("KES");
+                        if (method === "mpesa" || method === "card") setPaymentCurrency(config?.countryPaymentCurrency || "USD");
+                        if (method === "manual_mpesa") setPaymentCurrency("KES");
                         if (method === "nexuspay") setPaymentCurrency(config?.countryPaymentCurrency || "USD");
                       }}
                       disabled={!enabled}
@@ -568,7 +580,7 @@ export default function DepositPage() {
                     <Input
                       type="tel" value={mpesaPhone}
                       onChange={e => setMpesaPhone(e.target.value)}
-                      placeholder={user?.phone || "e.g. 0712345678 or +254712345678"}
+                      placeholder={user?.phone || "Enter a number that can receive payment prompts"}
                       data-testid="input-mpesa-phone"
                     />
                     <p className="text-xs text-muted-foreground">Leave blank to use your registered number</p>
@@ -1034,7 +1046,8 @@ export default function DepositPage() {
 
                 <Button
                   onClick={async () => {
-                    if (!hasUsdToKesRate) {
+                    const paymentCurrency = config?.countryPaymentCurrency || "USD";
+                    if (!hasUsdToPaymentCurrencyRate) {
                       toast({
                         title: "Card deposits are temporarily unavailable",
                         description: "The exchange rate needed to validate this deposit is unavailable.",
@@ -1044,8 +1057,8 @@ export default function DepositPage() {
                     }
                     if (!amount || parseFloat(amount) < minimumCardDeposit) {
                       toast({
-                        title: `Minimum KES ${formatNumber(minimumCardDeposit)}`,
-                        description: `Enter at least KES ${formatNumber(minimumCardDeposit)} to deposit via card.`,
+                        title: `Minimum ${paymentCurrency} ${formatNumber(minimumCardDeposit)}`,
+                        description: `Enter at least ${paymentCurrency} ${formatNumber(minimumCardDeposit)} to deposit via card.`,
                         variant: "destructive",
                       });
                       return;
@@ -1055,7 +1068,7 @@ export default function DepositPage() {
                         amount,
                         walletId: nexusWalletId,
                         currency: nexusCurrency,
-                        paymentCurrency: "KES",
+                        paymentCurrency,
                         paymentMethod: "card",
                         email: user?.email,
                       });
@@ -1066,7 +1079,7 @@ export default function DepositPage() {
                       toast({ title: "Error", description: e.message || "Card payment could not be started. Please try again later.", variant: "destructive" });
                     }
                   }}
-                  disabled={!hasUsdToKesRate || !amount || parseFloat(amount) < minimumCardDeposit}
+                  disabled={!hasUsdToPaymentCurrencyRate || !amount || parseFloat(amount) < minimumCardDeposit}
                   className="w-full"
                   data-testid="button-pay-with-card"
                 >

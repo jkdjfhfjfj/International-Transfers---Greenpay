@@ -50,6 +50,7 @@ import {
   normalizeManualMpesaAmount,
   normalizeManualMpesaReference,
 } from "./services/manual-mpesa";
+import { depositBonusMatchesMethod } from "../shared/deposit-bonus-methods";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
@@ -142,6 +143,63 @@ function settingText(value: unknown, fallback = ""): string {
 function settingEnabled(value: unknown, fallback = false): boolean {
   const normalized = settingText(value, fallback ? "true" : "false").toLowerCase();
   return ["true", "1", "yes", "on"].includes(normalized);
+}
+
+async function getCountryPaymentReadiness(user: any) {
+  const country = String(user?.country || "");
+  const isKenya = isKenyanCountry(country);
+  const hasValidEmail = Boolean(user?.email && user.email.includes("@") && user.email.includes("."));
+
+  if (!country) {
+    return {
+      isKenya: false,
+      countryPaymentCurrency: null,
+      mobileMoney: false,
+      card: false,
+      hostedCheckout: false,
+    };
+  }
+
+  if (isKenya) {
+    const configuredGateway = settingText(
+      (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
+      settingText(
+        (await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value,
+        "payhero",
+      ),
+    ).toLowerCase();
+    const mobileGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+      ? "nexuspay"
+      : "payhero";
+    const [mobileMoney, card] = await Promise.all([
+      mobileGateway === "nexuspay"
+        ? nexusPayService.isConfigured()
+        : payHeroService.getReadiness().then(readiness => readiness.configured),
+      hasValidEmail ? paystackService.isConfigured() : Promise.resolve(false),
+    ]);
+    return {
+      isKenya: true,
+      countryPaymentCurrency: "KES",
+      mobileMoney,
+      card,
+      hostedCheckout: false,
+    };
+  }
+
+  const countryPaymentCurrency = getPayzaCurrencyForCountry(country);
+  const hostedCheckout = Boolean(
+    countryPaymentCurrency &&
+    getPayzaApiCurrencyCode(countryPaymentCurrency) &&
+    hasValidEmail &&
+    await payzaApiService.isConfigured(),
+  );
+  return {
+    isKenya: false,
+    countryPaymentCurrency: countryPaymentCurrency || null,
+    mobileMoney: hostedCheckout,
+    card: hostedCheckout,
+    hostedCheckout,
+  };
 }
 
 async function getLoginSecondFactors(user: any) {
@@ -461,7 +519,80 @@ async function completeWalletDeposit(transaction: {
   await db.update(transactions)
     .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
     .where(eq(transactions.id, transaction.id));
+  if (applied.applied) {
+    const gateway = String(metadata.gateway || "").trim().toLowerCase();
+    const paymentMethod = String(
+      metadata.paymentMethod ||
+      metadata.channel ||
+      (gateway === "paystack" ? "card" : ["payhero", "nexuspay", "makamesco", "makamescopay"].includes(gateway) ? "mobile_money" : ""),
+    ).trim().toLowerCase();
+    await applyEligibleDepositBonus(transaction, wallet, paymentMethod);
+  }
   return { wallet, applied };
+}
+
+async function applyEligibleDepositBonus(
+  transaction: { id: string; userId: string; amount: string; metadata: unknown },
+  wallet: { id: string; currency: string },
+  paymentMethod: string,
+) {
+  if (!paymentMethod) return;
+  try {
+    const activeBonuses = await db.select().from(depositBonuses)
+      .where(eq(depositBonuses.isActive, true));
+    const depositAmount = Number(transaction.amount);
+    const eligible = activeBonuses
+      .filter(bonus =>
+        depositBonusMatchesMethod(bonus.method, paymentMethod) &&
+        depositAmount >= Number.parseFloat(bonus.minAmount),
+      )
+      .map(bonus => ({
+        bonus,
+        value: bonus.bonusType === "percentage"
+          ? (depositAmount * Number.parseFloat(bonus.bonusAmount)) / 100
+          : Number.parseFloat(bonus.bonusAmount),
+      }))
+      .filter(({ value }) => Number.isFinite(value) && value > 0)
+      .sort((a, b) => b.value - a.value);
+
+    if (!eligible[0]) return;
+    const { bonus, value } = eligible[0];
+    const currency = normalizeCurrency(wallet.currency);
+    const applied = await applyLedgerEntry({
+      walletId: wallet.id,
+      userId: transaction.userId,
+      currency,
+      amount: value,
+      entryType: "deposit_bonus",
+      idempotencyKey: `deposit-bonus:${transaction.id}:${bonus.id}`,
+      transactionId: transaction.id,
+      description: bonus.description || "Deposit bonus",
+    });
+    if (!applied.applied) return;
+
+    await db.insert(transactions).values({
+      userId: transaction.userId,
+      type: "deposit",
+      amount: value.toFixed(2),
+      currency,
+      status: "completed",
+      fee: "0.00",
+      description: `Deposit bonus: ${bonus.description || "Deposit bonus"}`,
+      metadata: {
+        bonusId: bonus.id,
+        bonusType: "deposit_bonus",
+        triggerMethod: paymentMethod,
+      } as any,
+    });
+    notificationService.sendNotification({
+      userId: transaction.userId,
+      title: "Deposit Bonus Credited!",
+      message: `You received ${currency} ${value.toFixed(2)} as a deposit bonus.`,
+      type: "success",
+    }).catch(error => console.error("[Deposit Bonus] Notification failed:", error));
+  } catch (error) {
+    console.error("[Deposit Bonus] Unable to apply an eligible bonus:", error);
+  }
 }
 
 async function completePayzaDeposit(transaction: {
@@ -3420,6 +3551,25 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Virtual Card routes with Paystack integration
+  app.get("/api/virtual-card/payment-options", requireAuth, async (req, res) => {
+    try {
+      const userId = (req.session as any).userId;
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const readiness = await getCountryPaymentReadiness(user);
+      res.json({
+        isKenya: readiness.isKenya,
+        countryPaymentCurrency: readiness.countryPaymentCurrency,
+        mobileMoney: readiness.mobileMoney && Boolean(String(user.phone || "").trim()),
+        card: readiness.card,
+      });
+    } catch (error) {
+      console.error("[Card Payment Options] Unable to load payment options:", error);
+      res.status(500).json({ message: "Payment options are temporarily unavailable." });
+    }
+  });
+
   app.post("/api/virtual-card/initialize-payment", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
@@ -3449,7 +3599,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const usdAmount = parseFloat(cardPriceSetting?.value || "60.00");
       const isKenya = isKenyanCountry(user.country);
       const requestedMethod = String(req.body?.paymentMethod || "mobile_money").trim().toLowerCase();
-      if (isKenya && !["mobile_money", "card"].includes(requestedMethod)) {
+      if (!["mobile_money", "card"].includes(requestedMethod)) {
         return res.status(400).json({ message: "Choose mobile money or card." });
       }
       const mobileGatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
@@ -3487,7 +3637,7 @@ p{color:#6b7280;font-size:14px;}</style>
         : Math.max(1, Math.round(usdAmount * exchangeRate));
       const reference = payHeroService.generateReference();
 
-      if (gateway === "payhero" || gateway === "nexuspay") {
+      if (requestedMethod === "mobile_money" && (gateway === "payhero" || gateway === "nexuspay" || gateway === "payzaapi")) {
         if (!user.phone) {
           return res.status(400).json({ message: "A phone number is required for this payment method. Please update your profile." });
         }
@@ -3527,7 +3677,7 @@ p{color:#6b7280;font-size:14px;}</style>
           gatewayAmount: gatewayAmount.toString(),
           gatewayCurrency,
           paymentCurrency: gatewayCurrency,
-          paymentMethod: isKenya ? (requestedMethod === "card" ? "card" : "mobile_money") : "hosted_checkout",
+          paymentMethod: requestedMethod,
           cardPrice: usdAmount.toFixed(2),
           status_reason: "Awaiting payment confirmation.",
         },
@@ -3602,15 +3752,22 @@ p{color:#6b7280;font-size:14px;}</style>
               usdAmount: usdAmount.toFixed(2),
               exchangeRate: exchangeRate.toString(),
             },
-            stkPush: false,
+            stkPush: requestedMethod === "mobile_money",
           });
-          if (!payment.paymentUrl || ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())) {
+          if (
+            (requestedMethod === "card" && !payment.paymentUrl) ||
+            ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())
+          ) {
             throw new Error("Hosted checkout could not be started");
           }
           paymentReference = payment.reference || reference;
           paymentStatus = payment.status || "pending";
           redirectUrl = payment.paymentUrl;
-          paymentMessage = "Redirecting you to complete the payment.";
+          paymentMessage = requestedMethod === "mobile_money"
+            ? redirectUrl
+              ? "Continue to complete the mobile-money payment."
+              : "Check your phone for the payment prompt."
+            : "Redirecting you to complete the card payment.";
         } catch (error) {
           console.error("[Card Purchase] PayzaAPI initialization failed:", error);
           await storage.updateTransaction(transaction.id, {
@@ -3802,56 +3959,6 @@ p{color:#6b7280;font-size:14px;}</style>
               }
             } catch (_) {}
 
-            // Check for applicable deposit bonuses — apply highest matching bonus
-            try {
-              const activeBonuses = await db.select().from(depositBonuses)
-                .where(eq(depositBonuses.isActive, true));
-              // Filter eligible bonuses and pick the one with highest bonusValue
-              const eligible = activeBonuses
-                .filter(b => (b.method === 'mpesa' || b.method === 'any') && depositAmount >= parseFloat(b.minAmount))
-                .map(b => ({
-                  bonus: b,
-                  value: b.bonusType === 'percentage'
-                    ? (depositAmount * parseFloat(b.bonusAmount)) / 100
-                    : parseFloat(b.bonusAmount)
-                }))
-                .filter(e => e.value > 0)
-                .sort((a, b) => b.value - a.value); // highest bonus first
-
-              if (eligible.length > 0) {
-                const { bonus, value: bonusValue } = eligible[0];
-                const bonusApplied = await applyLedgerEntry({
-                  walletId: depositWallet.id,
-                  userId: transaction.userId,
-                  currency: depositCurrency,
-                  amount: bonusValue,
-                  entryType: "deposit_bonus",
-                  idempotencyKey: `deposit-bonus:${transaction.id}:${bonus.id}`,
-                  transactionId: transaction.id,
-                  description: bonus.description || "Deposit bonus",
-                });
-                if (bonusApplied.applied) {
-                  await storage.createTransaction({
-                    userId: transaction.userId,
-                    type: 'deposit',
-                    amount: bonusValue.toFixed(2),
-                    currency: depositCurrency,
-                    status: 'completed',
-                    description: `Deposit bonus: ${bonus.description || `+${depositCurrency} ${bonusValue.toFixed(2)} for a mobile-money deposit`}`,
-                    fee: '0.00',
-                    metadata: { bonusId: bonus.id, bonusType: 'deposit_bonus', triggerMethod: 'mpesa' }
-                  });
-                  notificationService.sendNotification({
-                    userId: transaction.userId,
-                    title: "Deposit Bonus Credited!",
-                    message: `You received ${depositCurrency} ${bonusValue.toFixed(2)} as a deposit bonus.`,
-                    type: "success"
-                  }).catch(err => console.error('Bonus notification error:', err));
-                }
-              }
-            } catch (bonusErr) {
-              console.error('[PayHero Bonus Error]:', bonusErr);
-            }
           }
         }
       } else if (providerConfirmedFailure && transaction.status !== "completed") {
@@ -4185,7 +4292,8 @@ p{color:#6b7280;font-size:14px;}</style>
       ).toLowerCase();
       const user = await storage.getUser((req.session as any).userId);
       const country = String(user?.country || "");
-      const isKenya = isKenyanCountry(country);
+      const paymentReadiness = await getCountryPaymentReadiness(user);
+      const isKenya = paymentReadiness.isKenya;
       const [manualEnabledSetting, manualPaybillSetting, manualAccountSetting] = await Promise.all([
         storage.getSystemSetting("manual_mpesa", "enabled"),
         storage.getSystemSetting("manual_mpesa", "paybill"),
@@ -4197,35 +4305,42 @@ p{color:#6b7280;font-size:14px;}</style>
         settingEnabled(settingsMap.global_enabled, false) &&
         settingEnabled(manualEnabledSetting?.value, false) &&
         Boolean(manualPaybill && manualAccount);
-      const kenyaMobileMoneyGateway = settingText(
-        (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
-        settingText((await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value, "payhero"),
-      ).toLowerCase();
       let usdToKesRate: number | null = null;
       try {
         usdToKesRate = await getUsdToKesRate();
       } catch (error) {
         console.error("[Deposit Config] USD/KES rate is unavailable:", error);
       }
+      let usdToPaymentCurrencyRate: number | null = null;
+      try {
+        const paymentCurrency = paymentReadiness.countryPaymentCurrency;
+        if (paymentCurrency === "USD") {
+          usdToPaymentCurrencyRate = 1;
+        } else if (paymentCurrency === "KES") {
+          usdToPaymentCurrencyRate = usdToKesRate;
+        } else if (paymentCurrency) {
+          usdToPaymentCurrencyRate = await createExchangeRateService(storage)
+            .getExchangeRate("USD", paymentCurrency);
+        }
+      } catch (error) {
+        console.error("[Deposit Config] USD/payment currency rate is unavailable:", error);
+      }
+      if (!Number.isFinite(usdToPaymentCurrencyRate) || Number(usdToPaymentCurrencyRate) <= 0) {
+        paymentReadiness.card = false;
+        usdToPaymentCurrencyRate = null;
+      }
       res.json({
         methods: { ...settingsMap, default_gateway: defaultGateway },
         bonuses: activeBonuses,
         usdToKesRate,
+        usdToPaymentCurrencyRate,
         country,
         isKenya,
-        countryPaymentCurrency: isKenya ? "KES" : getPayzaCurrencyForCountry(country),
+        countryPaymentCurrency: paymentReadiness.countryPaymentCurrency,
         manualMpesa: manualMpesaEnabled
           ? { enabled: true, paybill: manualPaybill, account: manualAccount }
           : { enabled: false },
-        paymentReadiness: {
-          mobileMoney: isKenya
-            ? (["nexuspay", "makamesco", "makamescopay"].includes(kenyaMobileMoneyGateway)
-              ? await nexusPayService.isConfigured()
-              : (await payHeroService.getReadiness()).configured)
-            : false,
-          hostedCheckout: isKenya ? false : await payzaApiService.isConfigured(),
-          card: isKenya ? await paystackService.isConfigured() : false,
-        },
+        paymentReadiness,
         providerCurrencies: [
           { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya" },
           ...PAYZA_API_CURRENCIES.filter(currency => currency.code !== "KES")
@@ -15577,23 +15692,33 @@ Sitemap: https://geepay.us/sitemap.xml`;
         : await createExchangeRateService(storage).getExchangeRate(normalizedPaymentCurrency, normalizedCurrency);
       const creditedAmount = inputAmount * exchangeRate;
       const requestedMethod = String(req.body.paymentMethod || "mobile_money").trim().toLowerCase();
-      if (isKenya && !["mobile_money", "card"].includes(requestedMethod)) {
+      if (!["mobile_money", "card"].includes(requestedMethod)) {
         return res.status(400).json({ message: "Choose mobile money or card." });
       }
-      if (isKenya) {
-        const methodKey = requestedMethod === "card" ? "card_enabled" : "mpesa_enabled";
-        const methodSetting = await storage.getSystemSetting("deposit_methods", methodKey);
-        if (!settingEnabled(methodSetting?.value)) {
-          return res.status(403).json({ message: "This deposit method is currently disabled." });
-        }
+      const methodKey = requestedMethod === "card" ? "card_enabled" : "mpesa_enabled";
+      const methodSetting = await storage.getSystemSetting("deposit_methods", methodKey);
+      if (!settingEnabled(methodSetting?.value)) {
+        return res.status(403).json({ message: "This deposit method is currently disabled." });
       }
       if (!Number.isFinite(exchangeRate) || exchangeRate <= 0 || !Number.isFinite(creditedAmount) || creditedAmount <= 0) {
         return res.status(503).json({ message: "The deposit exchange rate is temporarily unavailable." });
       }
-      if (isKenya && requestedMethod === "card" && inputAmount < 10 * (await getUsdToKesRate())) {
-        return res.status(400).json({ message: "The minimum card deposit is the equivalent of USD 10 in KES." });
+      if (requestedMethod === "card") {
+        const usdToPaymentRate = normalizedPaymentCurrency === "USD"
+          ? 1
+          : normalizedPaymentCurrency === "KES"
+            ? await getUsdToKesRate()
+            : await createExchangeRateService(storage).getExchangeRate("USD", normalizedPaymentCurrency);
+        if (!Number.isFinite(usdToPaymentRate) || usdToPaymentRate <= 0) {
+          return res.status(503).json({ message: "The card deposit exchange rate is temporarily unavailable." });
+        }
+        if (inputAmount < 10 * usdToPaymentRate) {
+          return res.status(400).json({
+            message: `The minimum card deposit is the equivalent of USD 10 in ${normalizedPaymentCurrency}.`,
+          });
+        }
       }
-      const channel = isKenya ? requestedMethod : "hosted_checkout";
+      const channel = requestedMethod;
 
       let selectedGateway: "payhero" | "nexuspay" | "payzaapi" | "paystack";
       if (!isKenya) {
@@ -15630,7 +15755,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
 
       const customerPhone = String(phone || customer.phone || "").trim();
-      if (selectedGateway !== "payzaapi" && !customerPhone) {
+      if (requestedMethod === "mobile_money" && !customerPhone) {
         return res.status(400).json({ message: "Enter a phone number for the mobile-money payment prompt." });
       }
 
@@ -15653,6 +15778,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         metadata: {
           walletId,
           channel,
+          paymentMethod: requestedMethod,
           gateway: selectedGateway,
           paymentCurrency: normalizedPaymentCurrency,
           paymentAmount: inputAmount,
@@ -15675,10 +15801,13 @@ Sitemap: https://geepay.us/sitemap.xml`;
             redirectUrl: `${req.protocol}://${req.get("host")}/payment-processing?reference=${encodeURIComponent(reference)}&type=deposit`,
             cancelUrl: `${req.protocol}://${req.get("host")}/deposit?walletId=${encodeURIComponent(walletId)}`,
             description: `Deposit to ${normalizedCurrency} wallet`,
-            metadata: { userId, walletId, currency: normalizedCurrency },
-            stkPush: false,
+            metadata: { userId, walletId, currency: normalizedCurrency, paymentMethod: requestedMethod },
+            stkPush: requestedMethod === "mobile_money",
           });
-          if (!payment.paymentUrl || ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())) {
+          if (
+            (requestedMethod === "card" && !payment.paymentUrl) ||
+            ["failed", "cancelled", "rejected"].includes(String(payment.status).toLowerCase())
+          ) {
             throw new Error("Hosted checkout could not be started");
           }
           result = { reference: payment.reference || reference, status: payment.status, redirectUrl: payment.paymentUrl };
@@ -15712,7 +15841,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
         } else if (selectedGateway === "nexuspay") {
           const payment = await nexusPayService.checkout({
             amount: inputAmount,
-            currency: "KES",
+            currency: normalizedPaymentCurrency,
             channel: "mobile_money",
             phone: customerPhone,
             email: customer.email || undefined,
@@ -15912,48 +16041,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
       if (status.status === "completed") {
         const txn = existingTransaction;
-        const settlement = await completeWalletDeposit(txn);
-        if (settlement.applied.applied && gateway === "nexuspay") {
-          const activeBonuses = await db.select().from(depositBonuses)
-            .where(eq(depositBonuses.isActive, true));
-          const depositAmount = Number(txn.amount);
-          const eligible = activeBonuses
-            .filter((bonus) => (bonus.method === "nexuspay" || bonus.method === "any") &&
-              depositAmount >= parseFloat(bonus.minAmount))
-            .map((bonus) => ({
-              bonus,
-              value: bonus.bonusType === "percentage"
-                ? (depositAmount * parseFloat(bonus.bonusAmount)) / 100
-                : parseFloat(bonus.bonusAmount),
-            }))
-            .filter(({ value }) => value > 0)
-            .sort((a, b) => b.value - a.value);
-          if (eligible[0]) {
-            const { bonus, value } = eligible[0];
-            const applied = await applyLedgerEntry({
-              walletId: settlement.wallet.id,
-              userId,
-              currency: normalizeCurrency(settlement.wallet.currency),
-              amount: value,
-              entryType: "deposit_bonus",
-              idempotencyKey: `deposit-bonus:${txn.id}:${bonus.id}`,
-              transactionId: txn.id,
-              description: bonus.description || "Deposit bonus",
-            });
-            if (applied.applied) {
-              await db.insert(transactions).values({
-                userId,
-                type: "deposit",
-                amount: value.toFixed(2),
-                currency: normalizeCurrency(settlement.wallet.currency),
-                status: "completed",
-                fee: "0.00",
-                description: `Deposit bonus: ${bonus.description || "Global deposit bonus"}`,
-                metadata: { bonusId: bonus.id, triggerMethod: "nexuspay" } as any,
-              });
-            }
-          }
-        }
+        await completeWalletDeposit(txn);
       } else if (status.status === "failed") {
         if (existingTransaction.status !== "completed") {
           await db.update(transactions).set({ status: "failed", updatedAt: new Date() }).where(eq(transactions.id, existingTransaction.id));
