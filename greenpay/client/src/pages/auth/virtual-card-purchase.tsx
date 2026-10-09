@@ -446,12 +446,15 @@ export default function VirtualCardPurchasePage() {
             className="bg-card p-4 rounded-xl border border-border mb-4 elevation-1"
           >
             <div className="flex items-center justify-between mb-3">
-              <span className="font-medium">Virtual Card (Annual)</span>
-              <div className="flex items-center gap-2">
+              <span className="font-medium">One-time card price</span>
+              <div className="flex items-center justify-end gap-2 flex-wrap">
                 {showDiscount && (
-                  <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
+                  <span className="text-sm line-through text-muted-foreground">USD {originalPrice}</span>
                 )}
-                <span className="text-xl font-bold text-primary">${currentCardPriceNumber.toFixed(2)}</span>
+                <span className="text-xl font-bold text-primary">USD {currentCardPriceNumber.toFixed(2)}</span>
+                <span className="rounded-full bg-primary/10 px-3 py-1.5 text-[10px] font-bold text-primary">
+                  FIXED PRICE
+                </span>
                 {showDiscount && (
                   <div className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
                     {discountPct}% OFF
@@ -780,7 +783,7 @@ export default function VirtualCardPurchasePage() {
                   </div>
                 </div>
 
-                <Button variant="outline" className="w-full" onClick={() => setLocation("/live-chat")} data-testid="button-bank-transfer-support">
+                <Button className="w-full" onClick={() => setLocation("/live-chat")} data-testid="button-bank-transfer-support">
                   Contact support
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
