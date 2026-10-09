@@ -15198,7 +15198,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
 
       // Get card price
-      const cardPriceSetting = await storage.getSystemSetting("general", "card_price");
+      const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const cardPriceUSD = parseFloat(cardPriceSetting?.value || "60.00");
       const cryptoAmount = (cardPriceUSD / rate);
 

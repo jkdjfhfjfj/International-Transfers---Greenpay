@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import { Bitcoin, Check, CheckCircle2, CircleDollarSign, Clock, CreditCard, Loader2, Smartphone, XCircle } from "lucide-react";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
 
@@ -19,6 +20,16 @@ export default function VirtualCardPurchasePage() {
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<'mobile_money' | 'card' | 'crypto' | 'manual'>('mobile_money');
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
+  const [paymentResult, setPaymentResult] = useState<"verifying" | "success" | "failed" | null>(null);
+  const [paymentFeedbackMessage, setPaymentFeedbackMessage] = useState("");
+  const [checkoutStarted, setCheckoutStarted] = useState(false);
+  const [cryptoPaymentDetails, setCryptoPaymentDetails] = useState<{
+    amount: string;
+    coin: string;
+    transactionId: string;
+    network: string;
+  } | null>(null);
+  const verificationStarted = useRef(false);
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
 
@@ -71,28 +82,51 @@ export default function VirtualCardPurchasePage() {
       return data;
     },
     onSuccess: (data) => {
+      setCryptoPaymentDetails({
+        amount: String(data.cryptoAmount || ""),
+        coin: String(data.coin || cryptoCoin),
+        transactionId: String(data.cryptoTransaction?.id || ""),
+        network: String(data.cryptoTransaction?.network || ""),
+      });
       toast({
-        title: "Crypto card purchase started",
+        title: "Crypto payment awaiting confirmation",
         description: data.message,
       });
     },
     onError: (error: any) => {
+      setCryptoPaymentDetails(null);
       toast({ title: "Crypto payment failed", description: error.message, variant: "destructive" });
     },
   });
 
-  const currentCardPrice = (settingsData as any)?.price || "60.00";
+  const currentCardPrice = String((settingsData as any)?.price || "60.00");
+  const currentCardPriceNumber = Number(currentCardPrice);
   const originalPrice = "60.00";
-  const hasDiscount = parseFloat(currentCardPrice) < parseFloat(originalPrice);
+  const hasDiscount = currentCardPriceNumber < parseFloat(originalPrice);
   const discountEnabled = (discountData as any)?.enabled !== false;
   const discountPct = hasDiscount
-    ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
+    ? Math.round((1 - currentCardPriceNumber / parseFloat(originalPrice)) * 100)
     : 0;
   const showDiscount = discountEnabled && hasDiscount;
   const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
-  const cryptoCardAmount = cryptoRate > 0 ? parseFloat(currentCardPrice) / cryptoRate : 0;
+  const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
+  const { data: kesCardQuote, isLoading: kesQuoteLoading, isError: kesQuoteError } = useQuery<{
+    usdAmount: number;
+    kesAmount: number;
+    exchangeRate: number;
+  }>({
+    queryKey: ["/api/convert-to-kes", currentCardPrice],
+    queryFn: async () => {
+      const response = await apiRequest("POST", "/api/convert-to-kes", { usdAmount: currentCardPrice });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.message || "Card price conversion is unavailable");
+      return data;
+    },
+    enabled: Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     if (!paymentOptions) return;
@@ -116,43 +150,74 @@ export default function VirtualCardPurchasePage() {
     }
   }, [paymentMethod, paymentOptions, manualPaymentEnabled]);
 
-  // Listen for payment completion (in real app, use webhooks)
-  useState(() => {
-    const checkPaymentStatus = () => {
-      const urlParams = new URLSearchParams(window.location.search);
-      const reference = urlParams.get('reference');
-      const status = urlParams.get('status');
-      
-      if (reference && status === 'success') {
-        verifyPayment.mutate(reference, {
-          onSuccess: () => {
-            setLocation('/dashboard');
+  useEffect(() => {
+    if (verificationStarted.current) return;
+    const urlParams = new URLSearchParams(window.location.search);
+    const reference = urlParams.get("reference");
+    const status = urlParams.get("status")?.toLowerCase();
+    const error = urlParams.get("error");
+
+    if (reference && status === "success") {
+      verificationStarted.current = true;
+      setPaymentReference(reference);
+      setPaymentResult("verifying");
+      setPaymentFeedbackMessage("Confirming your payment with the provider before activating the card.");
+      verifyPayment.mutate(reference, {
+        onSuccess: data => {
+          if (data.success && data.card) {
+            setPaymentResult("success");
+            setPaymentFeedbackMessage("Payment verified. Your virtual card is active.");
+            window.setTimeout(() => setLocation("/dashboard"), 1800);
+          } else {
+            setPaymentResult("failed");
+            setPaymentFeedbackMessage(data.message || "Payment is not confirmed yet. Your card has not been activated.");
           }
-        });
-      }
-    };
-    
-    checkPaymentStatus();
-  });
+        },
+        onError: (verificationError: any) => {
+          setPaymentResult("failed");
+          setPaymentFeedbackMessage(verificationError.message || "We could not verify this payment. Your card has not been activated.");
+        },
+      });
+    } else if (status === "failed" || status === "cancelled" || error) {
+      verificationStarted.current = true;
+      setPaymentReference(reference);
+      setPaymentResult("failed");
+      setPaymentFeedbackMessage("No payment was confirmed. If you completed the payment, contact support before trying again.");
+    }
+  }, [setLocation, verifyPayment]);
 
   const handlePurchase = () => {
+    setCheckoutStarted(true);
+    setPaymentResult(null);
+    setPaymentFeedbackMessage("");
     initializePayment.mutate(paymentMethod === "card" ? "card" : "mobile_money", {
       onSuccess: (data) => {
         const redirectUrl = data.redirectUrl || data.authorization_url;
         if (redirectUrl) {
           window.location.href = redirectUrl;
         } else if (data.reference) {
+          setPaymentReference(data.reference);
           setLocation(`/payment-processing?reference=${encodeURIComponent(data.reference)}&type=virtual-card`);
+        } else {
+          setCheckoutStarted(false);
+          setPaymentResult("failed");
+          setPaymentFeedbackMessage("The payment provider did not return a checkout link. Please try again.");
         }
       },
       onError: (error: any) => {
-        toast({
-          title: "Payment Failed",
-          description: error.message || "Unable to initialize payment. Please try again.",
-          variant: "destructive",
-        });
+        setCheckoutStarted(false);
+        setPaymentResult("failed");
+        setPaymentFeedbackMessage(error.message || "Unable to start secure checkout. Please try again.");
       }
     });
+  };
+
+  const retryAfterPaymentFeedback = () => {
+    window.history.replaceState({}, "", window.location.pathname);
+    verificationStarted.current = false;
+    setPaymentReference(null);
+    setPaymentResult(null);
+    setPaymentFeedbackMessage("");
   };
 
   return (
@@ -238,7 +303,7 @@ export default function VirtualCardPurchasePage() {
                 {showDiscount && (
                   <span className="text-sm line-through text-muted-foreground">${originalPrice}</span>
                 )}
-                <span className="text-xl font-bold text-primary">${currentCardPrice}</span>
+                <span className="text-xl font-bold text-primary">${currentCardPriceNumber.toFixed(2)}</span>
                 {showDiscount && (
                   <div className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-bold">
                     {discountPct}% OFF
@@ -251,6 +316,30 @@ export default function VirtualCardPurchasePage() {
                 The current card price applies to all payment methods available for your country.
               </p>
             )}
+            <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2 text-left">
+              <div className="flex items-center justify-between gap-3 text-xs">
+                <span className="text-muted-foreground">KES equivalent</span>
+                <span className="font-semibold text-foreground">
+                  {kesQuoteLoading
+                    ? "Getting live rate…"
+                    : kesQuoteError || !kesCardQuote
+                      ? "Temporarily unavailable"
+                      : `KES ${Number(kesCardQuote.kesAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                </span>
+              </div>
+              {kesCardQuote && (
+                <p className="text-[11px] text-muted-foreground">
+                  Live rate: 1 USD = KES {Number(kesCardQuote.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}. The final amount is confirmed at checkout.
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-3 border-t border-primary/10 pt-2 text-xs">
+                <span className="text-muted-foreground">GreenPay purchase fee</span>
+                <span className="font-semibold text-foreground">USD 0.00</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Fixed one-time price. Minimum and maximum purchase amount are both USD {currentCardPriceNumber.toFixed(2)}; provider or mobile-network charges, if any, are shown before you confirm.
+              </p>
+            </div>
             <div className="text-left space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center">
                 <span className="material-icons text-green-500 text-sm mr-2">check</span>
@@ -270,6 +359,59 @@ export default function VirtualCardPurchasePage() {
               </div>
             </div>
           </motion.div>
+
+          {(checkoutStarted || paymentResult) && (
+            <div
+              className={`mb-5 rounded-2xl border p-4 text-left ${
+                paymentResult === "success"
+                  ? "border-green-200 bg-green-50 dark:border-green-900 dark:bg-green-950/30"
+                  : paymentResult === "failed"
+                    ? "border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30"
+                    : "border-primary/20 bg-primary/[0.04]"
+              }`}
+              role={paymentResult === "failed" ? "alert" : "status"}
+              data-testid="card-purchase-payment-feedback"
+            >
+              <div className="flex items-start gap-3">
+                {paymentResult === "success"
+                  ? <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
+                  : paymentResult === "failed"
+                    ? <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+                    : <Loader2 className="mt-0.5 h-5 w-5 shrink-0 animate-spin text-primary" />}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    {paymentResult === "success"
+                      ? "Payment confirmed"
+                      : paymentResult === "failed"
+                        ? "Payment not confirmed"
+                        : paymentResult === "verifying"
+                          ? "Verifying payment"
+                          : "Starting secure checkout"}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    {paymentFeedbackMessage || (checkoutStarted
+                      ? "Preparing your payment session. Do not close this page."
+                      : "Checking your payment status. Your card is activated only after provider confirmation.")}
+                  </p>
+                  {paymentReference && (
+                    <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">
+                      Reference: {paymentReference}
+                    </p>
+                  )}
+                  {paymentResult === "failed" && (
+                    <Button className="mt-3 h-9" variant="outline" onClick={retryAfterPaymentFeedback}>
+                      Try another payment
+                    </Button>
+                  )}
+                  {paymentResult === "success" && (
+                    <Button className="mt-3 h-9" onClick={() => setLocation("/dashboard")}>
+                      Go to dashboard
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Partner Section */}
           <motion.div
@@ -297,125 +439,75 @@ export default function VirtualCardPurchasePage() {
           >
             {/* Payment Method Selection */}
             <div className="space-y-3">
-              <h3 className="font-semibold text-sm">Choose Payment Method</h3>
-              
-              {paymentOptions?.mobileMoney && <motion.div
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setPaymentMethod('mobile_money')}
-                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === 'mobile_money'
-                    ? 'border-primary bg-primary/5' 
-                    : 'border-border bg-card hover:border-primary/50'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start gap-3 flex-1">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 transition-all ${
-                      paymentMethod === 'mobile_money' ? 'border-primary bg-primary' : 'border-border'
-                    }`}>
-                      {paymentMethod === 'mobile_money' && (
-                        <span className="material-icons text-white text-xs">check</span>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-semibold">Mobile money</h4>
-                        <span className="bg-green-500/10 text-green-700 dark:text-green-400 text-xs px-2 py-0.5 rounded-full font-medium">
-                          Recommended
-                        </span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        Get a payment prompt on your phone.
-                      </p>
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="material-icons text-green-500 text-xs">bolt</span>
-                        <span className="text-muted-foreground">Instant</span>
-                        <span className="material-icons text-green-500 text-xs ml-2">security</span>
-                        <span className="text-muted-foreground">Secure</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>}
+              <div>
+                <h3 className="font-semibold text-sm">Choose how to pay</h3>
+                <p className="mt-1 text-xs text-muted-foreground">Available options depend on your country and account settings.</p>
+              </div>
 
-              {paymentOptions?.card && (
-              <motion.div
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setPaymentMethod("card")}
-                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === "card"
-                    ? "border-primary bg-primary/5"
-                    : "border-border bg-card hover:border-primary/50"
-                }`}
-                data-testid="option-card-payment"
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                    paymentMethod === "card" ? "border-primary bg-primary" : "border-border"
-                  }`}>
-                    {paymentMethod === "card" && <span className="material-icons text-white text-xs">check</span>}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-1">Debit or credit card</h4>
-                    <p className="text-xs text-muted-foreground">Pay securely by card.</p>
-                  </div>
-                </div>
-              </motion.div>
-              )}
-
-              {manualPaymentEnabled && (
-                <motion.div
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setPaymentMethod("manual")}
-                  className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                    paymentMethod === "manual"
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-card hover:border-primary/50"
-                  }`}
-                  data-testid="option-manual-payment"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                      paymentMethod === "manual" ? "border-primary bg-primary" : "border-border"
-                    }`}>
-                      {paymentMethod === "manual" && <span className="material-icons text-white text-xs">check</span>}
-                    </div>
-                    <div>
-                      <h4 className="font-semibold mb-1">Manual M-Pesa</h4>
-                      <p className="text-xs text-muted-foreground">Use the configured paybill details and have your payment verified.</p>
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-
-              {/* Crypto Payment Option */}
-              <motion.div
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setPaymentMethod('crypto')}
-                className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                  paymentMethod === 'crypto'
-                    ? 'border-primary bg-primary/5'
-                    : 'border-border bg-card hover:border-primary/50'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
-                    paymentMethod === 'crypto' ? 'border-primary bg-primary' : 'border-border'
-                  }`}>
-                    {paymentMethod === 'crypto' && <span className="material-icons text-white text-xs">check</span>}
-                  </div>
-                  <div>
-                    <h4 className="font-semibold mb-1">Pay with Crypto</h4>
-                    <p className="text-xs text-muted-foreground mb-2">
-                      Use a live CoinGecko price to calculate the exact amount.
-                    </p>
-                  <div className="flex items-center gap-2 text-xs">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[11px] font-bold">₿</span>
-                      <span className="text-muted-foreground">BTC, ETH, USDT, or USDC</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
+              {[
+                ...(paymentOptions?.mobileMoney ? [{
+                  id: "mobile_money" as const,
+                  title: "Mobile money",
+                  detail: "Receive a payment prompt on your registered phone.",
+                  icon: Smartphone,
+                  testId: "option-mobile-money",
+                }] : []),
+                ...(paymentOptions?.card ? [{
+                  id: "card" as const,
+                  title: "Debit or credit card",
+                  detail: "Pay through secure card checkout.",
+                  icon: CreditCard,
+                  testId: "option-card-payment",
+                }] : []),
+                ...(manualPaymentEnabled ? [{
+                  id: "manual" as const,
+                  title: "Manual M-Pesa",
+                  detail: "Pay by Paybill, then share the transaction code for review.",
+                  icon: CircleDollarSign,
+                  testId: "option-manual-payment",
+                }] : []),
+                {
+                  id: "crypto" as const,
+                  title: "Cryptocurrency",
+                  detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+                  icon: Bitcoin,
+                  testId: "option-crypto-payment",
+                },
+              ].map(option => {
+                const OptionIcon = option.icon;
+                const isSelected = paymentMethod === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={isSelected}
+                    onClick={() => setPaymentMethod(option.id)}
+                    className={`group w-full rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                      isSelected
+                        ? "border-primary bg-primary/[0.055] shadow-sm"
+                        : "border-border/80 bg-card hover:border-primary/40 hover:bg-primary/[0.02]"
+                    }`}
+                    data-testid={option.testId}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                        isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:text-primary"
+                      }`}>
+                        <OptionIcon className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-foreground">{option.title}</span>
+                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.detail}</span>
+                      </span>
+                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                        isSelected ? "border-primary bg-primary text-white" : "border-border bg-background"
+                      }`}>
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Auto Payment Details & Button */}
@@ -431,21 +523,22 @@ export default function VirtualCardPurchasePage() {
                   className="w-full ripple"
                   disabled={
                     initializePayment.isPending ||
+                    checkoutStarted ||
                     (paymentMethod === "mobile_money" && !paymentOptions?.mobileMoney) ||
                     (paymentMethod === "card" && !paymentOptions?.card)
                   }
                   data-testid="button-purchase-card"
                 >
-                  {initializePayment.isPending
-                    ? "Processing..."
+                  {initializePayment.isPending || checkoutStarted
+                    ? "Preparing secure checkout…"
                     : paymentMethod === "card"
-                      ? `Pay with card · $${currentCardPrice}`
-                      : `Pay with mobile money · $${currentCardPrice}`}
+                      ? `Pay by card · $${currentCardPriceNumber.toFixed(2)}`
+                      : `Pay by mobile money · $${currentCardPriceNumber.toFixed(2)}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   {paymentMethod === "card"
-                    ? "Your card will be activated after payment confirmation."
-                    : "Complete the payment using the prompt sent to your phone."}
+                    ? "Secure checkout opens next. Your card activates only after the provider confirms payment."
+                    : "Approve the mobile-money prompt. Your card activates only after payment is confirmed."}
                 </p>
               </motion.div>
             )}
@@ -457,12 +550,27 @@ export default function VirtualCardPurchasePage() {
                 className="bg-muted/50 p-4 rounded-xl border border-border text-left space-y-3"
                 data-testid="panel-manual-payment"
               >
-                <div>
-                  <h4 className="font-semibold">Manual M-Pesa payment</h4>
-                  <p className="mt-1 text-xs text-muted-foreground">Virtual card price: ${currentCardPrice} USD</p>
+                <div className="rounded-xl border border-primary/15 bg-background p-3">
+                  <h4 className="font-semibold">Manual M-PESA instructions</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">Fixed card price: USD {currentCardPriceNumber.toFixed(2)}</p>
+                  <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+                    <span className="text-muted-foreground">Pay this amount</span>
+                    <span className="font-bold text-primary" data-testid="text-card-price-kes">
+                      {kesQuoteLoading
+                        ? "Loading live quote…"
+                        : kesCardQuote
+                          ? `KES ${Number(kesCardQuote.kesAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}`
+                          : "KES quote unavailable"}
+                    </span>
+                  </div>
+                  {kesCardQuote && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Rate: 1 USD = KES {Number(kesCardQuote.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}. The KES amount is rounded to match checkout.
+                    </p>
+                  )}
                 </div>
                 <div className="flex justify-between gap-3 rounded-lg bg-background p-3">
-                  <span className="text-sm text-muted-foreground">Paybill</span>
+                  <span className="text-sm text-muted-foreground">Paybill (Business no.)</span>
                   <span className="font-mono font-semibold" data-testid="text-manual-paybill">
                     {(manualPaymentData as any)?.paybill}
                   </span>
@@ -473,9 +581,27 @@ export default function VirtualCardPurchasePage() {
                     {(manualPaymentData as any)?.account}
                   </span>
                 </div>
+                <ol className="list-decimal list-inside space-y-2 rounded-xl bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+                  <li>Open M-PESA and choose <span className="font-semibold text-foreground">Lipa na M-PESA → Pay Bill</span>.</li>
+                  <li>Enter the Paybill and the account number shown above.</li>
+                  <li>Enter the exact KES amount shown, review any M-PESA fee, then complete with your PIN.</li>
+                  <li>Keep the M-PESA transaction code and contact support so the payment can be verified.</li>
+                </ol>
+                <div className="flex items-center justify-between gap-3 rounded-lg bg-background p-3 text-xs">
+                  <span className="text-muted-foreground">GreenPay fee</span>
+                  <span className="font-semibold">KES 0.00</span>
+                </div>
                 <p className="text-xs text-muted-foreground" data-testid="text-manual-payment-next-step">
-                  Confirm the current KES amount with support before paying. Keep your payment receipt and contact support for verification. Your card activates only after payment is confirmed.
+                  This is a fixed-price purchase: minimum and maximum are USD {currentCardPriceNumber.toFixed(2)} (the KES equivalent above). Keep your payment confirmation. The card is activated only after support verifies payment.
                 </p>
+                {(!kesCardQuote || kesQuoteError) && (
+                  <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300" role="alert">
+                    Do not pay until the live KES quote is available. Contact support for help with the current amount.
+                  </p>
+                )}
+                <Button variant="outline" className="w-full" onClick={() => setLocation("/live-chat")}>
+                  Contact support with your payment details
+                </Button>
               </motion.div>
             )}
 
@@ -494,8 +620,12 @@ export default function VirtualCardPurchasePage() {
                   <span className="font-semibold">{cryptoRate > 0 ? `$${cryptoRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : "Loading..."}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Amount required</span>
+                  <span className="text-muted-foreground">Estimated amount</span>
                   <span className="font-bold text-primary">{cryptoCardAmount > 0 ? `${cryptoCardAmount.toFixed(8)} ${cryptoCoin}` : "—"}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">GreenPay fee</span>
+                  <span className="font-semibold">{cryptoCoin} 0</span>
                 </div>
                 <Button
                   onClick={() => cryptoCardPurchase.mutate()}
@@ -504,8 +634,27 @@ export default function VirtualCardPurchasePage() {
                 >
                   {cryptoCardPurchase.isPending ? "Preparing..." : `Start ${cryptoCoin} payment`}
                 </Button>
+                {cryptoPaymentDetails && (
+                  <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-left dark:border-amber-800 dark:bg-amber-950/30" role="status" data-testid="crypto-card-payment-pending">
+                    <div className="flex items-start gap-2">
+                      <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
+                      <div className="space-y-1">
+                        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Payment request created</p>
+                        <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
+                          The confirmed amount is {cryptoPaymentDetails.amount} {cryptoPaymentDetails.coin}{cryptoPaymentDetails.network ? ` on ${cryptoPaymentDetails.network}` : ""}. Contact support for the payment address before sending. Your card stays inactive until the required confirmations are verified.
+                        </p>
+                        {cryptoPaymentDetails.transactionId && (
+                          <p className="break-all font-mono text-[11px] text-amber-800 dark:text-amber-300">Request ID: {cryptoPaymentDetails.transactionId}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button variant="outline" className="mt-3 w-full" onClick={() => setLocation("/live-chat")}>
+                      Contact support
+                    </Button>
+                  </div>
+                )}
                 <p className="text-xs text-muted-foreground">
-                  After sending the requested amount, support will confirm the blockchain payment and activate the card.
+                  The card purchase minimum and maximum are the same fixed price: USD {currentCardPriceNumber.toFixed(2)}. Any network fee charged by your wallet is not included.
                 </p>
               </motion.div>
             )}

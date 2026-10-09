@@ -71,7 +71,7 @@ interface CryptoAddress {
 
 const METHOD_META: Record<string, { label: string; icon: any; color: string; description: string }> = {
   mpesa: { label: "Mobile money", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Receive a payment prompt on your phone" },
-  manual_mpesa: { label: "Manual M-Pesa", icon: Smartphone, color: "from-emerald-600 to-green-700", description: "Pay to the configured paybill and submit your M-Pesa reference" },
+  manual_mpesa: { label: "Manual M-Pesa", icon: Smartphone, color: "from-emerald-600 to-green-700", description: "Pay by Paybill, then submit your M-Pesa transaction code for review" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa and Mastercard" },
@@ -86,6 +86,51 @@ const NEXUS_CURRENCY_FLAGS: Record<string, string> = {
 
 const COIN_COLORS: Record<string, string> = { BTC: "from-orange-500 to-yellow-500", ETH: "from-blue-500 to-indigo-500", USDT: "from-green-500 to-teal-500", USDC: "from-blue-500 to-cyan-500" };
 const COIN_ICONS: Record<string, string> = { BTC: "₿", ETH: "Ξ", USDT: "₮", USDC: "◎" };
+
+function DepositQuoteSummary({
+  from,
+  to,
+  rate,
+  amount,
+  loading,
+  error,
+}: {
+  from: string;
+  to: string;
+  rate: number;
+  amount: number;
+  loading: boolean;
+  error: boolean;
+}) {
+  const validRate = Number.isFinite(rate) && rate > 0;
+  return (
+    <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2" data-testid="deposit-quote-summary">
+      <div className="flex items-center justify-between gap-3 text-xs">
+        <span className="text-muted-foreground">Live conversion rate</span>
+        <span className="font-semibold text-foreground text-right">
+          {loading ? "Loading rate…" : validRate ? `1 ${from} = ${rate.toLocaleString(undefined, { maximumFractionDigits: 4 })} ${to}` : "Rate unavailable"}
+        </span>
+      </div>
+      {amount > 0 && validRate && (
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-muted-foreground">Estimated wallet credit</span>
+          <span className="font-semibold text-foreground">{to} {formatNumber(amount * rate)}</span>
+        </div>
+      )}
+      {validRate && (
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-muted-foreground">GreenPay deposit fee</span>
+          <span className="font-semibold text-foreground">{to} 0.00</span>
+        </div>
+      )}
+      <p className={`text-[11px] leading-relaxed ${error ? "text-destructive" : "text-muted-foreground"}`}>
+        {error
+          ? "The live rate is unavailable. This deposit cannot be started until a quote is available."
+          : "The wallet credit is an estimate. Any payment-provider fee is shown at checkout."}
+      </p>
+    </div>
+  );
+}
 
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -132,6 +177,24 @@ export default function DepositPage() {
     refetchInterval: 60_000,
   });
   const providerCurrencies = config?.providerCurrencies || [];
+  const quoteFromCurrency = (config?.countryPaymentCurrency || "USD").toUpperCase();
+  const quoteToCurrency = (displayWallet?.currency || nexusCurrency || "USD").toUpperCase();
+  const walletQuoteQuery = useQuery<{ from: string; to: string; rate: number }>({
+    queryKey: ["/api/exchange-rates", quoteFromCurrency, quoteToCurrency],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/exchange-rates/${quoteFromCurrency}/${quoteToCurrency}`);
+      return response.json();
+    },
+    enabled: !!user?.id && !!displayWallet && quoteFromCurrency !== quoteToCurrency,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+  });
+  const walletConversionRate = quoteFromCurrency === quoteToCurrency
+    ? 1
+    : Number(walletQuoteQuery.data?.rate || 0);
+  const hasWalletConversionRate = Number.isFinite(walletConversionRate) && walletConversionRate > 0 && !walletQuoteQuery.isError;
+  const walletQuoteError = quoteFromCurrency !== quoteToCurrency && walletQuoteQuery.isError;
+  const walletQuoteLoading = quoteFromCurrency !== quoteToCurrency && walletQuoteQuery.isLoading;
 
   const { data: cryptoData, isLoading: cryptoAddressesLoading } = useQuery({
     queryKey: ["/api/crypto/deposit-addresses"],
@@ -155,6 +218,11 @@ export default function DepositPage() {
   const usdToPaymentCurrencyRate = Number(config?.usdToPaymentCurrencyRate);
   const hasUsdToPaymentCurrencyRate = Number.isFinite(usdToPaymentCurrencyRate) && usdToPaymentCurrencyRate > 0;
   const minimumCardDeposit = hasUsdToPaymentCurrencyRate ? Math.ceil(10 * usdToPaymentCurrencyRate) : 0;
+  const manualMpesaAmountValid =
+    /^\d{1,8}(?:\.\d{1,2})?$/.test(amount.trim()) &&
+    Number.isFinite(Number(amount)) &&
+    Number(amount) >= 0.01 &&
+    Number(amount) <= 99_999_999.99;
   const bankTransferConfigured = ["bank_name", "bank_account_name", "bank_account_number"]
     .every(key => String(methods[key] || "").trim().length > 0);
   const enabledMethods: Exclude<Method, null>[] = [];
@@ -458,7 +526,10 @@ export default function DepositPage() {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-sm font-semibold text-muted-foreground mb-3">Available Deposit Methods</p>
+              <div className="mb-3">
+                <p className="text-sm font-semibold">Choose how to deposit</p>
+                <p className="text-xs text-muted-foreground mt-1">Select a payment method for your {displayWallet?.currency || "wallet"} balance.</p>
+              </div>
               <div className="space-y-3">
                 {enabledMethods.map(method => {
                   const meta = METHOD_META[method];
@@ -477,18 +548,19 @@ export default function DepositPage() {
                         if (method === "nexuspay") setPaymentCurrency(config?.countryPaymentCurrency || "USD");
                       }}
                       disabled={!enabled}
+                      aria-label={`Deposit with ${meta.label}`}
                       data-testid={`method-card-${method}`}
-                      className={`w-full flex items-center gap-4 p-4 rounded-2xl border transition-all text-left ${
+                      className={`group w-full flex items-center gap-4 p-4 rounded-2xl border bg-card text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                         enabled
-                          ? "border-border bg-card hover:border-primary/40 hover:shadow-md cursor-pointer"
+                          ? "border-border/80 hover:border-primary/50 hover:bg-primary/[0.025] hover:shadow-md active:scale-[0.99] cursor-pointer"
                           : "border-border/40 bg-muted/30 opacity-50 cursor-not-allowed"
                       }`}
                     >
-                      <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${meta.color} flex items-center justify-center shrink-0`}>
-                        <Icon className="w-6 h-6 text-white" />
+                      <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${meta.color} flex items-center justify-center shrink-0 shadow-sm`}>
+                        <Icon className="w-5 h-5 text-white" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <p className="font-semibold text-sm">{meta.label}</p>
                           {!enabled && <Badge variant="outline" className="text-[10px] px-1.5 py-0">{method === "nexuspay" ? "Disabled" : "Coming Soon"}</Badge>}
                           {methodBonuses.length > 0 && enabled && (
@@ -497,9 +569,13 @@ export default function DepositPage() {
                             </Badge>
                           )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">{meta.description}</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground mt-1">{meta.description}</p>
                       </div>
-                      {enabled && <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />}
+                      {enabled && (
+                        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted/70 text-muted-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary shrink-0">
+                          <ChevronRight className="w-4 h-4" />
+                        </span>
+                      )}
                     </motion.button>
                   );
                 })}
@@ -509,6 +585,13 @@ export default function DepositPage() {
                   </div>
                 )}
               </div>
+              {enabledMethods.length > 0 && (
+                <div className="mt-3 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5">
+                  <p className="text-[11px] leading-relaxed text-muted-foreground">
+                    Card deposits require at least USD 10 equivalent. Manual M-Pesa supports KES 0.01–99,999,999.99. GreenPay sets no maximum for other methods; providers or networks may apply their own limits and fees before payment confirmation.
+                  </p>
+                </div>
+              )}
               <details className="mt-4 rounded-2xl border border-border bg-card p-4">
                 <summary className="cursor-pointer text-sm font-semibold">Supported deposit currencies and regions</summary>
                 <div className="mt-3 space-y-2">
@@ -562,17 +645,25 @@ export default function DepositPage() {
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground">Amount ({paymentCurrency})</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">{getCurrencySymbol(paymentCurrency)}</span>
+                    <label className="text-xs font-medium text-muted-foreground">Amount to pay ({paymentCurrency})</label>
+                    <div className="flex h-11 items-center rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      <span className="shrink-0 pl-3 pr-2 text-sm font-semibold text-muted-foreground">{paymentCurrency}</span>
                       <Input
                         type="number" step="0.01" value={amount}
                         onChange={e => setAmount(e.target.value)}
-                        placeholder="0.00" className="pl-7 text-base"
+                        placeholder="0.00" className="h-full min-w-0 border-0 bg-transparent pl-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                         data-testid="input-mpesa-amount"
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">Enter the amount in {paymentCurrency}.</p>
+                    <p className="text-xs text-muted-foreground">Any positive amount; the payment provider may enforce its own limits.</p>
+                    <DepositQuoteSummary
+                      from={quoteFromCurrency}
+                      to={quoteToCurrency}
+                      rate={walletConversionRate}
+                      amount={Number(amount) || 0}
+                      loading={walletQuoteLoading}
+                      error={walletQuoteError}
+                    />
                   </div>
 
                   <div className="space-y-2">
@@ -588,7 +679,7 @@ export default function DepositPage() {
 
                   <Button
                     onClick={() => mpesaMutation.mutate()}
-                    disabled={mpesaMutation.isPending || !amount || parseFloat(amount) < 5}
+                    disabled={mpesaMutation.isPending || !amount || parseFloat(amount) <= 0 || !hasWalletConversionRate}
                     className="w-full bg-green-600 hover:bg-green-500"
                     data-testid="button-send-stk-push"
                   >
@@ -681,17 +772,26 @@ export default function DepositPage() {
                     </div>
                   </div>
 
+                  <ol className="space-y-2 rounded-xl bg-muted/40 p-3 text-xs leading-relaxed text-muted-foreground list-decimal list-inside">
+                    <li>Open M-PESA and choose <span className="font-semibold text-foreground">Lipa na M-PESA → Pay Bill</span>.</li>
+                    <li>Enter the Paybill and account numbers shown above.</li>
+                    <li>Send the exact KES amount you enter below, then complete the payment with your PIN.</li>
+                    <li>Enter the M-PESA transaction code below and submit it for review.</li>
+                  </ol>
+
                   <div className="space-y-2">
                     <label className="text-xs font-medium text-muted-foreground">Amount (KES)</label>
                     <Input
                       type="number"
-                      min="1"
+                      min="0.01"
+                      max="99999999.99"
                       step="0.01"
                       value={amount}
                       onChange={e => setAmount(e.target.value)}
                       placeholder="0.00"
                       data-testid="input-manual-mpesa-amount"
                     />
+                    <p className="text-[11px] text-muted-foreground">Manual M-Pesa accepts KES 0.01–99,999,999.99. M-PESA may apply lower transaction limits or fees.</p>
                   </div>
 
                   <div className="space-y-2">
@@ -706,7 +806,7 @@ export default function DepositPage() {
                   </div>
 
                   <p className="text-xs text-muted-foreground">
-                    Pay the exact amount shown to these details, then submit your M-Pesa transaction code. Your wallet stays unchanged until payment is verified.
+                    GreenPay deposit fee: KES 0.00. Your wallet is credited only after an admin verifies the M-PESA payment; keep the payment confirmation for your records.
                   </p>
                   <Button
                     onClick={() => manualMpesaMutation.mutate()}
@@ -714,8 +814,7 @@ export default function DepositPage() {
                       manualMpesaMutation.isPending ||
                       !nexusWalletId ||
                       !amount ||
-                      !Number.isFinite(Number(amount)) ||
-                      Number(amount) <= 0 ||
+                      !manualMpesaAmountValid ||
                       !manualPaymentReference.trim()
                     }
                     className="w-full bg-green-600 hover:bg-green-500"
@@ -787,7 +886,7 @@ export default function DepositPage() {
                   {selectedAddresses.length === 0 ? (
                     <div className="border border-dashed border-border rounded-xl p-6 text-center">
                       <Bitcoin className="w-8 h-8 mx-auto mb-2 text-muted-foreground/40" />
-                      <p className="text-sm font-medium text-muted-foreground">No {displayedCoin} addresses configured</p>
+                      <p className="text-sm font-medium text-muted-foreground">No {displayedCoin} deposit addresses are available</p>
                       <p className="text-xs text-muted-foreground/70 mt-1">Contact support or try another coin.</p>
                     </div>
                   ) : (
@@ -889,7 +988,7 @@ export default function DepositPage() {
               ) : (
                 <div className="bg-card border border-border rounded-2xl p-8 text-center">
                   <Building2 className="w-12 h-12 mx-auto text-muted-foreground/40 mb-3" />
-                  <p className="font-medium text-muted-foreground">Bank transfer details not configured yet.</p>
+                  <p className="font-medium text-muted-foreground">Bank transfer is currently unavailable.</p>
                   <p className="text-xs text-muted-foreground mt-1">Please contact support for wire transfer instructions.</p>
                   <Button variant="outline" className="mt-4" onClick={() => setLocation("/live-chat")}>
                     Contact Support
@@ -1028,20 +1127,31 @@ export default function DepositPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground">
-                    Amount ({config?.countryPaymentCurrency || "local currency"})
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                      {getCurrencySymbol(config?.countryPaymentCurrency || "USD")}
-                    </span>
+                    <label className="text-xs font-medium text-muted-foreground">
+                      Amount to pay ({config?.countryPaymentCurrency || "local currency"})
+                    </label>
+                    <div className="flex h-11 items-center rounded-xl border border-input bg-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2">
+                      <span className="shrink-0 pl-3 pr-2 text-sm font-semibold text-muted-foreground">
+                        {(config?.countryPaymentCurrency || "USD").toUpperCase()}
+                      </span>
                     <Input
                       type="number" step="0.01" value={amount}
                       onChange={e => setAmount(e.target.value)}
-                      placeholder="0.00" className="pl-7 text-base"
+                        placeholder="0.00" className="h-full min-w-0 border-0 bg-transparent pl-1 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
                       data-testid="input-card-amount"
                     />
                   </div>
+                    <p className="text-xs text-muted-foreground">
+                      Minimum: USD 10 equivalent ({config?.countryPaymentCurrency} {formatNumber(minimumCardDeposit)}). GreenPay sets no maximum; the payment provider may enforce one.
+                    </p>
+                    <DepositQuoteSummary
+                      from={quoteFromCurrency}
+                      to={quoteToCurrency}
+                      rate={walletConversionRate}
+                      amount={Number(amount) || 0}
+                      loading={walletQuoteLoading}
+                      error={walletQuoteError}
+                    />
                 </div>
 
                 <Button
@@ -1063,6 +1173,14 @@ export default function DepositPage() {
                       });
                       return;
                     }
+                    if (!hasWalletConversionRate) {
+                      toast({
+                        title: "Conversion quote unavailable",
+                        description: "Try again when a live rate is available for this wallet currency.",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
                     try {
                       const r = await apiRequest("POST", "/api/deposit/nexuspay", {
                         amount,
@@ -1079,14 +1197,14 @@ export default function DepositPage() {
                       toast({ title: "Error", description: e.message || "Card payment could not be started. Please try again later.", variant: "destructive" });
                     }
                   }}
-                  disabled={!hasUsdToPaymentCurrencyRate || !amount || parseFloat(amount) < minimumCardDeposit}
+                  disabled={!hasUsdToPaymentCurrencyRate || !hasWalletConversionRate || !amount || parseFloat(amount) < minimumCardDeposit}
                   className="w-full"
                   data-testid="button-pay-with-card"
                 >
                   Pay with Card
                 </Button>
 
-                 <p className="text-xs text-center text-muted-foreground">Your selected wallet is credited after the payment is confirmed.</p>
+                 <p className="text-xs text-center text-muted-foreground">GreenPay deposit fee: {quoteToCurrency} 0.00. The wallet is credited after payment confirmation; any provider fee is shown before you pay.</p>
               </div>
             </motion.div>
           )}
