@@ -1,10 +1,22 @@
 import { useState } from "react";
-import { Bitcoin, Check, Smartphone, CreditCard, CircleDollarSign } from "lucide-react";
+import { Bitcoin, Check, CreditCard, Smartphone } from "lucide-react";
 import "./_group.css";
 
-type PaymentMethod = "mobile_money" | "card" | "manual" | "crypto";
+type PaymentMethod = "mobile_money" | "card" | "crypto";
 
 const OPTIONS = [
+  {
+    id: "mobile_money" as const,
+    title: "Mobile money",
+    detail: "Receive a payment prompt on your registered phone.",
+    icon: Smartphone,
+  },
+  {
+    id: "card" as const,
+    title: "Debit or credit card",
+    detail: "Pay through secure card checkout.",
+    icon: CreditCard,
+  },
   {
     id: "crypto" as const,
     title: "Cryptocurrency",
@@ -14,7 +26,7 @@ const OPTIONS = [
 ];
 
 export function CardPurchaseMethodsCurrent() {
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("crypto");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("mobile_money");
 
   return (
     <main className="min-h-screen bg-background px-4 py-8 text-foreground">
@@ -38,6 +50,7 @@ export function CardPurchaseMethodsCurrent() {
                 className={`group w-full rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                   selected ? "border-primary bg-primary/[0.055] shadow-sm" : "border-border/80 bg-card hover:border-primary/40"
                 }`}
+                data-testid={`option-${option.id}`}
               >
                 <span className="flex items-center gap-3">
                   <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
@@ -59,10 +72,6 @@ export function CardPurchaseMethodsCurrent() {
             );
           })}
         </section>
-
-        <p className="rounded-xl border border-border bg-card p-3 text-xs leading-relaxed text-muted-foreground">
-          Bank transfer is not listed for this non-KES account.
-        </p>
       </div>
     </main>
   );

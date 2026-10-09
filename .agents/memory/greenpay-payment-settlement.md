@@ -20,3 +20,9 @@ The same admin-controlled manual M-Pesa configuration applies to Kenyan virtual-
 **Why:** The user explicitly chose both flows, while requiring customer funds to remain uncredited until verification.
 
 **How to apply:** Keep wallet deposits gated by the global deposit switch, the manual-M-Pesa switch, Kenyan account country, and a KES destination wallet. Use the shared paybill/account settings; do not activate a card or credit a wallet from displayed instructions alone.
+
+Non-KES virtual-card purchases may use the existing admin-managed bank-transfer details when bank transfer is enabled, the required details are configured, and the account country has a supported payment currency. Show a converted amount only when a usable exchange rate is available. Bank transfer remains instructions-only and requires support verification before card activation.
+
+**Why:** No separate card-purchase bank account or bank-payment verification path exists; reusing the configured receiving details supports the requested method without treating instructions as settlement.
+
+**How to apply:** Keep the shared bank-transfer toggle and required details as prerequisites. If card-specific bank settings or automated verification are introduced, revisit whether the configuration should be separated. Never activate a card from displayed transfer instructions alone.

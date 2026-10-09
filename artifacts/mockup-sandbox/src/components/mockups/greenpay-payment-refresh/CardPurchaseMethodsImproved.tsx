@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowRight, Banknote, Bitcoin, Check, Copy, Info } from "lucide-react";
+import { ArrowRight, Banknote, Bitcoin, Check, Info } from "lucide-react";
 import "./_group.css";
 
 type PaymentMethod = "bank_transfer" | "crypto";

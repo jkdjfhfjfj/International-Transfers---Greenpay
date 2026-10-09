@@ -2,5 +2,6 @@
 - [GreenPay payment copy](greenpay-payment-copy.md) — Keep payment-integration names out of visible payment text while preserving internal routing.
 - [GreenPay card requirement copy](greenpay-card-requirement-copy.md) — Keep active-card notices focused on the user’s next step, not settings controls.
 - [GreenPay payment settlement](greenpay-payment-settlement.md) — Verify provider, charge amount, and currency before settlement; report success only after idempotent credit or card activation.
+- [GreenPay card bank transfers](greenpay-payment-settlement.md) — Non-KES card transfers reuse configured bank details and stay pending until support verifies payment.
 - [GreenPay deposit eligibility](greenpay-deposit-eligibility.md) — Show only deposit methods enabled and configured for the authenticated user's country.
 - [GreenPay action labels](greenpay-action-labels.md) — Keep the dashboard “Send” action distinct from wallet-account “Transfer”.

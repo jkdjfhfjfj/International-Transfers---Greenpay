@@ -8,9 +8,61 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
-import { Bitcoin, Check, CheckCircle2, CircleDollarSign, Clock, CreditCard, Loader2, Smartphone, XCircle } from "lucide-react";
+import { ArrowRight, Bitcoin, Building2, Check, CheckCircle2, CircleDollarSign, Clock, Copy, CreditCard, Info, Loader2, Smartphone, XCircle } from "lucide-react";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
+
+type CardPaymentMethod = "mobile_money" | "card" | "crypto" | "manual" | "bank_transfer";
+
+type CardPaymentOptions = {
+  isKenya: boolean;
+  countryPaymentCurrency: string | null;
+  mobileMoney: boolean;
+  card: boolean;
+  bankTransfer: boolean;
+  bankTransferConfigured: boolean;
+  bankTransferDetails: {
+    bankName: string;
+    accountName: string;
+    accountNumber: string;
+    swiftCode: string;
+    branch: string;
+    currency: string;
+    routingNumber: string;
+    additionalInfo: string;
+  } | null;
+  usdToBankCurrencyRate: number | null;
+};
+
+type CardPaymentOption = {
+  id: CardPaymentMethod;
+  title: string;
+  detail: string;
+  icon: typeof Smartphone;
+  testId: string;
+  disabled?: boolean;
+};
+
+function formatCurrencyAmount(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+    }).format(amount);
+  } catch {
+    return `${currency} ${amount.toFixed(2)}`;
+  }
+}
+
+function getCurrencyFractionDigits(currency: string): number {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency })
+      .resolvedOptions()
+      .maximumFractionDigits;
+  } catch {
+    return 2;
+  }
+}
 
 export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
@@ -18,7 +70,7 @@ export default function VirtualCardPurchasePage() {
   const { user, login } = useAuth();
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'mobile_money' | 'card' | 'crypto' | 'manual'>('mobile_money');
+  const [paymentMethod, setPaymentMethod] = useState<CardPaymentMethod>("mobile_money");
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const [paymentResult, setPaymentResult] = useState<"verifying" | "success" | "failed" | null>(null);
   const [paymentFeedbackMessage, setPaymentFeedbackMessage] = useState("");
@@ -33,7 +85,12 @@ export default function VirtualCardPurchasePage() {
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
 
-  const { data: paymentOptions } = useQuery<any>({
+  const {
+    data: paymentOptions,
+    isLoading: paymentOptionsLoading,
+    isError: paymentOptionsError,
+    refetch: refetchPaymentOptions,
+  } = useQuery<CardPaymentOptions>({
     queryKey: ["/api/virtual-card/payment-options", user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -112,6 +169,85 @@ export default function VirtualCardPurchasePage() {
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
+  const paymentMethodOptions: CardPaymentOption[] = paymentOptions
+    ? paymentOptions.isKenya
+      ? [
+          ...(paymentOptions.mobileMoney ? [{
+            id: "mobile_money" as const,
+            title: "Mobile money",
+            detail: "Get a payment prompt on your registered phone.",
+            icon: Smartphone,
+            testId: "option-mobile-money",
+          }] : []),
+          ...(paymentOptions.card ? [{
+            id: "card" as const,
+            title: "Debit or credit card",
+            detail: "Pay through secure card checkout.",
+            icon: CreditCard,
+            testId: "option-card-payment",
+          }] : []),
+          ...(manualPaymentEnabled ? [{
+            id: "manual" as const,
+            title: "Paybill / Till",
+            detail: "Pay by Paybill, then share the transaction code for review.",
+            icon: CircleDollarSign,
+            testId: "option-manual-payment",
+          }] : []),
+          {
+            id: "crypto",
+            title: "Cryptocurrency",
+            detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+            icon: Bitcoin,
+            testId: "option-crypto-payment",
+          },
+        ]
+      : [
+          {
+            id: "bank_transfer",
+            title: "Bank transfer",
+            detail: paymentOptions.bankTransfer
+              ? `Send to the configured ${paymentOptions.bankTransferDetails?.currency || "USD"} bank account.`
+              : paymentOptions.bankTransferConfigured
+                ? "Not available for this account's country."
+                : "Not configured yet. Contact support for help.",
+            icon: Building2,
+            testId: "option-bank-transfer",
+            disabled: !paymentOptions.bankTransfer,
+          },
+          {
+            id: "crypto",
+            title: "Cryptocurrency",
+            detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+            icon: Bitcoin,
+            testId: "option-crypto-payment",
+          },
+        ]
+    : [
+        {
+          id: "crypto",
+          title: "Cryptocurrency",
+          detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+          icon: Bitcoin,
+          testId: "option-crypto-payment",
+        },
+      ];
+  const bankTransferDetails = paymentOptions?.bankTransferDetails ?? null;
+  const bankTransferCurrency = bankTransferDetails?.currency || "USD";
+  const bankTransferRate = Number(paymentOptions?.usdToBankCurrencyRate || 0);
+  const bankTransferAmount = bankTransferRate > 0 && Number.isFinite(currentCardPriceNumber)
+    ? Number((currentCardPriceNumber * bankTransferRate).toFixed(getCurrencyFractionDigits(bankTransferCurrency)))
+    : null;
+  const transferReference = String((user as any)?.accountNumber || "").trim();
+  const bankDetailRows = bankTransferDetails
+    ? [
+        { label: "Bank", value: bankTransferDetails.bankName },
+        { label: "Account name", value: bankTransferDetails.accountName },
+        { label: "Account number", value: bankTransferDetails.accountNumber },
+        { label: "SWIFT / BIC", value: bankTransferDetails.swiftCode },
+        { label: "Branch", value: bankTransferDetails.branch },
+        { label: "Routing number", value: bankTransferDetails.routingNumber },
+      ].filter((row) => Boolean(row.value))
+    : [];
   const { data: kesCardQuote, isLoading: kesQuoteLoading, isError: kesQuoteError } = useQuery<{
     usdAmount: number;
     kesAmount: number;
@@ -124,31 +260,30 @@ export default function VirtualCardPurchasePage() {
       if (!response.ok) throw new Error(data.message || "Card price conversion is unavailable");
       return data;
     },
-    enabled: Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
+    enabled: paymentOptions?.isKenya === true && Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
     staleTime: 60_000,
   });
 
   useEffect(() => {
-    if (!paymentOptions) return;
-    const methodAvailable = paymentMethod === "mobile_money"
-      ? paymentOptions.mobileMoney === true
-      : paymentMethod === "card"
-        ? paymentOptions.card === true
-        : paymentMethod === "manual"
-          ? manualPaymentEnabled
-          : true;
-    if (!methodAvailable) {
-      setPaymentMethod(
-        paymentOptions.mobileMoney
-          ? "mobile_money"
-          : paymentOptions.card
-            ? "card"
-            : manualPaymentEnabled
-              ? "manual"
-              : "crypto",
-      );
+    if (!paymentOptions) {
+      if (paymentOptionsError && paymentMethod !== "crypto") setPaymentMethod("crypto");
+      return;
     }
-  }, [paymentMethod, paymentOptions, manualPaymentEnabled]);
+    const availableMethods: CardPaymentMethod[] = paymentOptions.isKenya
+      ? [
+          ...(paymentOptions.mobileMoney ? ["mobile_money" as const] : []),
+          ...(paymentOptions.card ? ["card" as const] : []),
+          ...(manualPaymentEnabled ? ["manual" as const] : []),
+          "crypto",
+        ]
+      : [
+          ...(paymentOptions.bankTransfer ? ["bank_transfer" as const] : []),
+          "crypto",
+        ];
+    if (!availableMethods.includes(paymentMethod)) {
+      setPaymentMethod(availableMethods[0] || "crypto");
+    }
+  }, [paymentMethod, paymentOptions, manualPaymentEnabled, paymentOptionsError]);
 
   useEffect(() => {
     if (verificationStarted.current) return;
@@ -210,6 +345,19 @@ export default function VirtualCardPurchasePage() {
         setPaymentFeedbackMessage(error.message || "Unable to start secure checkout. Please try again.");
       }
     });
+  };
+
+  const copyBankDetail = async (value: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast({ title: "Copied", description: `${label} copied to clipboard.` });
+    } catch {
+      toast({
+        title: "Copy unavailable",
+        description: "Select and copy the bank detail manually.",
+        variant: "destructive",
+      });
+    }
   };
 
   const retryAfterPaymentFeedback = () => {
@@ -316,7 +464,8 @@ export default function VirtualCardPurchasePage() {
                 The current card price applies to all payment methods available for your country.
               </p>
             )}
-            <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2 text-left">
+            {paymentOptions?.isKenya && (
+              <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2 text-left">
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-muted-foreground">KES equivalent</span>
                 <span className="font-semibold text-foreground">
@@ -339,7 +488,8 @@ export default function VirtualCardPurchasePage() {
               <p className="text-[11px] leading-relaxed text-muted-foreground">
                 Fixed one-time price. Minimum and maximum purchase amount are both USD {currentCardPriceNumber.toFixed(2)}; provider or mobile-network charges, if any, are shown before you confirm.
               </p>
-            </div>
+              </div>
+            )}
             <div className="text-left space-y-2 text-sm text-muted-foreground">
               <div className="flex items-center">
                 <span className="material-icons text-green-500 text-sm mr-2">check</span>
@@ -414,22 +564,24 @@ export default function VirtualCardPurchasePage() {
           )}
 
           {/* Partner Section */}
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.55 }}
-            className="bg-card p-4 rounded-xl border border-border mb-6 elevation-1"
-          >
-            <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-widest">Accepted cards</p>
-            <div className="flex items-center justify-center gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
-                <img src={visaLogo} alt="Visa" className="h-7 w-7 object-contain" />
+          {paymentOptions?.isKenya && paymentOptions.card && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.55 }}
+              className="bg-card p-4 rounded-xl border border-border mb-6 elevation-1"
+            >
+              <p className="text-xs text-muted-foreground mb-3 font-medium uppercase tracking-widest">Accepted cards</p>
+              <div className="flex items-center justify-center gap-4 flex-wrap">
+                <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                  <img src={visaLogo} alt="Visa" className="h-7 w-7 object-contain" />
+                </div>
+                <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
+                  <img src={mastercardLogo} alt="Mastercard" className="h-7 w-11 object-contain" />
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 bg-muted px-3 py-1.5 rounded-lg">
-                <img src={mastercardLogo} alt="Mastercard" className="h-7 w-11 object-contain" />
-              </div>
-            </div>
-          </motion.div>
+            </motion.div>
+          )}
 
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -439,75 +591,90 @@ export default function VirtualCardPurchasePage() {
           >
             {/* Payment Method Selection */}
             <div className="space-y-3">
-              <div>
-                <h3 className="font-semibold text-sm">Choose how to pay</h3>
-                <p className="mt-1 text-xs text-muted-foreground">Available options depend on your country and account settings.</p>
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-sm">Choose how to pay</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {paymentOptions?.isKenya
+                      ? "Payment options available for your KES account."
+                      : paymentOptions
+                        ? `International checkout · ${paymentOptions.countryPaymentCurrency || "currency unavailable"}`
+                        : paymentOptionsError
+                          ? "Crypto is available while we retry your account options."
+                          : "Checking payment options for your account."}
+                  </p>
+                </div>
+                {paymentOptions && (
+                  <span className="shrink-0 rounded-full border border-border px-2.5 py-1 text-[10px] font-semibold text-muted-foreground">
+                    {paymentOptions.isKenya ? "KES" : paymentOptions.countryPaymentCurrency || "USD"}
+                  </span>
+                )}
               </div>
 
-              {[
-                ...(paymentOptions?.mobileMoney ? [{
-                  id: "mobile_money" as const,
-                  title: "Mobile money",
-                  detail: "Receive a payment prompt on your registered phone.",
-                  icon: Smartphone,
-                  testId: "option-mobile-money",
-                }] : []),
-                ...(paymentOptions?.card ? [{
-                  id: "card" as const,
-                  title: "Debit or credit card",
-                  detail: "Pay through secure card checkout.",
-                  icon: CreditCard,
-                  testId: "option-card-payment",
-                }] : []),
-                ...(manualPaymentEnabled ? [{
-                  id: "manual" as const,
-                  title: "Paybill / Till",
-                  detail: "Pay by Paybill, then share the transaction code for review.",
-                  icon: CircleDollarSign,
-                  testId: "option-manual-payment",
-                }] : []),
-                {
-                  id: "crypto" as const,
-                  title: "Cryptocurrency",
-                  detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
-                  icon: Bitcoin,
-                  testId: "option-crypto-payment",
-                },
-              ].map(option => {
-                const OptionIcon = option.icon;
-                const isSelected = paymentMethod === option.id;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    aria-pressed={isSelected}
-                    onClick={() => setPaymentMethod(option.id)}
-                    className={`group w-full rounded-2xl border p-4 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
-                      isSelected
-                        ? "border-primary bg-primary/[0.055] shadow-sm"
-                        : "border-border/80 bg-card hover:border-primary/40 hover:bg-primary/[0.02]"
-                    }`}
-                    data-testid={option.testId}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition-colors ${
-                        isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:text-primary"
-                      }`}>
-                        <OptionIcon className="h-5 w-5" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-foreground">{option.title}</span>
-                        <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.detail}</span>
-                      </span>
-                      <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${
-                        isSelected ? "border-primary bg-primary text-white" : "border-border bg-background"
-                      }`}>
-                        {isSelected && <Check className="h-3 w-3" />}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
+              {paymentOptionsLoading ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground" role="status">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  Checking payment methods…
+                </div>
+              ) : (
+                <>
+                  {paymentOptionsError && (
+                    <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+                      <span>We could not confirm your account currency. Cryptocurrency is available; retry to load the other eligible methods.</span>
+                      <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={() => void refetchPaymentOptions()}>
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3" data-testid="card-payment-method-options">
+                    {paymentMethodOptions.map((option) => {
+                      const OptionIcon = option.icon;
+                      const isSelected = paymentMethod === option.id;
+                      const eyebrow = option.id === "bank_transfer"
+                        ? "BANK TRANSFER"
+                        : option.id === "crypto"
+                          ? "CRYPTO"
+                          : option.id === "mobile_money"
+                            ? "MOBILE MONEY"
+                            : option.id === "manual"
+                              ? "MANUAL"
+                              : "CARD";
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          aria-pressed={isSelected}
+                          aria-disabled={option.disabled}
+                          disabled={option.disabled}
+                          onClick={() => setPaymentMethod(option.id)}
+                          className={`relative min-h-[132px] rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+                            isSelected
+                              ? "border-primary bg-primary/[0.055] shadow-sm"
+                              : "border-border bg-card hover:border-primary/40"
+                          }`}
+                          data-testid={option.testId}
+                        >
+                          <span className="flex items-center justify-between gap-2">
+                            <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                            }`}>
+                              <OptionIcon className="h-5 w-5" />
+                            </span>
+                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                              isSelected ? "border-primary bg-primary text-white" : "border-border bg-background"
+                            }`}>
+                              {isSelected && <Check className="h-3 w-3" />}
+                            </span>
+                          </span>
+                          <span className="mt-3 block text-[9px] font-bold tracking-[0.12em] text-primary">{eyebrow}</span>
+                          <span className="mt-1 block text-sm font-semibold text-foreground">{option.title}</span>
+                          <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">{option.detail}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Auto Payment Details & Button */}
@@ -540,6 +707,83 @@ export default function VirtualCardPurchasePage() {
                     ? "Secure checkout opens next. Your card activates only after the provider confirms payment."
                     : "Approve the mobile-money prompt. Your card activates only after payment is confirmed."}
                 </p>
+              </motion.div>
+            )}
+
+            {paymentMethod === "bank_transfer" && paymentOptions?.bankTransfer && bankTransferDetails && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="space-y-3 rounded-2xl border border-border bg-card p-4 text-left shadow-sm"
+                data-testid="panel-bank-transfer"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold">Bank transfer details</h4>
+                    <p className="mt-1 text-xs text-muted-foreground">Transfer the fixed card price to the account below.</p>
+                  </div>
+                  <Building2 className="h-5 w-5 shrink-0 text-primary" />
+                </div>
+
+                <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="text-muted-foreground">Amount to transfer</span>
+                    <span className="font-bold text-primary" data-testid="text-bank-transfer-amount">
+                      {bankTransferAmount === null
+                        ? `Confirm ${bankTransferCurrency} amount with support`
+                        : formatCurrencyAmount(bankTransferAmount, bankTransferCurrency)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                    Card price: USD {currentCardPriceNumber.toFixed(2)}. Bank or intermediary fees may be charged separately.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  {bankDetailRows.map(({ label, value }) => (
+                    <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-muted/50 px-3 py-2.5">
+                      <span className="shrink-0 text-xs text-muted-foreground">{label}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="break-all text-right font-mono text-xs font-semibold" data-testid={`text-bank-detail-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                          {value}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void copyBankDetail(value, label)}
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                          aria-label={`Copy ${label}`}
+                          data-testid={`button-copy-bank-detail-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {bankTransferDetails.additionalInfo && (
+                  <p className="rounded-xl bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">
+                    {bankTransferDetails.additionalInfo}
+                  </p>
+                )}
+
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-100">
+                  <div className="flex items-start gap-2">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0" />
+                    <p className="text-xs leading-relaxed">
+                      {bankTransferAmount === null
+                        ? `Do not send yet. Contact support to confirm the exact ${bankTransferCurrency} amount.`
+                        : transferReference
+                          ? `Use your GreenPay account number ${transferReference} as the transfer reference. Your card stays inactive until support verifies the transfer.`
+                          : "Contact support for a transfer reference before sending. Your card stays inactive until support verifies the transfer."}
+                    </p>
+                  </div>
+                </div>
+
+                <Button variant="outline" className="w-full" onClick={() => setLocation("/live-chat")} data-testid="button-bank-transfer-support">
+                  Contact support
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
               </motion.div>
             )}
 

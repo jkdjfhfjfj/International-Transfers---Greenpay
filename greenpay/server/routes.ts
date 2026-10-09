@@ -3558,11 +3558,80 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) return res.status(404).json({ message: "User not found" });
 
       const readiness = await getCountryPaymentReadiness(user);
+      let bankTransfer = false;
+      let bankTransferConfigured = false;
+      let bankTransferDetails: {
+        bankName: string;
+        accountName: string;
+        accountNumber: string;
+        swiftCode: string;
+        branch: string;
+        currency: string;
+        routingNumber: string;
+        additionalInfo: string;
+      } | null = null;
+      let usdToBankCurrencyRate: number | null = null;
+      if (!readiness.isKenya) {
+        const [
+          bankTransferEnabledSetting,
+          bankNameSetting,
+          bankAccountNameSetting,
+          bankAccountNumberSetting,
+          bankSwiftCodeSetting,
+          bankBranchSetting,
+          bankCurrencySetting,
+          bankRoutingNumberSetting,
+          bankAdditionalInfoSetting,
+        ] = await Promise.all([
+          storage.getSystemSetting("deposit_methods", "bank_transfer_enabled"),
+          storage.getSystemSetting("deposit_methods", "bank_name"),
+          storage.getSystemSetting("deposit_methods", "bank_account_name"),
+          storage.getSystemSetting("deposit_methods", "bank_account_number"),
+          storage.getSystemSetting("deposit_methods", "bank_swift_code"),
+          storage.getSystemSetting("deposit_methods", "bank_branch"),
+          storage.getSystemSetting("deposit_methods", "bank_currency"),
+          storage.getSystemSetting("deposit_methods", "bank_routing_number"),
+          storage.getSystemSetting("deposit_methods", "bank_additional_info"),
+        ]);
+        const bankTransferEnabled = settingEnabled(bankTransferEnabledSetting?.value);
+        const bankDetails = {
+          bankName: settingText(bankNameSetting?.value),
+          accountName: settingText(bankAccountNameSetting?.value),
+          accountNumber: settingText(bankAccountNumberSetting?.value),
+          swiftCode: settingText(bankSwiftCodeSetting?.value),
+          branch: settingText(bankBranchSetting?.value),
+          currency: settingText(bankCurrencySetting?.value, "USD").toUpperCase() || "USD",
+          routingNumber: settingText(bankRoutingNumberSetting?.value),
+          additionalInfo: settingText(bankAdditionalInfoSetting?.value),
+        };
+        const bankDetailsConfigured = Boolean(
+          bankDetails.bankName && bankDetails.accountName && bankDetails.accountNumber,
+        );
+        bankTransferConfigured = bankTransferEnabled && bankDetailsConfigured;
+        bankTransfer = Boolean(readiness.countryPaymentCurrency) && bankTransferConfigured;
+        if (bankTransfer) bankTransferDetails = bankDetails;
+      }
+      if (bankTransfer && bankTransferDetails) {
+        try {
+          usdToBankCurrencyRate = bankTransferDetails.currency === "USD"
+            ? 1
+            : await createExchangeRateService(storage).getExchangeRate("USD", bankTransferDetails.currency);
+          if (!Number.isFinite(usdToBankCurrencyRate) || Number(usdToBankCurrencyRate) <= 0) {
+            usdToBankCurrencyRate = null;
+          }
+        } catch (error) {
+          console.error("[Card Payment Options] Bank transfer exchange rate is unavailable:", error);
+        }
+      }
       res.json({
         isKenya: readiness.isKenya,
         countryPaymentCurrency: readiness.countryPaymentCurrency,
-        mobileMoney: readiness.mobileMoney && Boolean(String(user.phone || "").trim()),
-        card: readiness.card,
+        mobileMoney: readiness.isKenya && readiness.mobileMoney && Boolean(String(user.phone || "").trim()),
+        card: readiness.isKenya && readiness.card,
+        bankTransfer,
+        bankTransferConfigured,
+        bankTransferDetails,
+        usdToBankCurrencyRate,
       });
     } catch (error) {
       console.error("[Card Payment Options] Unable to load payment options:", error);
@@ -3619,6 +3688,11 @@ p{color:#6b7280;font-size:14px;}</style>
       const gatewayCurrency = isKenya ? "KES" : getPayzaCurrencyForCountry(user.country);
       if (!gatewayCurrency) {
         return res.status(400).json({ message: "Add your country to your profile before starting a payment." });
+      }
+      if (!isKenya && ["mobile_money", "card"].includes(requestedMethod)) {
+        return res.status(400).json({
+          message: "For card purchases outside Kenya, choose bank transfer or cryptocurrency.",
+        });
       }
       if (!Number.isFinite(usdAmount) || usdAmount <= 0) {
         return res.status(503).json({ message: "Virtual card pricing is temporarily unavailable." });
