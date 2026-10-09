@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +18,7 @@ export default function VirtualCardPurchasePage() {
   const isKenyanUser = ["ke", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto' | 'manual'>('auto');
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const initializePayment = useInitializeCardPayment();
   const verifyPayment = useVerifyCardPayment();
@@ -34,6 +34,16 @@ export default function VirtualCardPurchasePage() {
       const r = await apiRequest("GET", "/api/system-settings/discount-enabled");
       return r.json();
     },
+  });
+
+  const { data: manualPaymentData } = useQuery({
+    queryKey: ["/api/manual-payment-settings"],
+    enabled: !!user?.id && isKenyanUser,
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/manual-payment-settings");
+      return response.json();
+    },
+    refetchInterval: 60_000,
   });
 
   const { data: cryptoPricesData } = useQuery({
@@ -71,9 +81,14 @@ export default function VirtualCardPurchasePage() {
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;
   const showDiscount = discountEnabled && hasDiscount;
+  const manualPaymentEnabled = isKenyanUser && Boolean((manualPaymentData as any)?.enabled);
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? parseFloat(currentCardPrice) / cryptoRate : 0;
+
+  useEffect(() => {
+    if (paymentMethod === "manual" && !manualPaymentEnabled) setPaymentMethod("auto");
+  }, [paymentMethod, manualPaymentEnabled]);
 
   // Listen for payment completion (in real app, use webhooks)
   useState(() => {
@@ -320,6 +335,31 @@ export default function VirtualCardPurchasePage() {
               </motion.div>
               )}
 
+              {manualPaymentEnabled && (
+                <motion.div
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => setPaymentMethod("manual")}
+                  className={`relative p-4 rounded-xl border-2 cursor-pointer transition-all ${
+                    paymentMethod === "manual"
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-card hover:border-primary/50"
+                  }`}
+                  data-testid="option-manual-payment"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center mt-0.5 ${
+                      paymentMethod === "manual" ? "border-primary bg-primary" : "border-border"
+                    }`}>
+                      {paymentMethod === "manual" && <span className="material-icons text-white text-xs">check</span>}
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-1">Manual M-Pesa</h4>
+                      <p className="text-xs text-muted-foreground">Use the configured paybill details and have your payment verified.</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               {/* Crypto Payment Option */}
               <motion.div
                 whileTap={{ scale: 0.98 }}
@@ -377,6 +417,35 @@ export default function VirtualCardPurchasePage() {
                     : isKenyanUser
                       ? "Complete the payment using the prompt sent to your phone."
                       : "Your card will be activated after hosted checkout confirms payment."}
+                </p>
+              </motion.div>
+            )}
+
+            {paymentMethod === "manual" && manualPaymentEnabled && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="bg-muted/50 p-4 rounded-xl border border-border text-left space-y-3"
+                data-testid="panel-manual-payment"
+              >
+                <div>
+                  <h4 className="font-semibold">Manual M-Pesa payment</h4>
+                  <p className="mt-1 text-xs text-muted-foreground">Virtual card price: ${currentCardPrice} USD</p>
+                </div>
+                <div className="flex justify-between gap-3 rounded-lg bg-background p-3">
+                  <span className="text-sm text-muted-foreground">Paybill</span>
+                  <span className="font-mono font-semibold" data-testid="text-manual-paybill">
+                    {(manualPaymentData as any)?.paybill}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3 rounded-lg bg-background p-3">
+                  <span className="text-sm text-muted-foreground">Account</span>
+                  <span className="font-mono font-semibold" data-testid="text-manual-account">
+                    {(manualPaymentData as any)?.account}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground" data-testid="text-manual-payment-next-step">
+                  Confirm the current KES amount with support before paying. Keep your payment receipt and contact support for verification. Your card activates only after payment is confirmed.
                 </p>
               </motion.div>
             )}

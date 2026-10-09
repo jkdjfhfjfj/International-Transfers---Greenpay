@@ -8,3 +8,9 @@ For GreenPay, use the configured provider for the customer's authenticated profi
 **Why:** The user requires verified provider routing, exact charge validation, and no success message before settlement.
 
 **How to apply:** Apply these checks to every payment callback, status poll, and customer verification route. Never treat client-supplied country, amount, or currency as authoritative.
+
+For manual card payments, the admin-controlled option is instructions-only: showing paybill details must not create a completed transaction or activate a card. The current UI directs users to support for payment verification.
+
+**Why:** The user chose instructions-only rather than receipt upload and admin approval for card purchases.
+
+**How to apply:** Keep manual instructions conditional on the admin setting; maintain the rule that card activation follows verified payment, not display of payment details.

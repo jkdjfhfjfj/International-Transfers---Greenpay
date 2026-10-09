@@ -9892,13 +9892,15 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Manual M-Pesa payment settings endpoints
-  app.get("/api/admin/manual-payment-settings", async (req, res) => {
+  app.get("/api/admin/manual-payment-settings", requireAdminAuth, async (req, res) => {
     try {
       // Get settings from database, fallback to defaults
+      const enabledSetting = await storage.getSystemSetting("manual_mpesa", "enabled");
       const paybillSetting = await storage.getSystemSetting("manual_mpesa", "paybill");
       const accountSetting = await storage.getSystemSetting("manual_mpesa", "account");
       
       const settings = {
+        enabled: settingEnabled(enabledSetting?.value, false),
         paybill: paybillSetting?.value || "247",
         account: accountSetting?.value || "4664",
       };
@@ -9910,13 +9912,34 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.put("/api/admin/manual-payment-settings", async (req, res) => {
+  app.put("/api/admin/manual-payment-settings", requireAdminAuth, async (req, res) => {
     try {
-      const { paybill, account } = req.body;
+      const paybill = String(req.body?.paybill ?? "").trim();
+      const account = String(req.body?.account ?? "").trim();
+      const currentEnabledSetting = await storage.getSystemSetting("manual_mpesa", "enabled");
+      const enabled = req.body?.enabled === undefined
+        ? settingEnabled(currentEnabledSetting?.value, false)
+        : typeof req.body.enabled === "boolean"
+          ? req.body.enabled
+          : settingEnabled(req.body.enabled, false);
+
+      if (enabled && (!paybill || !account)) {
+        return res.status(400).json({ message: "Enter both a paybill and account number before enabling manual payments." });
+      }
+      if (paybill.length > 64 || account.length > 128) {
+        return res.status(400).json({ message: "Payment details are too long." });
+      }
       
-      console.log('Admin updated manual M-Pesa payment settings:', { paybill, account });
+      console.info('Admin updated manual M-Pesa payment settings:', { enabled, paybill, account });
       
       // Save settings to database for persistence
+      await storage.setSystemSetting({
+        category: "manual_mpesa",
+        key: "enabled",
+        value: String(enabled),
+        description: "Whether manual M-Pesa card payments are available to customers",
+      });
+
       await storage.setSystemSetting({
         category: "manual_mpesa",
         key: "paybill",
@@ -9934,6 +9957,7 @@ p{color:#6b7280;font-size:14px;}</style>
       res.json({ 
         success: true, 
         message: "Manual payment settings updated successfully",
+        enabled,
         paybill,
         account
       });
@@ -9943,12 +9967,25 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  // Manual card-purchase instructions were retired in favor of provider-routed
-  // mobile-money checkout.
-  app.get("/api/manual-payment-settings", requireAuth, (_req, res) => {
-    res.status(410).json({
-      message: "Manual payment instructions are no longer available. Use the payment options in your account.",
-    });
+  app.get("/api/manual-payment-settings", requireAuth, async (_req, res) => {
+    try {
+      const [enabledSetting, paybillSetting, accountSetting] = await Promise.all([
+        storage.getSystemSetting("manual_mpesa", "enabled"),
+        storage.getSystemSetting("manual_mpesa", "paybill"),
+        storage.getSystemSetting("manual_mpesa", "account"),
+      ]);
+      const enabled = settingEnabled(enabledSetting?.value, false);
+      if (!enabled) return res.json({ enabled: false });
+
+      res.json({
+        enabled: true,
+        paybill: settingText(paybillSetting?.value, "247") || "247",
+        account: settingText(accountSetting?.value, "4664") || "4664",
+      });
+    } catch (error) {
+      console.error("Error fetching manual payment instructions:", error);
+      res.status(500).json({ message: "Manual payment instructions could not be loaded." });
+    }
   });
 
   // ── Admin deposit method settings ─────────────────────────────────────────

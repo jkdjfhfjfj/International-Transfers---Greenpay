@@ -1,7 +1,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useLocation } from "wouter";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,7 +22,7 @@ export default function VirtualCardPage() {
   const [showCardDetails, setShowCardDetails] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [forceRepurchase, setForceRepurchase] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto'>('auto');
+  const [paymentMethod, setPaymentMethod] = useState<'auto' | 'card' | 'crypto' | 'manual'>('auto');
   const [selectedCardIdx, setSelectedCardIdx] = useState(0);
   const [transferOpen, setTransferOpen] = useState(false);
   const [transferDirection, setTransferDirection] = useState<'wallet_to_card' | 'card_to_wallet'>('wallet_to_card');
@@ -47,6 +47,16 @@ export default function VirtualCardPage() {
     queryKey: ["/api/system-settings/card-price"],
   });
 
+  const { data: manualPaymentData } = useQuery({
+    queryKey: ["/api/manual-payment-settings"],
+    enabled: !!user?.id && isKenyanUser,
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/manual-payment-settings");
+      return response.json();
+    },
+    refetchInterval: 60_000,
+  });
+
   const { data: discountData } = useQuery({
     queryKey: ["/api/system-settings/discount-enabled"],
     queryFn: async () => {
@@ -61,6 +71,7 @@ export default function VirtualCardPage() {
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const discountEnabled = (discountData as any)?.enabled !== false;
+  const manualPaymentEnabled = isKenyanUser && Boolean((manualPaymentData as any)?.enabled);
   const discountPct = parseFloat(currentCardPrice) < parseFloat(originalPrice)
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;
@@ -72,6 +83,10 @@ export default function VirtualCardPage() {
   const isExpired = card?.status === 'expired';
   const isActive = card?.status === 'active';
   const userFrozen = isFrozen && card?.freezeReason === 'Frozen by cardholder';
+
+  useEffect(() => {
+    if (paymentMethod === "manual" && !manualPaymentEnabled) setPaymentMethod("auto");
+  }, [paymentMethod, manualPaymentEnabled]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -300,6 +315,18 @@ export default function VirtualCardPage() {
                     Card
                   </button>
                 )}
+                {manualPaymentEnabled && (
+                  <button
+                    onClick={() => setPaymentMethod("manual")}
+                    className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                      paymentMethod === "manual" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                    }`}
+                    data-testid="button-payment-manual"
+                  >
+                    Manual M-Pesa
+                    {paymentMethod === "manual" && <span className="text-[9px] text-primary-foreground/80">Paybill</span>}
+                  </button>
+                )}
                 <button onClick={() => setPaymentMethod('crypto')}
                   className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
                     paymentMethod === 'crypto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
@@ -310,7 +337,41 @@ export default function VirtualCardPage() {
                 </button>
               </div>
 
-              {paymentMethod === 'auto' || paymentMethod === 'card' ? (
+              {paymentMethod === "manual" && manualPaymentEnabled ? (
+                <div className="space-y-3 text-left" data-testid="panel-manual-payment">
+                  <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                    <div>
+                      <p className="text-sm font-semibold text-primary">Manual M-Pesa payment</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Virtual card price: ${currentCardPrice} USD
+                      </p>
+                    </div>
+                    {[
+                      { label: "Paybill", value: String((manualPaymentData as any)?.paybill || ""), key: "manual-paybill" },
+                      { label: "Account", value: String((manualPaymentData as any)?.account || ""), key: "manual-account" },
+                    ].map((detail) => (
+                      <div key={detail.key} className="flex items-center justify-between gap-3 rounded-lg bg-background p-3">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{detail.label}</p>
+                          <p className="font-mono font-semibold" data-testid={`text-${detail.key}`}>{detail.value}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(detail.value, detail.key)}
+                          className="rounded-md p-2 text-muted-foreground hover:bg-muted"
+                          aria-label={`Copy ${detail.label.toLowerCase()}`}
+                          data-testid={`button-copy-${detail.key}`}
+                        >
+                          {copied === detail.key ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground" data-testid="text-manual-payment-next-step">
+                      Confirm the current KES amount with support before paying. Keep your payment receipt and contact support for verification. Your card activates only after payment is confirmed.
+                    </p>
+                  </div>
+                </div>
+              ) : paymentMethod === 'auto' || paymentMethod === 'card' ? (
                 <Button className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-6"
                   onClick={() => purchaseCardMutation.mutate()}
                   disabled={purchaseCardMutation.isPending}
@@ -325,7 +386,7 @@ export default function VirtualCardPage() {
                         ? `Pay with mobile money · $${currentCardPrice}`
                         : `Continue to checkout · $${currentCardPrice}`}
                 </Button>
-              ) : (
+              ) : paymentMethod === "crypto" ? (
                 <div className="space-y-3 text-left">
                   <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 p-4 rounded-xl space-y-3">
                     <p className="text-sm font-semibold text-primary">Pay with Crypto</p>
@@ -355,7 +416,7 @@ export default function VirtualCardPage() {
                   </Button>
                   <p className="text-xs text-muted-foreground text-center">You'll be taken to your crypto wallet to complete the purchase.</p>
                 </div>
-              )}
+              ) : null}
             </div>
           </motion.div>
         </div>

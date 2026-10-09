@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Save, Smartphone, Info } from "lucide-react";
 
 interface ManualPaymentData {
+  enabled: boolean;
   paybill: string;
   account: string;
 }
@@ -21,6 +22,7 @@ export default function AdminManualPaymentSettingsPage() {
 
   const [paybill, setPaybill] = useState("");
   const [account, setAccount] = useState("");
+  const [enabled, setEnabled] = useState(false);
 
   const { data, isLoading } = useQuery<ManualPaymentData>({
     queryKey: ["/api/admin/manual-payment-settings"],
@@ -32,6 +34,7 @@ export default function AdminManualPaymentSettingsPage() {
 
   useEffect(() => {
     if (data) {
+      setEnabled(Boolean(data.enabled));
       setPaybill(String(data.paybill || ""));
       setAccount(String(data.account || ""));
     }
@@ -39,7 +42,7 @@ export default function AdminManualPaymentSettingsPage() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const r = await apiRequest("PUT", "/api/admin/manual-payment-settings", { paybill, account });
+      const r = await apiRequest("PUT", "/api/admin/manual-payment-settings", { enabled, paybill, account });
       return r.json();
     },
     onSuccess: () => {
@@ -68,11 +71,28 @@ export default function AdminManualPaymentSettingsPage() {
               </div>
               <div>
                 <CardTitle>M-Pesa Manual Payment Configuration</CardTitle>
-                <CardDescription>Configure paybill number and account for manual M-Pesa deposits</CardDescription>
+                <CardDescription>Configure manual M-Pesa instructions for virtual card purchases</CardDescription>
               </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-border p-4">
+              <input
+                id="manual-payment-enabled"
+                type="checkbox"
+                checked={enabled}
+                onChange={(event) => setEnabled(event.target.checked)}
+                className="mt-1 h-4 w-4 accent-green-600"
+                data-testid="toggle-manual-payment-enabled"
+              />
+              <div className="space-y-1">
+                <Label htmlFor="manual-payment-enabled" className="font-medium">Show manual payment to customers</Label>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, the paybill instructions appear on Kenyan virtual card purchase screens.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label className="text-sm font-medium">Paybill Number</Label>
               <Input
@@ -97,10 +117,16 @@ export default function AdminManualPaymentSettingsPage() {
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-green-50 border border-green-100">
               <Info className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-green-700">These details are displayed to users in the deposit section. Changes take effect immediately.</p>
+              <p className="text-xs text-green-700">
+                Customers see these details only when manual payment is enabled. They must contact support to verify payment; the card is not activated automatically.
+              </p>
             </div>
 
-            <Button onClick={() => mutation.mutate()} disabled={mutation.isPending} className="w-full rounded-xl bg-green-600 hover:bg-green-500">
+            <Button
+              onClick={() => mutation.mutate()}
+              disabled={mutation.isPending || (enabled && (!paybill.trim() || !account.trim()))}
+              className="w-full rounded-xl bg-green-600 hover:bg-green-500"
+            >
               <Save className="w-4 h-4 mr-2" />
               {mutation.isPending ? "Saving..." : "Save Settings"}
             </Button>
@@ -113,6 +139,12 @@ export default function AdminManualPaymentSettingsPage() {
               <CardTitle className="text-sm">Current Configuration</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-600">Customer visibility</span>
+                <Badge variant={data.enabled ? "default" : "outline"} className="text-xs">
+                  {data.enabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">Paybill</span>
                 <Badge variant="outline" className="font-mono text-xs">{data.paybill || "—"}</Badge>
