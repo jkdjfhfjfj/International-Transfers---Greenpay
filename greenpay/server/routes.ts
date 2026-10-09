@@ -1213,13 +1213,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         walletCurrency: wallet?.currency,
       });
       if (!eligible) {
-        return res.status(403).json({ message: "Manual M-Pesa deposits are unavailable for this account or wallet." });
+        return res.status(403).json({ message: "Paybill / Till deposits are unavailable for this account or wallet." });
       }
       if (!wallet || wallet.isActive === false || wallet.isSuspended === true) {
         return res.status(400).json({ message: "The selected KES wallet is unavailable." });
       }
       if (!settingText(paybillSetting?.value) || !settingText(accountSetting?.value)) {
-        return res.status(503).json({ message: "Manual M-Pesa payment instructions are not configured." });
+        return res.status(503).json({ message: "Paybill / Till payment instructions are unavailable." });
       }
 
       const submission = await db.transaction(async (tx) => {
@@ -1236,7 +1236,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           currency: "KES",
           type: "deposit",
           status: "pending",
-          description: "Manual M-Pesa wallet deposit pending verification",
+          description: "Paybill / Till wallet deposit pending verification",
           reference: paymentReference,
           metadata: {
             walletId: wallet.id,
@@ -1256,7 +1256,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: "Your manual M-Pesa deposit is pending verification.",
+        message: "Your Paybill / Till deposit is pending verification.",
         transactionId: transaction.id,
         transactionReference: transaction.reference,
         paymentReference,
@@ -1264,7 +1264,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Manual M-Pesa deposit submission error:", error);
-      res.status(500).json({ message: "Could not submit the manual M-Pesa deposit. Please try again." });
+      res.status(500).json({ message: "Could not submit the Paybill / Till deposit. Please try again." });
     }
   });
 
@@ -10282,7 +10282,7 @@ p{color:#6b7280;font-size:14px;}</style>
       });
     } catch (error) {
       console.error("Error fetching manual payment instructions:", error);
-      res.status(500).json({ message: "Manual payment instructions could not be loaded." });
+      res.status(500).json({ message: "Paybill / Till instructions could not be loaded." });
     }
   });
 

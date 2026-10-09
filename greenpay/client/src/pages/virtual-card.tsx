@@ -354,7 +354,7 @@ export default function VirtualCardPage() {
                     }`}
                     data-testid="button-payment-manual"
                   >
-                    Manual M-Pesa
+                    Paybill / Till
                     {paymentMethod === "manual" && <span className="text-[9px] text-primary-foreground/80">Paybill</span>}
                   </button>
                 )}
@@ -372,7 +372,7 @@ export default function VirtualCardPage() {
                 <div className="space-y-3 text-left" data-testid="panel-manual-payment">
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
                     <div>
-                      <p className="text-sm font-semibold text-primary">Manual M-Pesa payment</p>
+                      <p className="text-sm font-semibold text-primary">Paybill / Till payment</p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Virtual card price: ${currentCardPrice} USD
                       </p>

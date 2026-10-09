@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, TrendingUp, Briefcase, PiggyBank, Shield, BarChart2, Users, ShoppingBag, Wallet, Grid, RefreshCw } from 'lucide-react';
+import { X, TrendingUp, Briefcase, PiggyBank, Shield, BarChart2, Users, Wallet, Grid, RefreshCw } from 'lucide-react';
 import { useMultipleExchangeRates } from '@/hooks/use-exchange-rates';
 
 const CURRENCY_META: Record<string, { flag: string; name: string; symbol: string }> = {
@@ -27,7 +27,6 @@ const COMING_SOON = [
   { icon: Shield,      label: 'Insurance',       description: 'Health & travel coverage',           color: 'from-purple-500 to-violet-600' },
   { icon: BarChart2,   label: 'Investments',     description: 'Stocks, bonds & ETFs',              color: 'from-amber-500 to-orange-600' },
   { icon: Users,       label: 'Group Payments',  description: 'Split bills & collect from groups', color: 'from-teal-500 to-cyan-600' },
-  { icon: ShoppingBag, label: 'Merchant Pay',    description: 'Pay at stores with Geepay',       color: 'from-red-500 to-pink-600' },
   { icon: Wallet,      label: 'Crypto Wallet',   description: 'Buy, sell & hold crypto',           color: 'from-yellow-500 to-amber-600' },
 ];
 

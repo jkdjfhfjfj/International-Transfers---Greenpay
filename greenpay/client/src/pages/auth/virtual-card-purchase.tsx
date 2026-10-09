@@ -461,7 +461,7 @@ export default function VirtualCardPurchasePage() {
                 }] : []),
                 ...(manualPaymentEnabled ? [{
                   id: "manual" as const,
-                  title: "Manual M-Pesa",
+                  title: "Paybill / Till",
                   detail: "Pay by Paybill, then share the transaction code for review.",
                   icon: CircleDollarSign,
                   testId: "option-manual-payment",
@@ -551,7 +551,7 @@ export default function VirtualCardPurchasePage() {
                 data-testid="panel-manual-payment"
               >
                 <div className="rounded-xl border border-primary/15 bg-background p-3">
-                  <h4 className="font-semibold">Manual M-PESA instructions</h4>
+                  <h4 className="font-semibold">Paybill / Till instructions</h4>
                   <p className="mt-1 text-xs text-muted-foreground">Fixed card price: USD {currentCardPriceNumber.toFixed(2)}</p>
                   <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                     <span className="text-muted-foreground">Pay this amount</span>

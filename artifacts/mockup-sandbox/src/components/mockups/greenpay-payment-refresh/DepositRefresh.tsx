@@ -11,7 +11,7 @@ export function DepositRefresh() {
 
   const methods = [
     { id: "mpesa" as const, title: "Mobile money", detail: "Approve a prompt on your phone", icon: Smartphone },
-    { id: "manual" as const, title: "Manual M-Pesa", detail: "Pay by Paybill, then submit the code", icon: Wallet },
+    { id: "manual" as const, title: "Paybill / Till", detail: "Pay by M-Pesa, then submit the code", icon: Wallet },
     { id: "card" as const, title: "Debit or credit card", detail: "Continue to secure checkout", icon: CreditCard },
   ];
 
@@ -120,7 +120,7 @@ export function DepositRefresh() {
           ) : (
             <section className="space-y-3 rounded-2xl border border-border bg-card p-4 shadow-sm">
               <div>
-                <h3 className="text-sm font-bold">Manual M-Pesa instructions</h3>
+                <h3 className="text-sm font-bold">Paybill / Till instructions</h3>
                 <p className="mt-1 text-xs text-muted-foreground">Enter the amount and transaction code after paying.</p>
               </div>
               <div className="space-y-2 rounded-xl bg-muted/60 p-3 text-xs">

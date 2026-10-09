@@ -71,7 +71,7 @@ interface CryptoAddress {
 
 const METHOD_META: Record<string, { label: string; icon: any; color: string; description: string }> = {
   mpesa: { label: "Mobile money", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Receive a payment prompt on your phone" },
-  manual_mpesa: { label: "Manual M-Pesa", icon: Smartphone, color: "from-emerald-600 to-green-700", description: "Pay by Paybill, then submit your M-Pesa transaction code for review" },
+  manual_mpesa: { label: "Paybill / Till", icon: Smartphone, color: "from-emerald-600 to-green-700", description: "Pay by M-Pesa, then submit the transaction code for review" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa and Mastercard" },
@@ -283,7 +283,7 @@ export default function DepositPage() {
         paymentReference: manualPaymentReference,
       });
       const data = await r.json();
-      if (!data.success) throw new Error(data.message || "Unable to submit your manual M-Pesa deposit");
+      if (!data.success) throw new Error(data.message || "Unable to submit your Paybill / Till deposit");
       return data;
     },
     onSuccess: (data) => {
@@ -297,7 +297,7 @@ export default function DepositPage() {
       });
     },
     onError: (err: any) => {
-      toast({ title: "Manual M-Pesa deposit failed", description: err.message, variant: "destructive" });
+      toast({ title: "Paybill / Till deposit failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -588,7 +588,7 @@ export default function DepositPage() {
               {enabledMethods.length > 0 && (
                 <div className="mt-3 rounded-xl border border-border/70 bg-muted/35 px-3 py-2.5">
                   <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Card deposits require at least USD 10 equivalent. Manual M-Pesa supports KES 0.01–99,999,999.99. GreenPay sets no maximum for other methods; providers or networks may apply their own limits and fees before payment confirmation.
+                    Card deposits require at least USD 10 equivalent. Paybill / Till deposits support KES 0.01–99,999,999.99. GreenPay sets no maximum for other methods; providers or networks may apply their own limits and fees before payment confirmation.
                   </p>
                 </div>
               )}
@@ -742,7 +742,7 @@ export default function DepositPage() {
             </motion.div>
           )}
 
-          {/* MANUAL M-PESA WALLET DEPOSIT */}
+          {/* PAYBILL / TILL WALLET DEPOSIT */}
           {selectedMethod === "manual_mpesa" && (
             <motion.div key="manual-mpesa" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
               <button onClick={() => { setSelectedMethod(null); resetManualMpesa(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -756,7 +756,7 @@ export default function DepositPage() {
                       <Smartphone className="w-5 h-5 text-white" />
                     </div>
                     <div>
-                      <p className="font-semibold text-sm">Manual M-Pesa wallet deposit</p>
+                      <p className="font-semibold text-sm">Paybill / Till wallet deposit</p>
                       <p className="text-xs text-muted-foreground">KES deposits are credited after an admin verifies the payment.</p>
                     </div>
                   </div>
@@ -791,7 +791,7 @@ export default function DepositPage() {
                       placeholder="0.00"
                       data-testid="input-manual-mpesa-amount"
                     />
-                    <p className="text-[11px] text-muted-foreground">Manual M-Pesa accepts KES 0.01–99,999,999.99. M-PESA may apply lower transaction limits or fees.</p>
+                    <p className="text-[11px] text-muted-foreground">Paybill / Till deposits accept KES 0.01–99,999,999.99. M-PESA may apply lower transaction limits or fees.</p>
                   </div>
 
                   <div className="space-y-2">

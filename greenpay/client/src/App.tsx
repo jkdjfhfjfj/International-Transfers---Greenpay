@@ -37,6 +37,7 @@ import ExchangePage from "@/pages/exchange";
 import KycPage from "@/pages/kyc";
 import AirtimePage from "@/pages/airtime";
 import BillsPage from "@/pages/bills";
+import MerchantPayPage from "@/pages/merchant-pay";
 import StatusPage from "@/pages/status";
 import MaintenancePage from "@/pages/maintenance";
 import OfflinePage from "@/pages/offline";
@@ -177,6 +178,9 @@ function Router() {
       }} />
       <Route path="/airtime" component={AirtimePage} />
       <Route path="/bills" component={BillsPage} />
+      <Route path="/merchant-pay">
+        <ProtectedRoute component={MerchantPayPage} />
+      </Route>
       <Route path="/status" component={StatusPage} />
       <Route path="/payment-callback" component={PaymentCallbackPage} />
       <Route path="/payment-success" component={PaymentSuccessPage} />

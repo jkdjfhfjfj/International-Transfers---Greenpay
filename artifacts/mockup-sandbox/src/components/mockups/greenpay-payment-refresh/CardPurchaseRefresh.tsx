@@ -10,7 +10,7 @@ export function CardPurchaseRefresh() {
   const options = [
     { id: "mobile" as const, label: "Mobile money", helper: "Approve a prompt on your phone", icon: Smartphone },
     { id: "card" as const, label: "Debit or credit card", helper: "Continue to secure checkout", icon: CreditCard },
-    { id: "manual" as const, label: "Manual M-Pesa", helper: "Pay by Paybill and submit the code", icon: Wallet },
+    { id: "manual" as const, label: "Paybill / Till", helper: "Pay by M-Pesa and submit the code", icon: Wallet },
     { id: "crypto" as const, label: "Cryptocurrency", helper: "Use the current live coin quote", icon: Bitcoin },
   ];
 
@@ -108,7 +108,7 @@ export function CardPurchaseRefresh() {
       {!pending && method === "manual" && (
         <section className="mb-4 space-y-3 rounded-2xl border border-border bg-card p-4">
           <div>
-            <h3 className="text-sm font-bold">Manual M-PESA instructions</h3>
+            <h3 className="text-sm font-bold">Paybill / Till instructions</h3>
             <p className="mt-1 text-xs text-muted-foreground">Pay the exact current KES equivalent shown above.</p>
           </div>
           <div className="rounded-xl bg-muted/60 p-3 text-xs">

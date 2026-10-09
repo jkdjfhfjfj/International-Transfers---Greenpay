@@ -785,6 +785,11 @@ export default function DashboardPage() {
                 icon: 'currency_bitcoin',
               },
               {
+                id: 'merchant', label: 'Merchant Pay', path: '/merchant-pay', testId: 'button-merchant-pay',
+                accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
+                icon: 'storefront',
+              },
+              {
                 id: 'support', label: 'Support', path: '/live-chat', testId: 'button-support',
                 accent: 'var(--gp-brand)', tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
                 icon: 'support_agent',
