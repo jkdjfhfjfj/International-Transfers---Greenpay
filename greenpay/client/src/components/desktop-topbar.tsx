@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 const pageNames: Record<string, string> = {
   "/dashboard": "Overview",
   "/transactions": "Transaction history",
-  "/send-money": "Send money",
+  "/send-money": "Move Money",
   "/receive-money": "Receive money",
   "/virtual-card": "Virtual card",
   "/virtual-accounts": "Virtual accounts",

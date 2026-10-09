@@ -99,6 +99,18 @@ export default function DashboardPage() {
     enabled: !!user?.id,
   });
 
+  const { data: transactionPolicy } = useQuery<{
+    activeCard: boolean;
+    activeCardRequired: { send: boolean };
+  }>({
+    queryKey: ["/api/transaction-policy"],
+    enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+  });
+
   const { data: cryptoWalletData } = useQuery({
     queryKey: ["/api/crypto/wallets"],
     enabled: !!user?.id,
@@ -260,7 +272,8 @@ export default function DashboardPage() {
   // Check user status
   const isKYCVerified = user?.kycStatus === 'verified';
   const card = (cardData as any)?.card;
-  const hasActiveVirtualCard = card && card.status === 'active';
+  const hasActiveVirtualCard = transactionPolicy?.activeCard ?? (card?.status === 'active');
+  const sendRequiresActiveCard = transactionPolicy?.activeCardRequired?.send ?? true;
   const cardStatus = hasActiveVirtualCard ? 'active' : 'inactive';
 
   // Card pricing for discount modal
@@ -275,12 +288,12 @@ export default function DashboardPage() {
     { 
       id: "send", 
       icon: Send, 
-      label: "Send Money", 
+      label: "Move Money", 
       path: "/send-money", 
        accent: 'var(--gp-brand)',
        tint: 'color-mix(in srgb, var(--gp-brand) 8%, transparent)',
-      disabled: !hasActiveVirtualCard,
-      requiresCard: true
+      disabled: sendRequiresActiveCard && !hasActiveVirtualCard,
+      requiresCard: sendRequiresActiveCard
     },
     { 
       id: "receive", 
