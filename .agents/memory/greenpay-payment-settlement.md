@@ -14,3 +14,9 @@ For manual card payments, the admin-controlled option is instructions-only: show
 **Why:** The user chose instructions-only rather than receipt upload and admin approval for card purchases.
 
 **How to apply:** Keep manual instructions conditional on the admin setting; maintain the rule that card activation follows verified payment, not display of payment details.
+
+The same admin-controlled manual M-Pesa configuration applies to Kenyan virtual-card purchases and wallet deposits. Wallet manual payments are KES-only and must stay pending until an admin verifies and credits the deposit.
+
+**Why:** The user explicitly chose both flows, while requiring customer funds to remain uncredited until verification.
+
+**How to apply:** Keep wallet deposits gated by the global deposit switch, the manual-M-Pesa switch, Kenyan account country, and a KES destination wallet. Use the shared paybill/account settings; do not activate a card or credit a wallet from displayed instructions alone.

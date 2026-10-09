@@ -45,6 +45,11 @@ import {
   isPaymentProviderCredentialKey,
   savePaymentCredential,
 } from "./services/payment-credentials";
+import {
+  canUseManualMpesaWalletDeposit,
+  normalizeManualMpesaAmount,
+  normalizeManualMpesaReference,
+} from "./services/manual-mpesa";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 
@@ -1049,56 +1054,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
-  // Handle manual deposit proof upload
-  app.post("/api/deposit/manual-proof", requireAuth, upload.single('proof'), async (req, res) => {
+  // Create a pending KES wallet-deposit request for manual M-Pesa verification.
+  app.post("/api/deposit/manual-mpesa", requireAuth, async (req, res) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No proof file uploaded" });
+      const userId = (req.session as any).userId;
+      const amount = normalizeManualMpesaAmount(req.body?.amount);
+      const paymentReference = normalizeManualMpesaReference(req.body?.paymentReference);
+      const walletId = String(req.body?.walletId || "").trim();
+      if (!amount || !paymentReference || !walletId) {
+        return res.status(400).json({ message: "Select a KES wallet, enter a valid amount, and provide the M-Pesa transaction code." });
       }
 
-      const userId = (req.session as any).userId;
-      const { amount, currency, reference } = req.body;
-
-      // Upload to Cloudinary
-      const uploadResult = await cloudinaryStorage.uploadFile(
-        req.file.buffer,
-        `deposits/${userId}/${Date.now()}_${req.file.originalname}`,
-        req.file.mimetype
-      );
-
-      // Create a pending transaction
-      const transaction = await storage.createTransaction({
-        userId,
-        amount: amount || "0",
-        currency: currency || "USD",
-        type: 'deposit',
-        status: 'pending',
-        description: `Manual deposit proof uploaded. Ref: ${reference || 'N/A'}`,
-        reference: reference || `MAN-${Date.now()}`,
-        metadata: {
-          proofUrl: uploadResult.url,
-          originalName: req.file.originalname,
-          uploadDate: new Date().toISOString()
-        }
+      const [user, globalDepositSetting, manualEnabledSetting, paybillSetting, accountSetting, wallet] = await Promise.all([
+        storage.getUser(userId),
+        storage.getSystemSetting("deposit_methods", "global_enabled"),
+        storage.getSystemSetting("manual_mpesa", "enabled"),
+        storage.getSystemSetting("manual_mpesa", "paybill"),
+        storage.getSystemSetting("manual_mpesa", "account"),
+        db.select().from(wallets)
+          .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)))
+          .then(rows => rows[0]),
+      ]);
+      const eligible = canUseManualMpesaWalletDeposit({
+        globalDepositsEnabled: settingEnabled(globalDepositSetting?.value, false),
+        manualMpesaEnabled: settingEnabled(manualEnabledSetting?.value, false),
+        isKenyanUser: isKenyanCountry(user?.country),
+        walletCurrency: wallet?.currency,
       });
+      if (!eligible) {
+        return res.status(403).json({ message: "Manual M-Pesa deposits are unavailable for this account or wallet." });
+      }
+      if (!wallet || wallet.isActive === false || wallet.isSuspended === true) {
+        return res.status(400).json({ message: "The selected KES wallet is unavailable." });
+      }
+      if (!settingText(paybillSetting?.value) || !settingText(accountSetting?.value)) {
+        return res.status(503).json({ message: "Manual M-Pesa payment instructions are not configured." });
+      }
 
-      // Notify admins
-      await storage.createAdminLog({
-        adminId: 1, // System admin
-        action: 'MANUAL_DEPOSIT_PROOF',
-        details: `User ${userId} uploaded proof for ${amount} ${currency}. Ref: ${reference}`,
-        ipAddress: req.ip || '0.0.0.0',
-        userAgent: req.headers['user-agent'] || 'Unknown'
+      const submission = await db.transaction(async (tx) => {
+        const lockKey = `manual-mpesa:${paymentReference}`;
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`);
+        const [duplicate] = await tx.select({ id: transactions.id }).from(transactions)
+          .where(sql`${transactions.metadata}->>'paymentReference' = ${paymentReference}`)
+          .limit(1);
+        if (duplicate) return { duplicate: true as const };
+
+        const [transaction] = await tx.insert(transactions).values({
+          userId,
+          amount,
+          currency: "KES",
+          type: "deposit",
+          status: "pending",
+          description: "Manual M-Pesa wallet deposit pending verification",
+          reference: paymentReference,
+          metadata: {
+            walletId: wallet.id,
+            paymentMethod: "manual_mpesa",
+            manualPaymentMethod: "manual_mpesa",
+            paymentReference,
+            paybill: settingText(paybillSetting.value),
+            account: settingText(accountSetting.value),
+          },
+        }).returning();
+        return { duplicate: false as const, transaction };
       });
+      if (submission.duplicate) {
+        return res.status(409).json({ message: "This M-Pesa transaction code has already been submitted." });
+      }
+      const transaction = submission.transaction;
 
-      res.json({ 
-        success: true, 
-        message: "Proof received for review. Your deposit will be credited only after verification.",
-        transactionId: transaction.id
+      res.json({
+        success: true,
+        message: "Your manual M-Pesa deposit is pending verification.",
+        transactionId: transaction.id,
+        transactionReference: transaction.reference,
+        paymentReference,
+        status: "pending",
       });
     } catch (error) {
-      console.error('Manual proof upload error:', error);
-      res.status(500).json({ message: "Failed to upload proof. Please try again." });
+      console.error("Manual M-Pesa deposit submission error:", error);
+      res.status(500).json({ message: "Could not submit the manual M-Pesa deposit. Please try again." });
     }
   });
 
@@ -4150,6 +4185,18 @@ p{color:#6b7280;font-size:14px;}</style>
       ).toLowerCase();
       const user = await storage.getUser((req.session as any).userId);
       const country = String(user?.country || "");
+      const isKenya = isKenyanCountry(country);
+      const [manualEnabledSetting, manualPaybillSetting, manualAccountSetting] = await Promise.all([
+        storage.getSystemSetting("manual_mpesa", "enabled"),
+        storage.getSystemSetting("manual_mpesa", "paybill"),
+        storage.getSystemSetting("manual_mpesa", "account"),
+      ]);
+      const manualPaybill = settingText(manualPaybillSetting?.value);
+      const manualAccount = settingText(manualAccountSetting?.value);
+      const manualMpesaEnabled = isKenya &&
+        settingEnabled(settingsMap.global_enabled, false) &&
+        settingEnabled(manualEnabledSetting?.value, false) &&
+        Boolean(manualPaybill && manualAccount);
       const kenyaMobileMoneyGateway = settingText(
         (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
         settingText((await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value, "payhero"),
@@ -4165,16 +4212,19 @@ p{color:#6b7280;font-size:14px;}</style>
         bonuses: activeBonuses,
         usdToKesRate,
         country,
-        isKenya: isKenyanCountry(country),
-        countryPaymentCurrency: isKenyanCountry(country) ? "KES" : getPayzaCurrencyForCountry(country),
+        isKenya,
+        countryPaymentCurrency: isKenya ? "KES" : getPayzaCurrencyForCountry(country),
+        manualMpesa: manualMpesaEnabled
+          ? { enabled: true, paybill: manualPaybill, account: manualAccount }
+          : { enabled: false },
         paymentReadiness: {
-          mobileMoney: isKenyanCountry(country)
+          mobileMoney: isKenya
             ? (["nexuspay", "makamesco", "makamescopay"].includes(kenyaMobileMoneyGateway)
               ? await nexusPayService.isConfigured()
               : (await payHeroService.getReadiness()).configured)
             : false,
-          hostedCheckout: isKenyanCountry(country) ? false : await payzaApiService.isConfigured(),
-          card: isKenyanCountry(country) ? await paystackService.isConfigured() : false,
+          hostedCheckout: isKenya ? false : await payzaApiService.isConfigured(),
+          card: isKenya ? await paystackService.isConfigured() : false,
         },
         providerCurrencies: [
           { code: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya" },
@@ -7899,7 +7949,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin: Update a specific transaction status
-  app.put("/api/admin/transactions/:txId/status", async (req, res) => {
+  app.put("/api/admin/transactions/:txId/status", requireAdminAuth, async (req, res) => {
     try {
       const { txId } = req.params;
       const { status } = req.body;
@@ -7911,7 +7961,25 @@ p{color:#6b7280;font-size:14px;}</style>
       const before = await storage.getTransaction(txId);
       if (!before) return res.status(404).json({ message: "Transaction not found" });
 
-      const updated = await storage.updateTransaction(txId, { status });
+      const metadata = (before.metadata || {}) as Record<string, unknown>;
+      const isManualMpesaWalletDeposit =
+        before.type === "deposit" &&
+        metadata.manualPaymentMethod === "manual_mpesa";
+      let updated: Awaited<ReturnType<typeof storage.getTransaction>>;
+      if (isManualMpesaWalletDeposit && status === "completed" && before.status !== "completed") {
+        if (!["pending", "processing"].includes(before.status || "")) {
+          return res.status(400).json({ message: "Only open manual M-Pesa deposits can be verified." });
+        }
+        try {
+          await completeWalletDeposit(before, true);
+          updated = await storage.getTransaction(txId);
+        } catch (error) {
+          console.error("Manual M-Pesa deposit verification failed:", error);
+          return res.status(400).json({ message: "The manual M-Pesa deposit could not be credited. Check its wallet and amount." });
+        }
+      } else {
+        updated = await storage.updateTransaction(txId, { status });
+      }
       if (!updated) return res.status(404).json({ message: "Transaction not found" });
 
       // Refund logic: if admin moves a deduction-type tx to failed/cancelled and
@@ -10021,26 +10089,51 @@ p{color:#6b7280;font-size:14px;}</style>
       
       console.info('Admin updated manual M-Pesa payment settings:', { enabled, paybill, account });
       
-      // Save settings to database for persistence
-      await storage.setSystemSetting({
-        category: "manual_mpesa",
-        key: "enabled",
-        value: String(enabled),
-        description: "Whether manual M-Pesa card payments are available to customers",
-      });
+      await db.transaction(async (tx) => {
+        const settings = [
+          {
+            key: "enabled",
+            value: String(enabled),
+            description: "Whether manual M-Pesa is available for wallet deposits and virtual card purchases",
+          },
+          {
+            key: "paybill",
+            value: paybill,
+            description: "Manual M-Pesa paybill number for wallet deposits and card purchases",
+          },
+          {
+            key: "account",
+            value: account,
+            description: "Manual M-Pesa account number for wallet deposits and card purchases",
+          },
+        ];
 
-      await storage.setSystemSetting({
-        category: "manual_mpesa",
-        key: "paybill",
-        value: paybill,
-        description: "Manual M-Pesa paybill number for card purchases"
-      });
-      
-      await storage.setSystemSetting({
-        category: "manual_mpesa",
-        key: "account",
-        value: account,
-        description: "Manual M-Pesa account number for card purchases"
+        for (const setting of settings) {
+          const [existing] = await tx.select().from(systemSettings)
+            .where(and(
+              eq(systemSettings.category, "manual_mpesa"),
+              eq(systemSettings.key, setting.key),
+            ))
+            .orderBy(desc(systemSettings.updatedAt))
+            .limit(1);
+
+          if (existing) {
+            await tx.update(systemSettings)
+              .set({
+                value: setting.value,
+                description: setting.description,
+                updatedBy: req.session.admin.id,
+                updatedAt: new Date(),
+              })
+              .where(eq(systemSettings.id, existing.id));
+          } else {
+            await tx.insert(systemSettings).values({
+              category: "manual_mpesa",
+              ...setting,
+              updatedBy: req.session.admin.id,
+            });
+          }
+        }
       });
       
       res.json({ 
@@ -10056,7 +10149,7 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.get("/api/manual-payment-settings", requireAuth, async (_req, res) => {
+  app.get("/api/manual-payment-settings", requireAuth, async (req, res) => {
     try {
       const [enabledSetting, paybillSetting, accountSetting] = await Promise.all([
         storage.getSystemSetting("manual_mpesa", "enabled"),
@@ -10064,7 +10157,8 @@ p{color:#6b7280;font-size:14px;}</style>
         storage.getSystemSetting("manual_mpesa", "account"),
       ]);
       const enabled = settingEnabled(enabledSetting?.value, false);
-      if (!enabled) return res.json({ enabled: false });
+      const user = await storage.getUser((req.session as any).userId);
+      if (!enabled || !isKenyanCountry(user?.country)) return res.json({ enabled: false });
 
       res.json({
         enabled: true,

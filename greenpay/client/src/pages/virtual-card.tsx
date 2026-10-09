@@ -49,7 +49,7 @@ export default function VirtualCardPage() {
 
   const { data: manualPaymentData } = useQuery({
     queryKey: ["/api/manual-payment-settings"],
-    enabled: !!user?.id && isKenyanUser,
+    enabled: !!user?.id,
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/manual-payment-settings");
       return response.json();
@@ -71,7 +71,7 @@ export default function VirtualCardPage() {
   const currentCardPrice = (settingsData as any)?.price || "60.00";
   const originalPrice = "60.00";
   const discountEnabled = (discountData as any)?.enabled !== false;
-  const manualPaymentEnabled = isKenyanUser && Boolean((manualPaymentData as any)?.enabled);
+  const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
   const discountPct = parseFloat(currentCardPrice) < parseFloat(originalPrice)
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;

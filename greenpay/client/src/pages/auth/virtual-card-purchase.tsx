@@ -38,7 +38,7 @@ export default function VirtualCardPurchasePage() {
 
   const { data: manualPaymentData } = useQuery({
     queryKey: ["/api/manual-payment-settings"],
-    enabled: !!user?.id && isKenyanUser,
+    enabled: !!user?.id,
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/manual-payment-settings");
       return response.json();
@@ -81,7 +81,7 @@ export default function VirtualCardPurchasePage() {
     ? Math.round((1 - parseFloat(currentCardPrice) / parseFloat(originalPrice)) * 100)
     : 0;
   const showDiscount = discountEnabled && hasDiscount;
-  const manualPaymentEnabled = isKenyanUser && Boolean((manualPaymentData as any)?.enabled);
+  const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? parseFloat(currentCardPrice) / cryptoRate : 0;

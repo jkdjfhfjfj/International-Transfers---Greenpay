@@ -18,7 +18,7 @@ import {
 import { useWallets, useNexusDeposit } from "@/hooks/use-wallets";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type Method = "mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
+type Method = "mpesa" | "manual_mpesa" | "crypto" | "bank_transfer" | "card" | "nexuspay" | null;
 
 interface DepositConfig {
   methods: Record<string, string>;
@@ -30,6 +30,11 @@ interface DepositConfig {
     mobileMoney?: boolean;
     hostedCheckout?: boolean;
     card?: boolean;
+  };
+  manualMpesa?: {
+    enabled: boolean;
+    paybill?: string;
+    account?: string;
   };
   providerCurrencies?: Array<{
     code: string;
@@ -64,6 +69,7 @@ interface CryptoAddress {
 
 const METHOD_META: Record<string, { label: string; icon: any; color: string; description: string }> = {
   mpesa: { label: "Mobile money", icon: Smartphone, color: "from-green-500 to-emerald-600", description: "Receive a payment prompt on your phone" },
+  manual_mpesa: { label: "Manual M-Pesa", icon: Smartphone, color: "from-emerald-600 to-green-700", description: "Pay to the configured paybill and submit your M-Pesa reference" },
   crypto: { label: "Cryptocurrency", icon: Bitcoin, color: "from-orange-500 to-yellow-500", description: "BTC, ETH, USDT, USDC & more" },
   bank_transfer: { label: "Bank Transfer", icon: Building2, color: "from-blue-500 to-indigo-600", description: "SWIFT / International wire" },
   card: { label: "Debit / Credit Card", icon: CreditCard, color: "from-blue-500 to-cyan-600", description: "Visa and Mastercard" },
@@ -98,6 +104,9 @@ export default function DepositPage() {
   const [mpesaRef, setMpesaRef] = useState<string | null>(null);
   const [mpesaCreditedAmount, setMpesaCreditedAmount] = useState<string | null>(null);
   const [mpesaStatus, setMpesaStatus] = useState<"idle" | "pending" | "completed" | "failed">("idle");
+  const [manualPaymentReference, setManualPaymentReference] = useState("");
+  const [manualDepositSubmitted, setManualDepositSubmitted] = useState(false);
+  const [manualDepositTransactionReference, setManualDepositTransactionReference] = useState<string | null>(null);
   const [selectedCoin, setSelectedCoin] = useState("USDT");
   const [nexusWalletId, setNexusWalletId] = useState<string | null>(null);
   const [nexusCurrency, setNexusCurrency] = useState("KES");
@@ -118,6 +127,7 @@ export default function DepositPage() {
     queryKey: ["/api/deposit/config"],
     queryFn: async () => { const r = await apiRequest("GET", "/api/deposit/config"); return r.json(); },
     enabled: !!user?.id,
+    refetchInterval: 60_000,
   });
   const providerCurrencies = config?.providerCurrencies || [];
 
@@ -149,6 +159,10 @@ export default function DepositPage() {
   if (depositsEnabled) {
     if (config?.isKenya) {
       if (isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) enabledMethods.push("mpesa");
+      if (
+        config.manualMpesa?.enabled === true &&
+        displayWallet?.currency?.toUpperCase() === "KES"
+      ) enabledMethods.push("manual_mpesa");
       if (isEnabled("card") && config.paymentReadiness?.card === true && hasUsdToKesRate) enabledMethods.push("card");
     } else if (config?.countryPaymentCurrency && config.paymentReadiness?.hostedCheckout === true) {
       enabledMethods.push("nexuspay");
@@ -184,6 +198,32 @@ export default function DepositPage() {
     },
     onError: (err: any) => {
       toast({ title: "Mobile-money payment error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const manualMpesaMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiRequest("POST", "/api/deposit/manual-mpesa", {
+        walletId: nexusWalletId,
+        amount,
+        paymentReference: manualPaymentReference,
+      });
+      const data = await r.json();
+      if (!data.success) throw new Error(data.message || "Unable to submit your manual M-Pesa deposit");
+      return data;
+    },
+    onSuccess: (data) => {
+      setManualDepositSubmitted(true);
+      setManualDepositTransactionReference(String(data.transactionReference || ""));
+      setManualPaymentReference("");
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({
+        title: "Deposit submitted for review",
+        description: `Reference ${data.transactionReference || data.paymentReference} is pending verification.`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Manual M-Pesa deposit failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -238,6 +278,12 @@ export default function DepositPage() {
   };
 
   function resetMpesa() { setMpesaRef(null); setMpesaStatus("idle"); setAmount(""); setMpesaPhone(""); setMpesaCreditedAmount(null); }
+  function resetManualMpesa() {
+    setManualDepositSubmitted(false);
+    setManualDepositTransactionReference(null);
+    setManualPaymentReference("");
+    setAmount("");
+  }
   function resetNexus() { setNexusRef(null); setNexusStatus("idle"); setAmount(""); }
 
   const handleNexusDeposit = async () => {
@@ -415,7 +461,7 @@ export default function DepositPage() {
                       onClick={() => {
                         if (!enabled) return;
                         setSelectedMethod(method);
-                        if (method === "mpesa" || method === "card") setPaymentCurrency("KES");
+                        if (method === "mpesa" || method === "manual_mpesa" || method === "card") setPaymentCurrency("KES");
                         if (method === "nexuspay") setPaymentCurrency(config?.countryPaymentCurrency || "USD");
                       }}
                       disabled={!enabled}
@@ -588,6 +634,103 @@ export default function DepositPage() {
                     <p className="text-sm text-muted-foreground mt-1">The mobile-money payment was declined or timed out.</p>
                   </div>
                   <Button className="w-full" onClick={resetMpesa} data-testid="button-retry-mpesa">Try Again</Button>
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* MANUAL M-PESA WALLET DEPOSIT */}
+          {selectedMethod === "manual_mpesa" && (
+            <motion.div key="manual-mpesa" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-4">
+              <button onClick={() => { setSelectedMethod(null); resetManualMpesa(); }} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <ArrowLeft className="w-4 h-4" /> Back to methods
+              </button>
+
+              {!manualDepositSubmitted ? (
+                <div className="bg-card border border-border rounded-2xl p-4 space-y-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-border">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-green-700 flex items-center justify-center">
+                      <Smartphone className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">Manual M-Pesa wallet deposit</p>
+                      <p className="text-xs text-muted-foreground">KES deposits are credited after an admin verifies the payment.</p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-border p-3 space-y-2">
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Paybill</span>
+                      <span className="font-mono font-semibold" data-testid="text-wallet-manual-paybill">{config?.manualMpesa?.paybill}</span>
+                    </div>
+                    <div className="flex justify-between gap-3 text-sm">
+                      <span className="text-muted-foreground">Account</span>
+                      <span className="font-mono font-semibold" data-testid="text-wallet-manual-account">{config?.manualMpesa?.account}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">Amount (KES)</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      value={amount}
+                      onChange={e => setAmount(e.target.value)}
+                      placeholder="0.00"
+                      data-testid="input-manual-mpesa-amount"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">M-Pesa transaction code</label>
+                    <Input
+                      value={manualPaymentReference}
+                      onChange={e => setManualPaymentReference(e.target.value)}
+                      placeholder="e.g. QAB12CDE34"
+                      autoCapitalize="characters"
+                      data-testid="input-manual-mpesa-reference"
+                    />
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    Pay the exact amount shown to these details, then submit your M-Pesa transaction code. Your wallet stays unchanged until payment is verified.
+                  </p>
+                  <Button
+                    onClick={() => manualMpesaMutation.mutate()}
+                    disabled={
+                      manualMpesaMutation.isPending ||
+                      !nexusWalletId ||
+                      !amount ||
+                      !Number.isFinite(Number(amount)) ||
+                      Number(amount) <= 0 ||
+                      !manualPaymentReference.trim()
+                    }
+                    className="w-full bg-green-600 hover:bg-green-500"
+                    data-testid="button-submit-manual-mpesa"
+                  >
+                    {manualMpesaMutation.isPending
+                      ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Submitting...</>
+                      : "Submit for verification"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="bg-card border border-amber-200 dark:border-amber-800 rounded-2xl p-6 text-center space-y-4" role="status">
+                  <Clock className="w-12 h-12 text-amber-600 mx-auto" />
+                  <div>
+                    <p className="font-semibold">Payment submitted for review</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your KES wallet will be credited only after an admin verifies the M-Pesa payment.
+                    </p>
+                  </div>
+                  {manualDepositTransactionReference && (
+                    <p className="text-xs text-muted-foreground">
+                      Submission reference: <span className="font-mono">{manualDepositTransactionReference}</span>
+                    </p>
+                  )}
+                  <Button variant="outline" className="w-full" onClick={() => { setSelectedMethod(null); resetManualMpesa(); }}>
+                    Back to deposit methods
+                  </Button>
                 </div>
               )}
             </motion.div>

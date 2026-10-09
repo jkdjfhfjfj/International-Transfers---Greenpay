@@ -71,7 +71,7 @@ export default function AdminManualPaymentSettingsPage() {
               </div>
               <div>
                 <CardTitle>M-Pesa Manual Payment Configuration</CardTitle>
-                <CardDescription>Configure manual M-Pesa instructions for virtual card purchases</CardDescription>
+                <CardDescription>Shared manual M-Pesa instructions for Kenyan wallet deposits and virtual card purchases</CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -88,7 +88,7 @@ export default function AdminManualPaymentSettingsPage() {
               <div className="space-y-1">
                 <Label htmlFor="manual-payment-enabled" className="font-medium">Show manual payment to customers</Label>
                 <p className="text-xs text-muted-foreground">
-                  When enabled, the paybill instructions appear on Kenyan virtual card purchase screens.
+                  When enabled, instructions appear for Kenyan virtual card purchases and wallet deposits to a KES wallet while deposits are enabled.
                 </p>
               </div>
             </div>
@@ -118,7 +118,7 @@ export default function AdminManualPaymentSettingsPage() {
             <div className="flex items-start gap-2 p-3 rounded-xl bg-green-50 border border-green-100">
               <Info className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
               <p className="text-xs text-green-700">
-                Customers see these details only when manual payment is enabled. They must contact support to verify payment; the card is not activated automatically.
+                Wallet deposits remain pending until an admin verifies payment. Showing these instructions never activates a virtual card; card payments still require support verification.
               </p>
             </div>
 
