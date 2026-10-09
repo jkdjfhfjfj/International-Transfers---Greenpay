@@ -38,6 +38,126 @@ export default function LoginPage() {
   const { login } = useAuth();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
 
+  const handleGoogleSignIn = () => {
+    let popup: Window | null = null;
+    let handled = false;
+    let checkingSession = false;
+    let callbackReportedLogin = false;
+    let pollTimer: number | undefined;
+    let timeoutTimer: number | undefined;
+
+    const cleanup = () => {
+      window.removeEventListener("message", handleMessage);
+      if (pollTimer !== undefined) window.clearInterval(pollTimer);
+      if (timeoutTimer !== undefined) window.clearTimeout(timeoutTimer);
+    };
+
+    const finishFromSession = async () => {
+      if (handled || checkingSession) return false;
+      checkingSession = true;
+      try {
+        const response = await fetch("/api/auth/me", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        if (!data?.user) return false;
+
+        handled = true;
+        cleanup();
+        popup?.close();
+        login(data.user);
+        window.location.assign("/dashboard");
+        return true;
+      } catch {
+        return false;
+      } finally {
+        checkingSession = false;
+      }
+    };
+
+    const handleMessage = (event: MessageEvent) => {
+      const result = event.data?.googleAuth;
+      if (typeof result !== "string" || handled) return;
+
+      if (result === "login") {
+        callbackReportedLogin = true;
+        void finishFromSession();
+        return;
+      }
+
+      handled = true;
+      cleanup();
+      switch (result) {
+        case "new_user":
+          window.location.assign("/auth/google/complete");
+          break;
+        case "mfa_required":
+          window.location.assign("/login?verification=required");
+          break;
+        case "suspended":
+          toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
+          break;
+        case "cancelled":
+          toast({ title: "Google sign-in cancelled", description: "You can try again whenever you're ready." });
+          break;
+        default:
+          toast({ title: "Sign-in failed", description: "Could not sign in with Google. Please try again.", variant: "destructive" });
+      }
+    };
+
+    // Listen before opening the popup so a fast OAuth redirect cannot beat the listener.
+    window.addEventListener("message", handleMessage);
+    popup = window.open(
+      "/auth/google",
+      "GoogleAuth",
+      "width=520,height=620,scrollbars=yes,resizable=yes,left=" +
+        Math.round((screen.width - 520) / 2) +
+        ",top=" +
+        Math.round((screen.height - 620) / 2),
+    );
+
+    if (!popup) {
+      handled = true;
+      cleanup();
+      toast({
+        title: "Allow pop-ups to sign in",
+        description: "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    pollTimer = window.setInterval(() => {
+      if (handled) return;
+      void finishFromSession().then((signedIn) => {
+        if (signedIn || handled || !popup?.closed) return;
+        handled = true;
+        cleanup();
+        toast({
+          title: "Google sign-in didn't finish",
+          description: callbackReportedLogin
+            ? "Google returned successfully, but this page couldn't confirm your session. Please try again."
+            : "The Google sign-in window closed before sign-in completed.",
+          variant: "destructive",
+        });
+      });
+    }, 1000);
+
+    timeoutTimer = window.setTimeout(() => {
+      if (handled) return;
+      handled = true;
+      cleanup();
+      popup?.close();
+      toast({
+        title: "Google sign-in timed out",
+        description: "Please try signing in with Google again.",
+        variant: "destructive",
+      });
+    }, 120_000);
+  };
+
   const requestOtpMutation = useMutation({
     mutationFn: async (userId: string) => {
       const response = await apiRequest("POST", "/api/auth/resend-otp", { userId });
@@ -552,25 +672,7 @@ export default function LoginPage() {
               <Button
                 variant="outline"
                 className="w-full flex items-center justify-center gap-3 h-11"
-                onClick={() => {
-                  const popup = window.open("/auth/google", "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
-                  const handler = (e: MessageEvent) => {
-                    if (!e.data?.googleAuth) return;
-                    window.removeEventListener("message", handler);
-                    const r = e.data.googleAuth;
-                    if (r === "login") {
-                      window.location.href = "/dashboard";
-                    } else if (r === "new_user") {
-                      window.location.href = "/auth/google/complete";
-                    } else if (r === "suspended") {
-                      toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
-                    } else if (r === "error") {
-                      toast({ title: "Sign-in failed", description: "Could not sign in with Google. Please try again.", variant: "destructive" });
-                    }
-                  };
-                  window.addEventListener("message", handler);
-                  const t = setInterval(() => { if (popup?.closed) { clearInterval(t); window.removeEventListener("message", handler); } }, 1000);
-                }}
+                onClick={handleGoogleSignIn}
                 type="button"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24">
