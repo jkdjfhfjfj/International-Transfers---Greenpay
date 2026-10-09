@@ -47,6 +47,10 @@ export default function WithdrawPage() {
   }>({
     queryKey: ["/api/transaction-policy"],
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const { data: recipientData, refetch: refetchRecipients } = useQuery({
     queryKey: ["/api/recipients", user?.id],

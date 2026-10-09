@@ -61,6 +61,10 @@ export default function ExchangePage() {
     activeCardRequired: { exchange: boolean };
   }>({
     queryKey: ["/api/transaction-policy"],
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
 
   const activeWallets = wallets.filter(w => w.isActive && !w.isSuspended);

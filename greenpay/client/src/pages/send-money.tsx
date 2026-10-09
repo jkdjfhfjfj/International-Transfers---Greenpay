@@ -49,6 +49,10 @@ export default function SendMoneyPage() {
   }>({
     queryKey: ["/api/transaction-policy"],
     enabled: !!user?.id,
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
   });
   const cardRequired = transactionPolicy?.activeCardRequired?.send ?? true;
   const hasActiveCard = transactionPolicy?.activeCard ?? false;

@@ -1721,8 +1721,7 @@ export class DatabaseStorage implements IStorage {
     const [setting] = await db
       .select()
       .from(systemSettings)
-      .where(eq(systemSettings.category, category))
-      .where(eq(systemSettings.key, key))
+      .where(and(eq(systemSettings.category, category), eq(systemSettings.key, key)))
       .orderBy(desc(systemSettings.updatedAt))
       .limit(1);
     return setting || undefined;
