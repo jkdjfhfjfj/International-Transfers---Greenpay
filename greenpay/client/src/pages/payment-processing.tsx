@@ -106,7 +106,7 @@ export default function PaymentProcessingPage() {
                 <div className="space-y-2">
                   <h1 className="text-2xl font-bold text-foreground">Processing Payment</h1>
                   <p className="text-muted-foreground">
-                    Please wait while we confirm your M-Pesa payment...
+                    Please wait while we confirm your payment.
                   </p>
                 </div>
 
@@ -117,9 +117,9 @@ export default function PaymentProcessingPage() {
 
                 <div className="space-y-3">
                   {[
-                    'STK push sent to your phone',
-                    'Waiting for M-Pesa confirmation',
-                    'Activating your account',
+                    'Payment submitted',
+                    'Checking payment status',
+                    'Updating your account',
                   ].map((step, i) => (
                     <motion.div
                       key={i}
@@ -139,7 +139,7 @@ export default function PaymentProcessingPage() {
                   transition={{ duration: 1.5, repeat: Infinity }}
                   className="text-xs text-muted-foreground"
                 >
-                  This may take up to 2 minutes...
+                  This may take up to 5 minutes...
                 </motion.p>
               </motion.div>
             )}

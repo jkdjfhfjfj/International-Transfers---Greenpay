@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Save, CreditCard, Info, CheckCircle2, CircleAlert } from "lucide-react";
+import { Save, CreditCard, Info, CheckCircle2, CircleAlert, Copy } from "lucide-react";
 
 interface PayHeroData {
   channelId?: string;
+  virtualCardGateway?: string;
   payheroConfigured?: boolean;
   nexuspayConfigured?: boolean;
   payzaConfigured?: boolean;
@@ -25,6 +27,8 @@ export default function AdminPayHeroSettingsPage() {
 
   const [channelId, setChannelId] = useState("");
   const [cardPrice, setCardPrice] = useState("");
+  const [virtualCardGateway, setVirtualCardGateway] = useState("payhero");
+  const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -38,6 +42,7 @@ export default function AdminPayHeroSettingsPage() {
     if (data) {
       setChannelId(String(data.channelId || ""));
       setCardPrice(String(data.cardPrice || ""));
+      setVirtualCardGateway(String(data.virtualCardGateway || "payhero"));
     }
   }, [data]);
 
@@ -46,6 +51,7 @@ export default function AdminPayHeroSettingsPage() {
       const r = await apiRequest("PUT", "/api/admin/payhero-settings", {
         channelId,
         cardPrice,
+        virtualCardGateway,
       });
       const result = await r.json();
       if (!r.ok) throw new Error(result.message || "Failed to save payment settings.");
@@ -79,10 +85,54 @@ export default function AdminPayHeroSettingsPage() {
   });
   const providerStatusRows: Array<{ label: string; configured?: boolean }> = [
     { label: "KES mobile-money deposits", configured: data?.payheroConfigured },
-    { label: "Other supported deposit currencies", configured: data?.payzaConfigured },
-    { label: "Card deposits", configured: data?.paystackConfigured },
+    { label: "PayzaAPI hosted checkout", configured: data?.payzaConfigured },
+    { label: "Paystack checkout", configured: data?.paystackConfigured },
     { label: "Legacy payment flow", configured: data?.nexuspayConfigured },
   ];
+  const appOrigin = typeof window === "undefined" ? "" : window.location.origin;
+  const callbackUrls = [
+    {
+      id: "payzaapi",
+      provider: "PayzaAPI",
+      label: "Webhook callback (POST)",
+      path: "/api/payzaapi/callback",
+    },
+    {
+      id: "payzaapi-card-return",
+      provider: "PayzaAPI",
+      label: "Virtual-card checkout return",
+      path: "/payment-processing?reference={reference}&type=virtual-card",
+    },
+    {
+      id: "payzaapi-deposit-return",
+      provider: "PayzaAPI",
+      label: "Wallet-deposit checkout return",
+      path: "/payment-processing?reference={reference}&type=deposit",
+    },
+    {
+      id: "paystack-card",
+      provider: "Paystack",
+      label: "Virtual-card checkout return (GET)",
+      path: "/api/payment-callback?type=virtual-card",
+    },
+    {
+      id: "paystack-deposit",
+      provider: "Paystack",
+      label: "Wallet card-deposit return (GET)",
+      path: "/api/payment-callback?reference={reference}&type=deposit",
+    },
+  ];
+
+  const copyCallbackUrl = async (url: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedCallbackUrl(id);
+      toast({ title: "Callback URL copied" });
+      window.setTimeout(() => setCopiedCallbackUrl(null), 2000);
+    } catch {
+      toast({ title: "Copy failed", description: "Select and copy the callback URL manually.", variant: "destructive" });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -120,19 +170,35 @@ export default function AdminPayHeroSettingsPage() {
             </div>
 
             <div className="space-y-2">
-              <Label className="text-sm font-medium">Virtual Card Price (KES)</Label>
+              <Label className="text-sm font-medium">Virtual Card Price (USD)</Label>
               <Input
                 value={cardPrice}
                 onChange={(e) => setCardPrice(e.target.value)}
-                placeholder="e.g., 100"
+                placeholder="e.g., 60"
                 className="rounded-xl"
               />
-              <p className="text-xs text-gray-500">Price charged when a user requests a virtual card.</p>
+              <p className="text-xs text-gray-500">Base card price; checkout converts it to KES.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Virtual-card checkout provider</Label>
+              <Select value={virtualCardGateway} onValueChange={setVirtualCardGateway}>
+                <SelectTrigger className="rounded-xl" data-testid="select-virtual-card-gateway">
+                  <SelectValue placeholder="Choose a provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="payhero">PayHero — M-Pesa prompt</SelectItem>
+                  <SelectItem value="nexuspay">NexusPay — mobile-money checkout</SelectItem>
+                  <SelectItem value="paystack">Paystack — card checkout</SelectItem>
+                  <SelectItem value="payzaapi">PayzaAPI — hosted checkout link</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-gray-500">This only controls virtual-card purchases; wallet-deposit routing is unchanged.</p>
             </div>
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-blue-50 border border-blue-100">
               <Info className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. Wallet deposits continue to route by currency, and card deposits use a separate payment flow. Credentials are not stored in this form.</p>
+              <p className="text-xs text-blue-700">Store payment credentials in Replit Secrets. Wallet deposits continue to route by currency; virtual-card purchases use the selected provider. Credentials are not stored in this form.</p>
             </div>
 
             <div className="flex gap-2">
@@ -165,6 +231,72 @@ export default function AdminPayHeroSettingsPage() {
           </CardContent>
         </Card>
 
+        <Card className="rounded-2xl border-0 shadow-sm">
+          <CardHeader>
+            <CardTitle>Paystack and PayzaAPI setup</CardTitle>
+            <CardDescription>Store credentials in Replit Secrets. This page shows status only and never displays secret values.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">PayzaAPI requirements</h3>
+              <p className="text-xs text-muted-foreground">
+                Add PAYZA_PUBLIC_KEY, PAYZA_SECRET_KEY, and PAYZA_WEBHOOK_SECRET. The webhook signing secret is separate from the API key pair.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Use matching test or live keys. Configure the same webhook signing secret in Replit Secrets as in the PayzaAPI dashboard.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Hosted checkout sends KES payments with STK push disabled and redirects users to the returned payment URL.
+              </p>
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="text-sm font-semibold">Paystack requirements</h3>
+              <p className="text-xs text-muted-foreground">
+                Add PAYSTACK_SECRET_KEY_KES or PAYSTACK_SECRET_KEY. Virtual-card checkout is restricted to the card payment channel.
+              </p>
+            </section>
+
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold">Callback URLs for this app host</h3>
+              {callbackUrls.map(({ id, provider, label, path }) => {
+                const url = `${appOrigin}${path}`;
+                return (
+                  <div key={id} className="space-y-2 rounded-xl border border-border p-3" data-testid={`callback-row-${id}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-medium">{provider} · {label}</p>
+                        {id === "payzaapi" && (
+                          <p className="mt-1 text-[11px] text-muted-foreground">
+                            Validates X-Payza-Signature as HMAC-SHA256 of the raw JSON body.
+                          </p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => void copyCallbackUrl(url, id)}
+                        data-testid={`button-copy-callback-${id}`}
+                      >
+                        <Copy className="mr-1 h-3.5 w-3.5" />
+                        {copiedCallbackUrl === id ? "Copied" : "Copy"}
+                      </Button>
+                    </div>
+                    <code className="block break-all rounded-lg bg-muted px-2 py-1.5 text-[11px]" data-testid={`text-callback-url-${id}`}>
+                      {url || path}
+                    </code>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-muted-foreground">
+                Use the HTTPS production host for live payments. These URLs are passed automatically when checkout is created; preview hosts are for development only.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {data && (
           <Card className="rounded-2xl border-0 shadow-sm bg-gray-50">
             <CardHeader>
@@ -177,7 +309,11 @@ export default function AdminPayHeroSettingsPage() {
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs text-gray-600">Card Price</span>
-                <Badge variant="outline" className="font-mono text-xs">KES {data.cardPrice || "—"}</Badge>
+                <Badge variant="outline" className="font-mono text-xs">USD {data.cardPrice || "—"}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-gray-600">Virtual-card provider</span>
+                <Badge variant="outline" className="font-mono text-xs">{data.virtualCardGateway || "—"}</Badge>
               </div>
             </CardContent>
           </Card>

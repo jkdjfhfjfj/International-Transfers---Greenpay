@@ -1,4 +1,5 @@
 import fetch from "node-fetch";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 const PAYZA_BASE_URL = "https://payzaapi.co.ke";
 
@@ -23,6 +24,19 @@ export const PAYZA_API_CURRENCIES = [
 
 export function getPayzaApiCurrencyCode(currency: string): string | undefined {
   return PAYZA_API_CURRENCIES.find(item => item.code === currency.toUpperCase())?.providerCode;
+}
+
+export function verifyPayzaWebhookSignature(
+  rawBody: string,
+  signature: string,
+  secret = String(process.env.PAYZA_WEBHOOK_SECRET || "").trim(),
+): boolean {
+  const normalizedSignature = String(signature || "").trim();
+  if (!secret || !/^[a-f\d]{64}$/i.test(normalizedSignature)) return false;
+
+  const expected = createHmac("sha256", secret).update(rawBody, "utf8").digest();
+  const received = Buffer.from(normalizedSignature, "hex");
+  return received.length === expected.length && timingSafeEqual(received, expected);
 }
 
 export class PayzaApiService {
@@ -56,6 +70,7 @@ export class PayzaApiService {
     metadata?: Record<string, unknown>;
     stkPush?: boolean;
   }) {
+    const stkPush = params.stkPush ?? params.currency === "KES";
     const keys = await this.getKeys();
     if (!keys) throw new Error("PayzaAPI is not configured");
     const response = await fetch(`${PAYZA_BASE_URL}/api/v1/pay`, {
@@ -65,7 +80,7 @@ export class PayzaApiService {
         amount: params.amount,
         currency: getPayzaApiCurrencyCode(params.currency) || params.currency,
         reference: params.reference,
-        stk_push: params.stkPush ?? params.currency === "KES",
+        stk_push: stkPush,
         customer: {
           email: params.email,
           name: params.name,
@@ -83,10 +98,26 @@ export class PayzaApiService {
       throw new Error(body.message || body.error || `PayzaAPI request failed (${response.status})`);
     }
     const data = body.data || body;
+    const rawPaymentUrl = String(data.payment_url || "");
+    let paymentUrl: string | null = null;
+    if (rawPaymentUrl) {
+      try {
+        const parsedPaymentUrl = new URL(rawPaymentUrl);
+        if (parsedPaymentUrl.protocol !== "https:" || parsedPaymentUrl.username || parsedPaymentUrl.password) {
+          throw new Error("Unexpected checkout URL");
+        }
+        paymentUrl = parsedPaymentUrl.toString();
+      } catch {
+        throw new Error("PayzaAPI returned an invalid hosted checkout URL");
+      }
+    }
+    if (!stkPush && !paymentUrl) {
+      throw new Error("PayzaAPI did not return a hosted checkout URL");
+    }
     return {
       reference: String(data.reference || params.reference),
       status: String(data.status || "pending"),
-      paymentUrl: data.payment_url || null,
+      paymentUrl,
       gateway: data.gateway || "payzaapi",
       actualGateway: data.actual_gateway || null,
       amount: Number(data.amount || params.amount),
@@ -108,7 +139,11 @@ export class PayzaApiService {
     const rawStatus = String(data.status || "pending").toLowerCase();
     return {
       reference: String(data.reference || reference),
-      status: rawStatus === "success" ? "completed" : rawStatus === "failed" || rawStatus === "cancelled" ? "failed" : "pending",
+      status: ["success", "completed", "paid"].includes(rawStatus)
+        ? "completed"
+        : ["failed", "cancelled", "canceled", "rejected"].includes(rawStatus)
+          ? "failed"
+          : "pending",
       amount: Number(data.amount || 0),
       currency: String(data.currency || "").toUpperCase() === "SLL"
         ? "SLE"
@@ -119,7 +154,10 @@ export class PayzaApiService {
   }
 
   async isConfigured() {
-    return Boolean(await this.getKeys());
+    return Boolean(
+      (await this.getKeys()) &&
+      String(process.env.PAYZA_WEBHOOK_SECRET || "").trim(),
+    );
   }
 }
 

@@ -57,7 +57,16 @@ export class PaystackService {
     return Boolean(await this.getSecretKey());
   }
 
-  async initializePayment(email: string, amount: number, reference: string, currency: string = 'KES', phoneNumber?: string, callbackUrl?: string, metadata?: Record<string, any>): Promise<PaystackResponse> {
+  async initializePayment(
+    email: string,
+    amount: number,
+    reference: string,
+    currency: string = "KES",
+    phoneNumber?: string,
+    callbackUrl?: string,
+    metadata?: Record<string, any>,
+    channels?: string[],
+  ): Promise<PaystackResponse> {
     const secretKey = await this.getSecretKey();
     if (!secretKey) {
       return {
@@ -73,7 +82,9 @@ export class PaystackService {
         amount: Math.round(amount * 100), // Convert to kobo for USD or cents for KES
         reference,
         currency,
-        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer']
+        channels: channels?.length
+          ? channels
+          : ["card", "bank", "ussd", "qr", "mobile_money", "bank_transfer"],
       };
 
       // Add callback URLs for success and failure tracking
