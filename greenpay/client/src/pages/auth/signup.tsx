@@ -326,23 +326,40 @@ export default function SignupPage() {
               variant="outline"
               className="w-full flex items-center justify-center gap-3 h-11"
               onClick={() => {
-                const popup = window.open("/auth/google", "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
+                let popup: Window | null = null;
+                let popupTimer: number | undefined;
                 const handler = (e: MessageEvent) => {
-                  if (!e.data?.googleAuth) return;
+                  if (e.origin !== window.location.origin || !e.data?.googleAuth) return;
                   window.removeEventListener("message", handler);
+                  if (popupTimer !== undefined) window.clearInterval(popupTimer);
                   const r = e.data.googleAuth;
                   if (r === "login") {
                     window.location.href = "/dashboard";
                   } else if (r === "new_user") {
                     window.location.href = "/auth/google/complete";
+                  } else if (r === "mfa_required") {
+                    window.location.href = "/login?verification=required";
                   } else if (r === "suspended") {
                     toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
+                  } else if (r === "cancelled") {
+                    toast({ title: "Google sign-in cancelled", description: "You can try again whenever you're ready." });
                   } else if (r === "error") {
                     toast({ title: "Sign-in failed", description: "Could not sign up with Google. Please try again.", variant: "destructive" });
                   }
                 };
                 window.addEventListener("message", handler);
-                const t = setInterval(() => { if (popup?.closed) { clearInterval(t); window.removeEventListener("message", handler); } }, 1000);
+                popup = window.open("/auth/google", "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
+                if (!popup) {
+                  window.removeEventListener("message", handler);
+                  toast({ title: "Allow pop-ups to sign in", description: "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.", variant: "destructive" });
+                  return;
+                }
+                popupTimer = window.setInterval(() => {
+                  if (popup?.closed) {
+                    window.clearInterval(popupTimer);
+                    window.removeEventListener("message", handler);
+                  }
+                }, 500);
               }}
               type="button"
             >

@@ -8,6 +8,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowRight, Bitcoin, Building2, Check, CheckCircle2, CircleDollarSign, Clock, Copy, CreditCard, Info, Loader2, Smartphone, XCircle } from "lucide-react";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
@@ -75,6 +76,7 @@ export default function VirtualCardPurchasePage() {
   const [paymentResult, setPaymentResult] = useState<"verifying" | "success" | "failed" | null>(null);
   const [paymentFeedbackMessage, setPaymentFeedbackMessage] = useState("");
   const [checkoutStarted, setCheckoutStarted] = useState(false);
+  const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
   const [cryptoPaymentDetails, setCryptoPaymentDetails] = useState<{
     amount: string;
     coin: string;
@@ -263,6 +265,25 @@ export default function VirtualCardPurchasePage() {
     enabled: paymentOptions?.isKenya === true && Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
     staleTime: 60_000,
   });
+  const confirmationCurrency = paymentMethod === "crypto"
+    ? cryptoCoin
+    : paymentMethod === "bank_transfer"
+      ? bankTransferCurrency
+      : paymentOptions?.isKenya
+        ? "KES"
+        : paymentOptions?.countryPaymentCurrency || "USD";
+  const confirmationAmount = paymentMethod === "crypto"
+    ? cryptoCardAmount > 0 ? cryptoCardAmount : null
+    : paymentMethod === "bank_transfer"
+      ? bankTransferAmount
+      : paymentOptions?.isKenya
+        ? kesCardQuote && !kesQuoteError ? Number(kesCardQuote.kesAmount) : null
+        : currentCardPriceNumber;
+  const confirmationAmountLabel = confirmationAmount === null
+    ? "Live amount unavailable"
+    : paymentMethod === "crypto"
+      ? `${confirmationAmount.toFixed(8)} ${confirmationCurrency}`
+      : formatCurrencyAmount(confirmationAmount, confirmationCurrency);
 
   useEffect(() => {
     if (!paymentOptions) {
@@ -345,6 +366,15 @@ export default function VirtualCardPurchasePage() {
         setPaymentFeedbackMessage(error.message || "Unable to start secure checkout. Please try again.");
       }
     });
+  };
+
+  const confirmPurchase = () => {
+    setPurchaseConfirmOpen(false);
+    if (paymentMethod === "crypto") {
+      cryptoCardPurchase.mutate();
+      return;
+    }
+    handlePurchase();
   };
 
   const copyBankDetail = async (value: string, label: string) => {
@@ -689,7 +719,7 @@ export default function VirtualCardPurchasePage() {
                 className="space-y-3"
               >
                 <Button
-                  onClick={handlePurchase}
+                  onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full ripple"
                   disabled={
                     initializePayment.isPending ||
@@ -702,8 +732,8 @@ export default function VirtualCardPurchasePage() {
                   {initializePayment.isPending || checkoutStarted
                     ? "Preparing secure checkout…"
                     : paymentMethod === "card"
-                      ? `Pay by card · $${currentCardPriceNumber.toFixed(2)}`
-                      : `Pay by mobile money · $${currentCardPriceNumber.toFixed(2)}`}
+                      ? `Pay by card${confirmationAmount !== null ? ` · ${confirmationAmountLabel}` : ""}`
+                      : `Pay by mobile money${confirmationAmount !== null ? ` · ${confirmationAmountLabel}` : ""}`}
                 </Button>
                 <p className="text-xs text-center text-muted-foreground">
                   {paymentMethod === "card"
@@ -816,18 +846,48 @@ export default function VirtualCardPurchasePage() {
                     </p>
                   )}
                 </div>
-                <div className="flex justify-between gap-3 rounded-lg bg-background p-3">
-                  <span className="text-sm text-muted-foreground">Paybill (Business no.)</span>
-                  <span className="font-mono font-semibold" data-testid="text-manual-paybill">
-                    {(manualPaymentData as any)?.paybill}
-                  </span>
-                </div>
-                <div className="flex justify-between gap-3 rounded-lg bg-background p-3">
-                  <span className="text-sm text-muted-foreground">Account</span>
-                  <span className="font-mono font-semibold" data-testid="text-manual-account">
-                    {(manualPaymentData as any)?.account}
-                  </span>
-                </div>
+                {[
+                  { label: "Paybill / Till number", value: String((manualPaymentData as any)?.paybill || ""), testId: "text-manual-paybill" },
+                  { label: "Account / reference", value: String((manualPaymentData as any)?.account || ""), testId: "text-manual-account" },
+                ].map(({ label, value, testId }) => (
+                  <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-background p-3">
+                    <span className="min-w-0">
+                      <span className="block text-xs text-muted-foreground">{label}</span>
+                      <span className="break-all font-mono font-semibold" data-testid={testId}>{value || "Not configured"}</span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={!value}
+                      onClick={() => void copyBankDetail(value, label)}
+                      aria-label={`Copy ${label}`}
+                      data-testid={`button-copy-${testId.replace("text-", "")}`}
+                    >
+                      <Copy className="mr-1.5 h-4 w-4" /> Copy
+                    </Button>
+                  </div>
+                ))}
+                {kesCardQuote && !kesQuoteError && (
+                  <div className="flex items-center justify-between gap-3 rounded-xl bg-background p-3">
+                    <span>
+                      <span className="block text-xs text-muted-foreground">Exact amount to pay</span>
+                      <span className="font-bold text-primary">
+                        KES {Number(kesCardQuote.kesAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </span>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void copyBankDetail(String(Math.round(Number(kesCardQuote.kesAmount))), "KES amount")}
+                      data-testid="button-copy-card-amount"
+                    >
+                      <Copy className="mr-1.5 h-4 w-4" /> Copy amount
+                    </Button>
+                  </div>
+                )}
                 <ol className="list-decimal list-inside space-y-2 rounded-xl bg-background p-3 text-xs leading-relaxed text-muted-foreground">
                   <li>Open M-PESA and choose <span className="font-semibold text-foreground">Lipa na M-PESA → Pay Bill</span>.</li>
                   <li>Enter the Paybill and the account number shown above.</li>
@@ -875,7 +935,7 @@ export default function VirtualCardPurchasePage() {
                   <span className="font-semibold">{cryptoCoin} 0</span>
                 </div>
                 <Button
-                  onClick={() => cryptoCardPurchase.mutate()}
+                  onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full bg-primary hover:bg-primary/90"
                   disabled={!cryptoRate || cryptoCardPurchase.isPending}
                 >
@@ -908,6 +968,45 @@ export default function VirtualCardPurchasePage() {
           </motion.div>
         </motion.div>
       </div>
+      <Dialog open={purchaseConfirmOpen} onOpenChange={setPurchaseConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Confirm virtual card purchase</DialogTitle>
+            <DialogDescription>
+              Review the amount before continuing. Your card is activated only after payment is confirmed.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-4">
+            <div className="flex items-center justify-between gap-3 text-sm">
+              <span className="text-muted-foreground">Card price</span>
+              <span className="font-semibold">USD {currentCardPriceNumber.toFixed(2)}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-border pt-3">
+              <span className="text-sm text-muted-foreground">You will pay</span>
+              <span className="text-lg font-bold text-primary" data-testid="text-purchase-confirm-amount">{confirmationAmountLabel}</span>
+            </div>
+            {paymentOptions?.isKenya && kesCardQuote && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Live conversion: 1 USD = KES {Number(kesCardQuote.exchangeRate).toLocaleString(undefined, { maximumFractionDigits: 4 })}. Provider or network fees, if any, may be shown separately before approval.
+              </p>
+            )}
+            {confirmationAmount === null && (
+              <p className="text-xs text-destructive" role="alert">The live payment amount is unavailable. Retry after the quote loads.</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" onClick={() => setPurchaseConfirmOpen(false)}>Cancel</Button>
+            <Button
+              type="button"
+              onClick={confirmPurchase}
+              disabled={confirmationAmount === null || checkoutStarted || cryptoCardPurchase.isPending}
+              data-testid="button-confirm-card-purchase"
+            >
+              Confirm and continue
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

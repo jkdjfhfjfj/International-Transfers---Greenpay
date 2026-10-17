@@ -190,15 +190,16 @@ export default function EnhancedUserManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/virtual-card"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/virtual-cards"] });
       toast({
         title: "Card Updated",
         description: "Virtual card status has been updated successfully",
       });
     },
-    onError: () => {
+    onError: (error) => {
       toast({
-        title: "Error",
-        description: "Failed to update card status",
+        title: "Card update failed",
+        description: error instanceof Error ? error.message.replace(/^\d+:\s*/, "") : "Please try again.",
         variant: "destructive",
       });
     },

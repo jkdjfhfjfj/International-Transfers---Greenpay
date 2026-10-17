@@ -253,14 +253,22 @@ async function savePendingLogin(req: any, user: any) {
 async function sendLoginOtp(user: any) {
   const { messagingService } = await import("./services/messaging");
   const { mailtrapService } = await import("./services/mailtrap");
+  const [firstName = "User", ...lastNameParts] = String(user.fullName || "User").trim().split(/\s+/);
+  const lastName = lastNameParts.join(" ");
   const otpCode = messagingService.generateOTP();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   await storage.updateUserOtp(user.id, otpCode, otpExpiry);
 
   const [smsWhatsappResult, emailResult] = await Promise.all([
-    messagingService.sendOTP(user.phone, otpCode),
+    messagingService.sendOTP(user.phone, otpCode).catch((error: unknown) => {
+      console.warn("[Login OTP] SMS/WhatsApp delivery failed; checking email fallback:", error);
+      return { sms: false, whatsapp: false };
+    }),
     user.email
-      ? mailtrapService.sendOTP(user.email, user.firstName || "User", user.lastName || "", otpCode)
+      ? mailtrapService.sendOTP(user.email, firstName, lastName, otpCode).catch((error: unknown) => {
+          console.warn("[Login OTP] Email delivery failed:", error);
+          return false;
+        })
       : Promise.resolve(false),
   ]);
   const sentMethods = [];
@@ -2446,33 +2454,11 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      const { messagingService } = await import('./services/messaging');
-      const { mailtrapService } = await import('./services/mailtrap');
-      const otpCode = messagingService.generateOTP();
-      const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
-      
-      await storage.updateUserOtp(user.id, otpCode, otpExpiry);
-      
-      // Send OTP via SMS, WhatsApp, and Email concurrently
-      const [smsWhatsappResult, emailResult] = await Promise.all([
-        messagingService.sendOTP(user.phone, otpCode),
-        user.email ? mailtrapService.sendOTP(user.email, user.firstName || 'User', user.lastName || '', otpCode) : Promise.resolve(false)
-      ]);
-      
-      const result = { ...smsWhatsappResult, email: emailResult };
-      
-      if (!result.sms && !result.whatsapp && !result.email) {
-        return res.status(500).json({ message: "Failed to resend verification code" });
-      }
-      
-      const sentMethods = [];
-      if (result.sms) sentMethods.push('SMS');
-      if (result.whatsapp) sentMethods.push('WhatsApp');
-      if (result.email) sentMethods.push('Email');
+      const sentMethods = await sendLoginOtp(user);
       
       res.json({ 
         message: `New OTP sent via ${sentMethods.join(', ')}`,
-        sentVia: sentMethods.length > 0 ? sentMethods.join(" and ") : "SMS, WhatsApp or Email",
+        sentVia: sentMethods.join(" and "),
       });
     } catch (error) {
       console.error('Resend OTP error:', error);
@@ -7170,7 +7156,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin User Management
-  app.get("/api/admin/users", async (req, res) => {
+  app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
       const { page = 1, limit = 20, status, search } = req.query;
       let users = await storage.getAllUsers();
@@ -7203,6 +7189,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const paginatedUsers = users.slice(startIndex, startIndex + Number(limit));
       const usersWithLedgerBalances = await Promise.all(paginatedUsers.map(async user => {
         const userWallets = await db.select().from(wallets).where(eq(wallets.userId, user.id));
+        const virtualCard = await storage.getVirtualCardByUserId(user.id);
         const balances: Record<string, number> = {};
         for (const wallet of userWallets) {
           const ledgerBalance = await getLedgerBalance({ walletId: wallet.id }, Number(wallet.balance || 0));
@@ -7213,6 +7200,8 @@ p{color:#6b7280;font-size:14px;}</style>
         }
         return {
           ...user,
+          hasVirtualCard: Boolean(virtualCard && ["active", "frozen", "blocked"].includes(String(virtualCard.status))),
+          cardStatus: virtualCard?.status || "inactive",
           balance: (balances.USD ?? Number(user.balance || 0)).toFixed(2),
           kesBalance: (balances.KES ?? Number((user as any).kesBalance || 0)).toFixed(2),
         };
@@ -7645,7 +7634,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin Virtual Cards Management
-  app.get("/api/admin/virtual-cards", async (req, res) => {
+  app.get("/api/admin/virtual-cards", requireAdminAuth, async (req, res) => {
     try {
       const search = ((req.query.search as string) || "").toLowerCase().trim();
       const allCards = await storage.getAllVirtualCards();
@@ -9049,7 +9038,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin virtual card management (action in URL param)
-  app.put("/api/admin/users/:id/card/:action", async (req, res) => {
+  app.put("/api/admin/users/:id/card/:action", requireAdminAuth, async (req, res) => {
     try {
       const user = await storage.getUser(req.params.id);
       if (!user) {
@@ -9061,42 +9050,47 @@ p{color:#6b7280;font-size:14px;}</style>
       
       switch (action) {
         case "issue":
-          updateData = { hasVirtualCard: true, cardStatus: "active" };
-          
-          // Create virtual card record when issuing
-          const cardData = {
-            userId: req.params.id,
-            cardNumber: `4567${Math.random().toString().slice(2, 14)}`,
-            expiryMonth: String(new Date().getMonth() + 1).padStart(2, '0'),
-            expiryYear: String(new Date().getFullYear() + 5).slice(-2),
-            cvv: Math.floor(Math.random() * 900 + 100).toString(),
-            cardholderName: user.fullName || user.username,
-            status: "active",
-            balance: "0.00",
-            cardType: "virtual",
-            provider: "Mastercard",
-            currency: user.defaultCurrency || "USD",
-            pin: Math.floor(Math.random() * 9000 + 1000).toString()
-          };
-          
+          if (user.hasVirtualCard) return res.status(409).json({ error: "User already has a virtual card." });
           try {
-            await storage.createVirtualCard(cardData);
+            const existingCard = await storage.getVirtualCardByUserId(user.id);
+            if (existingCard && ["active", "frozen"].includes(String(existingCard.status))) {
+              return res.status(409).json({ error: "User already has an active virtual card." });
+            }
+            await storage.createVirtualCard({
+              userId: user.id,
+              currency: user.defaultCurrency || "USD",
+              purchaseAmount: "60.00",
+            });
           } catch (error) {
             console.error('Error creating virtual card:', error);
             return res.status(500).json({ error: "Failed to create virtual card" });
           }
+          updateData = { hasVirtualCard: true, cardStatus: "active" };
           break;
         case "activate":
           if (!user.hasVirtualCard) {
             return res.status(400).json({ error: "User has no virtual card" });
           }
-          updateData = { cardStatus: "active" };
+          {
+            const card = await storage.getVirtualCardByUserId(user.id);
+            if (!card) return res.status(404).json({ error: "Virtual card record not found" });
+            if (card.status === "inactive") {
+              return res.status(400).json({ error: "Inactive cards must be reissued, not reactivated." });
+            }
+            await storage.updateVirtualCard(card.id, { status: "active", freezeReason: null, blockReason: null });
+          }
+          updateData = { hasVirtualCard: true };
           break;
         case "deactivate":
           if (!user.hasVirtualCard) {
             return res.status(400).json({ error: "User has no virtual card" });
           }
-          updateData = { cardStatus: "blocked" };
+          {
+            const card = await storage.getVirtualCardByUserId(user.id);
+            if (!card) return res.status(404).json({ error: "Virtual card record not found" });
+            await storage.updateVirtualCard(card.id, { status: "blocked", freezeReason: null, blockReason: "Deactivated by administrator" });
+          }
+          updateData = { hasVirtualCard: true };
           break;
         default:
           return res.status(400).json({ error: "Invalid action" });
@@ -9111,7 +9105,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin virtual card management (action in body)
-  app.put("/api/admin/users/:id/virtual-card", async (req, res) => {
+  app.put("/api/admin/users/:id/virtual-card", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const { action } = req.body;
@@ -9125,13 +9119,21 @@ p{color:#6b7280;font-size:14px;}</style>
       switch (action) {
         case "issue":
           // Issue new virtual card
+          if (user.hasVirtualCard) {
+            return res.status(409).json({ error: "User already has a virtual card." });
+          }
+          const existingCard = await storage.getVirtualCardByUserId(id);
+          if (existingCard && ["active", "frozen"].includes(String(existingCard.status))) {
+            return res.status(409).json({ error: "User already has an active virtual card." });
+          }
           result = await storage.createVirtualCard({
             userId: id,
+            currency: user.defaultCurrency || "USD",
             purchaseAmount: "60.00"
           });
           
           // Update user to reflect they have a card
-          await storage.updateUser(id, { hasVirtualCard: true });
+          await storage.updateUser(id, { hasVirtualCard: true, cardStatus: "active" });
           
           // Send card activation notification via SMS, WhatsApp, and Email
           const { messagingService: issueMessaging } = await import('./services/messaging');
@@ -9208,6 +9210,14 @@ p{color:#6b7280;font-size:14px;}</style>
           
         default:
           return res.status(400).json({ error: "Invalid action" });
+      }
+
+      if (action === "activate") {
+        await storage.updateUser(id, { hasVirtualCard: true });
+      } else if (action === "freeze") {
+        await storage.updateUser(id, { hasVirtualCard: true });
+      } else if (action === "inactive") {
+        await storage.updateUser(id, { hasVirtualCard: false });
       }
       
       res.json({ success: true, result });
@@ -9300,26 +9310,14 @@ p{color:#6b7280;font-size:14px;}</style>
       await storage.updateVirtualCard(id, { status: "blocked", blockReason: "Replaced by reissued card" });
 
       // Create new card with same structure as original cards
-      const newCardNumber = `4567${Math.random().toString().slice(2, 14)}`;
-      const newCvv = Math.floor(100 + Math.random() * 900).toString();
-      const expiryDate = new Date();
-      expiryDate.setFullYear(expiryDate.getFullYear() + 3);
-      const newExpiryDate = (expiryDate.getMonth() + 1).toString().padStart(2, '0') + '/' + expiryDate.getFullYear().toString().slice(-2);
-
       const newCard = await storage.createVirtualCard({
         userId,
-        cardNumber: newCardNumber,
-        expiryDate: newExpiryDate,
-        cvv: newCvv,
-        cardHolderName: user.fullName || "Card User",
-        status: "active",
-        balance: "0.00",
-        currency: "USD",
-        purchaseDate: new Date()
+        currency: oldCard.currency || "USD",
+        purchaseAmount: oldCard.purchaseAmount || "60.00",
       });
 
       // Restore the user's card flag so they regain access to send/transfer/etc.
-      await storage.updateUser(userId, { hasVirtualCard: true, cardStatus: "active" });
+      await storage.updateUser(userId, { hasVirtualCard: true });
 
       // Log admin action
       await storage.createAdminLog({

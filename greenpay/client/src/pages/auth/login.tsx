@@ -81,6 +81,7 @@ export default function LoginPage() {
       const result = event.data?.googleAuth;
       if (
         handled ||
+        event.origin !== window.location.origin ||
         typeof result !== "string" ||
         !["login", "new_user", "mfa_required", "suspended", "cancelled", "error"].includes(result)
       ) return;
