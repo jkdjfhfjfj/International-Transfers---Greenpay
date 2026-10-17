@@ -30,7 +30,7 @@ interface UserData {
 }
 
 export function generateTransactionPDF(transactions: Transaction[], userData: UserData) {
-  const doc = new jsPDF();
+  const doc = new jsPDF({ orientation: 'landscape' });
   
   const greenColor: [number, number, number] = [34, 197, 94]; // Green-500
   const grayColor: [number, number, number] = [107, 114, 128]; // Gray-500
@@ -228,5 +228,8 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
   
   // Save the PDF
   const fileName = `Geepay_Statement_${new Date().toISOString().split('T')[0]}.pdf`;
-  doc.save(fileName);
+  if (typeof window !== 'undefined') doc.save(fileName);
+  // Also return the bytes for server-side email attachments; browser callers
+  // still get the direct download above.
+  return new Uint8Array(doc.output('arraybuffer'));
 }

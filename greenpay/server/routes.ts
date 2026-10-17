@@ -9280,7 +9280,7 @@ p{color:#6b7280;font-size:14px;}</style>
   // (Duplicate admin virtual-cards GET/PUT removed — primary handlers exist earlier with search support)
 
   // Admin reissue virtual card
-  app.post("/api/admin/virtual-cards/:id/reissue", async (req, res) => {
+  app.post("/api/admin/virtual-cards/:id/reissue", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       

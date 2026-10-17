@@ -43,6 +43,7 @@ interface Conversation {
   lastMessageAt?: string;
   createdAt: string;
   updatedAt: string;
+  user?: { id: string; fullName?: string | null; email?: string | null } | null;
 }
 
 export default function RealLiveChat() {
@@ -290,9 +291,7 @@ export default function RealLiveChat() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
                         <User className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium text-sm">
-                          {conversation.title || 'User Support Request'}
-                        </span>
+                        <span className="font-medium text-sm">{conversation.user?.fullName || conversation.user?.email || conversation.title || 'User Support Request'}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <Badge 
@@ -317,6 +316,9 @@ export default function RealLiveChat() {
                         )}
                       </div>
                     </div>
+                    {conversation.user?.email && (
+                      <p className="ml-6 mb-2 truncate text-xs text-muted-foreground">Email: {conversation.user.email}</p>
+                    )}
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
                         {conversation.lastMessageAt 
@@ -345,9 +347,10 @@ export default function RealLiveChat() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-semibold">
-                    {selectedConversation?.title || 'User Support Chat'}
+                    {selectedConversation?.user?.fullName || selectedConversation?.title || 'User Support Chat'}
                   </h3>
                   <p className="text-sm text-muted-foreground">
+                    {selectedConversation?.user?.email && <span className="mr-2">{selectedConversation.user.email} ·</span>}
                     Started {format(new Date(selectedConversation?.createdAt || ''), 'MMM d, yyyy HH:mm')}
                   </p>
                 </div>

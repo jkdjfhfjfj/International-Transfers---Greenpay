@@ -187,7 +187,7 @@ export default function BillsPage() {
   const idLabel = selectedProvider?.needsId === "meterNumber" ? "Meter Number" : "Account Number";
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-6">
+    <div className="min-h-screen bg-background pb-24 md:pb-6">
       {/* Header */}
       <WavyHeader
         
@@ -195,7 +195,12 @@ export default function BillsPage() {
         size="sm"
       />
 
-      <div className="p-6 space-y-6">
+      <main className="mx-auto max-w-3xl p-4 md:p-6 space-y-5">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Payments</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Pay bills</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Pay supported Kenyan services directly from your KES wallet.</p>
+        </div>
         {/* Available Balance */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -281,7 +286,7 @@ export default function BillsPage() {
             </div>
           )}
         </motion.div>
-      </div>
+      </main>
 
       {/* Multi-Step Payment Modal */}
       <Dialog open={showModal} onOpenChange={setShowModal}>

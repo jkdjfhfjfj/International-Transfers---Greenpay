@@ -93,13 +93,13 @@ export default function BottomNavigation() {
         initial={{ y: 100 }}
         animate={{ y: 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
-        style={{ position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 9999 }}
+        className="fixed bottom-[calc(env(safe-area-inset-bottom,0px)+12px)] left-3 right-3 z-50 md:hidden"
+        style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', left: 12, right: 12, zIndex: 9999 }}
         data-testid="bottom-navigation"
       >
        <div
-        className="bg-background/95 border-t border-border shadow-[0_-4px_18px_rgba(15,23,42,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80 dark:shadow-[0_-4px_18px_rgba(0,0,0,0.28)]"
-        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)', minHeight: 'var(--bottom-nav-height)' }}
+        className="rounded-full border border-border/80 bg-background/95 shadow-[0_8px_30px_rgba(15,23,42,0.18)] backdrop-blur supports-[backdrop-filter]:bg-background/85 dark:shadow-[0_8px_30px_rgba(0,0,0,0.4)]"
+        style={{ minHeight: 72 }}
       >
         <div className="flex justify-around items-end max-w-lg mx-auto px-2 relative" style={{ height: 72 }}>
           {navItems.map((item) => {
@@ -115,7 +115,7 @@ export default function BottomNavigation() {
               return (
                 <div key={item.id} className="flex flex-col items-center justify-end pb-2 relative" style={{ flex: 1 }}>
                   <motion.button
-                    onClick={() => setLocation(item.path)}
+                  onClick={() => item.id === "settings" ? setMenuOpen(true) : setLocation(item.path)}
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.92 }}
                     data-testid={`nav-${item.id}`}
@@ -154,7 +154,7 @@ export default function BottomNavigation() {
             return (
               <motion.button
                 key={item.id}
-                onClick={() => setLocation(item.path)}
+                  onClick={() => item.id === "settings" ? setMenuOpen(true) : setLocation(item.path)}
                 whileHover={{ y: -2, scale: 1.04 }}
                 whileTap={{ scale: 0.88 }}
                 data-testid={`nav-${item.id}`}
@@ -198,7 +198,7 @@ export default function BottomNavigation() {
       </motion.div>
 
       <Drawer open={menuOpen} onOpenChange={setMenuOpen}>
-        <DrawerContent className="z-[10001] max-h-[calc(100dvh-var(--bottom-nav-height)-env(safe-area-inset-bottom,0px))] overflow-y-auto rounded-t-[28px] pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+1rem)]">
+        <DrawerContent className="fixed bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+24px)] left-3 right-3 z-[10001] mx-auto max-h-[calc(100dvh-var(--bottom-nav-height)-env(safe-area-inset-bottom,0px)-40px)] w-auto max-w-lg overflow-y-auto rounded-[28px] border border-border bg-background pb-4 shadow-2xl">
           <DrawerHeader className="text-left">
             <div className="flex items-center justify-between">
               <div>

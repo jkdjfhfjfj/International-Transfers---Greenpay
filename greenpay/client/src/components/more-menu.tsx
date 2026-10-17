@@ -111,8 +111,8 @@ export function MoreMenu({ open, onClose }: MoreMenuProps) {
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed bottom-[4.5rem] md:bottom-0 left-0 right-0 z-[10001] bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl flex flex-col"
-            style={{ maxHeight: '82vh' }}
+            className="fixed bottom-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom,0px)+24px)] md:bottom-4 left-3 right-3 z-[10001] mx-auto max-w-lg bg-white dark:bg-gray-900 rounded-3xl border border-border shadow-2xl flex flex-col"
+            style={{ maxHeight: 'calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom, 0px) - 40px)' }}
           >
             <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
               <div className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full" />

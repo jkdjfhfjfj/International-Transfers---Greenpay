@@ -629,7 +629,7 @@ export default function VirtualCardPurchasePage() {
                       </Button>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3" data-testid="card-payment-method-options">
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3" data-testid="card-payment-method-options">
                     {paymentMethodOptions.map((option) => {
                       const OptionIcon = option.icon;
                       const isSelected = paymentMethod === option.id;
@@ -650,7 +650,7 @@ export default function VirtualCardPurchasePage() {
                           aria-disabled={option.disabled}
                           disabled={option.disabled}
                           onClick={() => setPaymentMethod(option.id)}
-                          className={`relative min-h-[132px] rounded-2xl border p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ${
+                          className={`relative min-h-[112px] rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[132px] sm:p-3 ${
                             isSelected
                               ? "border-primary bg-primary/[0.055] shadow-sm"
                               : "border-border bg-card hover:border-primary/40"

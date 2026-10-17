@@ -95,7 +95,9 @@ export default function VirtualCardManagement() {
   const updateCardMutation = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<VirtualCard> & { blockReason?: string | null } }) => {
       const response = await apiRequest("PUT", `/api/admin/virtual-cards/${id}`, updates);
-      return response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "Failed to update virtual card");
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/virtual-cards"] });
@@ -103,8 +105,12 @@ export default function VirtualCardManagement() {
       setViewDialogCard(null);
       setSelectedCard(null);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update virtual card", variant: "destructive" });
+    onError: (error) => {
+      toast({
+        title: "Card update failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -132,12 +138,16 @@ export default function VirtualCardManagement() {
   const handleReissueCard = async (card: VirtualCard) => {
     try {
       const response = await apiRequest("POST", `/api/admin/virtual-cards/${card.id}/reissue`, {});
-      if (response.ok) {
-        toast({ title: "Card Reissued", description: "A new card has been issued to the user" });
-        queryClient.invalidateQueries({ queryKey: ["/api/admin/virtual-cards"] });
-      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || "Failed to reissue card");
+      toast({ title: "Card Reissued", description: "A new card has been issued to the user" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/virtual-cards"] });
     } catch (error) {
-      toast({ title: "Error", description: "Failed to reissue card", variant: "destructive" });
+      toast({
+        title: "Card reissue failed",
+        description: error instanceof Error ? error.message : "Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
