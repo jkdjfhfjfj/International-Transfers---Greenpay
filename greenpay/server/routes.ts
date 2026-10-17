@@ -2425,7 +2425,6 @@ p{color:#6b7280;font-size:14px;}</style>
           requiresPin: hasPin,
           requiresAuthenticator: hasAuthenticator,
           requiresBiometric: hasBiometric,
-          requiresBiometric: hasBiometric,
           requiresOtp: otpMethods.length > 0,
           otpMethods,
           userId: user.id,
@@ -2438,7 +2437,6 @@ p{color:#6b7280;font-size:14px;}</style>
           return res.json({
             requiresPin: hasPin,
             requiresAuthenticator: hasAuthenticator,
-            requiresBiometric: hasBiometric,
             requiresBiometric: hasBiometric,
             requiresOtp: false,
             userId: user.id,
