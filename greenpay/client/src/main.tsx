@@ -12,15 +12,10 @@ if (typeof global === 'undefined') {
 const APP_VERSION = "1.0.3";
 const isNative = !!(window as any).Capacitor?.isNativePlatform?.();
 
-// Only do version-mismatch reload on web — on native it kills the WebView
+// Record the client version without clearing browser data or forcing a reload.
 if (!isNative) {
   const storedVersion = localStorage.getItem("app_version");
-  if (storedVersion && storedVersion !== APP_VERSION) {
-    localStorage.setItem("app_version", APP_VERSION);
-    localStorage.clear();
-    sessionStorage.clear();
-    window.location.reload();
-  } else if (!storedVersion) {
+  if (storedVersion !== APP_VERSION) {
     localStorage.setItem("app_version", APP_VERSION);
   }
 }

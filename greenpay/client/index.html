@@ -212,51 +212,19 @@
   <body>
     <div id="root"></div>
     <script>
-      // Force reload if page hangs on blank screen
-      window.onload = function() {
-        setTimeout(() => {
-          const root = document.getElementById('root');
-          if (root && root.innerHTML === "") {
-            console.log("App failed to render. Attempting hard reload...");
-            window.location.href = window.location.origin + "/?clear_cache=1&s=1";
-          }
-        }, 3000);
-      };
-
-      // Global error handler to catch boot crashes
+      // Report boot failures without clearing user data or starting reload loops.
       window.addEventListener('error', function(e) {
         console.error('Runtime error caught:', e.error);
-        // Only trigger auto-clear if it's a critical boot error (root is empty)
-        setTimeout(() => {
-          const root = document.getElementById('root');
-          if (root && root.innerHTML === "") {
-            console.warn('App failed to boot. Clearing storage...');
-            localStorage.clear();
-            sessionStorage.clear();
-            // Clear all cookies
-            document.cookie.split(";").forEach(function(c) {
-              document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
-            });
-            window.location.reload();
-          }
-        }, 1000);
       });
 
-      // Fail-safe: If root is empty after 5 seconds, clear and reload
+      // If React never mounts, show a manual retry instead of reloading forever.
       setTimeout(() => {
         const root = document.getElementById('root');
         if (root && root.innerHTML === "") {
-          console.error("App failed to load within 5s. Force resetting site data...");
-          localStorage.clear();
-          sessionStorage.clear();
-          if ('caches' in window) {
-            caches.keys().then(names => {
-              for (let name of names) caches.delete(name);
-            });
-          }
-          window.location.reload();
+          console.error("GreenPay did not mount within 12 seconds.");
+          root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39"><h1>GreenPay could not load</h1><p>The app did not start. Your saved browser data was left untouched.</p><button style="padding:.7rem 1rem;border:0;border-radius:.6rem;background:#0d9488;color:white;cursor:pointer" onclick="window.location.reload()">Try again</button></main>';
         }
-      }, 5000);
+      }, 12000);
     </script>
     <script type="module" src="/src/main.tsx"></script>
     <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->

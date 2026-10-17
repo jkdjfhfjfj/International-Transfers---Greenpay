@@ -114,10 +114,6 @@ app.use((req, res, next) => {
     res.cookie('cache_cleared', '1', { maxAge: 3600000, httpOnly: true, sameSite: 'lax' });
   }
 
-  // Clear site data if a specific query param is present or on certain conditions
-  if (req.query.clear_cache === '1') {
-    res.setHeader('Clear-Site-Data', '"cache", "storage", "executionContexts"');
-  }
   next();
 });
 

@@ -51,11 +51,6 @@ export function PWAInstallPrompt() {
           await Promise.all(registrations.map((registration) => registration.unregister()));
           const cacheNames = await caches.keys();
           await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
-          const cleanupKey = 'greenpay-dev-sw-cleanup-reloaded';
-          if (!sessionStorage.getItem(cleanupKey)) {
-            sessionStorage.setItem(cleanupKey, '1');
-            window.location.reload();
-          }
         }).catch((error) => console.warn('Unable to clear stale development service worker:', error));
       } else {
         navigator.serviceWorker.register('/sw.js')
