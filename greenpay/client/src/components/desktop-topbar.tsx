@@ -9,6 +9,7 @@ const pageNames: Record<string, string> = {
   "/receive-money": "Receive money",
   "/virtual-card": "Virtual card",
   "/virtual-accounts": "Virtual accounts",
+  "/merchant-pay": "Merchant Pay",
   "/settings": "Settings",
   "/kyc": "Identity verification",
   "/analytics": "Analytics",

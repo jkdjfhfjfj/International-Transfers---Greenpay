@@ -74,7 +74,8 @@ body, html {
   --radius: 12px;
 
   /* Geepay brand tokens */
-  --gp-brand: #0f766e;
+  --gp-theme-color: #0f766e;
+  --gp-brand: var(--gp-theme-color);
   --gp-brand-rgb: 15, 118, 110;
   --gp-brand-soft: #14b8a6;
   --gp-gradient: linear-gradient(135deg, var(--gp-brand) 0%, var(--gp-brand-soft) 100%);

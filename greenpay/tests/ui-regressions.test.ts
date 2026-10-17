@@ -10,6 +10,8 @@ const notifications = readFileSync(new URL("src/components/notifications.tsx", r
 const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.tsx", root), "utf8");
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
 const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
+const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root), "utf8");
+const styles = readFileSync(new URL("src/index.css", root), "utf8");
 
 test("pre-React startup shell fills mobile viewport without a default white frame", () => {
   assert.match(html, /html,\s*body,\s*#root\s*\{[^}]*margin:\s*0/s);
@@ -46,4 +48,17 @@ test("Paybill and Till directions appear in card purchase, not merchant pay", ()
   assert.match(cardPurchase, /check that the merchant name is/);
   assert.match(cardPurchase, /Check current Greenpay\.co\.ke details/);
   assert.doesNotMatch(merchantPay, /PAYMENT_STEPS|Lipa na M-PESA|Buy Goods and Services/);
+});
+
+test("Merchant Pay stays focused on merchant instructions and has no back button", () => {
+  assert.doesNotMatch(merchantPay, /virtual.?card/i);
+  assert.doesNotMatch(merchantPay, /ArrowLeft|Back to dashboard|setLocation/);
+  assert.match(merchantPay, /title="Merchant Pay"/);
+  assert.match(merchantPay, /button-open-merchant-guidance/);
+});
+
+test("wavy header fill uses the same teal as the browser theme color", () => {
+  assert.match(wavyHeader, /var\(--gp-theme-color, #0f766e\)/);
+  assert.match(styles, /--gp-theme-color:\s*#0f766e/);
+  assert.match(html, /name="theme-color" content="#0f766e"/);
 });
