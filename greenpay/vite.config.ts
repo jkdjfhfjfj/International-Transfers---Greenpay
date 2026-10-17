@@ -33,7 +33,7 @@ export default defineConfig({
   },
   server: {
     allowedHosts: true,
-    hmr: {
+    hmr: process.env.BASE_PATH ? false : {
       clientPort: 443,
       protocol: 'wss',
     },
