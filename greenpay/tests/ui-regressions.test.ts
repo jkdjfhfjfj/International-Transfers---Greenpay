@@ -154,6 +154,24 @@ test("password reset actions stay fixed at the bottom with short Android-style l
   assert.doesNotMatch(resetPassword, />\s*Back\s*</);
 });
 
+test("verification method Back action is fixed to the bottom and password reset has no Back action", () => {
+  const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
+  const resetPassword = readFileSync(new URL("src/pages/auth/reset-password.tsx", root), "utf8");
+  assert.match(login, /fixed inset-x-0 bottom-0[\s\S]*?data-testid="button-back-verification-method"/);
+  assert.match(login, /onClick=\{clearPendingLogin\}/);
+  assert.doesNotMatch(resetPassword, />\s*Back\s*</);
+});
+
+test("account deletion failures include the server-provided reason", () => {
+  assert.match(serverRoutes, /Could not submit your account deletion request\. Reason: \$\{detail\.slice\(0, 300\)\}/);
+});
+
+test("login database and session failures are not reported as invalid credentials", () => {
+  const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
+  assert.match(serverRoutes, /res\.status\(500\)\.json\(\{ message: "We couldn't complete sign-in because of a server error/);
+  assert.match(login, /raw\.startsWith\("401:"\)/);
+});
+
 test("production auth and sessions use the Render database while previews stay isolated", () => {
   const database = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
   const storage = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");

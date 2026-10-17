@@ -299,11 +299,13 @@ export default function LoginPage() {
     },
     onError: (error: any) => {
       const raw = error.message || "";
-      let description = "Invalid email or password. Please try again.";
+      let description = raw.replace(/^\d+:\s*/, "") || "We couldn't complete sign-in. Please try again.";
       if (raw.includes("accountSuspended") || raw.includes("suspended")) {
         description = "Your account has been suspended. Please contact support for assistance.";
       } else if (raw.includes("maintenance")) {
         description = "The platform is under maintenance. Please try again later.";
+      } else if (raw.startsWith("401:")) {
+        description = "Invalid email or password. Please try again.";
       }
       toast({
         title: "Login failed",
@@ -448,9 +450,9 @@ export default function LoginPage() {
 
   if (tempLoginData && authMethod === null && pendingMethods > 1) {
     return (
-      <div className="min-h-screen flex flex-col bg-background pb-20">
+      <div className="min-h-screen flex flex-col bg-background pb-24">
         <WavyHeader size="sm" />
-        <div className="flex-1 p-6">
+        <div className="flex-1 p-6 pb-24">
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
@@ -515,17 +517,23 @@ export default function LoginPage() {
                 </div>
               </motion.button>}
 
-              <Button
-                variant="outline"
-                className="w-full mt-4"
-                onClick={() => {
-                  clearPendingLogin();
-                }}
-              >
-                Back
-              </Button>
             </div>
           </motion.div>
+        </div>
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background"
+          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+        >
+          <div className="mx-auto max-w-sm p-4">
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={clearPendingLogin}
+              data-testid="button-back-verification-method"
+            >
+              Back
+            </Button>
+          </div>
         </div>
       </div>
     );

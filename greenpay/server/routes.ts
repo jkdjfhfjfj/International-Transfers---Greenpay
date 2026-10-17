@@ -2494,7 +2494,7 @@ p{color:#6b7280;font-size:14px;}</style>
       }
     } catch (error) {
       console.error('Login error:', error);
-      res.status(400).json({ message: "Invalid login data" });
+      res.status(500).json({ message: "We couldn't complete sign-in because of a server error. Please try again." });
     }
   });
 
@@ -10051,7 +10051,10 @@ p{color:#6b7280;font-size:14px;}</style>
       res.status(201).json({ request, message: "Your account deletion request was submitted for admin review." });
     } catch (error) {
       console.error("Account deletion request error:", error);
-      res.status(500).json({ message: "Could not submit your account deletion request." });
+      const detail = error instanceof Error ? error.message : String(error || "Unknown error");
+      res.status(500).json({
+        message: `Could not submit your account deletion request. Reason: ${detail.slice(0, 300)}`,
+      });
     }
   });
 
