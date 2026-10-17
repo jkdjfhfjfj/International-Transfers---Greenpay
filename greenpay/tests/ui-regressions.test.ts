@@ -184,6 +184,20 @@ test("login lets users choose a verified OTP delivery channel before sending a c
   assert.match(login, /requestOtpMutation\.mutate\(method\.id\)/);
 });
 
+test("login method chooser includes enabled PIN, authenticator, and account-bound biometric", () => {
+  const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
+  const webauthn = readFileSync(new URL("src/lib/webauthn.ts", root), "utf8");
+  assert.match(serverRoutes, /requiresPin: Boolean\(user\?\.pinEnabled && user\?\.pinCode\)/);
+  assert.match(serverRoutes, /requiresAuthenticator: Boolean\(user\?\.twoFactorEnabled && user\?\.twoFactorSecret\)/);
+  assert.match(serverRoutes, /requiresBiometric: Boolean\(getStoredBiometricCredential\(user\)\)/);
+  assert.match(serverRoutes, /pendingUserId !== match\.id/);
+  assert.match(login, /tempLoginData\.requiresPin/);
+  assert.match(login, /tempLoginData\.requiresAuthenticator/);
+  assert.match(login, /tempLoginData\.requiresBiometric/);
+  assert.match(login, /button-login-biometric/);
+  assert.match(webauthn, /allowCredentials: options\.allowCredentials\.map/);
+});
+
 test("production auth and sessions use the Render database while previews stay isolated", () => {
   const database = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
   const storage = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");

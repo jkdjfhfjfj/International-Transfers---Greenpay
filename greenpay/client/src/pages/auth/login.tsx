@@ -201,13 +201,18 @@ export default function LoginPage() {
     const methods = [
       data.requiresPin ? "pin" : null,
       data.requiresAuthenticator ? "authenticator" : null,
+      data.requiresBiometric ? "biometric" : null,
       data.requiresOtp ? "otp" : null,
-    ].filter(Boolean) as Array<"pin" | "authenticator" | "otp">;
+    ].filter(Boolean) as Array<"pin" | "authenticator" | "biometric" | "otp">;
 
     if (methods.length === 0) return false;
 
     setTempLoginData(data);
-    if (methods.length > 1 || (methods[0] === "otp" && data.otpMethods?.length)) {
+    if (
+      methods.length > 1 ||
+      methods[0] === "biometric" ||
+      (methods[0] === "otp" && data.otpMethods?.length)
+    ) {
       setAuthMethod(null);
       setRequiresPin(false);
       return true;
@@ -220,6 +225,8 @@ export default function LoginPage() {
       setPinCode("");
     } else if (method === "authenticator") {
       setAuthenticatorCode("");
+    } else if (method === "biometric") {
+      return true;
     } else {
       localStorage.setItem("otpUserId", data.userId);
       localStorage.setItem("otpPhone", data.phone || "");
@@ -400,6 +407,7 @@ export default function LoginPage() {
     onSuccess: (data) => {
       if (data.user) {
         login(data.user);
+        clearPendingLogin();
         toast({
           title: "Biometric Login Success",
           description: "Welcome back!",
@@ -446,13 +454,22 @@ export default function LoginPage() {
 
   // Show auth method selection if both PIN and OTP are available
   const pendingMethods = tempLoginData
-    ? [tempLoginData.requiresPin, tempLoginData.requiresAuthenticator, tempLoginData.requiresOtp].filter(Boolean).length
+    ? [
+        tempLoginData.requiresPin,
+        tempLoginData.requiresAuthenticator,
+        tempLoginData.requiresBiometric,
+        tempLoginData.requiresOtp,
+      ].filter(Boolean).length
     : 0;
 
   if (
     tempLoginData &&
     authMethod === null &&
-    (pendingMethods > 1 || (tempLoginData.requiresOtp && tempLoginData.otpMethods?.length))
+    (
+      pendingMethods > 1 ||
+      tempLoginData.requiresBiometric ||
+      (tempLoginData.requiresOtp && tempLoginData.otpMethods?.length)
+    )
   ) {
     return (
       <div className="min-h-screen flex flex-col bg-background pb-24">
@@ -502,6 +519,30 @@ export default function LoginPage() {
                     <div>
                       <p className="font-semibold">Use Authenticator App</p>
                       <p className="text-sm text-muted-foreground">6-digit verification code</p>
+                    </div>
+                  </div>
+                </motion.button>
+              )}
+
+              {tempLoginData.requiresBiometric && (
+                <motion.button
+                  whileHover={{ scale: biometricSupported ? 1.02 : 1 }}
+                  onClick={() => biometricLoginMutation.mutate()}
+                  disabled={!biometricSupported || biometricLoginMutation.isPending}
+                  className="w-full p-4 border border-border rounded-lg bg-card hover:bg-muted transition-colors text-left disabled:cursor-not-allowed disabled:opacity-60"
+                  data-testid="button-login-biometric"
+                >
+                  <div className="flex items-center">
+                    <span className="material-icons text-primary mr-3">fingerprint</span>
+                    <div>
+                      <p className="font-semibold">
+                        {biometricLoginMutation.isPending ? "Authenticating…" : "Use biometric"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {biometricSupported
+                          ? "Verify with your device passkey"
+                          : "Passkeys are not supported in this browser"}
+                      </p>
                     </div>
                   </div>
                 </motion.button>

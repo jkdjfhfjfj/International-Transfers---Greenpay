@@ -273,6 +273,20 @@ async function resolveKenyanMobileMoneyGateway(): Promise<"payhero" | "nexuspay"
   return fallbackReady ? fallback : preferred;
 }
 
+function getStoredBiometricCredential(user: any) {
+  if (!user?.biometricEnabled || !user?.biometricCredentialId) return null;
+  try {
+    const credential = typeof user.biometricCredentialId === "string"
+      ? JSON.parse(user.biometricCredentialId)
+      : user.biometricCredentialId;
+    return typeof credential?.credentialId === "string" && typeof credential?.publicKey === "string"
+      ? credential
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 async function getLoginSecondFactors(user: any) {
   const [
     enableOtpSetting,
@@ -309,6 +323,7 @@ async function getLoginSecondFactors(user: any) {
     requiresOtp: settingEnabled(enableOtpSetting?.value, true) && (smsConfigured || whatsappConfigured || emailConfigured),
     requiresPin: Boolean(user?.pinEnabled && user?.pinCode),
     requiresAuthenticator: Boolean(user?.twoFactorEnabled && user?.twoFactorSecret),
+    requiresBiometric: Boolean(getStoredBiometricCredential(user)),
   };
 }
 
@@ -2122,6 +2137,7 @@ p{color:#6b7280;font-size:14px;}</style>
         factors.requiresOtp &&
         !factors.requiresPin &&
         !factors.requiresAuthenticator &&
+        !factors.requiresBiometric &&
         otpMethods.length === 0
       ) {
         return res.status(503).json({
@@ -2285,6 +2301,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const pinRequired = pinRequiredSetting?.value === 'true';
       const hasPin = Boolean(user.pinEnabled && user.pinCode);
       const hasAuthenticator = Boolean(user.twoFactorEnabled && user.twoFactorSecret);
+      const hasBiometric = Boolean(getStoredBiometricCredential(user));
       
       // Check if messaging credentials are configured. Email is a valid
       // second-factor delivery channel for Google and password login too.
@@ -2344,20 +2361,14 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!otpRequired) {
         console.log('OTP disabled by admin');
         
-        // Check both admin PIN requirement AND user PIN setting
-        if ((pinRequired || hasPin) && hasPin) {
+        if (((pinRequired || hasPin) && hasPin) || hasAuthenticator || hasBiometric) {
           await savePendingLogin(req, user);
           return res.status(200).json({
-            message: "PIN verification required",
-            requiresPin: true,
-            userId: user.id
-          });
-        }
-        if (hasAuthenticator) {
-          await savePendingLogin(req, user);
-          return res.status(200).json({
-            message: "Authenticator verification required",
-            requiresAuthenticator: true,
+            message: "Additional verification required",
+            requiresPin: hasPin,
+            requiresAuthenticator: hasAuthenticator,
+            requiresBiometric: hasBiometric,
+            requiresOtp: false,
             userId: user.id
           });
         }
@@ -2404,7 +2415,7 @@ p{color:#6b7280;font-size:14px;}</style>
       // provider does not prevent a user from choosing another verified method.
       if (messagesConfigured) {
         const otpMethods = await getAvailableLoginOtpMethods(user);
-        if (otpMethods.length === 0 && !hasPin && !hasAuthenticator) {
+        if (otpMethods.length === 0 && !hasPin && !hasAuthenticator && !hasBiometric) {
           return res.status(503).json({
             message: "No verified contact method is available for a login code. Please contact support.",
           });
@@ -2413,6 +2424,8 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.json({
           requiresPin: hasPin,
           requiresAuthenticator: hasAuthenticator,
+          requiresBiometric: hasBiometric,
+          requiresBiometric: hasBiometric,
           requiresOtp: otpMethods.length > 0,
           otpMethods,
           userId: user.id,
@@ -2420,11 +2433,13 @@ p{color:#6b7280;font-size:14px;}</style>
           email: user.email,
         });
       } else {
-        if (hasPin || hasAuthenticator) {
+        if (hasPin || hasAuthenticator || hasBiometric) {
           await savePendingLogin(req, user);
           return res.json({
             requiresPin: hasPin,
             requiresAuthenticator: hasAuthenticator,
+            requiresBiometric: hasBiometric,
+            requiresBiometric: hasBiometric,
             requiresOtp: false,
             userId: user.id,
             phone: user.phone,
@@ -6170,7 +6185,19 @@ p{color:#6b7280;font-size:14px;}</style>
       const scope = `login:${crypto.randomUUID()}`;
       const challenge = biometricService.issueChallenge(scope);
       const origin = `${req.protocol}://${req.get("host")}`;
-      res.json({ challenge, scope, rpId: new URL(origin).hostname, origin });
+      const pendingUserId = (req.session as any).pendingLoginUserId;
+      const pendingUser = pendingUserId ? await storage.getUser(pendingUserId) : null;
+      const credential = pendingUser ? getStoredBiometricCredential(pendingUser) : null;
+      if (pendingUserId && !credential) {
+        return res.status(403).json({ message: "Biometric login is not enabled for this account." });
+      }
+      res.json({
+        challenge,
+        scope,
+        rpId: new URL(origin).hostname,
+        origin,
+        ...(credential ? { allowCredentials: [credential.credentialId] } : {}),
+      });
     } catch (error) {
       console.error("Biometric login options error:", error);
       res.status(500).json({ message: "Unable to start biometric login" });
@@ -6282,6 +6309,10 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(401).json({ 
           message: "No verified passkey found for this device. Enable biometric login again in Settings."
         });
+      }
+      const pendingUserId = (req.session as any).pendingLoginUserId;
+      if (pendingUserId && pendingUserId !== match.id) {
+        return res.status(403).json({ message: "This passkey does not belong to the account being verified." });
       }
       if ((match as any).isSuspended === true) {
         return res.status(403).json({

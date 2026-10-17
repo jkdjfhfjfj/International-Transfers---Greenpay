@@ -70,6 +70,14 @@ export async function verifyBiometric(): Promise<any> {
       timeout: 60000,
       userVerification: "preferred",
       rpId: options.rpId,
+      ...(Array.isArray(options.allowCredentials)
+        ? {
+            allowCredentials: options.allowCredentials.map((id: string) => ({
+              type: "public-key" as const,
+              id: fromBase64Url(id),
+            })),
+          }
+        : {}),
     },
   }) as PublicKeyCredential | null;
   if (!credential) throw new Error("Biometric authentication cancelled");
