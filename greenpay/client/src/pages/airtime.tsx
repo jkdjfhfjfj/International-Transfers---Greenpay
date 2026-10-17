@@ -139,6 +139,25 @@ export default function AirtimePage() {
     }
   };
 
+  const isKenyanUser = ["KE", "KEN", "KENYA", "REPUBLIC OF KENYA"]
+    .includes(String(user?.country || "").trim().toUpperCase());
+  if (user?.country && !isKenyanUser) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <WavyHeader size="sm" />
+        <main className="mx-auto flex min-h-[65vh] max-w-xl items-center justify-center p-6">
+          <div className="w-full rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+            <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <Clock className="h-8 w-8" />
+            </div>
+            <p className="text-xl font-semibold">Coming soon</p>
+            <p className="mt-2 text-sm text-muted-foreground">Airtime is currently available in Kenya.</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-6">
       {/* Header */}

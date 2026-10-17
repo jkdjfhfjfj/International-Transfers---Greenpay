@@ -3796,9 +3796,11 @@ p{color:#6b7280;font-size:14px;}</style>
             : !readiness.mobileMoney
               ? "No configured Kenyan mobile-money provider is ready."
               : null,
-        card: readiness.isKenya && readiness.card,
+        card: readiness.card,
         cardReason: !readiness.isKenya
-          ? "Card checkout is available for Kenyan accounts."
+          ? !readiness.card
+            ? "Card checkout is not available for this country right now."
+            : null
           : !String(user.email || "").includes("@")
             ? "Add a valid email address to your profile to use card checkout."
             : !readiness.card
@@ -3859,10 +3861,8 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!gatewayCurrency) {
         return res.status(400).json({ message: "Add your country to your profile before starting a payment." });
       }
-      if (!isKenya && ["mobile_money", "card"].includes(requestedMethod)) {
-        return res.status(400).json({
-          message: "For card purchases outside Kenya, choose bank transfer or cryptocurrency.",
-        });
+      if (!isKenya && requestedMethod === "mobile_money") {
+        return res.status(400).json({ message: "Mobile money is available for Kenyan accounts only." });
       }
       if (!Number.isFinite(usdAmount) || usdAmount <= 0) {
         return res.status(503).json({ message: "Virtual card pricing is temporarily unavailable." });
@@ -5197,6 +5197,9 @@ p{color:#6b7280;font-size:14px;}</style>
         console.error(`❌ User not found: ${userId}`);
         return res.status(404).json({ message: "User not found" });
       }
+      if (!isKenyanCountry(user.country)) {
+        return res.status(403).json({ message: "Airtime is coming soon for your country." });
+      }
 
       const airtimeCurrency = normalizeCurrency(currency);
       if (airtimeCurrency !== "KES") {
@@ -5322,6 +5325,9 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!user) {
         console.error(`❌ User not found: ${userId}`);
         return res.status(404).json({ message: "User not found" });
+      }
+      if (!isKenyanCountry(user.country)) {
+        return res.status(403).json({ message: "Airtime is coming soon for your country." });
       }
 
       console.log(`👤 User ${user.fullName} - Already claimed: ${user.hasClaimedAirtimeBonus}`);
@@ -5458,6 +5464,9 @@ p{color:#6b7280;font-size:14px;}</style>
         console.error(`❌ User not found: ${userId}`);
         return res.status(404).json({ message: "User not found" });
       }
+      if (!isKenyanCountry(user.country)) {
+        return res.status(403).json({ message: "Bill payments are coming soon for your country." });
+      }
 
       const kesWallet = await getUserWallet(userId, "KES");
       if (!kesWallet) {
@@ -5554,6 +5563,10 @@ p{color:#6b7280;font-size:14px;}</style>
       // Security: users can only view their own bill history
       if (sessionUserId !== requestedUserId) {
         return res.status(403).json({ message: "Access denied" });
+      }
+      const user = await storage.getUser(sessionUserId);
+      if (!user || !isKenyanCountry(user.country)) {
+        return res.status(403).json({ message: "Bill payments are available in Kenya only." });
       }
       
       const payments = await storage.getBillPaymentsByUserId(requestedUserId);

@@ -225,7 +225,12 @@ export default function VirtualCardPurchasePage() {
   const showDiscount = discountEnabled && hasDiscount;
   const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
   const isKenyaCardPurchase = paymentOptions?.isKenya ??
-    String(user?.country || "").trim().toLowerCase() === "kenya";
+    ["ke", "ken", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
+  useEffect(() => {
+    if (!isKenyaCardPurchase && (paymentMethod === "mobile_money" || paymentMethod === "manual")) {
+      setPaymentMethod("card");
+    }
+  }, [isKenyaCardPurchase, paymentMethod]);
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
@@ -682,7 +687,9 @@ export default function VirtualCardPurchasePage() {
                 </div>
               )}
               <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3" data-testid="card-payment-method-options">
-                    {paymentMethodOptions.map((option) => {
+                {paymentMethodOptions
+                  .filter((option) => isKenyaCardPurchase || !["mobile_money", "manual"].includes(option.id))
+                  .map((option) => {
                       const OptionIcon = option.icon;
                       const isSelected = paymentMethod === option.id;
                       const eyebrow = option.id === "bank_transfer"

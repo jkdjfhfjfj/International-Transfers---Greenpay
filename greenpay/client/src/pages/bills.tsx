@@ -16,7 +16,7 @@ import { PINModal } from "@/components/pin-modal";
 const BILL_PROVIDERS = [
   { id: "KPLC", name: "KPLC", label: "KPLC (Electricity)", icon: "⚡", color: "from-yellow-500 to-yellow-600", needsId: "meterNumber" },
   { id: "Zuku", name: "Zuku", label: "Zuku (Cable TV)", icon: "📺", color: "from-teal-500 to-teal-600", needsId: "accountNumber" },
-  { id: "StarimesTV", name: "StarimesTV", label: "StarimesTV (Cable)", icon: "📡", color: "from-orange-500 to-orange-600", needsId: "accountNumber" },
+  { id: "StarimesTV", name: "StarTimes TV", label: "StarTimes TV", icon: "📡", color: "from-orange-500 to-orange-600", needsId: "accountNumber" },
   { id: "Nairobi_Water", name: "Nairobi Water", label: "Nairobi Water", icon: "💧", color: "from-blue-500 to-blue-600", needsId: "meterNumber" },
   { id: "Kenya_Power", name: "Kenya Power", label: "Kenya Power", icon: "🔌", color: "from-red-500 to-red-600", needsId: "meterNumber" },
   { id: "Airtel_Money", name: "Airtel Money", label: "Airtel Money", icon: "💰", color: "from-red-500 to-red-700", needsId: "accountNumber" },
@@ -140,6 +140,8 @@ export default function BillsPage() {
 
   const handleProviderSelect = (provider: typeof BILL_PROVIDERS[0]) => {
     setSelectedProvider(provider);
+    setIdentifier("");
+    setAmount("");
     setStep(2);
   };
 
@@ -185,69 +187,81 @@ export default function BillsPage() {
   const paymentAmount = parseFloat(amount) || 0;
   const selectedProviderObj = BILL_PROVIDERS.find(p => p.id === selectedProvider?.id);
   const idLabel = selectedProvider?.needsId === "meterNumber" ? "Meter Number" : "Account Number";
+  const isKenyanUser = ["KE", "KEN", "KENYA", "REPUBLIC OF KENYA"]
+    .includes(String(user?.country || "").trim().toUpperCase());
+
+  if (user?.country && !isKenyanUser) {
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        <WavyHeader size="sm" />
+        <main className="mx-auto flex min-h-[65vh] max-w-xl items-center justify-center p-6">
+          <div className="w-full rounded-3xl border border-border bg-card p-8 text-center shadow-sm">
+            <div className="mx-auto mb-5 grid h-16 w-16 place-items-center rounded-2xl bg-primary/10 text-primary">
+              <Clock className="h-8 w-8" />
+            </div>
+            <p className="text-xl font-semibold">Coming soon</p>
+            <p className="mt-2 text-sm text-muted-foreground">Bill payments are currently available in Kenya.</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background pb-24 md:pb-6">
-      {/* Header */}
-      <WavyHeader
-        
-        
-        size="sm"
-      />
-
-      <main className="mx-auto max-w-3xl p-4 md:p-6 space-y-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-primary">Payments</p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">Pay bills</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Pay supported Kenyan services directly from your KES wallet.</p>
-        </div>
-        {/* Available Balance */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
+    <div className="min-h-screen bg-muted/30 pb-24">
+      <WavyHeader size="sm" />
+      <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950/20 dark:to-emerald-950/20 p-4 rounded-xl border border-green-200 dark:border-green-800"
+          className="overflow-hidden rounded-3xl bg-gradient-to-br from-teal-800 via-primary to-emerald-700 p-5 text-white shadow-lg sm:p-7"
         >
-          <p className="text-xs text-green-700 dark:text-green-300 mb-1">Available KES Balance</p>
-          <p className="text-3xl font-bold text-green-900 dark:text-green-100">KSh {kesBalance.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-        </motion.div>
+          <div className="flex flex-wrap items-end justify-between gap-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/70">KES wallet</p>
+              <p className="mt-2 text-3xl font-bold tabular-nums sm:text-4xl">
+                KSh {Number(kesBalance).toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="mt-2 text-sm text-white/75">Available balance</p>
+            </div>
+            <Button onClick={() => setShowModal(true)} className="h-12 w-full rounded-xl bg-white text-teal-800 hover:bg-white/90 sm:w-auto">
+              <Zap className="mr-2 h-4 w-4" /> Pay a bill
+            </Button>
+          </div>
+        </motion.section>
 
-        {/* Start Payment Button */}
+        <section className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {BILL_PROVIDERS.map((provider) => (
+              <button
+                key={provider.id}
+                onClick={() => { handleProviderSelect(provider); setShowModal(true); }}
+                className="group flex min-h-28 items-center gap-3 rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-primary/50 hover:shadow-md"
+              >
+                <span className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-primary/10 text-2xl">{provider.icon}</span>
+                  <span className="min-w-0 flex-1">
+                  <span className="block break-words text-xs font-semibold leading-tight sm:text-sm">{provider.name}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">Pay from KES</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+          transition={{ delay: 0.12 }}
+          className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5"
         >
-          <Button
-            onClick={() => setShowModal(true)}
-            className="w-full h-14 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-semibold text-lg rounded-xl shadow-lg"
-          >
-            <span className="material-icons mr-2">add_circle</span>
-            Start New Payment
-          </Button>
-        </motion.div>
-
-        {/* Recent Payments */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6"
-        >
-          <h2 className="text-lg font-semibold mb-4 flex items-center">
-            <Clock className="w-5 h-5 mr-2 text-green-600" />
-            Recent Payments
-          </h2>
-
           {loadingHistory ? (
-            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600 mx-auto"></div>
-              <p className="mt-2">Loading...</p>
+            <div className="space-y-3 py-1" aria-label="Loading bill activity">
+              {[0, 1, 2].map((item) => <div key={item} className="h-16 animate-pulse rounded-xl bg-muted" />)}
             </div>
           ) : billHistory.length === 0 ? (
-            <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-              <Receipt size={32} className="mx-auto mb-2 opacity-50" />
-              <p>No bill payments yet</p>
+            <div className="rounded-xl bg-muted/50 px-4 py-8 text-center">
+              <Receipt className="mx-auto mb-2 h-7 w-7 text-muted-foreground/60" />
+              <p className="text-sm text-muted-foreground">No bill payments yet</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -256,7 +270,7 @@ export default function BillsPage() {
                   key={payment.id}
                   initial={{ opacity: 0, x: -20 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700"
+                  className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background p-3 sm:p-4"
                 >
                   <div className="flex items-center gap-3 flex-1">
                     {payment.status === "completed" ? (

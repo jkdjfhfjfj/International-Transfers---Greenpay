@@ -14,6 +14,9 @@ const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.ur
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
 const walletAccount = readFileSync(new URL("src/pages/wallet-account.tsx", root), "utf8");
 const transactionsPage = readFileSync(new URL("src/pages/transactions.tsx", root), "utf8");
+const billsPage = readFileSync(new URL("src/pages/bills.tsx", root), "utf8");
+const airtimePage = readFileSync(new URL("src/pages/airtime.tsx", root), "utf8");
+const depositPage = readFileSync(new URL("src/pages/deposit.tsx", root), "utf8");
 const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
 const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root), "utf8");
 
@@ -30,6 +33,22 @@ test("authenticated bottom navigation remains visible inside the preview iframe"
   assert.ok(bottomNavigation.includes("location.startsWith('/auth/virtual-card-purchase')"));
   assert.match(bottomNavigation, /addEventListener\("open-bottom-menu", openMenu\)/);
   assert.match(dashboard, /dispatchEvent\(new CustomEvent\("open-bottom-menu"\)\)/);
+  assert.ok(bottomNavigation.includes("location.startsWith('/airtime')"));
+  assert.ok(bottomNavigation.includes("location.startsWith('/bills')"));
+});
+
+test("airtime and bills show coming soon outside Kenya and reject non-Kenyan API requests", () => {
+  assert.match(airtimePage, /Airtime is currently available in Kenya/);
+  assert.match(billsPage, /Bill payments are currently available in Kenya/);
+  assert.match(serverRoutes, /Airtime is coming soon for your country/);
+  assert.match(serverRoutes, /Bill payments are coming soon for your country/);
+});
+
+test("international card checkout and deposits route through hosted card readiness", () => {
+  assert.match(serverRoutes, /card:\s*readiness\.card/);
+  assert.match(serverRoutes, /const gateway = !isKenya\s*\?\s*"payzaapi"/);
+  assert.match(depositPage, /config\?\.isKenya \? isEnabled\("card"\) : true/);
+  assert.match(depositPage, /config\?\.isKenya && config\?\.countryPaymentCurrency/);
 });
 
 test("bottom navigation sends users to Send and Settings directly", () => {

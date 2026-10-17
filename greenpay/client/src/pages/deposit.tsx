@@ -227,7 +227,7 @@ export default function DepositPage() {
     .every(key => String(methods[key] || "").trim().length > 0);
   const enabledMethods: Exclude<Method, null>[] = [];
   if (depositsEnabled) {
-    if (config?.countryPaymentCurrency && isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) {
+    if (config?.isKenya && config?.countryPaymentCurrency && isEnabled("mpesa") && config.paymentReadiness?.mobileMoney === true) {
       enabledMethods.push("mpesa");
     }
     if (
@@ -237,7 +237,7 @@ export default function DepositPage() {
     ) enabledMethods.push("manual_mpesa");
     if (
       config?.countryPaymentCurrency &&
-      isEnabled("card") &&
+      (config?.isKenya ? isEnabled("card") : true) &&
       config.paymentReadiness?.card === true &&
       hasUsdToPaymentCurrencyRate
     ) enabledMethods.push("card");

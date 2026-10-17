@@ -266,7 +266,9 @@
           const detail = String(reason || ('Startup timed out during: ' + (window.__greenpayBootStage || 'unknown step'))).slice(0, 500);
           console.error('GreenPay startup failed:', detail);
           root.style.background = '#0f766e';
-          root.innerHTML = '<main style="box-sizing:border-box;font-family:system-ui,sans-serif;padding:2rem 1.5rem;max-width:40rem;margin:8vh auto;color:#fff;background:#0f766e;min-height:84vh;display:flex;flex-direction:column;justify-content:center"><h1 style="font-size:1.5rem;line-height:1.2;margin:0 0 1rem">GreenPay could not load</h1><p style="font-size:1rem;line-height:1.6;margin:0 0 1rem">Startup stopped before the app mounted. Your saved browser data has not been cleared.</p><p id="boot-failure-detail" style="font-size:.875rem;line-height:1.5;overflow-wrap:anywhere;background:rgba(0,0,0,.18);padding:1rem;border-radius:.75rem;margin:0 0 1.5rem"></p><button style="padding:.85rem 1rem;border:0;border-radius:.6rem;background:#fff;color:#0f766e;font-weight:700;cursor:pointer" onclick="window.retryGreenPayPreview()">Retry GreenPay startup</button></main>';
+          root.style.minHeight = '100vh';
+          root.style.minHeight = '100dvh';
+          root.innerHTML = '<main style="position:fixed;inset:0;box-sizing:border-box;width:100%;height:100vh;height:100dvh;margin:0;padding:calc(2rem + env(safe-area-inset-top,0px)) 1.5rem calc(2rem + env(safe-area-inset-bottom,0px));font-family:system-ui,sans-serif;color:#fff;background:#0f766e;display:flex;flex-direction:column;justify-content:center"><div style="width:100%;max-width:40rem;margin:0 auto"><h1 style="font-size:1.5rem;line-height:1.2;margin:0 0 1rem">GreenPay could not load</h1><p style="font-size:1rem;line-height:1.6;margin:0 0 1rem">Startup stopped before the app mounted. Your saved browser data has not been cleared.</p><p id="boot-failure-detail" style="font-size:.875rem;line-height:1.5;overflow-wrap:anywhere;background:rgba(0,0,0,.18);padding:1rem;border-radius:.75rem;margin:0 0 1.5rem"></p><button style="width:100%;padding:.85rem 1rem;border:0;border-radius:.6rem;background:#fff;color:#0f766e;font-weight:700;cursor:pointer" onclick="window.retryGreenPayPreview()">Retry GreenPay startup</button></div></main>';
           root.querySelector('#boot-failure-detail').textContent = detail;
         }
       };
@@ -274,7 +276,7 @@
       function armPreviewBootTimeout() {
         setTimeout(function() {
           window.showPreviewBootFailure('Startup timed out during: ' + (window.__greenpayBootStage || 'unknown step'));
-        }, 15000);
+        }, 45000);
       }
 
       window.addEventListener('unhandledrejection', function(event) {
