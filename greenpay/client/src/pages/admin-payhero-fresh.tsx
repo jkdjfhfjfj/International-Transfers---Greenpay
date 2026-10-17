@@ -21,6 +21,14 @@ interface PayHeroData {
   paystackConfigured?: boolean;
   cardPrice?: string;
   encryptionKeyConfigured?: boolean;
+  encryptionKeyStatus?: {
+    source: "environment" | "database" | "missing" | "locked";
+    environmentKeyConfigured: boolean;
+    databaseKeyConfigured: boolean;
+    databaseKeyReadable: boolean;
+    wrappingKeyAvailable: boolean;
+    persistentStorageAvailable: boolean;
+  };
   credentialSources?: Record<string, {
     configured: boolean;
     envConfigured: boolean;
@@ -71,6 +79,7 @@ export default function AdminPayHeroSettingsPage() {
   const [kenyaMobileMoneyGateway, setKenyaMobileMoneyGateway] = useState("payhero");
   const [copiedCallbackUrl, setCopiedCallbackUrl] = useState<string | null>(null);
   const [credentialValues, setCredentialValues] = useState<Record<string, string>>({});
+  const [encryptionKeyValue, setEncryptionKeyValue] = useState("");
 
   const { data, isLoading } = useQuery<PayHeroData>({
     queryKey: ["/api/admin/payhero-settings"],
@@ -104,6 +113,27 @@ export default function AdminPayHeroSettingsPage() {
       qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
     },
     onError: () => toast({ title: "Error", description: "Failed to save payment settings.", variant: "destructive" }),
+  });
+
+  const encryptionKeyMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("PUT", "/api/admin/payment-encryption-key", {
+        key: encryptionKeyValue,
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || "Unable to save database encryption key.");
+      return result;
+    },
+    onSuccess: () => {
+      setEncryptionKeyValue("");
+      toast({ title: "Encryption key saved", description: "The database stores only a wrapped copy; the key is not returned to the page." });
+      qc.invalidateQueries({ queryKey: ["/api/admin/payhero-settings"] });
+    },
+    onError: (error: Error) => toast({
+      title: "Could not save encryption key",
+      description: error.message,
+      variant: "destructive",
+    }),
   });
 
   const credentialsMutation = useMutation({
@@ -329,18 +359,60 @@ export default function AdminPayHeroSettingsPage() {
               <Info className="mt-0.5 h-4 w-4 flex-shrink-0 text-blue-600" />
               <div className="space-y-1">
                 <p className="text-xs text-blue-700">
-                  Encryption key: {data?.encryptionKeyConfigured ? "configured" : "missing"}.
+                  Encryption key: {data?.encryptionKeyConfigured ? `configured (${data.encryptionKeyStatus?.source || "unknown"})` : "missing"}.
                 </p>
                 {!data?.encryptionKeyConfigured && (
                   <p className="text-xs text-blue-700">
-                    Add <code>PAYMENT_CREDENTIALS_ENCRYPTION_KEY</code> in Replit Secrets before saving database fallbacks. Use a random value of at least 32 characters.
+                    Set a database key below or add <code>PAYMENT_CREDENTIALS_ENCRYPTION_KEY</code> in Replit Secrets. Use a random value of at least 32 characters.
                   </p>
                 )}
                 <p className="text-xs text-blue-700">
-                  Leave an input blank to keep its saved value. Replit Secrets override the database fallback.
+                  Replit Secrets take priority. Leave a provider credential input blank to keep its saved value.
                 </p>
               </div>
             </div>
+
+            <section className="space-y-3 rounded-xl border border-border p-4">
+              <div>
+                <h3 className="text-sm font-semibold">Database encryption-key fallback</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  The key is stored encrypted with the app session secret and is never shown again. If an environment key is set, this value must match it.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  value={encryptionKeyValue}
+                  onChange={(event) => setEncryptionKeyValue(event.target.value)}
+                  placeholder="Enter key (minimum 32 characters)"
+                  disabled={!data?.encryptionKeyStatus?.wrappingKeyAvailable || encryptionKeyMutation.isPending}
+                  className="rounded-xl"
+                />
+                <Button
+                  type="button"
+                  onClick={() => encryptionKeyMutation.mutate()}
+                  disabled={encryptionKeyValue.trim().length < 32 || !data?.encryptionKeyStatus?.wrappingKeyAvailable || encryptionKeyMutation.isPending}
+                  className="rounded-xl"
+                >
+                  <Save className="mr-2 h-4 w-4" />
+                  {encryptionKeyMutation.isPending ? "Saving…" : "Save database key"}
+                </Button>
+              </div>
+              {!data?.encryptionKeyStatus?.wrappingKeyAvailable && (
+                <p className="text-xs text-destructive">SESSION_SECRET is unavailable or too short; the database key cannot be protected.</p>
+              )}
+              {!data?.encryptionKeyStatus?.persistentStorageAvailable && (
+                <p className="text-xs text-amber-700">
+                  This preview is using temporary memory storage. A key saved here will be lost when the preview server restarts; persistent database storage is required for durable configuration.
+                </p>
+              )}
+              {data?.encryptionKeyStatus?.databaseKeyConfigured && (
+                <p className="text-xs text-muted-foreground">
+                  A database key is already saved. Replacing it requires rotating saved provider credentials first.
+                </p>
+              )}
+            </section>
 
             {paymentCredentialGroups.map((group) => (
               <section key={group.provider} className="space-y-3">
@@ -421,7 +493,7 @@ export default function AdminPayHeroSettingsPage() {
             </Button>
 
             <p className="text-xs text-muted-foreground">
-                To rotate the encryption key safely, set the old value as PAYMENT_CREDENTIALS_ENCRYPTION_KEY_PREVIOUS before changing PAYMENT_CREDENTIALS_ENCRYPTION_KEY. Saved credentials encrypted with the previous key are re-encrypted with the current key when used.
+                To rotate a key, keep the old value available as PAYMENT_CREDENTIALS_ENCRYPTION_KEY_PREVIOUS before switching keys. Previously encrypted credentials are re-encrypted with the current key when used.
             </p>
 
             <div className="space-y-3">

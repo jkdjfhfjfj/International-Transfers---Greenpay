@@ -46,6 +46,11 @@ import {
   savePaymentCredential,
 } from "./services/payment-credentials";
 import {
+  getPaymentEncryptionKeyStatus,
+  hydratePaymentEncryptionKey,
+  saveDatabasePaymentEncryptionKey,
+} from "./services/payment-encryption-key-store";
+import {
   canUseManualMpesaWalletDeposit,
   normalizeManualMpesaAmount,
   normalizeManualMpesaReference,
@@ -1097,6 +1102,7 @@ const transferSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  await hydratePaymentEncryptionKey();
   // Maintenance mode middleware - APPLIED AT END
   const checkMaintenanceMode = async (req: any, res: any, next: any) => {
     try {
@@ -10048,6 +10054,7 @@ p{color:#6b7280;font-size:14px;}</style>
         payheroPasswordConfigured: readiness.passwordConfigured,
         credentialSources: await getPaymentCredentialStatuses(),
         encryptionKeyConfigured: isPaymentCredentialEncryptionConfigured(),
+        encryptionKeyStatus: await getPaymentEncryptionKeyStatus(),
         cardPrice: cardPriceSetting?.value || "60.00",
       };
       res.json(settings);
@@ -10166,6 +10173,24 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  app.put("/api/admin/payment-encryption-key", requireAdminAuth, async (req, res) => {
+    const key = req.body?.key;
+    if (typeof key !== "string" || key.length > 4096) {
+      return res.status(400).json({ message: "Enter an encryption key of at least 32 characters." });
+    }
+    try {
+      await saveDatabasePaymentEncryptionKey(key);
+      res.json({
+        success: true,
+        encryptionKeyStatus: await getPaymentEncryptionKeyStatus(),
+      });
+    } catch (error) {
+      res.status(409).json({
+        message: error instanceof Error ? error.message : "The database encryption key could not be saved.",
+      });
+    }
+  });
+
   app.put("/api/admin/payment-provider-credentials", requireAdminAuth, async (req, res) => {
     try {
       const body = req.body && typeof req.body === "object" && !Array.isArray(req.body)
@@ -10209,7 +10234,7 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       if (valuesToSave.length > 0 && !isPaymentCredentialEncryptionConfigured()) {
         return res.status(503).json({
-          message: "Set PAYMENT_CREDENTIALS_ENCRYPTION_KEY in Replit Secrets before saving encrypted payment credentials.",
+          message: "Set an encryption key in the admin database controls or configure PAYMENT_CREDENTIALS_ENCRYPTION_KEY in Replit Secrets.",
         });
       }
 
