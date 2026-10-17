@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { WavyHeader } from "@/components/wavy-header";
+import BottomNavigation from "@/components/bottom-navigation";
 
 const MERCHANT_URL = "https://greenpay.co.ke";
 
@@ -39,6 +40,7 @@ export default function MerchantPayPage() {
           </div>
         </motion.section>
       </main>
+      <BottomNavigation />
     </div>
   );
 }

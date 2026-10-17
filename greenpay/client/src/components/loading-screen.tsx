@@ -7,7 +7,11 @@ export default function LoadingScreen() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.25 }}
-      className="fixed inset-0 z-50 flex min-h-[100svh] items-center justify-center overflow-hidden bg-gradient-to-br from-[var(--gp-brand)] via-[var(--gp-brand)] to-[#073c3a]"
+      className="fixed inset-0 z-50 flex min-h-[100dvh] items-center justify-center overflow-hidden bg-gradient-to-br from-[var(--gp-brand)] via-[var(--gp-brand)] to-[#073c3a]"
+      style={{
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}
       data-testid="loading-screen"
       role="status"
       aria-live="polite"

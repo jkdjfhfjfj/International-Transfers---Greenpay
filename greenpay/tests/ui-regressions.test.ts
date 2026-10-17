@@ -16,6 +16,8 @@ const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root),
 test("pre-React startup shell fills mobile viewport without a default white frame", () => {
   assert.match(html, /html,\s*body,\s*#root\s*\{[^}]*margin:\s*0/s);
   assert.match(html, /#root\s*\{[^}]*min-height:\s*100svh/s);
+  assert.match(html, /min-height:\s*100dvh/);
+  assert.match(html, /viewport-fit=cover/);
 });
 
 test("authenticated bottom navigation remains visible inside the preview iframe", () => {
@@ -53,6 +55,10 @@ test("Kenyan card purchase keeps each supported funding option visible", () => {
   assert.match(cardPurchase, /transaction\?\.status === "completed"/);
   assert.match(cardPurchase, /depositAddress/);
   assert.match(cardPurchase, /cryptoPaymentDetails\.address/);
+  assert.match(cardPurchase, /item\.type === "card_purchase" && item\.status === "pending"/);
+  assert.match(cardPurchase, /Pending purchase reopened/);
+  assert.match(cardPurchase, /We're checking your purchase/);
+  assert.doesNotMatch(cardPurchase, /purchase.{0,40}admin|admin.{0,40}purchase/i);
 });
 
 test("card payment returns show the purchase result without a generic success or failure page", () => {
@@ -64,9 +70,9 @@ test("crypto card checkout requires a configured receiving address and activates
   assert.match(serverRoutes, /cryptoCoins/);
   assert.match(serverRoutes, /Crypto card payments in \$\{normalizedCoin\} are not configured/);
   assert.match(serverRoutes, /toAddress: chosenAddress\.address/);
-  assert.match(serverRoutes, /Crypto payment confirmed by administrator/);
+  assert.match(serverRoutes, /Crypto payment verified/);
   assert.match(serverRoutes, /verifiedConfirmations < Number\(cryptoTx\.requiredConfirmations/);
-  assert.match(cardPurchase, /!cryptoConfigured \|\| cryptoCardPurchase\.isPending/);
+  assert.match(cardPurchase, /!cryptoConfigured \|\| cryptoTransactionsLoading \|\| cryptoCardPurchase\.isPending/);
   assert.match(cardPurchase, /cryptoPaymentDetails\.address/);
   assert.match(readFileSync(new URL("src/pages/admin-crypto.tsx", root), "utf8"), /Verified confirmations/);
 });
@@ -98,7 +104,8 @@ test("Merchant Pay stays focused on merchant instructions and has no back button
   assert.match(merchantPay, /<WavyHeader\s+size="md"\s*\/>/);
   assert.match(merchantPay, /<main className="mx-auto mt-5/);
   assert.match(merchantPay, /button-open-merchant-guidance/);
-  assert.match(bottomNavigation, /location\.startsWith\('\/merchant-pay'\)/);
+  assert.doesNotMatch(bottomNavigation, /location\.startsWith\('\/merchant-pay'\)/);
+  assert.match(merchantPay, /<BottomNavigation\s*\/>/);
 });
 
 test("password reset actions stay fixed at the bottom with short Android-style labels", () => {

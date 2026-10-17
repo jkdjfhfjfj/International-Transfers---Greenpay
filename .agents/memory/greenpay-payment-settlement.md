@@ -9,6 +9,12 @@ For GreenPay, use the configured provider for the customer's authenticated profi
 
 **How to apply:** Apply these checks to every payment callback, status poll, and customer verification route. Never treat client-supplied country, amount, or currency as authoritative.
 
+For pending crypto card purchases that need manual verification, tell customers “We’re checking your purchase” or equivalent. Do not mention internal admin review in customer-facing status copy. Reopen the saved pending purchase details when the customer returns.
+
+**Why:** The user explicitly requested neutral customer-facing review language and a way to reopen pending crypto purchases.
+
+**How to apply:** Keep the review action and evidence requirements in the admin workflow; show customers only the payment status and next step.
+
 For manual card payments, the admin-controlled option is instructions-only: showing paybill details must not create a completed transaction or activate a card. The current UI directs users to support for payment verification.
 
 **Why:** The user chose instructions-only rather than receipt upload and admin approval for card purchases.

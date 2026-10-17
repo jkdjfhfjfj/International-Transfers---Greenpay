@@ -15789,7 +15789,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
           await completeCardPurchase(
             purchase,
             cryptoTx.id,
-            "Crypto payment confirmed by administrator",
+            "Crypto payment verified",
           );
         }
       } else if (status === "failed" && cryptoTx.status !== "failed") {

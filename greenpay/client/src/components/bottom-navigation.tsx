@@ -54,7 +54,6 @@ export default function BottomNavigation() {
     location.startsWith('/dashboard') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||
-    location.startsWith('/merchant-pay') ||
     location.startsWith('/auth/virtual-card-purchase') ||
     location.startsWith('/virtual-accounts') ||
     location.startsWith('/support') ||

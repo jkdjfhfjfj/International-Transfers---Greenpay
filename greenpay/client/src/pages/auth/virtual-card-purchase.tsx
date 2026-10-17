@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -69,6 +69,7 @@ export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { user, login } = useAuth();
+  const queryClient = useQueryClient();
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<CardPaymentMethod>("mobile_money");
@@ -77,6 +78,7 @@ export default function VirtualCardPurchasePage() {
   const [paymentFeedbackMessage, setPaymentFeedbackMessage] = useState("");
   const [checkoutStarted, setCheckoutStarted] = useState(false);
   const [purchaseConfirmOpen, setPurchaseConfirmOpen] = useState(false);
+  const [cryptoPendingReopened, setCryptoPendingReopened] = useState(false);
   const [cryptoPaymentDetails, setCryptoPaymentDetails] = useState<{
     amount: string;
     coin: string;
@@ -151,8 +153,10 @@ export default function VirtualCardPurchasePage() {
         address: String(data.depositAddress || ""),
         memo: data.memo ? String(data.memo) : null,
       });
+      setCryptoPendingReopened(false);
+      void queryClient.invalidateQueries({ queryKey: ["/api/crypto/transactions", user?.id] });
       toast({
-        title: "Crypto payment awaiting confirmation",
+        title: "We're checking your purchase",
         description: data.message,
       });
     },
@@ -162,12 +166,33 @@ export default function VirtualCardPurchasePage() {
     },
   });
 
-  const { data: cryptoTransactionsData } = useQuery({
-    queryKey: ["/api/crypto/transactions", user?.id, cryptoPaymentDetails?.transactionId],
+  const { data: cryptoTransactionsData, isLoading: cryptoTransactionsLoading } = useQuery({
+    queryKey: ["/api/crypto/transactions", user?.id],
     queryFn: async () => (await apiRequest("GET", "/api/crypto/transactions")).json(),
-    enabled: !!user?.id && !!cryptoPaymentDetails?.transactionId,
-    refetchInterval: 10_000,
+    enabled: !!user?.id,
+    refetchOnMount: "always",
+    staleTime: 0,
+    refetchInterval: cryptoPaymentDetails?.transactionId ? 10_000 : false,
   });
+
+  useEffect(() => {
+    if (cryptoPaymentDetails) return;
+    const pendingPurchase = ((cryptoTransactionsData as any)?.transactions || []).find(
+      (item: any) => item.type === "card_purchase" && item.status === "pending" && item.toAddress,
+    );
+    if (!pendingPurchase) return;
+    setCryptoCoin(String(pendingPurchase.coin || "USDT").toUpperCase());
+    setPaymentMethod("crypto");
+    setCryptoPendingReopened(true);
+    setCryptoPaymentDetails({
+      amount: String(pendingPurchase.amount || ""),
+      coin: String(pendingPurchase.coin || "USDT").toUpperCase(),
+      transactionId: String(pendingPurchase.id || ""),
+      network: String(pendingPurchase.network || ""),
+      address: String(pendingPurchase.toAddress || ""),
+      memo: null,
+    });
+  }, [cryptoPaymentDetails, cryptoTransactionsData]);
 
   useEffect(() => {
     const transaction = ((cryptoTransactionsData as any)?.transactions || []).find(
@@ -182,6 +207,7 @@ export default function VirtualCardPurchasePage() {
     if (transaction?.status === "failed") {
       setPaymentResult("failed");
       setPaymentFeedbackMessage("Crypto payment was not confirmed. Your card has not been activated.");
+      setCryptoPaymentDetails(null);
     }
   }, [cryptoPaymentDetails?.transactionId, cryptoTransactionsData, setLocation]);
 
@@ -957,18 +983,28 @@ export default function VirtualCardPurchasePage() {
                 <Button
                   onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full bg-primary hover:bg-primary/90"
-                  disabled={!cryptoRate || !cryptoConfigured || cryptoCardPurchase.isPending}
+                  disabled={!cryptoRate || !cryptoConfigured || cryptoTransactionsLoading || cryptoCardPurchase.isPending || !!cryptoPaymentDetails}
                 >
-                  {cryptoCardPurchase.isPending ? "Preparing..." : `Start ${cryptoCoin} payment`}
+                  {cryptoTransactionsLoading
+                    ? "Checking pending purchase..."
+                    : cryptoCardPurchase.isPending
+                    ? "Preparing..."
+                    : cryptoPaymentDetails
+                      ? "Pending purchase reopened"
+                      : `Start ${cryptoCoin} payment`}
                 </Button>
                 {cryptoPaymentDetails && (
                   <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-left dark:border-amber-800 dark:bg-amber-950/30" role="status" data-testid="crypto-card-payment-pending">
                     <div className="flex items-start gap-2">
                       <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" />
                       <div className="space-y-1">
-                        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Payment request created</p>
+                        <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+                          {cryptoPendingReopened ? "Pending purchase reopened" : "We're checking your purchase"}
+                        </p>
                         <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
-                          Send exactly {cryptoPaymentDetails.amount} {cryptoPaymentDetails.coin}{cryptoPaymentDetails.network ? ` on ${cryptoPaymentDetails.network}` : ""} to the address below. Your card stays inactive until the payment is confirmed.
+                          {cryptoPendingReopened
+                            ? "We're checking your purchase. You can return here to see updates. Your card will activate once the payment is confirmed."
+                            : `Send exactly ${cryptoPaymentDetails.amount} ${cryptoPaymentDetails.coin}${cryptoPaymentDetails.network ? ` on ${cryptoPaymentDetails.network}` : ""} to the address below. Once sent, we're checking your purchase. Your card will activate after the payment is confirmed.`}
                         </p>
                         <div className="flex items-center justify-between gap-2 rounded-lg bg-white/70 p-2 dark:bg-black/20">
                           <span className="break-all font-mono text-[11px]">{cryptoPaymentDetails.address}</span>
