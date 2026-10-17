@@ -79,7 +79,7 @@ export function generateTransactionPDF(transactions: Transaction[], userData: Us
   }
   
   // Summary Statistics - group by all currencies present
-  const currencies = [...new Set(transactions.map(t => t.currency?.toUpperCase() || 'USD'))];
+  const currencies = Array.from(new Set(transactions.map(t => t.currency?.toUpperCase() || 'USD')));
   
   const currencyStats = currencies.map(cur => {
     const curTxns = transactions.filter(t => (t.currency?.toUpperCase() || 'USD') === cur);
