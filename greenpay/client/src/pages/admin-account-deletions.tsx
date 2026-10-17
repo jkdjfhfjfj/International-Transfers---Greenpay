@@ -21,7 +21,7 @@ export default function AdminAccountDeletionsPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [notes, setNotes] = useState<Record<string, string>>({});
-  const { data, isLoading, isError } = useQuery<{ requests: DeletionRequest[] }>({
+  const { data, isLoading, isError, error, refetch } = useQuery<{ requests: DeletionRequest[] }>({
     queryKey: ["/api/admin/account-deletion-requests"],
     queryFn: async () => (await apiRequest("GET", "/api/admin/account-deletion-requests")).json(),
   });
@@ -51,7 +51,14 @@ export default function AdminAccountDeletionsPage() {
           </div>
         </div>
         {isLoading ? <p className="text-sm text-muted-foreground">Loading requests…</p>
-          : isError ? <p className="text-sm text-destructive">Could not load deletion requests.</p>
+          : isError ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm text-destructive">
+                Could not load deletion requests: {error instanceof Error ? error.message : "Try again."}
+              </p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            </div>
+          )
           : requests.length === 0 ? <p className="rounded-xl border bg-card p-6 text-center text-sm text-muted-foreground">No account deletion requests yet.</p>
           : requests.map((request) => (
             <section key={request.id} className="space-y-3 rounded-xl border bg-card p-4">

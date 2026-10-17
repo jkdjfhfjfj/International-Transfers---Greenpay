@@ -10039,6 +10039,7 @@ p{color:#6b7280;font-size:14px;}</style>
         .orderBy(desc(accountDeletionRequests.requestedAt));
       res.json({ requests });
     } catch (error) {
+      console.error("Load account deletion requests error:", error);
       res.status(500).json({ message: "Could not load deletion requests." });
     }
   });

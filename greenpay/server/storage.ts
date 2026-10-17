@@ -52,6 +52,7 @@ import {
   type TicketReply,
   type InsertTicketReply,
   users,
+  wallets,
   kycDocuments,
   virtualCards,
   transactions,

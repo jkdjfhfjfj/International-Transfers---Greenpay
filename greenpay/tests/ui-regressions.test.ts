@@ -9,6 +9,8 @@ const desktopTopbar = readFileSync(new URL("src/components/desktop-topbar.tsx", 
 const notifications = readFileSync(new URL("src/components/notifications.tsx", root), "utf8");
 const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.tsx", root), "utf8");
 const serverRoutes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
+const storageSource = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
+const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
 const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
 const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root), "utf8");
@@ -173,6 +175,13 @@ test("wallet lists retry in user and admin views, with an explicit admin error s
   assert.match(adminWallets, /Wallets could not be loaded/);
   assert.match(adminWallets, /onClick=\{\(\) => refetch\(\)\}/);
   assert.match(serverRoutes, /if \(!db\) \{\s+const \{ users: matchingUsers \} = await storage\.getAllUsers/);
+  assert.match(storageSource, /users,\s+wallets,\s+kycDocuments/);
+});
+
+test("account deletion requests are included in additive upgrades for existing databases", () => {
+  assert.match(databaseBootstrap, /CREATE TABLE IF NOT EXISTS account_deletion_requests/);
+  assert.match(databaseBootstrap, /ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_code_hash/);
+  assert.match(databaseBootstrap, /ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS kyc_evidence_deleted_at/);
 });
 
 test("account deletion requires reauthentication and admin approval", () => {

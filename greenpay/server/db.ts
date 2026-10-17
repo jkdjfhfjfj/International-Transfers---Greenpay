@@ -453,6 +453,30 @@ async function alterMissingColumns() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_document_type TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_id_expiry_date TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS kyc_issuing_country TEXT`,
+    // Existing databases do not replay checked-in Drizzle migrations, so keep
+    // the account-deletion table and its later controls in the additive path.
+    `CREATE TABLE IF NOT EXISTS account_deletion_requests (
+      id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      admin_note TEXT,
+      reviewed_by TEXT,
+      requested_at TIMESTAMP DEFAULT NOW(),
+      reviewed_at TIMESTAMP,
+      confirmation_code_hash TEXT,
+      confirmation_expires_at TIMESTAMP,
+      confirmation_attempts INTEGER NOT NULL DEFAULT 0,
+      confirmation_sent_at TIMESTAMP,
+      kyc_evidence_expires_at TIMESTAMP,
+      kyc_evidence_deleted_at TIMESTAMP
+    )`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_code_hash TEXT`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_expires_at TIMESTAMP`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_attempts INTEGER NOT NULL DEFAULT 0`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_sent_at TIMESTAMP`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS kyc_evidence_expires_at TIMESTAMP`,
+    `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS kyc_evidence_deleted_at TIMESTAMP`,
   ];
 
   for (let index = 0; index < migrations.length; index++) {
