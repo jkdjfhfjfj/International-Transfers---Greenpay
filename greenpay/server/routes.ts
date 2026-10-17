@@ -322,35 +322,49 @@ async function savePendingLogin(req: any, user: any) {
   });
 }
 
-async function sendLoginOtp(user: any) {
+async function getAvailableLoginOtpMethods(user: any) {
+  const [
+    smsApiKey, smsAppId, smsSenderId, whatsappToken, whatsappPhoneId, mailtrapApiKey,
+  ] = await Promise.all([
+    storage.getSystemSetting("messaging", "sms_api_key"),
+    storage.getSystemSetting("messaging", "sms_app_id"),
+    storage.getSystemSetting("messaging", "sms_sender_id"),
+    storage.getSystemSetting("messaging", "whatsapp_access_token"),
+    storage.getSystemSetting("messaging", "whatsapp_phone_number_id"),
+    storage.getSystemSetting("email", "mailtrap_api_key"),
+  ]);
+  const methods: Array<{ id: "sms" | "whatsapp" | "email"; label: string }> = [];
+  const verifiedPhone = Boolean(user?.phone && user?.isPhoneVerified);
+  if (verifiedPhone && (smsApiKey?.value || process.env.SMS_API_KEY) &&
+    (smsAppId?.value || process.env.SMS_APP_ID) &&
+    (smsSenderId?.value || process.env.SMS_SENDER_ID)) {
+    methods.push({ id: "sms", label: "SMS" });
+  }
+  if (verifiedPhone && (whatsappToken?.value || process.env.WHATSAPP_ACCESS_TOKEN) &&
+    (whatsappPhoneId?.value || process.env.WHATSAPP_PHONE_NUMBER_ID)) {
+    methods.push({ id: "whatsapp", label: "WhatsApp" });
+  }
+  if (user?.email && user?.isEmailVerified && (mailtrapApiKey?.value || process.env.MAILTRAP_API_KEY)) {
+    methods.push({ id: "email", label: "Email" });
+  }
+  return methods;
+}
+
+async function sendLoginOtp(user: any, method: "sms" | "whatsapp" | "email") {
   const { messagingService } = await import("./services/messaging");
-  const { mailtrapService } = await import("./services/mailtrap");
-  const [firstName = "User", ...lastNameParts] = String(user.fullName || "User").trim().split(/\s+/);
-  const lastName = lastNameParts.join(" ");
   const otpCode = messagingService.generateOTP();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
   await storage.updateUserOtp(user.id, otpCode, otpExpiry);
-
-  const [smsWhatsappResult, emailResult] = await Promise.all([
-    messagingService.sendOTP(user.phone, otpCode).catch((error: unknown) => {
-      console.warn("[Login OTP] SMS/WhatsApp delivery failed; checking email fallback:", error);
-      return { sms: false, whatsapp: false };
-    }),
-    user.email
-      ? mailtrapService.sendOTP(user.email, firstName, lastName, otpCode).catch((error: unknown) => {
-          console.warn("[Login OTP] Email delivery failed:", error);
-          return false;
-        })
-      : Promise.resolve(false),
-  ]);
-  const sentMethods = [];
-  if (smsWhatsappResult.sms) sentMethods.push("SMS");
-  if (smsWhatsappResult.whatsapp) sentMethods.push("WhatsApp");
-  if (emailResult) sentMethods.push("Email");
-  if (sentMethods.length === 0) {
-    throw new Error("Failed to send verification code. Please try again or contact support.");
+  let sent = false;
+  try {
+    sent = await messagingService.sendOTPVia(method, user.phone, otpCode, user.email, user.fullName);
+  } catch (error) {
+    console.warn(`[Login OTP] ${method} delivery failed:`, error);
   }
-  return sentMethods;
+  if (!sent) {
+    throw new Error(`${method === "sms" ? "SMS" : method === "whatsapp" ? "WhatsApp" : "Email"} delivery failed. Choose another available verification method or contact support.`);
+  }
+  return [method === "sms" ? "SMS" : method === "whatsapp" ? "WhatsApp" : "Email"];
 }
 
 function hashDeletionCode(userId: string, code: string) {
@@ -390,10 +404,17 @@ async function beginLoginVerification(req: any, user: any) {
   }
 
   await savePendingLogin(req, user);
-  const sentVia = factors.requiresOtp && factorCount === 1
-    ? await sendLoginOtp(user)
-    : [];
-  return { ...factors, needsVerification: true, sentVia };
+  const otpMethods = factors.requiresOtp ? await getAvailableLoginOtpMethods(user) : [];
+  if (factors.requiresOtp && factorCount === 1 && otpMethods.length === 0) {
+    throw new Error("No verified contact method is available for your login code.");
+  }
+  return {
+    ...factors,
+    requiresOtp: factors.requiresOtp && otpMethods.length > 0,
+    needsVerification: true,
+    sentVia: [],
+    otpMethods,
+  };
 }
 
 function normalizeDiditIdNumber(value: unknown): string {
@@ -2096,12 +2117,24 @@ p{color:#6b7280;font-size:14px;}</style>
       const user = await storage.getUser(pendingUserId);
       if (!user) return res.status(404).json({ message: "User not found" });
       const factors = await getLoginSecondFactors(user);
+      const otpMethods = factors.requiresOtp ? await getAvailableLoginOtpMethods(user) : [];
+      if (
+        factors.requiresOtp &&
+        !factors.requiresPin &&
+        !factors.requiresAuthenticator &&
+        otpMethods.length === 0
+      ) {
+        return res.status(503).json({
+          message: "No verified contact method is available for a login code. Please contact support.",
+        });
+      }
       res.json({
         ...factors,
+        requiresOtp: factors.requiresOtp && otpMethods.length > 0,
         userId: user.id,
         phone: user.phone,
         email: user.email,
-        sentVia: factors.requiresOtp ? "SMS, WhatsApp or Email" : "",
+        otpMethods,
       });
     } catch (error) {
       console.error("Pending login lookup error:", error);
@@ -2367,87 +2400,24 @@ p{color:#6b7280;font-size:14px;}</style>
         return;
       }
 
-      // OTP is required - attempt to send if messaging is configured
+      // Present available delivery channels before sending, so one depleted
+      // provider does not prevent a user from choosing another verified method.
       if (messagesConfigured) {
-        // Let users with a configured second factor choose it instead of
-        // receiving a new OTP. OTP remains available as the fallback.
-        if (hasPin || hasAuthenticator) {
-          // Keep the pending login server-side while the user chooses PIN or
-          // OTP. This prevents OTP verification from relying on a client
-          // supplied user ID when both methods are available.
-          (req.session as any).pendingLoginUserId = user.id;
-          (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-          (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
-          (req.session as any).userAgent = String(req.headers["user-agent"] || "");
-          await new Promise<void>((resolve, reject) => {
-            req.session.save((saveErr) => saveErr ? reject(saveErr) : resolve());
-          });
-          return res.json({
-            requiresPin: hasPin,
-            requiresAuthenticator: hasAuthenticator,
-            requiresOtp: true,
-            userId: user.id,
-            phone: user.phone,
-            email: user.email,
+        const otpMethods = await getAvailableLoginOtpMethods(user);
+        if (otpMethods.length === 0 && !hasPin && !hasAuthenticator) {
+          return res.status(503).json({
+            message: "No verified contact method is available for a login code. Please contact support.",
           });
         }
-        // OTP is required and messaging is configured - send OTP
-        const { messagingService } = await import('./services/messaging');
-        const { mailtrapService } = await import('./services/mailtrap');
-        const otpCode = messagingService.generateOTP();
-        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-
-        // Store OTP in user record
-        await storage.updateUserOtp(user.id, otpCode, otpExpiry);
-
-        // Send OTP via SMS, WhatsApp, and Email concurrently
-        const [smsWhatsappResult, emailResult] = await Promise.all([
-          messagingService.sendOTP(user.phone, otpCode),
-          user.email ? mailtrapService.sendOTP(user.email, user.firstName || 'User', user.lastName || '', otpCode) : Promise.resolve(false)
-        ]);
-        
-        const result = { ...smsWhatsappResult, email: emailResult };
-
-        // When messaging is configured, OTP delivery failure is an error (don't bypass)
-        if (!result.sms && !result.whatsapp && !result.email) {
-          console.error('OTP delivery failed - messaging configured but delivery failed');
-          return res.status(500).json({ 
-            message: "Failed to send verification code. Please try again or contact support." 
-          });
-        }
-
-        // OTP was sent successfully - require verification
-        req.session.regenerate((err) => {
-          if (err) {
-            console.error('Session regeneration error:', err);
-            return res.status(500).json({ message: "Session error" });
-          }
-
-          // Store pending login data (user not authenticated yet)
-          (req.session as any).pendingLoginUserId = user.id;
-          (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
-          (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
-          (req.session as any).userAgent = String(req.headers["user-agent"] || "");
-
-          req.session.save((saveErr) => {
-            if (saveErr) {
-              console.error('Session save error:', saveErr);
-              return res.status(500).json({ message: "Session save error" });
-            }
-
-            const sentMethods = [];
-            if (result.sms) sentMethods.push('SMS');
-            if (result.whatsapp) sentMethods.push('WhatsApp');
-            if (result.email) sentMethods.push('Email');
-
-            res.json({ 
-              requiresOtp: true,
-              userId: user.id,
-              phone: user.phone,
-              sentVia: sentMethods.length > 0 ? sentMethods.join(' and ') : 'SMS, WhatsApp or Email',
-              message: `Verification code sent to ${sentMethods.length > 0 ? sentMethods.join(', ') : 'SMS, WhatsApp or Email'}`
-            });
-          });
+        await savePendingLogin(req, user);
+        return res.json({
+          requiresPin: hasPin,
+          requiresAuthenticator: hasAuthenticator,
+          requiresOtp: otpMethods.length > 0,
+          otpMethods,
+          userId: user.id,
+          phone: user.phone,
+          email: user.email,
         });
       } else {
         if (hasPin || hasAuthenticator) {
@@ -2538,6 +2508,7 @@ p{color:#6b7280;font-size:14px;}</style>
         delete (req.session as any).pendingLoginUserId;
         delete (req.session as any).loginIp;
         delete (req.session as any).loginLocation;
+        delete (req.session as any).pendingLoginOtpMethod;
         
         // Send login alert via SMS, WhatsApp, and Email
         const { messagingService } = await import('./services/messaging');
@@ -2593,7 +2564,16 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(404).json({ message: "User not found" });
       }
 
-      const sentMethods = await sendLoginOtp(user);
+      const method = String(req.body?.method || (req.session as any).pendingLoginOtpMethod || "");
+      if (!["sms", "whatsapp", "email"].includes(method)) {
+        return res.status(400).json({ message: "Choose SMS, WhatsApp, or email for your verification code." });
+      }
+      const availableMethods = await getAvailableLoginOtpMethods(user);
+      if (!availableMethods.some((candidate) => candidate.id === method)) {
+        return res.status(400).json({ message: "That verification method is unavailable for your account." });
+      }
+      (req.session as any).pendingLoginOtpMethod = method;
+      const sentMethods = await sendLoginOtp(user, method as "sms" | "whatsapp" | "email");
       
       res.json({ 
         message: `New OTP sent via ${sentMethods.join(', ')}`,
@@ -2601,7 +2581,8 @@ p{color:#6b7280;font-size:14px;}</style>
       });
     } catch (error) {
       console.error('Resend OTP error:', error);
-      res.status(500).json({ message: "Failed to resend OTP" });
+      const message = error instanceof Error ? error.message : "Failed to send that verification code.";
+      res.status(503).json({ message });
     }
   });
 

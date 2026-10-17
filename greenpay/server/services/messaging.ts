@@ -240,6 +240,37 @@ export class MessagingService {
     return { sms: smsResult, whatsapp: whatsappResult, email: emailResult };
   }
 
+  async sendOTPVia(
+    method: "sms" | "whatsapp" | "email",
+    phone: string,
+    otpCode: string,
+    email?: string,
+    userName?: string,
+  ): Promise<boolean> {
+    const enableSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
+    if (enableSetting?.value === "false") return false;
+
+    if (method === "sms") {
+      const credentials = await this.getCredentials();
+      if (!credentials || !phone) return false;
+      return this.sendSMS(
+        phone,
+        `Your GreenPay verification code is ${otpCode}. Valid for 10 minutes. Do not share with anyone.`,
+        credentials,
+      );
+    }
+
+    if (method === "whatsapp") {
+      if (!phone || !(await whatsappService.isConfigured())) return false;
+      return whatsappService.sendOTP(phone, otpCode);
+    }
+
+    if (!email) return false;
+    const { mailtrapService } = await import("./mailtrap");
+    const [firstName = "User", ...lastNameParts] = String(userName || "User").trim().split(/\s+/);
+    return mailtrapService.sendOTP(email, firstName, lastNameParts.join(" "), otpCode);
+  }
+
   /**
    * Send login alert via SMS + WhatsApp + Email
    */

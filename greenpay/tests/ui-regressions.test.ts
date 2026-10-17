@@ -11,6 +11,7 @@ const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.
 const serverRoutes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
 const storageSource = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
 const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
+const messagingService = readFileSync(new URL("../server/services/messaging.ts", import.meta.url), "utf8");
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
 const walletAccount = readFileSync(new URL("src/pages/wallet-account.tsx", root), "utf8");
 const transactionsPage = readFileSync(new URL("src/pages/transactions.tsx", root), "utf8");
@@ -170,6 +171,17 @@ test("login database and session failures are not reported as invalid credential
   const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
   assert.match(serverRoutes, /res\.status\(500\)\.json\(\{ message: "We couldn't complete sign-in because of a server error/);
   assert.match(login, /raw\.startsWith\("401:"\)/);
+});
+
+test("login lets users choose a verified OTP delivery channel before sending a code", () => {
+  const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
+  assert.match(serverRoutes, /async function getAvailableLoginOtpMethods/);
+  assert.match(serverRoutes, /otpMethods,/);
+  assert.match(serverRoutes, /req\.body\?\.method/);
+  assert.match(serverRoutes, /sendLoginOtp\(user, method as "sms" \| "whatsapp" \| "email"\)/);
+  assert.match(messagingService, /async sendOTPVia\(/);
+  assert.match(login, /tempLoginData\.otpMethods \|\| \[\]\)\.map/);
+  assert.match(login, /requestOtpMutation\.mutate\(method\.id\)/);
 });
 
 test("production auth and sessions use the Render database while previews stay isolated", () => {

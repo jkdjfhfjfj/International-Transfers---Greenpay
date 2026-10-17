@@ -164,17 +164,18 @@ export default function LoginPage() {
   };
 
   const requestOtpMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const response = await apiRequest("POST", "/api/auth/resend-otp", { userId });
+    mutationFn: async (method: string) => {
+      const response = await apiRequest("POST", "/api/auth/resend-otp", { method });
       const data = await response.json();
       if (!response.ok) throw Object.assign(new Error(data.message || "Failed to send OTP"), data);
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, method) => {
       if (!tempLoginData) return;
       localStorage.setItem("otpUserId", tempLoginData.userId);
       localStorage.setItem("otpPhone", tempLoginData.phone || "");
-      localStorage.setItem("otpSentVia", data.sentVia || tempLoginData.sentVia || "");
+      localStorage.setItem("otpSentVia", data.sentVia || "");
+      localStorage.setItem("otpMethod", method);
       localStorage.setItem("otpEmail", tempLoginData.email || "");
       // Clear the PIN branch before navigating so a stale overlay cannot
       // intercept the OTP verification page when the user returns.
@@ -206,7 +207,7 @@ export default function LoginPage() {
     if (methods.length === 0) return false;
 
     setTempLoginData(data);
-    if (methods.length > 1) {
+    if (methods.length > 1 || (methods[0] === "otp" && data.otpMethods?.length)) {
       setAuthMethod(null);
       setRequiresPin(false);
       return true;
@@ -274,8 +275,8 @@ export default function LoginPage() {
       if (handlePendingChallenge(data)) {
         if (data.requiresOtp && !data.requiresPin && !data.requiresAuthenticator) {
           toast({
-            title: "Verification code sent",
-            description: `A 6-digit code was sent via ${data.sentVia || "your registered contact"}`,
+            title: "Choose a verification method",
+            description: "Select a verified contact method to receive your code.",
           });
         }
       } else if (data.requires2FA) {
@@ -448,7 +449,11 @@ export default function LoginPage() {
     ? [tempLoginData.requiresPin, tempLoginData.requiresAuthenticator, tempLoginData.requiresOtp].filter(Boolean).length
     : 0;
 
-  if (tempLoginData && authMethod === null && pendingMethods > 1) {
+  if (
+    tempLoginData &&
+    authMethod === null &&
+    (pendingMethods > 1 || (tempLoginData.requiresOtp && tempLoginData.otpMethods?.length))
+  ) {
     return (
       <div className="min-h-screen flex flex-col bg-background pb-24">
         <WavyHeader size="sm" />
@@ -502,20 +507,28 @@ export default function LoginPage() {
                 </motion.button>
               )}
 
-              {tempLoginData.requiresOtp && <motion.button
-                whileHover={{ scale: 1.02 }}
-                  onClick={() => requestOtpMutation.mutate(tempLoginData.userId)}
+              {tempLoginData.requiresOtp && (tempLoginData.otpMethods || []).map((method: { id: string; label: string }) => (
+                <motion.button
+                  key={method.id}
+                  whileHover={{ scale: 1.02 }}
+                  onClick={() => requestOtpMutation.mutate(method.id)}
                   disabled={requestOtpMutation.isPending}
-                className="w-full p-4 border border-border rounded-lg bg-card hover:bg-muted transition-colors text-left"
-              >
-                <div className="flex items-center">
-                  <span className="material-icons text-secondary mr-3">mail</span>
-                  <div>
-                    <p className="font-semibold">{requestOtpMutation.isPending ? "Sending code…" : "Use OTP Code"}</p>
-                    <p className="text-sm text-muted-foreground">6-digit code via SMS/Email</p>
+                  className="w-full p-4 border border-border rounded-lg bg-card hover:bg-muted transition-colors text-left"
+                  data-testid={`button-login-otp-${method.id}`}
+                >
+                  <div className="flex items-center">
+                    <span className="material-icons text-secondary mr-3">
+                      {method.id === "email" ? "mail" : method.id === "whatsapp" ? "chat" : "sms"}
+                    </span>
+                    <div>
+                      <p className="font-semibold">
+                        {requestOtpMutation.isPending ? "Sending code…" : `Send code by ${method.label}`}
+                      </p>
+                      <p className="text-sm text-muted-foreground">To your verified {method.label} contact</p>
+                    </div>
                   </div>
-                </div>
-              </motion.button>}
+                </motion.button>
+              ))}
 
             </div>
           </motion.div>

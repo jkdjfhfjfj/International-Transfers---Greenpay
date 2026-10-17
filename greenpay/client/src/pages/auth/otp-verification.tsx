@@ -58,6 +58,7 @@ export default function OtpVerificationPage() {
       localStorage.removeItem("otpPhone");
       localStorage.removeItem("otpEmail");
       localStorage.removeItem("otpSentVia");
+      localStorage.removeItem("otpMethod");
 
       login(data.user);
 
@@ -136,20 +137,24 @@ export default function OtpVerificationPage() {
   const resendOtpMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/auth/resend-otp", {
-        userId,
+        method: localStorage.getItem("otpMethod"),
       });
       return response.json();
     },
     onSuccess: (data) => {
+      if (data.sentVia) {
+        setSentVia(data.sentVia);
+        localStorage.setItem("otpSentVia", data.sentVia);
+      }
       toast({
         title: "OTP Resent",
         description: data.message || "A new verification code has been sent.",
       });
     },
-    onError: () => {
+    onError: (error: any) => {
       toast({
         title: "Resend failed",
-        description: "Failed to resend verification code. Please try again.",
+        description: error.message || "Failed to resend verification code. Please try again.",
         variant: "destructive",
       });
     },
@@ -181,23 +186,7 @@ export default function OtpVerificationPage() {
 
           <h2 className="text-2xl font-bold mb-2">Verify Login</h2>
           <p className="text-muted-foreground mb-8">
-            We've sent a 6-digit verification code to (Check Email, SMS or
-            WhatsApp):
-            <br />
-            <strong>📱 Phone:</strong> {phone || "your phone"}
-            {email && (
-              <>
-                <br />
-                <strong>📧 Email:</strong>{" "}
-{email && email.trim().length > 0 ? (
-  email
-) : (
-  <span className="text-muted-foreground">
-    Check your mailbox. Ensure you entered a correct email or contact us.
-  </span>
-)}
-              </>
-            )}
+            We've sent a 6-digit verification code via {sentVia || "your selected method"}.
           </p>
 
           <form onSubmit={handleSubmit}>
