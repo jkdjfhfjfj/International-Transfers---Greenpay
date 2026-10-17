@@ -217,16 +217,37 @@
         console.error('Runtime error caught:', e.error);
       });
 
+      window.retryGreenPayPreview = async function() {
+        try {
+          if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map(registration => registration.unregister()));
+          }
+          if ('caches' in window) {
+            const cacheNames = await caches.keys();
+            await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+          }
+        } catch (error) {
+          console.warn('Preview cache cleanup failed:', error);
+        }
+        const root = document.getElementById('root');
+        if (root) root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39">Starting GreenPay…</main>';
+        const bootstrap = document.createElement('script');
+        bootstrap.type = 'module';
+        bootstrap.src = '/src/preview-bootstrap.ts?retry=' + Date.now();
+        document.body.appendChild(bootstrap);
+      };
+
       // If React never mounts, show a manual retry instead of reloading forever.
       setTimeout(() => {
         const root = document.getElementById('root');
         if (root && root.innerHTML === "") {
           console.error("GreenPay did not mount within 12 seconds.");
-          root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39"><h1>GreenPay could not load</h1><p>The app did not start. Your saved browser data was left untouched.</p><button style="padding:.7rem 1rem;border:0;border-radius:.6rem;background:#0d9488;color:white;cursor:pointer" onclick="window.location.reload()">Try again</button></main>';
+          root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39"><h1>GreenPay could not load</h1><p>The app did not start. Retry clears only stale service-worker and cache data; saved browser data is left untouched.</p><button style="padding:.7rem 1rem;border:0;border-radius:.6rem;background:#0d9488;color:white;cursor:pointer" onclick="window.retryGreenPayPreview()">Clear stale preview cache and start GreenPay</button></main>';
         }
       }, 12000);
     </script>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module" src="/src/preview-bootstrap.ts"></script>
     <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->
     <script type="text/javascript" src="https://replit.com/public/js/replit-dev-banner.js"></script>
   </body>
