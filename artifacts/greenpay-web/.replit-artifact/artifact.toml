@@ -1,0 +1,32 @@
+kind = "web"
+previewPath = "/"
+title = "GreenPay"
+description = "GreenPay web application for wallet payments, virtual cards, and account management."
+version = "1.0.0"
+id = "artifacts/greenpay-web"
+router = "path"
+
+[[services]]
+name = "web"
+paths = ["/api", "/ws", "/"]
+localPort = 22920
+
+[services.development]
+run = "cd greenpay && env -u DATABASE_URL -u PGHOST -u PGPORT -u PGUSER -u PGPASSWORD -u PGDATABASE NODE_ENV=development ./node_modules/.bin/tsx server/index.ts"
+
+[services.production.build]
+args = ["bash", "-lc", "cd greenpay && npm ci && npm run build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["node", "greenpay/dist/index.js"]
+
+[services.production.run.env]
+NODE_ENV = "production"
+PORT = "22920"
+
+[services.env]
+PORT = "22920"
+BASE_PATH = "/"
