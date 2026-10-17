@@ -42,18 +42,28 @@ export function PWAInstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Register service worker with auto-update on new version
+    // Service workers can retain stale HTML/API responses and cause confusing
+    // reloads in the live development preview. Keep them out of dev previews.
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js')
-        .then((registration) => {
-          console.log('SW registered: ', registration);
-          // Force check for updates on every page load
-          registration.update().catch(() => {});
-
-        })
-        .catch((registrationError) => {
-          console.log('SW registration failed: ', registrationError);
-        });
+      if (import.meta.env.DEV) {
+        navigator.serviceWorker.getRegistrations().then(async (registrations) => {
+          if (registrations.length === 0) return;
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
+          const cleanupKey = 'greenpay-dev-sw-cleanup-reloaded';
+          if (!sessionStorage.getItem(cleanupKey)) {
+            sessionStorage.setItem(cleanupKey, '1');
+            window.location.reload();
+          }
+        }).catch((error) => console.warn('Unable to clear stale development service worker:', error));
+      } else {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => registration.update().catch(() => {}))
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      }
     }
 
     return () => {

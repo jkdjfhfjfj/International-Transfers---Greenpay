@@ -25,6 +25,7 @@ interface PayHeroData {
     configured: boolean;
     envConfigured: boolean;
     fallbackStored: boolean;
+    rotationNeeded: boolean;
     source: "environment" | "encrypted_database" | "missing" | "locked" | "unavailable";
   }>;
 }
@@ -352,7 +353,9 @@ export default function AdminPayHeroSettingsPage() {
                   const sourceLabel = status?.source === "environment"
                     ? "Using Replit Secrets"
                     : status?.source === "encrypted_database"
-                      ? "Using encrypted admin fallback"
+                        ? status.rotationNeeded
+                          ? "Recovered with previous key; will re-encrypt with the current key when used"
+                          : "Using encrypted admin fallback"
                       : status?.source === "locked"
                         ? "Saved fallback cannot be decrypted; check the encryption key"
                         : status?.source === "unavailable"
@@ -418,7 +421,7 @@ export default function AdminPayHeroSettingsPage() {
             </Button>
 
             <p className="text-xs text-muted-foreground">
-              Keep the encryption key stable: changing it without re-encrypting saved credentials makes those database fallbacks unreadable.
+                To rotate the encryption key safely, set the old value as PAYMENT_CREDENTIALS_ENCRYPTION_KEY_PREVIOUS before changing PAYMENT_CREDENTIALS_ENCRYPTION_KEY. Saved credentials encrypted with the previous key are re-encrypted with the current key when used.
             </p>
 
             <div className="space-y-3">

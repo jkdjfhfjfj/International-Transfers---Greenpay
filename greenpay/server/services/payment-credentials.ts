@@ -1,6 +1,6 @@
 import { storage } from "../storage";
 import {
-  decryptPaymentCredential,
+  decryptPaymentCredentialWithRotation,
   encryptPaymentCredential,
   isPaymentCredentialEncryptionConfigured,
 } from "./payment-credential-crypto";
@@ -33,6 +33,7 @@ export type PaymentCredentialStatus = {
   envConfigured: boolean;
   fallbackStored: boolean;
   source: PaymentCredentialSource;
+  rotationNeeded: boolean;
 };
 
 export { isPaymentCredentialEncryptionConfigured };
@@ -64,7 +65,20 @@ export async function getPaymentCredential(
   );
   const encryptedValue = readSettingValue(setting?.value);
   if (!encryptedValue) return null;
-  return decryptPaymentCredential(encryptedValue, key);
+  const decrypted = decryptPaymentCredentialWithRotation(encryptedValue, key);
+  if (decrypted.needsRotation) {
+    try {
+      await storage.setSystemSetting({
+        category: PAYMENT_CREDENTIAL_CATEGORY,
+        key,
+        value: encryptPaymentCredential(decrypted.value, key),
+        description: "Encrypted payment-provider credential",
+      });
+    } catch {
+      console.error("[Payment credentials] Could not rotate a saved credential after decrypting it.");
+    }
+  }
+  return decrypted.value;
 }
 
 export async function getPaymentCredentialStatus(
@@ -80,6 +94,7 @@ export async function getPaymentCredentialStatus(
       envConfigured,
       fallbackStored: false,
       source: envConfigured ? "environment" : "unavailable",
+      rotationNeeded: false,
     };
   }
   const fallbackStored = Boolean(readSettingValue(setting?.value));
@@ -90,6 +105,7 @@ export async function getPaymentCredentialStatus(
       envConfigured: true,
       fallbackStored,
       source: "environment",
+      rotationNeeded: false,
     };
   }
   if (!fallbackStored) {
@@ -98,17 +114,19 @@ export async function getPaymentCredentialStatus(
       envConfigured: false,
       fallbackStored: false,
       source: "missing",
+      rotationNeeded: false,
     };
   }
 
   try {
-    const value = decryptPaymentCredential(readSettingValue(setting?.value), key);
-    const configured = Boolean(value.trim());
+    const decrypted = decryptPaymentCredentialWithRotation(readSettingValue(setting?.value), key);
+    const configured = Boolean(decrypted.value.trim());
     return {
       configured,
       envConfigured: false,
       fallbackStored,
       source: configured ? "encrypted_database" : "missing",
+      rotationNeeded: decrypted.needsRotation,
     };
   } catch {
     return {
@@ -116,6 +134,7 @@ export async function getPaymentCredentialStatus(
       envConfigured: false,
       fallbackStored,
       source: "locked",
+      rotationNeeded: false,
     };
   }
 }

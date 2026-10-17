@@ -53,6 +53,14 @@ import {
 import { depositBonusMatchesMethod } from "../shared/deposit-bonus-methods";
 
 const cloudinaryStorage = new CloudinaryStorageService();
+const LOCAL_PREVIEW_TEST_EMAIL = "preview.tester@greenpay.local";
+let localPreviewTestPassword: string | undefined;
+
+function isLocalPreviewTestAccount(user: { email?: string } | null | undefined): boolean {
+  return process.env.NODE_ENV === "development" &&
+    !process.env.DATABASE_URL &&
+    user?.email?.toLowerCase() === LOCAL_PREVIEW_TEST_EMAIL;
+}
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
 const VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST = ["USD", "EUR", "GBP"] as const;
@@ -1717,6 +1725,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Administrator accounts must be provisioned through a secure process.
   // Never create an account with credentials embedded in source code.
+  // Disposable account for private, memory-only development previews.
+  app.post("/api/dev/test-account", async (_req, res) => {
+    if (process.env.NODE_ENV !== "development" || process.env.DATABASE_URL) {
+      return res.status(404).json({ message: "Not found" });
+    }
+    try {
+      const existing = await storage.getUserByEmail(LOCAL_PREVIEW_TEST_EMAIL);
+      if (existing) {
+        if (!localPreviewTestPassword) {
+          return res.status(409).json({ message: "Preview test account already exists; restart the preview to recreate it." });
+        }
+        return res.json({ email: LOCAL_PREVIEW_TEST_EMAIL, password: localPreviewTestPassword });
+      }
+
+      localPreviewTestPassword ??= crypto.randomBytes(24).toString("base64url");
+      const user = await storage.createUser({
+        fullName: "Preview Test Account",
+        email: LOCAL_PREVIEW_TEST_EMAIL,
+        phone: `+2547${crypto.randomInt(10_000_000, 99_999_999)}`,
+        country: "Kenya",
+        password: await bcrypt.hash(localPreviewTestPassword, 10),
+        defaultCurrency: "KES",
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+      });
+      await storage.updateUser(user.id, {
+        isEmailVerified: true,
+        isPhoneVerified: true,
+        twoFactorEnabled: false,
+        twoFactorSecret: null,
+      });
+      res.status(201).json({ email: LOCAL_PREVIEW_TEST_EMAIL, password: localPreviewTestPassword });
+    } catch (error) {
+      localPreviewTestPassword = undefined;
+      console.error("[Preview test account] Could not create local test account:", error);
+      res.status(500).json({ message: "Could not create the preview test account." });
+    }
+  });
+
   // Authentication routes with real WhatsApp integration
   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
     try {
@@ -2099,7 +2146,7 @@ p{color:#6b7280;font-size:14px;}</style>
       
       // Check if OTP is required (based on admin toggle)
       const enableOtpSetting = await storage.getSystemSetting("messaging", "enable_otp_messages");
-      const otpRequired = settingEnabled(enableOtpSetting?.value, true);
+      const otpRequired = settingEnabled(enableOtpSetting?.value, true) && !isLocalPreviewTestAccount(user);
       
       // Check which OTP methods are enabled
       const otpEmailSetting = await storage.getSystemSetting("messaging", "otp_email_enabled");

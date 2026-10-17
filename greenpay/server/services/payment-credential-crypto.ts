@@ -11,26 +11,36 @@ const IV_BYTES = 12;
 const AUTH_TAG_BYTES = 16;
 const KDF_SALT = "greenpay:payment-provider-credentials:v1";
 const MIN_SECRET_LENGTH = 32;
-let cachedSecret: string | undefined;
-let cachedEncryptionKey: Buffer | undefined;
+const PREVIOUS_KEY_ENV = "PAYMENT_CREDENTIALS_ENCRYPTION_KEY_PREVIOUS";
+const keyCache = new Map<string, Buffer>();
 
-function deriveEncryptionKey(): Buffer {
+function deriveEncryptionKey(secret: string): Buffer {
+  if (secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      `${ENCRYPTION_KEY_ENV} must be set to a random value of at least ${MIN_SECRET_LENGTH} characters.`,
+    );
+  }
+  let key = keyCache.get(secret);
+  if (!key) {
+    key = scryptSync(secret, KDF_SALT, 32);
+    keyCache.set(secret, key);
+  }
+  return key;
+}
+
+function currentSecret(): string {
   const secret = String(process.env[ENCRYPTION_KEY_ENV] || "").trim();
   if (secret.length < MIN_SECRET_LENGTH) {
     throw new Error(
       `${ENCRYPTION_KEY_ENV} must be set to a random value of at least ${MIN_SECRET_LENGTH} characters.`,
     );
   }
-  if (secret !== cachedSecret || !cachedEncryptionKey) {
-    cachedSecret = secret;
-    cachedEncryptionKey = scryptSync(secret, KDF_SALT, 32);
-  }
-  return cachedEncryptionKey;
+  return secret;
 }
 
 export function isPaymentCredentialEncryptionConfigured(): boolean {
   try {
-    deriveEncryptionKey();
+    currentSecret();
     return true;
   } catch {
     return false;
@@ -45,7 +55,7 @@ export function encryptPaymentCredential(
   if (!credentialKey) throw new Error("Payment credential context is required.");
 
   const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv(ALGORITHM, deriveEncryptionKey(), iv);
+  const cipher = createCipheriv(ALGORITHM, deriveEncryptionKey(currentSecret()), iv);
   cipher.setAAD(Buffer.from(credentialKey, "utf8"));
   const ciphertext = Buffer.concat([
     cipher.update(value, "utf8"),
@@ -61,10 +71,10 @@ export function encryptPaymentCredential(
   ].join(".");
 }
 
-export function decryptPaymentCredential(
+export function decryptPaymentCredentialWithRotation(
   encrypted: string,
   credentialKey: string,
-): string {
+): { value: string; needsRotation: boolean } {
   if (!credentialKey) throw new Error("Payment credential context is required.");
   const [version, encodedIv, encodedAuthTag, encodedCiphertext, ...extra] =
     String(encrypted || "").split(".");
@@ -85,17 +95,36 @@ export function decryptPaymentCredential(
     throw new Error("Saved payment credential is invalid.");
   }
 
-  try {
-    const decipher = createDecipheriv(ALGORITHM, deriveEncryptionKey(), iv);
-    decipher.setAAD(Buffer.from(credentialKey, "utf8"));
-    decipher.setAuthTag(authTag);
-    return Buffer.concat([
-      decipher.update(ciphertext),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    throw new Error(
-      `Unable to decrypt an admin-saved payment credential. Confirm ${ENCRYPTION_KEY_ENV} matches the key used when it was saved.`,
-    );
+  const activeSecret = currentSecret();
+  const previousSecret = String(process.env[PREVIOUS_KEY_ENV] || "").trim();
+  const candidates = [
+    { secret: activeSecret, needsRotation: false },
+    ...(previousSecret && previousSecret !== activeSecret
+      ? [{ secret: previousSecret, needsRotation: true }]
+      : []),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const decipher = createDecipheriv(ALGORITHM, deriveEncryptionKey(candidate.secret), iv);
+      decipher.setAAD(Buffer.from(credentialKey, "utf8"));
+      decipher.setAuthTag(authTag);
+      const value = Buffer.concat([
+        decipher.update(ciphertext),
+        decipher.final(),
+      ]).toString("utf8");
+      return { value, needsRotation: candidate.needsRotation };
+    } catch {
+      // Try the previous key only after authentication with the active key fails.
+    }
   }
+  throw new Error(
+    `Unable to decrypt an admin-saved payment credential. Confirm ${ENCRYPTION_KEY_ENV} or ${PREVIOUS_KEY_ENV} matches the key used when it was saved.`,
+  );
+}
+
+export function decryptPaymentCredential(
+  encrypted: string,
+  credentialKey: string,
+): string {
+  return decryptPaymentCredentialWithRotation(encrypted, credentialKey).value;
 }
