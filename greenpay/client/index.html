@@ -2,6 +2,14 @@
 <html lang="en">
   <head>
     <style>
+      html, body, #root {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 100%;
+        margin: 0;
+      }
+      html, body { height: 100%; overflow-x: hidden; background: #062a2a; }
+      #root { min-height: 100vh; min-height: 100svh; }
       @keyframes geepay-boot-spin { to { transform: rotate(360deg); } }
       @media (prefers-reduced-motion: reduce) {
         [data-boot-shell] span[aria-hidden="true"] { animation: none !important; }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, X, AlertCircle, CheckCircle, Info, AlertTriangle, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,12 @@ export default function Notifications() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const openNotifications = () => setIsOpen(true);
+    window.addEventListener("open-notifications", openNotifications);
+    return () => window.removeEventListener("open-notifications", openNotifications);
+  }, []);
 
   const { data: notificationResponse = { notifications: [] }, isLoading } = useQuery({
     queryKey: ['/api/notifications', user?.id],

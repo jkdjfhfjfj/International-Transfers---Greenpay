@@ -32,6 +32,15 @@ export default function DesktopTopbar() {
     .slice(0, 2)
     .toUpperCase() || "U";
 
+  const openNotifications = () => {
+    if (location.startsWith("/dashboard")) {
+      window.dispatchEvent(new Event("open-notifications"));
+      return;
+    }
+    setLocation("/dashboard");
+    window.setTimeout(() => window.dispatchEvent(new Event("open-notifications")), 250);
+  };
+
   return (
     <header className="hidden md:flex fixed left-64 right-0 top-0 z-30 h-16 items-center justify-between border-b border-slate-200/80 bg-white/90 px-8 backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/90">
       <div className="flex items-center gap-3">
@@ -52,7 +61,13 @@ export default function DesktopTopbar() {
           <ShieldCheck className="h-4 w-4 text-emerald-500" />
           {user?.kycStatus === "verified" ? "Identity verified" : "Verify identity"}
         </button>
-        <button type="button" className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Notifications">
+        <button
+          type="button"
+          onClick={openNotifications}
+          className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+          aria-label="Open notifications"
+          title="Open notifications"
+        >
           <Bell className="h-5 w-5" />
         </button>
         <button
