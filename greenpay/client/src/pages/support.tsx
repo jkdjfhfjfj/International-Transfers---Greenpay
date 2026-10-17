@@ -12,7 +12,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useToast } from "@/hooks/use-toast";
 import { mockFAQs } from "@/lib/mock-data";
 import LiveChat from "@/components/live-chat";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { X, Upload } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
@@ -30,6 +30,21 @@ export default function SupportPage() {
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [showLiveChat, setShowLiveChat] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { data: supportHub } = useQuery<{
+    conversations: Array<{ id: string; title?: string; status: string; createdAt?: string; updatedAt?: string }>;
+    tickets: Array<{ id: string; issueType: string; status: string; createdAt?: string }>;
+    availableAgents: Array<{ id: string; fullName: string }>;
+    onlineCount: number;
+  }>({
+    queryKey: ["/api/support/hub"],
+    queryFn: async () => {
+      const response = await fetch("/api/support/hub", { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load support overview");
+      return response.json();
+    },
+    refetchInterval: 15000,
+  });
 
   const form = useForm<IssueReportForm>({
     resolver: zodResolver(issueReportSchema),
@@ -74,12 +89,30 @@ export default function SupportPage() {
     },
   });
 
+  const startConversationMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/conversations", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "GreenPay Support" }),
+      });
+      if (!response.ok) throw new Error("Could not start a conversation");
+      return response.json();
+    },
+    onSuccess: (conversation: { id: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/support/hub"] });
+      setLocation(`/live-chat?conversationId=${encodeURIComponent(conversation.id)}`);
+    },
+    onError: () => toast({ title: "Could not start a conversation", description: "Please try again.", variant: "destructive" }),
+  });
+
   const onSubmit = (data: IssueReportForm) => {
     submitTicketMutation.mutate(data);
   };
 
   const handleStartLiveChat = () => {
-    setLocation('/live-chat');
+    startConversationMutation.mutate();
   };
 
   const handleCloseLiveChat = () => {
@@ -105,20 +138,37 @@ export default function SupportPage() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-gradient-to-r from-primary to-secondary p-6 rounded-xl text-white elevation-2"
+          className="bg-gradient-to-br from-emerald-800 via-emerald-700 to-green-600 p-6 rounded-2xl text-white shadow-lg"
         >
-          <h3 className="font-bold text-lg mb-2">Need Help?</h3>
-          <p className="text-green-100 mb-4">Our support team is available 24/7 to assist you</p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">GreenPay support</p>
+              <h3 className="font-bold text-2xl mt-2 mb-2">We’re here to help</h3>
+              <p className="text-emerald-50 mb-4">
+                {supportHub?.onlineCount
+                  ? `${supportHub.onlineCount} support ${supportHub.onlineCount === 1 ? "agent is" : "agents are"} online now.`
+                  : "Our agents are away right now. Leave a message and we’ll follow up."}
+              </p>
+            </div>
+            <div className="hidden sm:flex -space-x-3">
+              {(supportHub?.availableAgents || []).slice(0, 3).map((agent, index) => (
+                <div key={agent.id} title={agent.fullName} className={`h-11 w-11 rounded-full border-2 border-white/80 flex items-center justify-center text-sm font-bold ${["bg-lime-300 text-emerald-950", "bg-amber-200 text-amber-950", "bg-sky-200 text-sky-950"][index % 3]}`}>
+                  {agent.fullName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
+                </div>
+              ))}
+            </div>
+          </div>
           <div className="flex gap-2">
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={handleStartLiveChat}
+              disabled={startConversationMutation.isPending}
               className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg font-medium hover:bg-white/30 transition-colors"
               data-testid="button-start-chat"
             >
               <span className="material-icons text-sm mr-1">chat</span>
-              Start Live Chat
+              {startConversationMutation.isPending ? "Starting…" : "Start a conversation"}
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.05 }}
@@ -127,10 +177,47 @@ export default function SupportPage() {
               className="bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg font-medium hover:bg-white/30 transition-colors"
             >
               <span className="material-icons text-sm mr-1">confirmation_number</span>
-              My Tickets
+              My support history
             </motion.button>
           </div>
         </motion.div>
+
+        <section className="rounded-xl border border-border bg-card overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-4 border-b border-border">
+            <div>
+              <h3 className="font-semibold">Your conversations</h3>
+              <p className="text-sm text-muted-foreground">Chat and support cases in one place</p>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              {supportHub?.conversations.length || 0} chats · {supportHub?.tickets.length || 0} cases
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {supportHub?.conversations.slice(0, 5).map((conversation) => (
+              <button key={conversation.id} onClick={() => setLocation(`/live-chat?conversationId=${encodeURIComponent(conversation.id)}`)} className="w-full text-left px-4 py-4 flex items-center gap-3 hover:bg-muted/50 transition-colors">
+                <span className="material-icons text-emerald-700 bg-emerald-50 rounded-full p-2">support_agent</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium truncate">{conversation.title || "GreenPay Support"}</span>
+                  <span className="block text-xs text-muted-foreground">Case {conversation.id.slice(0, 8).toUpperCase()} · {conversation.status}</span>
+                </span>
+                <span className="material-icons text-muted-foreground">chevron_right</span>
+              </button>
+            ))}
+            {supportHub?.tickets.slice(0, 3).map((ticket) => (
+              <button key={ticket.id} onClick={handleViewTickets} className="w-full text-left px-4 py-4 flex items-center gap-3 hover:bg-muted/50 transition-colors">
+                <span className="material-icons text-emerald-700 bg-emerald-50 rounded-full p-2">confirmation_number</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium truncate">{ticket.issueType}</span>
+                  <span className="block text-xs text-muted-foreground">Case {ticket.id.slice(0, 8).toUpperCase()} · {ticket.status}</span>
+                </span>
+                <span className="material-icons text-muted-foreground">chevron_right</span>
+              </button>
+            ))}
+            {supportHub && !supportHub.conversations.length && !supportHub.tickets.length && (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">No open support conversations yet. Start one whenever you need help.</p>
+            )}
+          </div>
+        </section>
 
         {/* FAQ Categories */}
         <motion.div

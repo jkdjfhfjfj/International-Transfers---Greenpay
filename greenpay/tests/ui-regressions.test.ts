@@ -184,17 +184,23 @@ test("login lets users choose a verified OTP delivery channel before sending a c
   assert.match(login, /requestOtpMutation\.mutate\(method\.id\)/);
 });
 
-test("login method chooser includes enabled PIN, authenticator, and account-bound biometric", () => {
+test("PIN and authenticator login challenges continue on the OTP verification page", () => {
   const login = readFileSync(new URL("src/pages/auth/login.tsx", root), "utf8");
+  const otpPage = readFileSync(new URL("src/pages/auth/otp-verification.tsx", root), "utf8");
   const webauthn = readFileSync(new URL("src/lib/webauthn.ts", root), "utf8");
   assert.match(serverRoutes, /requiresPin: Boolean\(user\?\.pinEnabled && user\?\.pinCode\)/);
   assert.match(serverRoutes, /requiresAuthenticator: Boolean\(user\?\.twoFactorEnabled && user\?\.twoFactorSecret\)/);
   assert.match(serverRoutes, /requiresBiometric: Boolean\(getStoredBiometricCredential\(user\)\)/);
   assert.match(serverRoutes, /pendingUserId !== match\.id/);
-  assert.match(login, /tempLoginData\.requiresPin/);
-  assert.match(login, /tempLoginData\.requiresAuthenticator/);
-  assert.match(login, /tempLoginData\.requiresBiometric/);
-  assert.match(login, /button-login-biometric/);
+  assert.match(login, /if \(data\.requiresPin \|\| data\.requiresAuthenticator\)/);
+  assert.match(login, /otpChallengeData/);
+  assert.match(login, /setLocation\("\/auth\/otp-verification"\)/);
+  assert.match(otpPage, /challenge\.requiresPin &&/);
+  assert.match(otpPage, /challenge\.requiresAuthenticator &&/);
+  assert.match(otpPage, /"\/api\/auth\/verify-pin"/);
+  assert.match(otpPage, /"\/api\/auth\/verify-authenticator"/);
+  assert.match(otpPage, /button-otp-method-/);
+  assert.match(otpPage, /verifyBiometric/);
   assert.match(webauthn, /allowCredentials: options\.allowCredentials\.map/);
 });
 

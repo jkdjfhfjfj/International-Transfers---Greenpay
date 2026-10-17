@@ -43,19 +43,30 @@ interface Conversation {
   lastMessageAt?: string;
   createdAt: string;
   updatedAt: string;
+  firstResponseSeconds?: number | null;
+  assignedAgent?: { id: string; fullName: string } | null;
   user?: { id: string; fullName?: string | null; email?: string | null } | null;
+}
+
+interface SupportAgent {
+  id: string;
+  fullName: string;
+  email: string;
+  status: "online" | "away" | "offline";
 }
 
 export default function RealLiveChat() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [messageText, setMessageText] = useState("");
   const [isConnected, setIsConnected] = useState(false);
+  const [supportAvailability, setSupportAvailability] = useState<"available" | "away">("available");
+  const [transferAgentId, setTransferAgentId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get all active conversations (no polling - WebSocket will handle real-time updates)
+  // Polling keeps the queue current even when no authenticated socket is available.
   const { data: conversations = [], isLoading: conversationsLoading } = useQuery<Conversation[]>({
     queryKey: ['/api/admin/conversations'],
     queryFn: async () => {
@@ -65,11 +76,35 @@ export default function RealLiveChat() {
       if (!response.ok) throw new Error('Failed to fetch conversations');
       return response.json();
     },
-    refetchOnWindowFocus: false,
-    // Removed refetchInterval - WebSocket will provide real-time updates
+    refetchOnWindowFocus: true,
+    refetchInterval: 5000,
   });
 
-  // Get messages for selected conversation (no polling - WebSocket will handle real-time updates)
+  const { data: agents = [] } = useQuery<SupportAgent[]>({
+    queryKey: ["/api/admin/support/agents"],
+    queryFn: async () => {
+      const response = await fetch("/api/admin/support/agents", { credentials: "include" });
+      if (!response.ok) throw new Error("Could not load agents");
+      return response.json();
+    },
+    refetchInterval: 15000,
+  });
+
+  useEffect(() => {
+    const sendHeartbeat = () => {
+      fetch("/api/admin/support/presence", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: supportAvailability }),
+      }).catch((error) => console.error("Support presence heartbeat failed:", error));
+    };
+    sendHeartbeat();
+    const timer = window.setInterval(sendHeartbeat, 20000);
+    return () => window.clearInterval(timer);
+  }, [supportAvailability]);
+
+  // Get messages for selected conversation
   const { data: messages = [], isLoading: messagesLoading } = useQuery<Message[]>({
     queryKey: ['/api/messages', selectedConversationId],
     queryFn: async () => {
@@ -81,8 +116,8 @@ export default function RealLiveChat() {
       return response.json();
     },
     enabled: !!selectedConversationId,
-    refetchOnWindowFocus: false,
-    // Removed refetchInterval - WebSocket will provide real-time updates
+    refetchOnWindowFocus: true,
+    refetchInterval: 3000,
   });
 
   // WebSocket connection management for admin
@@ -96,12 +131,6 @@ export default function RealLiveChat() {
       console.log('Admin WebSocket connected');
       setIsConnected(true);
       
-      // Register this connection as an admin
-      ws.send(JSON.stringify({
-        type: 'register',
-        userId: 'admin', // TODO: Use actual admin ID when available
-        isAdmin: true
-      }));
     };
 
     ws.onmessage = (event) => {
@@ -192,8 +221,8 @@ export default function RealLiveChat() {
 
   // Take conversation mutation
   const takeConversationMutation = useMutation({
-    mutationFn: async (conversationId: string) => {
-      return apiRequest('PUT', `/api/admin/conversations/${conversationId}/assign`, {});
+    mutationFn: async ({ conversationId, adminId }: { conversationId: string; adminId?: string }) => {
+      return apiRequest('PUT', `/api/admin/conversations/${conversationId}/assign`, adminId ? { adminId } : {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/admin/conversations'] });
@@ -224,7 +253,7 @@ export default function RealLiveChat() {
   };
 
   const handleTakeConversation = (conversationId: string) => {
-    takeConversationMutation.mutate(conversationId);
+    takeConversationMutation.mutate({ conversationId });
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -266,6 +295,19 @@ export default function RealLiveChat() {
             <p className="text-sm text-muted-foreground">
               {conversations.length} active conversation{conversations.length !== 1 ? 's' : ''}
             </p>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Your availability</span>
+              <select
+                value={supportAvailability}
+                onChange={(event) => setSupportAvailability(event.target.value as "available" | "away")}
+                className="rounded-md border bg-background px-2 py-1 text-xs"
+                aria-label="Your support availability"
+              >
+                <option value="available">Available</option>
+                <option value="away">Away</option>
+              </select>
+              <span className="text-xs text-muted-foreground">{agents.filter((agent) => agent.status === "online").length} online</span>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <ScrollArea className="h-96">
@@ -351,12 +393,36 @@ export default function RealLiveChat() {
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {selectedConversation?.user?.email && <span className="mr-2">{selectedConversation.user.email} ·</span>}
-                    Started {format(new Date(selectedConversation?.createdAt || ''), 'MMM d, yyyy HH:mm')}
+                    Case {selectedConversation?.id.slice(0, 8).toUpperCase()} · Started {format(new Date(selectedConversation?.createdAt || ''), 'MMM d, yyyy HH:mm')}
+                    {selectedConversation?.assignedAgent && ` · ${selectedConversation.assignedAgent.fullName}`}
+                    {selectedConversation?.firstResponseSeconds != null && ` · First response ${Math.floor(selectedConversation.firstResponseSeconds / 60)}m`}
                   </p>
                 </div>
-                <Badge variant={selectedConversation?.status === 'active' ? 'default' : 'secondary'}>
-                  {selectedConversation?.status}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={transferAgentId || selectedConversation?.adminId || ""}
+                    onChange={(event) => setTransferAgentId(event.target.value)}
+                    className="max-w-44 rounded-md border bg-background px-2 py-2 text-sm"
+                    aria-label="Assign or transfer conversation"
+                  >
+                    <option value="">Assign to…</option>
+                    {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.fullName} · {agent.status}</option>)}
+                  </select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={!transferAgentId || takeConversationMutation.isPending}
+                    onClick={() => {
+                      takeConversationMutation.mutate({ conversationId: selectedConversationId!, adminId: transferAgentId });
+                      setTransferAgentId("");
+                    }}
+                  >
+                    Transfer
+                  </Button>
+                  <Badge variant={selectedConversation?.status === 'active' ? 'default' : 'secondary'}>
+                    {selectedConversation?.status}
+                  </Badge>
+                </div>
               </div>
             </div>
 

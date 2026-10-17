@@ -149,6 +149,7 @@ export interface IStorage {
   // Admin operations
   getAdminByEmail(email: string): Promise<Admin | undefined>;
   getAdminById(id: number): Promise<Admin | undefined>;
+  getAllAdmins(): Promise<Admin[]>;
   createAdmin(admin: InsertAdmin): Promise<Admin>;
   getAllUsers(filters?: { status?: string; search?: string; page?: number; limit?: number }): Promise<{ users: User[]; total: number; page: number; totalPages: number }>;
   getAllKycDocuments(): Promise<KycDocument[]>;
@@ -817,6 +818,7 @@ export class MemStorage implements IStorage {
       adminId: insertConversation.adminId ?? null,
       title: insertConversation.title ?? null,
       lastMessageAt: null,
+      firstResponseAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -1001,6 +1003,10 @@ export class MemStorage implements IStorage {
     return this.admins.get(String(id));
   }
 
+  async getAllAdmins(): Promise<Admin[]> {
+    return Array.from(this.admins.values());
+  }
+
   async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {
     const id = randomUUID();
     const hashedPassword = await bcrypt.hash(insertAdmin.password, 10);
@@ -1013,6 +1019,8 @@ export class MemStorage implements IStorage {
       twoFactorEnabled: insertAdmin.twoFactorEnabled ?? false,
       lastLoginAt: insertAdmin.lastLoginAt ?? null,
       isActive: true,
+      supportStatus: insertAdmin.supportStatus ?? "away",
+      supportLastSeenAt: insertAdmin.supportLastSeenAt ?? null,
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -1689,6 +1697,10 @@ export class DatabaseStorage implements IStorage {
   async getAdminById(id: number): Promise<Admin | undefined> {
     const [admin] = await db.select().from(admins).where(eq(admins.id, id));
     return admin || undefined;
+  }
+
+  async getAllAdmins(): Promise<Admin[]> {
+    return db.select().from(admins);
   }
 
   async createAdmin(insertAdmin: InsertAdmin): Promise<Admin> {

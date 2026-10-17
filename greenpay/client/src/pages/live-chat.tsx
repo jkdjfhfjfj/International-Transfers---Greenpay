@@ -47,10 +47,14 @@ export default function LiveChatPage() {
   const { logout } = useAuth();
 
   // Get or create conversation for current user
+  const requestedConversationId = new URLSearchParams(window.location.search).get("conversationId");
   const { data: conversation, error: conversationError } = useQuery<Conversation>({
-    queryKey: ['/api/conversations/user-conversation'],
+    queryKey: ['/api/conversations/user-conversation', requestedConversationId],
     queryFn: async () => {
-      const response = await fetch('/api/conversations/user-conversation', {
+      const url = requestedConversationId
+        ? `/api/conversations/user-conversation?conversationId=${encodeURIComponent(requestedConversationId)}`
+        : '/api/conversations/user-conversation';
+      const response = await fetch(url, {
         credentials: 'include'
       });
       if (!response.ok) {

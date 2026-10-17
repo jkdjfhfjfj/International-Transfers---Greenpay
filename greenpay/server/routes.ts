@@ -2916,6 +2916,48 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Conversation endpoints
+  app.get("/api/support/hub", requireAuth, async (req, res) => {
+    try {
+      const session = req.session as any;
+      const userId = session?.user?.id || session?.userId;
+      if (!userId) return res.status(401).json({ message: "Authentication required" });
+      const [conversations, tickets, allAdmins] = await Promise.all([
+        storage.getConversationsByUserId(userId),
+        storage.getSupportTicketsByUserId(userId),
+        storage.getAllAdmins(),
+      ]);
+      const cutoff = Date.now() - 60_000;
+      const availableAgents = allAdmins
+        .filter((agent) => agent.isActive && agent.supportStatus === "available" &&
+          agent.supportLastSeenAt && new Date(agent.supportLastSeenAt).getTime() > cutoff)
+        .map(({ id, fullName }) => ({ id, fullName }));
+      res.json({ conversations, tickets, availableAgents, onlineCount: availableAgents.length });
+    } catch (error) {
+      console.error("Load support hub error:", error);
+      res.status(500).json({ message: "Failed to load support" });
+    }
+  });
+
+  app.post("/api/conversations", requireAuth, async (req, res) => {
+    try {
+      const session = req.session as any;
+      const userId = session?.user?.id || session?.userId;
+      if (!userId) return res.status(401).json({ message: "Authentication required" });
+      const title = typeof req.body?.title === "string" ? req.body.title.trim().slice(0, 80) : "GreenPay Support";
+      const conversation = await storage.createConversation({ userId, title: title || "GreenPay Support", adminId: null });
+      try {
+        const { messagingService } = await import("./services/messaging");
+        await messagingService.sendAdminChatNotification(userId);
+      } catch (error) {
+        console.error("Support new conversation notification failed:", error);
+      }
+      res.status(201).json(conversation);
+    } catch (error) {
+      console.error("Create support conversation error:", error);
+      res.status(500).json({ message: "Could not start a support conversation" });
+    }
+  });
+
   app.get("/api/conversations/user-conversation", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any)?.userId;
@@ -2930,6 +2972,13 @@ p{color:#6b7280;font-size:14px;}</style>
       // Check if user already has an active conversation
       const existingConversations = await storage.getConversationsByUserId(userId);
       console.log(`[CONVERSATION PRIVACY] User ${userId.substring(0, 8)}... has ${existingConversations.length} existing conversations`);
+
+      const requestedConversationId = typeof req.query.conversationId === "string" ? req.query.conversationId : null;
+      if (requestedConversationId) {
+        const requestedConversation = existingConversations.find((item) => item.id === requestedConversationId);
+        if (!requestedConversation) return res.status(404).json({ message: "Conversation not found" });
+        return res.json(requestedConversation);
+      }
       
       const activeConversation = existingConversations.find(c => c.status === "active");
 
@@ -3031,6 +3080,9 @@ p{color:#6b7280;font-size:14px;}</style>
       // Determine sender type and ID based on who is authenticated
       const senderId = adminId || userId;
       const senderType = adminId ? "admin" : "user";
+      const hadAgentReply = senderType === "admin" && !conversation.firstResponseAt
+        ? (await storage.getMessagesByConversationId(conversation.id)).some((item) => item.senderType === "admin")
+        : false;
 
       console.log(`[MESSAGES PRIVACY] Creating message from ${senderType} ${senderId?.substring(0, 8)}... in conversation ${messageData.conversationId.substring(0, 8)}...`);
 
@@ -3041,19 +3093,41 @@ p{color:#6b7280;font-size:14px;}</style>
         senderType
       } as any);
 
-      // If sender is admin, notify user via SMS
+      if (senderType === "admin" && !conversation.firstResponseAt && !hadAgentReply) {
+        await storage.updateConversation(conversation.id, { firstResponseAt: message.createdAt || new Date() });
+      }
+
       if (senderType === 'admin') {
         try {
-          const { messagingService } = await import('./services/messaging');
-          const user = await storage.getUser(conversation.userId);
-          if (user && user.phone) {
-            const domain = process.env.REPLIT_DOMAINS || 'greenpay.app';
-            const loginUrl = `https://${domain.split(',')[0]}/login`;
-            const notification = `You have a new message from GreenPay support. Login to reply: ${loginUrl}`;
-            await messagingService.sendMessage(user.phone, notification);
+          const { notificationService } = await import("./services/notifications");
+          await notificationService.sendNotification({
+            userId: conversation.userId,
+            title: "New message from GreenPay Support",
+            body: "Your support conversation has a new reply.",
+            type: "general",
+            metadata: { actionUrl: `/live-chat?conversationId=${conversation.id}`, conversationId: conversation.id },
+          });
+        } catch (notificationError) {
+          console.error("Failed to notify user about support reply:", notificationError);
+        }
+      } else {
+        try {
+          if (conversation.adminId) {
+            const agent = (await storage.getAllAdmins()).find((item) => item.id === conversation.adminId);
+            if (agent?.email) {
+              const { emailService } = await import("./services/email");
+              await emailService.sendEmail(
+                agent.email,
+                "New GreenPay support message",
+                `<p>${conversation.title || "A support conversation"} has a new customer message.</p><p>Sign in to the GreenPay admin console to reply.</p>`,
+              );
+            }
+          } else {
+            const { messagingService } = await import("./services/messaging");
+            await messagingService.sendAdminChatNotification(conversation.userId);
           }
-        } catch (smsError) {
-          console.error('Failed to send user chat notification:', smsError);
+        } catch (notificationError) {
+          console.error("Failed to notify support about incoming message:", notificationError);
         }
       }
 
@@ -8702,6 +8776,9 @@ p{color:#6b7280;font-size:14px;}</style>
         }
       }
 
+      const ticket = await storage.getSupportTicket(req.params.id);
+      const priorReplies = ticket ? await storage.getTicketReplies(ticket.id) : [];
+      const hasPriorAgentReply = priorReplies.some((item) => item.senderType === "admin");
       const reply = await storage.createTicketReply({
         ticketId: req.params.id,
         userId,
@@ -8758,8 +8835,10 @@ p{color:#6b7280;font-size:14px;}</style>
               // Replies table might not exist yet, continue without them
               replies = [];
             }
+            const firstAgentReply = replies.find((reply: any) => reply.senderType === "admin");
             return {
               ...ticket,
+              firstResponseAt: ticket.firstResponseAt || firstAgentReply?.createdAt || null,
               user: user ? { fullName: user.fullName, email: user.email, phone: user.phone } : undefined,
               replies,
             };
@@ -8954,6 +9033,25 @@ p{color:#6b7280;font-size:14px;}</style>
         fileName,
       });
 
+      if (ticket && !ticket.firstResponseAt && !hasPriorAgentReply) {
+        await storage.updateSupportTicket(req.params.id, { firstResponseAt: reply.createdAt || new Date() });
+      }
+
+      if (ticket) {
+        try {
+          const { notificationService } = await import("./services/notifications");
+          await notificationService.sendNotification({
+            userId: ticket.userId,
+            title: "New reply to your support case",
+            body: "GreenPay Support has replied to your case.",
+            type: "general",
+            metadata: { actionUrl: "/support/tickets", ticketId: ticket.id },
+          });
+        } catch (error) {
+          console.error("Could not notify user about ticket reply:", error);
+        }
+      }
+
       await storage.createAdminLog({
         adminId: (req.session as any)?.admin?.id || null,
         action: "reply_support_ticket",
@@ -9103,18 +9201,65 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin Conversation Management
+  app.get("/api/admin/support/agents", requireAdminAuth, async (_req, res) => {
+    try {
+      const cutoff = Date.now() - 60_000;
+      const agents = (await storage.getAllAdmins())
+        .filter((admin) => admin.isActive)
+        .map(({ id, fullName, email, role, supportStatus, supportLastSeenAt }) => ({
+          id,
+          fullName,
+          email,
+          role,
+          status: supportStatus === "available" && supportLastSeenAt &&
+            new Date(supportLastSeenAt).getTime() > cutoff ? "online" : supportStatus === "away" ? "away" : "offline",
+        }));
+      res.json(agents);
+    } catch (error) {
+      console.error("Get support agents error:", error);
+      res.status(500).json({ message: "Failed to fetch support agents" });
+    }
+  });
+
+  app.put("/api/admin/support/presence", requireAdminAuth, async (req, res) => {
+    const adminId = (req.session as any)?.admin?.id;
+    const status = req.body?.status;
+    if (status !== "available" && status !== "away") {
+      return res.status(400).json({ message: "Status must be available or away" });
+    }
+    try {
+      const updated = await storage.updateAdmin(adminId, {
+        supportStatus: status,
+        supportLastSeenAt: new Date(),
+      });
+      if (!updated) return res.status(404).json({ message: "Admin account not found" });
+      res.json({ status, lastSeenAt: updated.supportLastSeenAt });
+    } catch (error) {
+      console.error("Update support presence error:", error);
+      res.status(500).json({ message: "Could not update support availability" });
+    }
+  });
+
   app.get("/api/admin/conversations", requireAdminAuth, async (req, res) => {
     try {
-      const conversations = await storage.getAllActiveConversations();
+      const [conversations, agents] = await Promise.all([
+        storage.getAllActiveConversations(),
+        storage.getAllAdmins(),
+      ]);
       
       // Get detailed info including user details
       const conversationsWithDetails = await Promise.all(
         conversations.map(async (conversation) => {
           const user = await storage.getUser(conversation.userId);
           const messageCount = await storage.getUnreadMessagesCount(conversation.id, conversation.userId);
+          const assignedAgent = agents.find((agent) => agent.id === conversation.adminId);
           return {
             ...conversation,
             user: user ? { id: user.id, fullName: user.fullName, email: user.email } : null,
+            assignedAgent: assignedAgent ? { id: assignedAgent.id, fullName: assignedAgent.fullName } : null,
+            firstResponseSeconds: conversation.firstResponseAt
+              ? Math.max(0, Math.round((new Date(conversation.firstResponseAt).getTime() - new Date(conversation.createdAt || Date.now()).getTime()) / 1000))
+              : null,
             unreadCount: messageCount
           };
         })
@@ -9130,8 +9275,13 @@ p{color:#6b7280;font-size:14px;}</style>
   // Admin: Assign conversation to admin
   app.put("/api/admin/conversations/:id/assign", requireAdminAuth, async (req, res) => {
     try {
-      const { adminId } = req.body;
+      const currentAdminId = (req.session as any)?.admin?.id;
+      const adminId = req.body?.adminId || currentAdminId;
       const conversationId = req.params.id;
+      const agent = (await storage.getAllAdmins()).find((item) => item.id === adminId && item.isActive);
+      if (!agent) return res.status(400).json({ message: "Choose an active support agent" });
+      const currentConversation = await storage.getConversation(conversationId);
+      if (!currentConversation) return res.status(404).json({ message: "Conversation not found" });
       
       const conversation = await storage.updateConversation(conversationId, { 
         adminId,
@@ -9144,11 +9294,39 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Log admin action  
       await storage.createAdminLog({
-        adminId: (req.session as any)?.admin?.id || null,
-        action: "assign_conversation",
-        details: `Admin assigned conversation ${conversationId} to admin ${adminId}`,
+        adminId: currentAdminId || null,
+        action: currentConversation.adminId ? "transfer_conversation" : "assign_conversation",
+        details: `Conversation ${conversationId} assigned to ${agent.fullName}`,
         targetId: conversationId,
       });
+
+      if (currentConversation.adminId !== adminId) {
+        const user = await storage.getUser(conversation.userId);
+        if (user) {
+          try {
+            const { notificationService } = await import("./services/notifications");
+            await notificationService.sendNotification({
+              userId: user.id,
+              title: "Support agent assigned",
+              body: `${agent.fullName} is now handling your conversation.`,
+              type: "general",
+              metadata: { actionUrl: `/live-chat?conversationId=${conversation.id}`, conversationId: conversation.id },
+            });
+          } catch (error) {
+            console.error("Could not notify user about agent assignment:", error);
+          }
+        }
+        try {
+          const { emailService } = await import("./services/email");
+          if (agent.email) await emailService.sendEmail(
+            agent.email,
+            "GreenPay support conversation assigned",
+            `<p>Hello ${agent.fullName},</p><p>A support conversation has been assigned to you.</p><p><strong>${conversation.title || "Support conversation"}</strong></p><p>Please sign in to the GreenPay admin console to respond.</p>`,
+          );
+        } catch (error) {
+          console.error("Could not email assigned support agent:", error);
+        }
+      }
 
       res.json({ 
         message: "Conversation assigned successfully",

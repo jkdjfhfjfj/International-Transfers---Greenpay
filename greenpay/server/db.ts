@@ -483,6 +483,12 @@ async function alterMissingColumns() {
     `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS confirmation_sent_at TIMESTAMP`,
     `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS kyc_evidence_expires_at TIMESTAMP`,
     `ALTER TABLE account_deletion_requests ADD COLUMN IF NOT EXISTS kyc_evidence_deleted_at TIMESTAMP`,
+    // Additive support operations: availability expires naturally when an agent
+    // stops heartbeating; response timestamps preserve existing conversations.
+    `ALTER TABLE admins ADD COLUMN IF NOT EXISTS support_status TEXT NOT NULL DEFAULT 'away'`,
+    `ALTER TABLE admins ADD COLUMN IF NOT EXISTS support_last_seen_at TIMESTAMP`,
+    `ALTER TABLE conversations ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMP`,
+    `ALTER TABLE support_tickets ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMP`,
   ];
 
   for (let index = 0; index < migrations.length; index++) {

@@ -195,9 +195,31 @@ export default function LoginPage() {
     setAuthenticatorCode("");
     setAuthMethod(null);
     setTempLoginData(null);
+    ["otpUserId", "otpPhone", "otpEmail", "otpSentVia", "otpMethod", "otpChallengeData"]
+      .forEach((key) => localStorage.removeItem(key));
   };
 
   const handlePendingChallenge = (data: any) => {
+    if (data.requiresPin || data.requiresAuthenticator) {
+      localStorage.setItem("otpUserId", data.userId || "");
+      localStorage.setItem("otpPhone", data.phone || "");
+      localStorage.setItem("otpEmail", data.email || "");
+      localStorage.setItem("otpSentVia", "");
+      localStorage.removeItem("otpMethod");
+      localStorage.setItem("otpChallengeData", JSON.stringify({
+        requiresPin: Boolean(data.requiresPin),
+        requiresAuthenticator: Boolean(data.requiresAuthenticator),
+        requiresBiometric: Boolean(data.requiresBiometric),
+        requiresOtp: Boolean(data.requiresOtp),
+        otpMethods: data.otpMethods || [],
+      }));
+      setRequiresPin(false);
+      setAuthMethod(null);
+      setTempLoginData(null);
+      setLocation("/auth/otp-verification");
+      return true;
+    }
+
     const methods = [
       data.requiresPin ? "pin" : null,
       data.requiresAuthenticator ? "authenticator" : null,
@@ -225,8 +247,6 @@ export default function LoginPage() {
       setPinCode("");
     } else if (method === "authenticator") {
       setAuthenticatorCode("");
-    } else if (method === "biometric") {
-      return true;
     } else {
       localStorage.setItem("otpUserId", data.userId);
       localStorage.setItem("otpPhone", data.phone || "");
@@ -295,6 +315,7 @@ export default function LoginPage() {
         setLocation("/settings");
       } else {
         // Direct login
+        clearPendingLogin();
         login(data.user);
         toast({
           title: "Welcome back!",

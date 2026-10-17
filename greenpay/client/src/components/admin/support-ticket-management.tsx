@@ -30,6 +30,7 @@ interface SupportTicket {
   priority: string;
   adminNotes: string | null;
   createdAt: string;
+  firstResponseAt?: string | null;
   user?: {
     fullName: string;
     email: string;
@@ -148,6 +149,12 @@ export default function SupportTicketManagement() {
                 <CardTitle className="text-2xl">{ticket.issueType}</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 pt-6">
+                <div className="rounded-lg border border-emerald-200 bg-white px-4 py-3 text-sm">
+                  <span className="font-semibold text-emerald-800">First response: </span>
+                  {ticket.firstResponseAt
+                    ? `after ${Math.max(0, Math.round((new Date(ticket.firstResponseAt).getTime() - new Date(ticket.createdAt).getTime()) / 60000))} min`
+                    : "awaiting support reply"}
+                </div>
                 <div>
                   <p className="text-sm font-semibold text-emerald-800">Description</p>
                   <p className="text-sm mt-2 bg-white p-4 rounded-lg border-l-4 border-emerald-500">{ticket.description}</p>

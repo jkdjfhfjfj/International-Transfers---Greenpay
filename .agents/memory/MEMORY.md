@@ -10,3 +10,4 @@
 - [GreenPay preview reload prevention](greenpay-preview-reload.md) — Avoid automatic cache-clearing or reloads when the app root is slow to mount; proxy startup delays can create refresh loops.
 - [GreenPay screenshot layout feedback](greenpay-screenshot-layout-feedback.md) — Treat screenshot whitespace reports as visual layout requests; fix the visible gap without reframing them as startup diagnosis.
 - [GreenPay account deletion](greenpay-account-deletion.md) — Require current-password confirmation, a reason, and admin review; redact identity while retaining audit and financial records.
+- [GreenPay support agents](greenpay-support-agents.md) — Base agent presence on authenticated admin heartbeats; stale agents are offline, never trust client-supplied admin claims.

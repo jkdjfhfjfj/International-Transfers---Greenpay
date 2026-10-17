@@ -197,6 +197,7 @@ export const supportTickets = pgTable("support_tickets", {
   assignedAdminId: varchar("assigned_admin_id").references(() => users.id, { onDelete: "set null" }),
   adminNotes: text("admin_notes"),
   resolvedAt: timestamp("resolved_at"),
+  firstResponseAt: timestamp("first_response_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -219,6 +220,7 @@ export const conversations = pgTable("conversations", {
   status: text("status").default("active"), // active, closed
   title: text("title"),
   lastMessageAt: timestamp("last_message_at"),
+  firstResponseAt: timestamp("first_response_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -356,6 +358,8 @@ export const admins = pgTable("admins", {
   twoFactorEnabled: boolean("two_factor_enabled").default(false),
   lastLoginAt: timestamp("last_login_at"),
   isActive: boolean("is_active").default(true),
+  supportStatus: text("support_status").notNull().default("away"),
+  supportLastSeenAt: timestamp("support_last_seen_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
