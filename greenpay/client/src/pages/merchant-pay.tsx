@@ -6,13 +6,6 @@ import { WavyHeader } from "@/components/wavy-header";
 
 const MERCHANT_URL = "https://greenpay.co.ke";
 
-const PAYMENT_STEPS = [
-  "Open M-PESA on your phone and choose Lipa na M-PESA.",
-  "Choose Pay Bill or Buy Goods and Services, following the option shown on Greenpay.co.ke.",
-  "Enter the Paybill or Till number shown by the merchant. Add the account or reference if requested.",
-  "Enter the amount and check that the merchant name is Greenpay.co.ke before confirming with your M-PESA PIN.",
-];
-
 export default function MerchantPayPage() {
   const [, setLocation] = useLocation();
 
@@ -60,22 +53,10 @@ export default function MerchantPayPage() {
         </motion.section>
 
         <section className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-          <h2 className="text-base font-bold">Paybill / Till instructions</h2>
+          <h2 className="text-base font-bold">Merchant payment details</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-            Use the current Paybill or Till details published by Greenpay.co.ke.
+            For merchant payments, use the current payment instructions published on Greenpay.co.ke. Virtual-card purchase instructions are available in the card purchase flow.
           </p>
-
-          <ol className="mt-4 space-y-3">
-            {PAYMENT_STEPS.map((step, index) => (
-              <li key={step} className="flex items-start gap-3">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                  {index + 1}
-                </span>
-                <p className="pt-1 text-sm leading-relaxed text-foreground">{step}</p>
-              </li>
-            ))}
-          </ol>
-
           <a
             href={MERCHANT_URL}
             target="_blank"

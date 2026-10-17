@@ -9,8 +9,8 @@ For GreenPay, keep payment-integration names out of customer-facing payment copy
 
 **How to apply:** Use generic language in customer UI, transaction descriptions, and public API errors. Keep internal service identifiers intact. In admin-only setup UI, accept provider values only through the encrypted credential flow, show source/readiness without returning saved values, and keep non-secret settings separate. Do not rotate the encryption key without re-encrypting saved credentials.
 
-For customer-facing merchant-payment instructions, name the merchant **Greenpay.co.ke** and call the payment method **Paybill / Till**, not “manual.”
+For card-purchase payment instructions, identify the merchant as **Greenpay.co.ke** and call the payment method **Paybill / Till**, not “manual.” Keep these directions in the virtual-card purchase flow, not on the merchant-payment page.
 
-**Why:** The user specified this merchant identity and customer-facing label.
+**Why:** The user clarified that Paybill / Till instructions are for card purchase, not merchant payments, and specified the merchant identity and customer-facing label.
 
-**How to apply:** Use the Greenpay.co.ke link and Paybill / Till wording on the Services entry and instructions page; retain existing internal route and configuration identifiers.
+**How to apply:** Show current Paybill / Till details and M-PESA steps in virtual-card purchase. Do not invent merchant numbers; use configured current details or direct users to Greenpay.co.ke. Keep merchant-payment pages separate.

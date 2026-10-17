@@ -9,7 +9,7 @@ import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-pays
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArrowRight, Bitcoin, Building2, Check, CheckCircle2, CircleDollarSign, Clock, Copy, CreditCard, Info, Loader2, Smartphone, XCircle } from "lucide-react";
+import { ArrowRight, Bitcoin, Building2, Check, CheckCircle2, CircleDollarSign, Clock, Copy, CreditCard, ExternalLink, Info, Loader2, Smartphone, XCircle } from "lucide-react";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
 
@@ -174,27 +174,35 @@ export default function VirtualCardPurchasePage() {
   const paymentMethodOptions: CardPaymentOption[] = paymentOptions
     ? paymentOptions.isKenya
       ? [
-          ...(paymentOptions.mobileMoney ? [{
+          {
             id: "mobile_money" as const,
             title: "Mobile money",
-            detail: "Get a payment prompt on your registered phone.",
+            detail: paymentOptions.mobileMoney
+              ? "Get a payment prompt on your registered phone."
+              : "Temporarily unavailable until the mobile-money provider is configured.",
             icon: Smartphone,
             testId: "option-mobile-money",
-          }] : []),
-          ...(paymentOptions.card ? [{
+            disabled: !paymentOptions.mobileMoney,
+          },
+          {
             id: "card" as const,
             title: "Debit or credit card",
-            detail: "Pay through secure card checkout.",
+            detail: paymentOptions.card
+              ? "Pay through secure card checkout."
+              : "Temporarily unavailable until card checkout is configured.",
             icon: CreditCard,
             testId: "option-card-payment",
-          }] : []),
-          ...(manualPaymentEnabled ? [{
+            disabled: !paymentOptions.card,
+          },
+          {
             id: "manual" as const,
             title: "Paybill / Till",
-            detail: "Pay by Paybill, then share the transaction code for review.",
+            detail: manualPaymentEnabled
+              ? "Pay using the current Greenpay.co.ke details, then share the transaction code for review."
+              : "View card-purchase instructions; confirm the current number on Greenpay.co.ke before paying.",
             icon: CircleDollarSign,
             testId: "option-manual-payment",
-          }] : []),
+          },
           {
             id: "crypto",
             title: "Cryptocurrency",
@@ -294,7 +302,7 @@ export default function VirtualCardPurchasePage() {
       ? [
           ...(paymentOptions.mobileMoney ? ["mobile_money" as const] : []),
           ...(paymentOptions.card ? ["card" as const] : []),
-          ...(manualPaymentEnabled ? ["manual" as const] : []),
+          "manual",
           "crypto",
         ]
       : [
@@ -670,7 +678,7 @@ export default function VirtualCardPurchasePage() {
                           : option.id === "mobile_money"
                             ? "MOBILE MONEY"
                             : option.id === "manual"
-                              ? "MANUAL"
+                              ? "PAYBILL / TILL"
                               : "CARD";
                       return (
                         <button
@@ -820,7 +828,7 @@ export default function VirtualCardPurchasePage() {
               </motion.div>
             )}
 
-            {paymentMethod === "manual" && manualPaymentEnabled && (
+            {paymentMethod === "manual" && paymentOptions?.isKenya && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -846,9 +854,9 @@ export default function VirtualCardPurchasePage() {
                     </p>
                   )}
                 </div>
-                {[
-                  { label: "Paybill / Till number", value: String((manualPaymentData as any)?.paybill || ""), testId: "text-manual-paybill" },
-                  { label: "Account / reference", value: String((manualPaymentData as any)?.account || ""), testId: "text-manual-account" },
+                  {[
+                  { label: "Paybill or Till number", value: String((manualPaymentData as any)?.paybill || ""), testId: "text-manual-paybill" },
+                  { label: "Account / reference (if requested)", value: String((manualPaymentData as any)?.account || ""), testId: "text-manual-account" },
                 ].map(({ label, value, testId }) => (
                   <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-background p-3">
                     <span className="min-w-0">
@@ -888,12 +896,27 @@ export default function VirtualCardPurchasePage() {
                     </Button>
                   </div>
                 )}
+                {!manualPaymentEnabled && (
+                  <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+                    Payment details are not configured in this preview. Do not send money using placeholder details. Check the current Paybill or Till on Greenpay.co.ke.
+                  </p>
+                )}
                 <ol className="list-decimal list-inside space-y-2 rounded-xl bg-background p-3 text-xs leading-relaxed text-muted-foreground">
-                  <li>Open M-PESA and choose <span className="font-semibold text-foreground">Lipa na M-PESA → Pay Bill</span>.</li>
-                  <li>Enter the Paybill and the account number shown above.</li>
-                  <li>Enter the exact KES amount shown, review any M-PESA fee, then complete with your PIN.</li>
-                  <li>Keep the M-PESA transaction code and contact support so the payment can be verified.</li>
+                  <li>Open M-PESA on your phone and choose <span className="font-semibold text-foreground">Lipa na M-PESA</span>.</li>
+                  <li>Choose <span className="font-semibold text-foreground">Pay Bill</span> or <span className="font-semibold text-foreground">Buy Goods and Services</span>, following the option shown on Greenpay.co.ke.</li>
+                  <li>Enter the Paybill or Till number shown by the merchant. Add the account or reference if requested.</li>
+                  <li>Enter the amount and check that the merchant name is <span className="font-semibold text-foreground">Greenpay.co.ke</span> before confirming with your M-PESA PIN.</li>
                 </ol>
+                <a
+                  href="https://greenpay.co.ke"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-border bg-background px-3 text-sm font-medium text-primary"
+                  data-testid="link-current-greenpay-payment-details"
+                >
+                  Check current Greenpay.co.ke details
+                  <ExternalLink className="h-4 w-4" />
+                </a>
                 <div className="flex items-center justify-between gap-3 rounded-lg bg-background p-3 text-xs">
                   <span className="text-muted-foreground">GreenPay fee</span>
                   <span className="font-semibold">KES 0.00</span>
