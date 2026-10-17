@@ -168,7 +168,8 @@ app.use((req, res, next) => {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       // Do not dump system settings or API-key configuration into logs/WebSocket activity.
       // The endpoint is still available to the app; only its sensitive response is omitted.
-      const shouldLogResponse = path !== "/api/system-settings";
+      const shouldLogResponse = path !== "/api/system-settings" &&
+        path !== "/api/dev/test-account";
       if (capturedJsonResponse && shouldLogResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }

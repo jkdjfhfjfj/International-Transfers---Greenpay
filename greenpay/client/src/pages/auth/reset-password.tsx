@@ -71,6 +71,30 @@ export default function ResetPasswordPage() {
     },
   });
 
+  const resendCodeMutation = useMutation({
+    mutationFn: async () => {
+      const contact = localStorage.getItem("resetPhone");
+      if (!contact) {
+        throw new Error("Session expired. Start again from Forgot password.");
+      }
+      const response = await apiRequest("POST", "/api/auth/forgot-password", { contact });
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Reset code sent",
+        description: "Check your phone or email for the new code.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Could not resend code",
+        description: error.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const onSubmit = (data: ResetPasswordForm) => {
     resetPasswordMutation.mutate(data);
   };
@@ -114,7 +138,8 @@ export default function ResetPasswordPage() {
                     <FormControl>
                       <Input
                         {...field}
-                        type="text"
+                         type="text"
+                         inputMode="numeric"
                         placeholder="000000"
                         className="h-12 text-center text-2xl tracking-widest"
                         maxLength={6}
@@ -182,16 +207,6 @@ export default function ResetPasswordPage() {
                 )}
               />
 
-              <div className="text-center">
-                <Button
-                  type="button"
-                  variant="link"
-                  onClick={() => setLocation("/auth/forgot-password")}
-                  className="text-primary"
-                >
-                  Resend Code
-                </Button>
-              </div>
             </form>
           </Form>
         </motion.div>
@@ -199,13 +214,23 @@ export default function ResetPasswordPage() {
 
       {/* Fixed bottom action matches the sign-up flow and stays reachable on mobile. */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="max-w-sm mx-auto p-4">
+        <div className="max-w-sm mx-auto flex flex-col gap-2 p-4">
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            onClick={() => resendCodeMutation.mutate()}
+            disabled={resendCodeMutation.isPending || resetPasswordMutation.isPending}
+            data-testid="button-resend-reset-code"
+          >
+            {resendCodeMutation.isPending ? "Sending code..." : "Resend code"}
+          </Button>
           <Button
             type="button"
             onClick={form.handleSubmit(onSubmit)}
             className="w-full ripple"
             style={{ height: 52 }}
-            disabled={resetPasswordMutation.isPending}
+            disabled={resetPasswordMutation.isPending || resendCodeMutation.isPending}
             data-testid="button-reset-password"
           >
             {resetPasswordMutation.isPending ? "Resetting Password..." : "Reset Password"}

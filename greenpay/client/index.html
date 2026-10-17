@@ -234,7 +234,7 @@
           <p style="margin:8px 0 0;color:rgba(220,255,250,.86);font-size:14px">Your money, moving forward</p>
           <div style="margin:30px auto 0;display:flex;align-items:center;justify-content:center;gap:10px;color:rgba(255,255,255,.88);font-size:13px">
             <span style="width:18px;height:18px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:geepay-boot-spin .8s linear infinite" aria-hidden="true"></span>
-            Preparing your secure session
+            <span data-boot-message>Preparing your secure session</span>
           </div>
         </div>
       </main>
@@ -245,36 +245,49 @@
         console.error('Runtime error caught:', e.error);
       });
 
+      function showPreviewBootFailure() {
+        const root = document.getElementById('root');
+        if (root && root.querySelector('[data-boot-shell]')) {
+          console.error("GreenPay did not mount within 15 seconds.");
+          root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39"><h1>GreenPay could not load</h1><p>The app did not start. Retry clears only stale service-worker and cache data; saved browser data is left untouched.</p><button style="padding:.7rem 1rem;border:0;border-radius:.6rem;background:#0d9488;color:white;cursor:pointer" onclick="window.retryGreenPayPreview()">Clear stale preview cache and start GreenPay</button></main>';
+        }
+      }
+
+      function armPreviewBootTimeout() {
+        setTimeout(showPreviewBootFailure, 15000);
+      }
+
       window.retryGreenPayPreview = async function() {
         try {
-          if ('serviceWorker' in navigator) {
-            const registrations = await navigator.serviceWorker.getRegistrations();
-            await Promise.all(registrations.map(registration => registration.unregister()));
-          }
-          if ('caches' in window) {
-            const cacheNames = await caches.keys();
-            await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
-          }
+          const cleanup = (async function() {
+            if ('serviceWorker' in navigator) {
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.map(registration => registration.unregister()));
+            }
+            if ('caches' in window) {
+              const cacheNames = await caches.keys();
+              await Promise.all(cacheNames.map(cacheName => caches.delete(cacheName)));
+            }
+          })();
+          await Promise.race([cleanup, new Promise(resolve => setTimeout(resolve, 1500))]);
         } catch (error) {
           console.warn('Preview cache cleanup failed:', error);
         }
-        const root = document.getElementById('root');
-        if (root) root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39">Starting GreenPay…</main>';
-        const bootstrap = document.createElement('script');
-        bootstrap.type = 'module';
-        bootstrap.src = '/src/preview-bootstrap.ts?retry=' + Date.now();
-        document.body.appendChild(bootstrap);
+        // A fresh document is needed because unregistering a worker does not
+        // detach it from the current page. This navigation only follows a
+        // user's explicit retry and leaves all saved browser data untouched.
+        const retryUrl = new URL(window.location.href);
+        retryUrl.searchParams.set('gp_preview_recovery', String(Date.now()));
+        window.location.replace(retryUrl.toString());
       };
 
       // If React never replaces the boot shell, show a manual retry instead of
       // reloading forever. Allow slower mobile/proxied startup before declaring failure.
       setTimeout(() => {
-        const root = document.getElementById('root');
-        if (root && root.querySelector('[data-boot-shell]')) {
-          console.error("GreenPay did not mount within 30 seconds.");
-          root.innerHTML = '<main style="font-family:system-ui,sans-serif;padding:2rem;max-width:40rem;margin:10vh auto;color:#173b39"><h1>GreenPay could not load</h1><p>The app did not start. Retry clears only stale service-worker and cache data; saved browser data is left untouched.</p><button style="padding:.7rem 1rem;border:0;border-radius:.6rem;background:#0d9488;color:white;cursor:pointer" onclick="window.retryGreenPayPreview()">Clear stale preview cache and start GreenPay</button></main>';
-        }
-      }, 30000);
+        const message = document.querySelector('[data-boot-message]');
+        if (message) message.textContent = "Taking longer than usual — still preparing your secure session";
+      }, 6000);
+      armPreviewBootTimeout();
     </script>
     <script type="module" src="/src/preview-bootstrap.ts"></script>
     <!-- This is a replit script which adds a banner on the top of the page when opened in development mode outside the replit environment -->

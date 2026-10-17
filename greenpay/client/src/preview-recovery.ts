@@ -1,5 +1,5 @@
 export interface PreviewServiceWorkerContainer {
-  getRegistrations(): Promise<Array<{ unregister(): Promise<boolean> }>>;
+  getRegistrations(): Promise<ReadonlyArray<{ unregister(): Promise<boolean> }>>;
 }
 
 export interface PreviewCacheStorage {

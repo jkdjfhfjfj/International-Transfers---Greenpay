@@ -2147,7 +2147,12 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.post("/api/auth/login", optionalApiKey, async (req, res) => {
     try {
-      const { email, password } = loginSchema.parse(req.body);
+      const { email, password } = loginSchema.parse({
+        ...req.body,
+        email: typeof req.body.email === "string"
+          ? req.body.email.trim().toLowerCase()
+          : req.body.email,
+      });
       
       const user = await storage.getUserByEmail(email);
       if (!user) {

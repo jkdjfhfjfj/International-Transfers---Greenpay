@@ -8,13 +8,14 @@ const html = readFileSync(new URL("../client/index.html", import.meta.url), "utf
 
 test("development preview removes stale worker caches before importing React", () => {
   assert.match(bootstrap, /import\.meta\.env\.DEV/);
+  assert.match(bootstrap, /setTimeout\(\(\) => resolve\(false\), 800\)/);
   assert.ok(bootstrap.indexOf("clearStalePreviewCaches") < bootstrap.indexOf('await import("./main")'));
 });
 
 test("startup shell stays visible while React loads and recovery is manual", () => {
   assert.match(html, /data-boot-shell/);
-  assert.match(html, /setTimeout\(\(\) => \{/);
-  assert.match(html, /\}, 30000\)/);
+  assert.match(html, /setTimeout\(showPreviewBootFailure, 30000\)/);
+  assert.match(html, /setTimeout\(resolve, 800\)/);
   assert.match(html, /Clear stale preview cache and start GreenPay/);
   assert.doesNotMatch(html, /localStorage\.clear|sessionStorage\.clear|Clear-Site-Data/);
   assert.doesNotMatch(html, /window\.location\.reload\(\)/);

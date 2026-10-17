@@ -264,7 +264,10 @@ export default function LoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
-      const response = await apiRequest("POST", "/api/auth/login", data);
+      const response = await apiRequest("POST", "/api/auth/login", {
+        email: data.email.trim().toLowerCase(),
+        password: data.password,
+      });
       return response.json();
     },
     onSuccess: (data) => {
@@ -570,6 +573,9 @@ export default function LoginPage() {
                           type="email"
                           placeholder="Enter your email"
                           className="pl-12"
+                          autoComplete="username"
+                          autoCapitalize="none"
+                          spellCheck={false}
                           data-testid="input-email"
                         />
                       </div>
@@ -594,6 +600,7 @@ export default function LoginPage() {
                           type={showPassword ? "text" : "password"}
                           placeholder="Enter your password"
                           className="pl-12 pr-12"
+                          autoComplete="current-password"
                           data-testid="input-password"
                         />
                         <button
