@@ -25,6 +25,16 @@ self.addEventListener('install', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Vite's dev modules must never be served from or stored in the PWA cache.
+  if (
+    url.pathname.startsWith('/src/') ||
+    url.pathname.startsWith('/@vite/') ||
+    url.pathname.startsWith('/@fs/') ||
+    url.pathname.includes('/node_modules/.vite/')
+  ) {
+    return;
+  }
+
   // Always fetch JS and CSS from network to get latest code
   if (
     url.pathname.startsWith('/assets/') ||

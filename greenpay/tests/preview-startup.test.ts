@@ -8,19 +8,31 @@ const html = readFileSync(new URL("../client/index.html", import.meta.url), "utf
 
 test("development preview removes stale worker caches before importing React", () => {
   assert.match(bootstrap, /import\.meta\.env\.DEV/);
-  assert.match(bootstrap, /setTimeout\(\(\) => resolve\(false\), 800\)/);
+  assert.match(bootstrap, /setTimeout\(\(\) => resolve\(false\), 4000\)/);
+  assert.match(bootstrap, /Loading GreenPay application modules/);
+  assert.match(bootstrap, /showPreviewBootFailure\?\.\(error\)/);
   assert.ok(bootstrap.indexOf("clearStalePreviewCaches") < bootstrap.indexOf('await import("./main")'));
 });
 
 test("startup shell stays visible while React loads and recovery is manual", () => {
   assert.match(html, /data-boot-shell/);
-  assert.match(html, /setTimeout\(showPreviewBootFailure, 15000\)/);
+  assert.match(html, /setTimeout\(function\(\)[\s\S]*window\.showPreviewBootFailure/);
   assert.match(html, /setTimeout\(resolve, 1500\)/);
-  assert.match(html, /Clear stale preview cache and start GreenPay/);
+  assert.match(html, /Retry GreenPay startup/);
   assert.match(html, /window\.location\.replace\(retryUrl\.toString\(\)\)/);
   assert.match(html, /gp_preview_recovery/);
+  assert.match(html, /background: #0f766e/);
+  assert.match(html, /#boot-failure-detail/);
+  assert.match(html, /window\.__greenpayBootStage/);
   assert.doesNotMatch(html, /localStorage\.clear|sessionStorage\.clear|Clear-Site-Data/);
   assert.doesNotMatch(html, /window\.location\.reload\(\)/);
+});
+
+test("service worker never caches Vite source modules", () => {
+  const serviceWorker = readFileSync(new URL("../client/public/sw.js", import.meta.url), "utf8");
+  assert.ok(serviceWorker.includes("url.pathname.startsWith('/src/')"));
+  assert.ok(serviceWorker.includes("url.pathname.startsWith('/@vite/')"));
+  assert.ok(serviceWorker.includes("/node_modules/.vite/"));
 });
 
 test("stale worker registrations and cache entries are removed before retry", async () => {

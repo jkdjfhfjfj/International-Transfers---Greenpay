@@ -42,17 +42,10 @@ export function PWAInstallPrompt() {
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Service workers can retain stale HTML/API responses and cause confusing
-    // reloads in the live development preview. Keep them out of dev previews.
+    // The dev bootstrap removes stale workers before React loads. Do not run a
+    // second asynchronous cleanup here: it can race with module loading.
     if ('serviceWorker' in navigator) {
-      if (import.meta.env.DEV) {
-        navigator.serviceWorker.getRegistrations().then(async (registrations) => {
-          if (registrations.length === 0) return;
-          await Promise.all(registrations.map((registration) => registration.unregister()));
-          const cacheNames = await caches.keys();
-          await Promise.all(cacheNames.map((cacheName) => caches.delete(cacheName)));
-        }).catch((error) => console.warn('Unable to clear stale development service worker:', error));
-      } else {
+      if (!import.meta.env.DEV) {
         navigator.serviceWorker.register('/sw.js')
           .then((registration) => registration.update().catch(() => {}))
           .catch((registrationError) => {

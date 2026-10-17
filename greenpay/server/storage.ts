@@ -283,6 +283,7 @@ export class MemStorage implements IStorage {
   private adminLogs: Map<string, AdminLog> = new Map();
   private systemLogs: Map<string, SystemLog> = new Map();
   private announcements: Map<string, Announcement> = new Map();
+  private loginHistory: Map<string, LoginHistory> = new Map();
 
   constructor() {
     // Initialize with mock data for demo
@@ -1188,8 +1189,22 @@ export class MemStorage implements IStorage {
   async updateQRPayment(): Promise<QRPayment | undefined> { return undefined; }
 
   // Login History operations (stubs for MemStorage)
-  async createLoginHistory(): Promise<LoginHistory> { throw new Error('Not implemented'); }
-  async getLoginHistoryByUserId(): Promise<LoginHistory[]> { return []; }
+  async createLoginHistory(history: InsertLoginHistory): Promise<LoginHistory> {
+    const record = {
+      ...history,
+      id: randomUUID(),
+      createdAt: new Date(),
+    } as LoginHistory;
+    this.loginHistory.set(record.id, record);
+    return record;
+  }
+
+  async getLoginHistoryByUserId(userId: string, limit: number = 10): Promise<LoginHistory[]> {
+    return [...this.loginHistory.values()]
+      .filter(record => record.userId === userId)
+      .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
+      .slice(0, limit);
+  }
 
   // API Configuration operations (stubs for MemStorage)
   async getApiConfiguration(): Promise<ApiConfiguration | undefined> { return undefined; }
