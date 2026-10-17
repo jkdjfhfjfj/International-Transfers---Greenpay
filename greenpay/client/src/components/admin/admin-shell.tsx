@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, FileCheck, DollarSign, Banknote, CreditCard,
   Bell, Mail, MessageCircle, Headphones, FileText, Activity, Smartphone,
   Settings, MessageSquare, History, Database, BarChart3, LogOut, Menu, X,
-  Shield, ChevronRight, User, Megaphone, Bitcoin, AlertTriangle, ArrowDownToLine, Wallet, Newspaper
+  Shield, ChevronRight, User, Megaphone, Bitcoin, AlertTriangle, ArrowDownToLine, Wallet, Newspaper, Trash2
 } from "lucide-react";
 
 interface AdminUser {
@@ -34,6 +34,7 @@ const navSections = [
     title: "Users & KYC",
     items: [
       { href: "/admin/users", label: "User Management", icon: Users },
+      { href: "/admin/account-deletions", label: "Account Deletions", icon: Trash2 },
       { href: "/admin/kyc", label: "KYC Review", icon: FileCheck },
       { href: "/admin/advanced-kyc", label: "Advanced KYC", icon: Shield },
         { href: "/admin/risks", label: "Risk Monitoring", icon: AlertTriangle },

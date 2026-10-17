@@ -3,8 +3,8 @@ import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -30,7 +30,8 @@ export default function KycVerificationPage() {
     selfie: null as File | null,
   });
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
+  const queryClient = useQueryClient();
 
   // Fetch existing KYC status
   const { data: kycData, isLoading: kycLoading } = useQuery({
@@ -40,6 +41,18 @@ export default function KycVerificationPage() {
       const response = await apiRequest("GET", `/api/kyc/${user.id}`);
       return response.json();
     },
+    enabled: !!user?.id,
+  });
+
+  const { data: extractedResponse } = useQuery<{
+    extractedData?: {
+      dateOfBirth?: string | null;
+      address?: string | null;
+      documentType?: string | null;
+    } | null;
+  }>({
+    queryKey: ["/api/kyc/extracted-data"],
+    queryFn: async () => (await apiRequest("GET", "/api/kyc/extracted-data")).json(),
     enabled: !!user?.id,
   });
 
@@ -53,6 +66,24 @@ export default function KycVerificationPage() {
       documentType: "",
     },
   });
+
+  useEffect(() => {
+    const identity = extractedResponse?.extractedData;
+    if (!identity) return;
+    const rawDocumentType = String(identity.documentType || "").toLowerCase();
+    const documentType = rawDocumentType.includes("passport")
+      ? "passport"
+      : rawDocumentType.includes("driver")
+        ? "drivers_license"
+        : rawDocumentType.includes("national") || rawDocumentType.includes("identity") || rawDocumentType.includes("id")
+          ? "national_id"
+          : "";
+    form.reset({
+      dateOfBirth: identity.dateOfBirth || "",
+      address: identity.address || "",
+      documentType,
+    });
+  }, [extractedResponse?.extractedData, form]);
 
   const kycMutation = useMutation({
     mutationFn: async (data: KycForm) => {
@@ -83,12 +114,14 @@ export default function KycVerificationPage() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: [`/api/kyc/${user?.id}`] });
+      await refreshUser();
       toast({
         title: "Documents submitted!",
         description: "Your documents have been submitted for verification.",
       });
-      setLocation("/virtual-card-purchase");
+      setLocation("/kyc");
     },
     onError: (error: Error) => {
       toast({

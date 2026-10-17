@@ -15,6 +15,13 @@
       "when": 1788595457706,
       "tag": "0001_payment-request-recipient",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792238000000,
+      "tag": "0002_account-deletion-requests",
+      "breakpoints": true
     }
   ]
 }

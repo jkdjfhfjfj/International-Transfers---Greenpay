@@ -124,6 +124,35 @@ test("card purchase methods stay visible while unavailable actions obey admin re
   assert.match(virtualCard, /disabled=\{!cryptoConfigured\}/);
 });
 
+test("KYC identity data is fetched into the form without overwriting residence country", () => {
+  const kycForm = readFileSync(new URL("src/pages/auth/kyc-verification.tsx", root), "utf8");
+  const diditService = readFileSync(new URL("../server/services/didit.ts", import.meta.url), "utf8");
+  assert.match(kycForm, /\/api\/kyc\/extracted-data/);
+  assert.match(kycForm, /form\.reset\(\{/);
+  assert.match(serverRoutes, /app\.get\("\/api\/kyc\/:userId", requireAuth/);
+  assert.match(serverRoutes, /app\.post\("\/api\/kyc\/submit", requireAuth/);
+  assert.doesNotMatch(diditService, /const country = identity\.nationality/);
+});
+
+test("device settings list active sessions and support revoking an individual device", () => {
+  const settings = readFileSync(new URL("src/pages/settings.tsx", root), "utf8");
+  assert.match(settings, /DELETE.*\/api\/users\/me\/devices/);
+  assert.match(settings, /device\.current/);
+  assert.match(serverRoutes, /app\.delete\("\/api\/users\/me\/devices\/:sessionId", requireAuth/);
+  assert.match(serverRoutes, /SELECT sid, expire FROM user_sessions/);
+});
+
+test("account deletion requires reauthentication and admin approval", () => {
+  const settings = readFileSync(new URL("src/pages/settings.tsx", root), "utf8");
+  const adminPage = readFileSync(new URL("src/pages/admin-account-deletions.tsx", root), "utf8");
+  assert.match(settings, /DELETE MY ACCOUNT/);
+  assert.match(settings, /currentPassword: deletionPassword/);
+  assert.match(adminPage, /Approve and redact/);
+  assert.match(serverRoutes, /app\.post\("\/api\/users\/me\/account-deletion", requireAuth/);
+  assert.match(serverRoutes, /app\.post\("\/api\/admin\/account-deletion-requests\/:id\/review", requireAdminAuth/);
+  assert.match(serverRoutes, /Resolve remaining balances and pending transactions/);
+});
+
 test("wavy header retains its original teal gradient and accents", () => {
   assert.match(wavyHeader, /linearGradient id="waveGrad"/);
   assert.match(wavyHeader, /fill="url\(#waveGrad\)"/);

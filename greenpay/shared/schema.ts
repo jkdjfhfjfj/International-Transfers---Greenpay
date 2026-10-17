@@ -536,6 +536,17 @@ export const loginHistory = pgTable("login_history", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const accountDeletionRequests = pgTable("account_deletion_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"), // pending, approved, rejected
+  adminNote: text("admin_note"),
+  reviewedBy: text("reviewed_by"),
+  requestedAt: timestamp("requested_at").defaultNow(),
+  reviewedAt: timestamp("reviewed_at"),
+});
+
 // Announcements table for system-wide announcements and offers
 export const announcements = pgTable("announcements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

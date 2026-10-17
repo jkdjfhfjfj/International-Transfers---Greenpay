@@ -125,7 +125,6 @@ export default function KYCPage() {
         login({
           ...user,
           fullName: extracted.fullName || user.fullName,
-          country: extracted.nationality || extracted.issuingCountry || user.country,
           kycStatus: newKycStatus,
           kycFullName: extracted.fullName || user.kycFullName,
           kycDateOfBirth: extracted.dateOfBirth || user.kycDateOfBirth,
@@ -191,7 +190,6 @@ export default function KYCPage() {
       login({
         ...user,
         fullName: extracted.fullName || user.fullName,
-        country: extracted.nationality || extracted.issuingCountry || user.country,
         kycStatus: nextStatus,
         kycFullName: extracted.fullName || user.kycFullName,
         kycDateOfBirth: extracted.dateOfBirth || user.kycDateOfBirth,

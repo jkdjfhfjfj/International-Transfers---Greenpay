@@ -54,6 +54,7 @@ import AdminDashboard from "@/pages/admin-dashboard-new";
 import AdminDashboardPage from "@/pages/admin-dashboard";
 import AdminUsersPage from "@/pages/admin-users";
 import AdminKycPage from "@/pages/admin-kyc";
+import AdminAccountDeletionsPage from "@/pages/admin-account-deletions";
 import AdminAdvancedKycPage from "@/pages/admin-advanced-kyc";
 import AdminRisksPage from "@/pages/admin-risks";
 import AdminTransactionsPage from "@/pages/admin-transactions";
@@ -219,6 +220,7 @@ function Router() {
       <Route path="/admin/dashboard" component={AdminDashboard} />
       <Route path="/admin/home" component={AdminDashboardPage} />
       <Route path="/admin/users" component={AdminUsersPage} />
+      <Route path="/admin/account-deletions" component={AdminAccountDeletionsPage} />
       <Route path="/admin/kyc" component={AdminKycPage} />
       <Route path="/admin/advanced-kyc" component={AdminAdvancedKycPage} />
       <Route path="/admin/risks" component={AdminRisksPage} />

@@ -5,7 +5,7 @@ import path from "path";
 import crypto from "crypto";
 import { storage } from "./storage";
 import { db, pool } from "./db";
-import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
+import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, accountDeletionRequests, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import {
   getPayzaCurrencyForCountry,
@@ -3447,14 +3447,15 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // KYC routes with file upload
-  app.post("/api/kyc/submit", upload.fields([
+  app.post("/api/kyc/submit", requireAuth, upload.fields([
     { name: 'frontImage', maxCount: 1 },
     { name: 'backImage', maxCount: 1 },
     { name: 'selfie', maxCount: 1 }
   ]), async (req, res) => {
     try {
       const files = req.files as { [fieldname: string]: Express.Multer.File[] };
-      const { userId, documentType, dateOfBirth, address } = req.body;
+      const userId = (req as any).session?.userId;
+      const { documentType, dateOfBirth, address } = req.body;
       
       if (!userId || !documentType || !dateOfBirth || !address) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -3619,8 +3620,11 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
-  app.get("/api/kyc/:userId", async (req, res) => {
+  app.get("/api/kyc/:userId", requireAuth, async (req, res) => {
     try {
+      if ((req as any).session?.userId !== req.params.userId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
       const kyc = await storage.getKycByUserId(req.params.userId);
       res.json({ kyc });
     } catch (error) {
@@ -4737,18 +4741,6 @@ p{color:#6b7280;font-size:14px;}</style>
     } catch (error) {
       console.error('Password change error:', error);
       res.status(500).json({ message: "Failed to change password" });
-    }
-  });
-
-  // KYC endpoints
-  app.get("/api/kyc/:userId", async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const kyc = await storage.getKycByUserId(userId);
-      res.json({ kyc });
-    } catch (error) {
-      console.error('KYC fetch error:', error);
-      res.status(500).json({ message: "Failed to fetch KYC data" });
     }
   });
 
@@ -9803,10 +9795,51 @@ p{color:#6b7280;font-size:14px;}</style>
   app.get("/api/users/me/devices", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
-      const history = await storage.getLoginHistoryByUserId(userId, 20);
-      res.json({ devices: history });
+      const session = (req as any).session;
+      const currentSid = session?.id || (req as any).sessionID;
+      const userAgent = String(req.headers["user-agent"] || "");
+      if (!db) {
+        return res.json({ devices: [{ id: currentSid, current: true, browser: userAgent || "This device", deviceType: /mobile/i.test(userAgent) ? "mobile" : "desktop" }] });
+      }
+      const result = await db.execute(sql`
+        SELECT sid, expire FROM user_sessions
+        WHERE sess->>'userId' = ${userId} AND expire > NOW()
+        ORDER BY expire DESC
+      `);
+      const rows = (result as any).rows || result || [];
+      res.json({
+        devices: rows.map((row: any) => ({
+          id: row.sid,
+          current: row.sid === currentSid,
+          browser: row.sid === currentSid ? (userAgent || "This device") : "Other active device",
+          deviceType: row.sid === currentSid && /mobile/i.test(userAgent) ? "mobile" : "desktop",
+          expiresAt: row.expire,
+        })),
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to retrieve devices" });
+    }
+  });
+
+  app.delete("/api/users/me/devices/:sessionId", requireAuth, async (req, res) => {
+    try {
+      const userId = (req as any).session?.userId;
+      const currentSid = (req as any).session?.id || (req as any).sessionID;
+      if (req.params.sessionId === currentSid) {
+        return res.status(400).json({ message: "You cannot revoke the device you are using." });
+      }
+      if (!db) return res.status(503).json({ message: "Device session management is unavailable." });
+      const result: any = await db.execute(sql`
+        DELETE FROM user_sessions
+        WHERE sid = ${req.params.sessionId} AND sess->>'userId' = ${userId}
+        RETURNING sid
+      `);
+      const affected = result?.rowCount ?? result?.rows?.length ?? (Array.isArray(result) ? result.length : 0);
+      if (!affected) return res.status(404).json({ message: "That active device session was not found." });
+      res.json({ message: "Device signed out." });
+    } catch (error) {
+      console.error("Revoke device session error:", error);
+      res.status(500).json({ message: "Could not sign out that device." });
     }
   });
 
@@ -9826,8 +9859,153 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  app.get("/api/users/me/account-deletion", requireAuth, async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
+      const userId = (req as any).session?.userId;
+      const [request] = await db.select().from(accountDeletionRequests)
+        .where(eq(accountDeletionRequests.userId, userId))
+        .orderBy(desc(accountDeletionRequests.requestedAt)).limit(1);
+      res.json({ request: request || null });
+    } catch (error) {
+      res.status(500).json({ message: "Could not load account deletion status." });
+    }
+  });
+
+  app.post("/api/users/me/account-deletion", requireAuth, async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
+      const userId = (req as any).session?.userId;
+      const { reason, currentPassword, confirmation } = req.body || {};
+      const cleanReason = typeof reason === "string" ? reason.trim() : "";
+      if (cleanReason.length < 20 || cleanReason.length > 1000) {
+        return res.status(400).json({ message: "Please provide a reason between 20 and 1000 characters." });
+      }
+      if (confirmation !== "DELETE MY ACCOUNT") {
+        return res.status(400).json({ message: "Type DELETE MY ACCOUNT exactly to confirm." });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) return res.status(404).json({ message: "Account not found." });
+      if (user.passwordSet === false || !currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+        return res.status(403).json({ message: "Enter your current password to submit this request. Set a password first if your account has none." });
+      }
+      const [pending] = await db.select().from(accountDeletionRequests)
+        .where(and(eq(accountDeletionRequests.userId, userId), eq(accountDeletionRequests.status, "pending")))
+        .limit(1);
+      if (pending) return res.status(409).json({ message: "A deletion request is already awaiting admin review." });
+      const [request] = await db.insert(accountDeletionRequests).values({
+        userId,
+        reason: cleanReason,
+        status: "pending",
+      }).returning();
+      res.status(201).json({ request, message: "Your account deletion request was submitted for admin review." });
+    } catch (error) {
+      console.error("Account deletion request error:", error);
+      res.status(500).json({ message: "Could not submit your account deletion request." });
+    }
+  });
+
+  app.get("/api/admin/account-deletion-requests", requireAdminAuth, async (_req, res) => {
+    try {
+      if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
+      const requests = await db.select({
+        id: accountDeletionRequests.id,
+        userId: accountDeletionRequests.userId,
+        reason: accountDeletionRequests.reason,
+        status: accountDeletionRequests.status,
+        adminNote: accountDeletionRequests.adminNote,
+        requestedAt: accountDeletionRequests.requestedAt,
+        reviewedAt: accountDeletionRequests.reviewedAt,
+        fullName: users.fullName,
+        email: users.email,
+      }).from(accountDeletionRequests)
+        .leftJoin(users, eq(accountDeletionRequests.userId, users.id))
+        .orderBy(desc(accountDeletionRequests.requestedAt));
+      res.json({ requests });
+    } catch (error) {
+      res.status(500).json({ message: "Could not load deletion requests." });
+    }
+  });
+
+  app.post("/api/admin/account-deletion-requests/:id/review", requireAdminAuth, async (req, res) => {
+    try {
+      if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
+      const { decision, adminNote } = req.body || {};
+      if (!["approve", "reject"].includes(decision)) {
+        return res.status(400).json({ message: "Choose approve or reject." });
+      }
+      if (decision === "reject" && String(adminNote || "").trim().length < 5) {
+        return res.status(400).json({ message: "A reason is required when rejecting a request." });
+      }
+      const [request] = await db.select().from(accountDeletionRequests)
+        .where(eq(accountDeletionRequests.id, req.params.id)).limit(1);
+      if (!request) return res.status(404).json({ message: "Deletion request not found." });
+      if (request.status !== "pending") return res.status(409).json({ message: "This request has already been reviewed." });
+
+      if (decision === "approve") {
+        const funds = await db.execute(sql`
+          SELECT
+            COALESCE((SELECT SUM(balance::numeric + hold_amount::numeric + withdrawal_hold_amount::numeric)
+              FROM wallets WHERE user_id = ${request.userId}), 0) AS wallet_total,
+            COALESCE((SELECT balance::numeric + kes_balance::numeric FROM users WHERE id = ${request.userId}), 0) AS legacy_total,
+            COALESCE((SELECT SUM(balance::numeric) FROM virtual_cards WHERE user_id = ${request.userId}), 0) AS card_total,
+            (SELECT COUNT(*) FROM transactions WHERE user_id = ${request.userId}
+              AND status IN ('pending', 'processing')) AS open_transactions
+        `);
+        const fundRow = (funds as any).rows?.[0] || (funds as any)[0] || {};
+        if (Number(fundRow.wallet_total || 0) > 0 || Number(fundRow.legacy_total || 0) > 0 || Number(fundRow.card_total || 0) > 0 || Number(fundRow.open_transactions || 0) > 0) {
+          return res.status(409).json({ message: "Resolve remaining balances and pending transactions before approving account deletion." });
+        }
+        const randomPassword = await bcrypt.hash(`${request.userId}:${Date.now()}:${Math.random()}`, 12);
+        await storage.updateUser(request.userId, {
+          fullName: "Deleted account",
+          email: `deleted-${request.userId}@deleted.invalid`,
+          phone: `deleted-${request.userId}`,
+          country: "Deleted",
+          password: randomPassword,
+          passwordSet: true,
+          profilePhotoUrl: null,
+          googleId: null,
+          fcmToken: null,
+          isSuspended: true,
+          suspendedAt: new Date(),
+          suspensionReason: "Account deletion approved",
+          twoFactorSecret: null,
+          twoFactorEnabled: false,
+          twoFactorBackupCodes: null,
+          biometricEnabled: false,
+          biometricCredentialId: null,
+          pinEnabled: false,
+          pinCode: null,
+          kycFullName: null,
+          kycDateOfBirth: null,
+          kycIdNumber: null,
+          kycNationality: null,
+          kycGender: null,
+          kycAddress: null,
+          kycDocumentType: null,
+          kycIdExpiryDate: null,
+          kycIssuingCountry: null,
+        } as any);
+        await db.execute(sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${request.userId}`);
+      }
+      const [reviewed] = await db.update(accountDeletionRequests).set({
+        status: decision === "approve" ? "approved" : "rejected",
+        adminNote: String(adminNote || "").trim() || null,
+        reviewedBy: String((req as any).session?.adminId || (req as any).session?.admin?.id || "admin"),
+        reviewedAt: new Date(),
+      }).where(and(eq(accountDeletionRequests.id, request.id), eq(accountDeletionRequests.status, "pending")))
+        .returning();
+      if (!reviewed) return res.status(409).json({ message: "This request was reviewed by another admin." });
+      res.json({ request: reviewed, message: decision === "approve" ? "Account access disabled and identifying profile data redacted." : "Deletion request rejected." });
+    } catch (error) {
+      console.error("Account deletion review error:", error);
+      res.status(500).json({ message: "Could not review this deletion request." });
+    }
+  });
+
   // Admin: get devices (login history) for a specific user
-  app.get("/api/admin/users/:id/devices", async (req, res) => {
+  app.get("/api/admin/users/:id/devices", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const history = await storage.getLoginHistoryByUserId(id, 30);
@@ -9838,7 +10016,7 @@ p{color:#6b7280;font-size:14px;}</style>
   });
 
   // Admin: revoke all sessions for a specific user
-  app.post("/api/admin/users/:id/revoke-all-sessions", async (req, res) => {
+  app.post("/api/admin/users/:id/revoke-all-sessions", requireAdminAuth, async (req, res) => {
     try {
       const { id } = req.params;
       const result = await db.execute(

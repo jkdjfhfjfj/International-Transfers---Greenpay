@@ -241,11 +241,9 @@ export function diditIdentityToUserFields(identity: DiditIdentityData): Record<s
 }
 
 export function diditIdentityToUserProfileFields(identity: DiditIdentityData): Record<string, string> {
-  const country = identity.nationality || identity.issuingCountry;
   return Object.fromEntries(
     Object.entries({
       fullName: identity.fullName,
-      country,
     }).filter(([, value]) => value !== null && value !== undefined && value !== ''),
   ) as Record<string, string>;
 }

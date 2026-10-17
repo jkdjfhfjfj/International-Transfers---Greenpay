@@ -14,7 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { enrollBiometric } from "@/lib/webauthn";
 import { ObjectUploader } from "@/components/ObjectUploader";
-import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock, ShieldCheck, User, Calendar, Hash, MapPin, CreditCard, AlertCircle } from "lucide-react";
+import { HelpCircle, ChevronRight, LogOut, Monitor, Smartphone, Tablet, Download, Globe, Clock, ShieldCheck, User, Calendar, Hash, MapPin, CreditCard, AlertCircle, Trash2 } from "lucide-react";
 import { WavyHeader } from "@/components/wavy-header";
 
 export default function SettingsPage() {
@@ -32,6 +32,9 @@ export default function SettingsPage() {
     phone: user?.phone || "",
     country: user?.country || "",
   });
+  const [deletionReason, setDeletionReason] = useState("");
+  const [deletionPassword, setDeletionPassword] = useState("");
+  const [deletionConfirmation, setDeletionConfirmation] = useState("");
 
   // Keep the edit form in sync when Didit webhook data refreshes the user.
   // Do not reset fields while the user is actively typing.
@@ -530,6 +533,42 @@ export default function SettingsPage() {
     onError: () => {
       toast({ title: "Error", description: "Failed to revoke sessions.", variant: "destructive" });
     },
+  });
+
+  const revokeDeviceMutation = useMutation({
+    mutationFn: async (sessionId: string) => {
+      const res = await apiRequest("DELETE", `/api/users/me/devices/${encodeURIComponent(sessionId)}`);
+      return res.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/users/me/devices"] });
+      toast({ title: "Device signed out", description: "That session can no longer access your account." });
+    },
+    onError: (error: any) => toast({ title: "Could not sign out device", description: error.message, variant: "destructive" }),
+  });
+
+  const { data: deletionData, refetch: refetchDeletionRequest } = useQuery({
+    queryKey: ["/api/users/me/account-deletion"],
+    enabled: !!user?.id,
+  });
+  const deletionRequest = (deletionData as any)?.request;
+  const accountDeletionMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/users/me/account-deletion", {
+        reason: deletionReason,
+        currentPassword: deletionPassword,
+        confirmation: deletionConfirmation,
+      });
+      return response.json();
+    },
+    onSuccess: async () => {
+      setDeletionReason("");
+      setDeletionPassword("");
+      setDeletionConfirmation("");
+      await refetchDeletionRequest();
+      toast({ title: "Request sent", description: "An administrator must review your account deletion request." });
+    },
+    onError: (error: any) => toast({ title: "Request not sent", description: error.message, variant: "destructive" }),
   });
 
   const devices: any[] = (devicesData as any)?.devices || [];
@@ -1443,7 +1482,7 @@ export default function SettingsPage() {
         >
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wider">Devices & Sessions</h3>
-            {devices.length > 0 && (
+            {devices.some((device: any) => !device.current) && (
               <Button
                 variant="outline"
                 size="sm"
@@ -1451,18 +1490,18 @@ export default function SettingsPage() {
                 onClick={() => revokeAllSessionsMutation.mutate()}
                 disabled={revokeAllSessionsMutation.isPending}
               >
-                {revokeAllSessionsMutation.isPending ? "Revoking..." : "Sign Out All Others"}
+                {revokeAllSessionsMutation.isPending ? "Revoking…" : "Sign Out All Others"}
               </Button>
             )}
           </div>
 
           {devices.length === 0 ? (
             <div className="bg-card p-4 rounded-xl border border-border text-sm text-muted-foreground text-center elevation-1">
-              No recent device activity
+              No active sessions were found.
             </div>
           ) : (
             <div className="space-y-2">
-              {devices.slice(0, 5).map((device: any, i: number) => (
+              {devices.map((device: any, i: number) => (
                 <motion.div
                   key={device.id || i}
                   whileHover={{ scale: 1.01 }}
@@ -1475,36 +1514,90 @@ export default function SettingsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium text-sm truncate">
-                          {device.browser || 'Unknown Browser'}
+                          {device.browser || 'Active session'}
                           {device.deviceType && <span className="text-muted-foreground"> · {device.deviceType}</span>}
                         </p>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${device.status === 'success' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'}`}>
-                          {device.status === 'success' ? 'Logged in' : 'Failed'}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${device.current ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' : 'bg-muted text-muted-foreground'}`}>
+                          {device.current ? "This device" : "Active session"}
                         </span>
                       </div>
                       <div className="flex items-center gap-3 mt-1">
-                        {device.location && (
-                          <span className="text-xs text-muted-foreground flex items-center gap-1">
-                            <Globe className="w-3 h-3" /> {device.location}
-                          </span>
-                        )}
-                        {device.ipAddress && (
-                          <span className="text-xs text-muted-foreground">{device.ipAddress}</span>
-                        )}
+                        {device.expiresAt && <span className="text-xs text-muted-foreground">Expires {new Date(device.expiresAt).toLocaleString()}</span>}
                       </div>
-                      {device.createdAt && (
-                        <p className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {new Date(device.createdAt).toLocaleString()}
-                        </p>
-                      )}
                     </div>
+                    {!device.current && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive"
+                        disabled={revokeDeviceMutation.isPending}
+                        onClick={() => revokeDeviceMutation.mutate(device.id)}
+                      >
+                        Sign out
+                      </Button>
+                    )}
                   </div>
                 </motion.div>
               ))}
             </div>
           )}
         </motion.div>
+
+        {/* Danger Zone */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/[0.03] p-4"
+          data-testid="account-deletion-danger-zone"
+        >
+          <div className="flex items-start gap-3">
+            <Trash2 className="mt-0.5 h-5 w-5 text-destructive" />
+            <div>
+              <h3 className="font-semibold text-destructive">Danger Zone · Delete account</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Requests require your current password, a reason, and admin approval. Approval disables sign-in and redacts profile identifiers. Financial and KYC records may be retained for audit or legal requirements.
+              </p>
+            </div>
+          </div>
+          {deletionRequest?.status === "pending" ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              Your request is awaiting admin review. Reason: {deletionRequest.reason}
+            </div>
+          ) : deletionRequest?.status === "approved" ? (
+            <div className="rounded-lg border border-border bg-muted p-3 text-sm">
+              Your account deletion was approved. Your personal profile has been redacted and access disabled.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {deletionRequest?.status === "rejected" && (
+                <div className="rounded-lg border border-border bg-card p-3 text-sm">
+                  Previous request rejected: {deletionRequest.adminNote || "Contact support for details."} You can submit a new request below.
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="deletion-reason">Reason (required)</Label>
+                <textarea id="deletion-reason" value={deletionReason} onChange={(e) => setDeletionReason(e.target.value)} minLength={20} maxLength={1000} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Tell us why you want to delete your account" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="deletion-password">Current password</Label>
+                <Input id="deletion-password" type="password" autoComplete="current-password" value={deletionPassword} onChange={(e) => setDeletionPassword(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="deletion-confirmation">Type DELETE MY ACCOUNT</Label>
+                <Input id="deletion-confirmation" value={deletionConfirmation} onChange={(e) => setDeletionConfirmation(e.target.value)} autoComplete="off" />
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={accountDeletionMutation.isPending || deletionReason.trim().length < 20 || !deletionPassword || deletionConfirmation !== "DELETE MY ACCOUNT"}
+                onClick={() => accountDeletionMutation.mutate()}
+              >
+                {accountDeletionMutation.isPending ? "Submitting…" : "Request account deletion"}
+              </Button>
+            </div>
+          )}
+        </motion.section>
 
         {/* Notifications */}
         <motion.div
@@ -1779,7 +1872,7 @@ function KycIdentityCard({ user }: { user?: any }) {
               <p className="text-xs text-muted-foreground">{f.label}</p>
               <p className="text-sm font-medium truncate">{f.value}</p>
             </div>
-            <AlertCircle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" title="Read only — from identity verification" />
+            <AlertCircle className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" aria-label="Read only — from identity verification" />
           </div>
         ))}
       </div>
