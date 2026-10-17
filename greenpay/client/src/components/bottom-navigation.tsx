@@ -51,6 +51,7 @@ export default function BottomNavigation() {
 
   const showBottomNav = isAuthenticated && (
     location.startsWith('/dashboard') ||
+    location.startsWith('/wallet/') ||
     location.startsWith('/merchant-pay') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||

@@ -1280,7 +1280,7 @@ export default function SettingsPage() {
             setVerificationCode('');
           }
         }}>
-          <DialogContent className="w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-border/80 bg-gradient-to-b from-background to-muted/30 p-5 shadow-2xl sm:max-w-md sm:p-6">
+          <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>
                 {twoFAStep === 'qr' && 'Setup Two-Factor Authentication'}
@@ -1583,7 +1583,7 @@ export default function SettingsPage() {
           )}
         </motion.div>
         <Dialog open={!!selectedDevice} onOpenChange={(open) => !open && setSelectedDevice(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="left-1/2 top-1/2 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-border/80 bg-gradient-to-b from-background to-muted/30 p-5 shadow-2xl sm:p-6">
             <DialogHeader>
               <DialogTitle>Session details</DialogTitle>
               <DialogDescription>Information recorded for this sign-in session.</DialogDescription>

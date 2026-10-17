@@ -6,6 +6,7 @@ import { matchesProviderPayment } from "../server/services/payment-validation";
 test("uses profile country to select Kenya or supported Payza checkout currency", () => {
   assert.equal(isKenyanCountry("Kenya"), true);
   assert.equal(isKenyanCountry("KE"), true);
+  assert.equal(isKenyanCountry("KEN"), true);
   assert.equal(isKenyanCountry("Nigeria"), false);
   assert.equal(getPayzaCurrencyForCountry("Nigeria"), "NGN");
   assert.equal(getPayzaCurrencyForCountry("Côte d'Ivoire"), "XOF");

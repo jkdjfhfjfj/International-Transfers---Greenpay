@@ -475,32 +475,46 @@ export default function TransactionsPage() {
           transition={{ delay: 0.1 }}
           className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:mb-6 md:p-5"
         >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">This month</h2>
-              <p className="text-xs text-muted-foreground">Completed activity by currency</p>
-            </div>
-            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
-              {new Date().toLocaleDateString(undefined, { month: "long" })}
-            </span>
-          </div>
           {(() => {
             const now = new Date();
-            const monthTxns = transactions.filter((txn: any) => {
+            const completedTransactions = transactions.filter((txn: any) =>
+              String(txn.status || "").toLowerCase() === "completed"
+            );
+            const monthTransactions = completedTransactions.filter((txn: any) => {
               const date = new Date(txn.createdAt);
               return !Number.isNaN(date.getTime()) && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
             });
-            const currencies = Array.from(new Set<string>(monthTxns
-              .filter((txn: any) => txn.status === "completed")
+            const showingHistory = monthTransactions.length === 0 && completedTransactions.length > 0;
+            const summaryTransactions = showingHistory ? completedTransactions : monthTransactions;
+            const currencies = Array.from(new Set<string>(summaryTransactions
               .map((txn: any) => String(txn.currency?.toUpperCase() || "USD"))));
+            const monthLabel = now.toLocaleDateString(undefined, { month: "long" });
             return currencies.length === 0 ? (
-              <p className="rounded-xl bg-muted/50 px-4 py-6 text-center text-sm text-muted-foreground">No completed activity this month yet.</p>
+              <>
+                <div className="mb-4">
+                  <h2 className="text-base font-semibold">{monthLabel} activity</h2>
+                  <p className="text-xs text-muted-foreground">Completed activity by currency</p>
+                </div>
+                <p className="rounded-xl bg-muted/50 px-4 py-6 text-center text-sm text-muted-foreground">No completed transaction history yet.</p>
+              </>
             ) : (
+              <>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold">Completed activity by currency</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {showingHistory ? `No completed activity in ${monthLabel}; showing your completed history.` : "Your completed activity this month."}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                  {showingHistory ? "All time" : monthLabel}
+                </span>
+              </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {currencies.map((cur) => {
-                  const curTxns = monthTxns.filter((txn: any) => (txn.currency?.toUpperCase() || "USD") === cur && txn.status === "completed");
+                  const curTxns = summaryTransactions.filter((txn: any) => (txn.currency?.toUpperCase() || "USD") === cur);
                   const sum = (types: string[]) => curTxns
-                    .filter((txn: any) => types.includes(txn.type))
+                    .filter((txn: any) => types.includes(String(txn.type || "").toLowerCase()))
                     .reduce((total: number, txn: any) => total + (Number.parseFloat(txn.amount) || 0), 0);
                   const total = curTxns.reduce((amount: number, txn: any) => amount + (Number.parseFloat(txn.amount) || 0), 0);
                   const sent = sum(["send", "withdraw", "card_purchase"]);
@@ -529,6 +543,7 @@ export default function TransactionsPage() {
                   );
                 })}
               </div>
+              </>
             );
           })()}
         </motion.section>

@@ -12,6 +12,8 @@ const serverRoutes = readFileSync(new URL("../server/routes.ts", import.meta.url
 const storageSource = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
 const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
+const walletAccount = readFileSync(new URL("src/pages/wallet-account.tsx", root), "utf8");
+const transactionsPage = readFileSync(new URL("src/pages/transactions.tsx", root), "utf8");
 const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
 const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root), "utf8");
 
@@ -108,6 +110,17 @@ test("Merchant Pay stays focused on merchant instructions and uses the global bo
   assert.match(merchantPay, /button-open-merchant-guidance/);
   assert.match(bottomNavigation, /location\.startsWith\('\/merchant-pay'\)/);
   assert.doesNotMatch(merchantPay, /<BottomNavigation\s*\/>/);
+});
+
+test("wallet account has the global bottom bar and no back button", () => {
+  assert.match(bottomNavigation, /location\.startsWith\('\/wallet\/'\)/);
+  assert.doesNotMatch(walletAccount, /Back to dashboard|import[^\n]*\bArrowLeft\b/);
+});
+
+test("monthly currency summary falls back to completed history when the month is empty", () => {
+  assert.match(transactionsPage, /const showingHistory = monthTransactions\.length === 0 && completedTransactions\.length > 0/);
+  assert.match(transactionsPage, /showingHistory \? completedTransactions : monthTransactions/);
+  assert.match(transactionsPage, /showing your completed history/);
 });
 
 test("password reset actions stay fixed at the bottom with short Android-style labels", () => {

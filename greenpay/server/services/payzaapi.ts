@@ -94,7 +94,7 @@ function countryKey(country: unknown): string {
 
 export function isKenyanCountry(country: unknown): boolean {
   const key = countryKey(country);
-  return key === "KE" || key === "KENYA" || key === "REPUBLIC OF KENYA";
+  return key === "KE" || key === "KEN" || key === "KENYA" || key === "REPUBLIC OF KENYA";
 }
 
 /**

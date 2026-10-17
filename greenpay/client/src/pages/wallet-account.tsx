@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocation, useRoute } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRightLeft, ArrowUpRight, Building2, Clock3, Lock } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, ArrowRightLeft, ArrowUpRight, Building2, Clock3, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { WavyHeader } from "@/components/wavy-header";
@@ -131,11 +131,6 @@ export default function WalletAccountPage() {
     <div className="min-h-screen bg-background bottom-nav-safe">
       <WavyHeader size="sm" />
       <main className="max-w-2xl mx-auto p-4 pb-8 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" aria-label="Back to dashboard" onClick={() => setLocation("/dashboard")}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-        </div>
         <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-emerald-800 via-primary to-emerald-600 p-5 text-white shadow-lg sm:p-6">
           <div className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
           <div className="relative">
