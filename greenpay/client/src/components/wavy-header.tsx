@@ -55,7 +55,9 @@ export function WavyHeader({
   };
 
   const paths = pathMap[size];
-  const THEME_COLOR = 'var(--gp-theme-color, #0f766e)';
+  const BRAND = 'var(--gp-brand)';
+  const BRAND_MID = 'var(--gp-brand-soft)';
+  const BRAND_STROKE = 'var(--gp-brand-soft)';
 
   return (
     <motion.div
@@ -64,25 +66,33 @@ export function WavyHeader({
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       className="relative z-10 md:hidden"
     >
-      {/* Keep the wave fill in sync with the browser theme color. */}
+      {/* Wavy SVG background — matches onboarding splash style */}
       <svg
         className="w-full"
         viewBox={viewBoxMap[size]}
         preserveAspectRatio="none"
         style={{ height: heightMap[size], overflow: 'visible', display: 'block' }}
       >
-        <path d={paths.main} fill={THEME_COLOR} />
+        <defs>
+          <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" style={{ stopColor: BRAND, stopOpacity: 1 }} />
+            <stop offset="100%" style={{ stopColor: 'var(--gp-brand-soft)', stopOpacity: 1 }} />
+          </linearGradient>
+        </defs>
+
+        {/* Main solid wave fill */}
+        <path d={paths.main} fill="url(#waveGrad)" />
 
         {/* Flowing inner wave */}
-        <path d={paths.flowing} fill="white" opacity="0.08" />
+        <path d={paths.flowing} fill={BRAND_MID} opacity="0.55" />
 
         {/* Accent stroke */}
         <path
           d={paths.accent}
-          stroke="white"
+          stroke={BRAND_STROKE}
           strokeWidth="2.5"
           fill="none"
-          opacity="0.22"
+          opacity="0.5"
         />
       </svg>
 

@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Home, CreditCard, Send, ClipboardList, LayoutGrid, Sun, Moon, Settings2, X, TrendingUp, WalletCards, RefreshCw } from "lucide-react";
+import { Home, CreditCard, Send, ClipboardList, Sun, Moon, Settings2, X, TrendingUp, WalletCards, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useWallets } from "@/hooks/use-wallets";
@@ -18,9 +18,9 @@ import {
 const navItems = [
   { id: "dashboard",    Icon: Home,            label: "Home",     path: "/dashboard" },
   { id: "virtual-card", Icon: CreditCard,       label: "Card",     path: "/virtual-card" },
-  { id: "send",         Icon: Send,             label: "Move",     path: "/send-money",  isCenter: true },
+  { id: "send",         Icon: Send,             label: "Send",     path: "/send-money",  isCenter: true },
   { id: "transactions", Icon: ClipboardList,    label: "History",  path: "/transactions" },
-  { id: "settings",     Icon: LayoutGrid,       label: "More",     path: "/settings" },
+  { id: "settings",     Icon: Settings2,        label: "Settings", path: "/settings" },
 ];
 
 export default function BottomNavigation() {
@@ -114,7 +114,7 @@ export default function BottomNavigation() {
               return (
                 <div key={item.id} className="flex flex-col items-center justify-end pb-2 relative" style={{ flex: 1 }}>
                   <motion.button
-                  onClick={() => item.id === "settings" ? setMenuOpen(true) : setLocation(item.path)}
+                  onClick={() => setLocation(item.path)}
                     whileHover={{ scale: 1.05, y: -2 }}
                     whileTap={{ scale: 0.92 }}
                     data-testid={`nav-${item.id}`}
@@ -153,7 +153,7 @@ export default function BottomNavigation() {
             return (
               <motion.button
                 key={item.id}
-                  onClick={() => item.id === "settings" ? setMenuOpen(true) : setLocation(item.path)}
+                onClick={() => setLocation(item.path)}
                 whileHover={{ y: -2, scale: 1.04 }}
                 whileTap={{ scale: 0.88 }}
                 data-testid={`nav-${item.id}`}

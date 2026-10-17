@@ -11,7 +11,6 @@ const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
 const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
 const wavyHeader = readFileSync(new URL("src/components/wavy-header.tsx", root), "utf8");
-const styles = readFileSync(new URL("src/index.css", root), "utf8");
 
 test("pre-React startup shell fills mobile viewport without a default white frame", () => {
   assert.match(html, /html,\s*body,\s*#root\s*\{[^}]*margin:\s*0/s);
@@ -24,6 +23,13 @@ test("authenticated bottom navigation remains visible inside the preview iframe"
   assert.ok(bottomNavigation.includes("location.startsWith('/auth/virtual-card-purchase')"));
   assert.match(bottomNavigation, /addEventListener\("open-bottom-menu", openMenu\)/);
   assert.match(dashboard, /dispatchEvent\(new CustomEvent\("open-bottom-menu"\)\)/);
+});
+
+test("bottom navigation sends users to Send and Settings directly", () => {
+  assert.match(bottomNavigation, /id:\s*"send"[\s\S]*?label:\s*"Send"[\s\S]*?path:\s*"\/send-money"/);
+  assert.match(bottomNavigation, /id:\s*"settings"[\s\S]*?Icon:\s*Settings2[\s\S]*?label:\s*"Settings"[\s\S]*?path:\s*"\/settings"/);
+  assert.match(bottomNavigation, /onClick=\{\(\) => setLocation\(item\.path\)\}/);
+  assert.doesNotMatch(bottomNavigation, /item\.id === "settings" \? setMenuOpen\(true\)/);
 });
 
 test("desktop notifications control opens the notification panel", () => {
@@ -57,8 +63,10 @@ test("Merchant Pay stays focused on merchant instructions and has no back button
   assert.match(merchantPay, /button-open-merchant-guidance/);
 });
 
-test("wavy header fill uses the same teal as the browser theme color", () => {
-  assert.match(wavyHeader, /var\(--gp-theme-color, #0f766e\)/);
-  assert.match(styles, /--gp-theme-color:\s*#0f766e/);
-  assert.match(html, /name="theme-color" content="#0f766e"/);
+test("wavy header retains its original teal gradient and accents", () => {
+  assert.match(wavyHeader, /linearGradient id="waveGrad"/);
+  assert.match(wavyHeader, /fill="url\(#waveGrad\)"/);
+  assert.match(wavyHeader, /fill=\{BRAND_MID\} opacity="0\.55"/);
+  assert.match(wavyHeader, /stroke=\{BRAND_STROKE\}/);
+  assert.match(wavyHeader, /opacity="0\.5"/);
 });
