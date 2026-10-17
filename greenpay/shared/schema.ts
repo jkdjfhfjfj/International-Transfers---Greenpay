@@ -545,6 +545,12 @@ export const accountDeletionRequests = pgTable("account_deletion_requests", {
   reviewedBy: text("reviewed_by"),
   requestedAt: timestamp("requested_at").defaultNow(),
   reviewedAt: timestamp("reviewed_at"),
+  confirmationCodeHash: text("confirmation_code_hash"),
+  confirmationExpiresAt: timestamp("confirmation_expires_at"),
+  confirmationAttempts: integer("confirmation_attempts").notNull().default(0),
+  confirmationSentAt: timestamp("confirmation_sent_at"),
+  kycEvidenceExpiresAt: timestamp("kyc_evidence_expires_at"),
+  kycEvidenceDeletedAt: timestamp("kyc_evidence_deleted_at"),
 });
 
 // Announcements table for system-wide announcements and offers

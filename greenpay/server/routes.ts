@@ -56,6 +56,7 @@ import {
   normalizeManualMpesaReference,
 } from "./services/manual-mpesa";
 import { depositBonusMatchesMethod } from "../shared/deposit-bonus-methods";
+import { startKycRetentionPurge } from "./services/kyc-retention";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 const LOCAL_PREVIEW_TEST_EMAIL = "preview.tester@greenpay.local";
@@ -336,6 +337,28 @@ async function sendLoginOtp(user: any) {
     throw new Error("Failed to send verification code. Please try again or contact support.");
   }
   return sentMethods;
+}
+
+function hashDeletionCode(userId: string, code: string) {
+  const secret = String(process.env.SESSION_SECRET || "");
+  if (secret.length < 32) throw new Error("Secure confirmation is unavailable.");
+  return crypto.createHmac("sha256", secret).update(`account-deletion:${userId}:${code}`).digest("hex");
+}
+
+async function sendAccountDeletionCode(user: any, code: string) {
+  const { messagingService } = await import("./services/messaging");
+  const { mailtrapService } = await import("./services/mailtrap");
+  const deliveries: Promise<unknown>[] = [];
+  if (user.isPhoneVerified && user.phone) deliveries.push(messagingService.sendOTP(user.phone, code));
+  if (user.isEmailVerified && user.email) {
+    const [firstName = "User", ...lastName] = String(user.fullName || "User").trim().split(/\s+/);
+    deliveries.push(mailtrapService.sendOTP(user.email, firstName, lastName.join(" "), code));
+  }
+  if (!deliveries.length) throw new Error("Verify an email address or phone number before requesting account deletion.");
+  const results = await Promise.allSettled(deliveries);
+  if (!results.some(result => result.status === "fulfilled" && result.value)) {
+    throw new Error("Could not send a verification code to your verified contact methods.");
+  }
 }
 
 async function beginLoginVerification(req: any, user: any) {
@@ -1146,6 +1169,7 @@ const transferSchema = z.object({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  startKycRetentionPurge();
   await hydratePaymentEncryptionKey();
   if (process.env.NODE_ENV === "development" && !process.env.DATABASE_URL) {
     try {
@@ -9876,7 +9900,7 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
       const userId = (req as any).session?.userId;
-      const { reason, currentPassword, confirmation } = req.body || {};
+      const { reason, currentPassword, confirmation, verificationCode } = req.body || {};
       const cleanReason = typeof reason === "string" ? reason.trim() : "";
       if (cleanReason.length < 20 || cleanReason.length > 1000) {
         return res.status(400).json({ message: "Please provide a reason between 20 and 1000 characters." });
@@ -9886,8 +9910,64 @@ p{color:#6b7280;font-size:14px;}</style>
       }
       const user = await storage.getUser(userId);
       if (!user) return res.status(404).json({ message: "Account not found." });
-      if (user.passwordSet === false || !currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
-        return res.status(403).json({ message: "Enter your current password to submit this request. Set a password first if your account has none." });
+      if (user.passwordSet === false || !user.password) {
+        const [awaiting] = await db.select().from(accountDeletionRequests)
+          .where(and(eq(accountDeletionRequests.userId, userId), eq(accountDeletionRequests.status, "awaiting_confirmation")))
+          .orderBy(desc(accountDeletionRequests.requestedAt)).limit(1);
+        if (verificationCode) {
+          if (!awaiting) return res.status(404).json({ message: "No account deletion confirmation is waiting." });
+          if (!awaiting.confirmationExpiresAt || awaiting.confirmationExpiresAt <= new Date() || awaiting.confirmationAttempts >= 5) {
+            return res.status(410).json({ message: "That confirmation code has expired. Request a new code." });
+          }
+          const suppliedHash = hashDeletionCode(userId, String(verificationCode).trim());
+          if (!awaiting.confirmationCodeHash || !crypto.timingSafeEqual(
+            Buffer.from(suppliedHash, "hex"),
+            Buffer.from(awaiting.confirmationCodeHash, "hex"),
+          )) {
+            await db.update(accountDeletionRequests)
+              .set({ confirmationAttempts: awaiting.confirmationAttempts + 1 })
+              .where(eq(accountDeletionRequests.id, awaiting.id));
+            return res.status(400).json({ message: "The confirmation code is incorrect." });
+          }
+          const [confirmed] = await db.update(accountDeletionRequests).set({
+            status: "pending",
+            confirmationCodeHash: null,
+            confirmationExpiresAt: null,
+            confirmationAttempts: 0,
+          }).where(and(
+            eq(accountDeletionRequests.id, awaiting.id),
+            eq(accountDeletionRequests.status, "awaiting_confirmation"),
+          )).returning();
+          if (!confirmed) return res.status(409).json({ message: "This request has already changed." });
+          return res.status(201).json({ request: confirmed, message: "Your account deletion request was submitted for review." });
+        }
+        if (awaiting?.confirmationSentAt && Date.now() - awaiting.confirmationSentAt.getTime() < 60_000) {
+          return res.status(429).json({ message: "Wait a minute before requesting another confirmation code." });
+        }
+        if (awaiting && awaiting.confirmationAttempts >= 5) {
+          return res.status(429).json({ message: "Too many code attempts. Wait a minute and request a new code." });
+        }
+        const [pending] = await db.select().from(accountDeletionRequests)
+          .where(and(eq(accountDeletionRequests.userId, userId), eq(accountDeletionRequests.status, "pending")))
+          .limit(1);
+        if (pending) return res.status(409).json({ message: "A deletion request is already awaiting review." });
+        const code = String(crypto.randomInt(100000, 1000000));
+        await sendAccountDeletionCode(user, code);
+        const values = {
+          reason: cleanReason,
+          status: "awaiting_confirmation",
+          confirmationCodeHash: hashDeletionCode(userId, code),
+          confirmationExpiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          confirmationAttempts: 0,
+          confirmationSentAt: new Date(),
+        };
+        const [request] = awaiting
+          ? await db.update(accountDeletionRequests).set(values).where(eq(accountDeletionRequests.id, awaiting.id)).returning()
+          : await db.insert(accountDeletionRequests).values({ userId, ...values }).returning();
+        return res.json({ request, requiresCode: true, message: "A confirmation code was sent to your verified contact method." });
+      }
+      if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
+        return res.status(403).json({ message: "Enter your current password to submit this request." });
       }
       const [pending] = await db.select().from(accountDeletionRequests)
         .where(and(eq(accountDeletionRequests.userId, userId), eq(accountDeletionRequests.status, "pending")))
@@ -9994,6 +10074,7 @@ p{color:#6b7280;font-size:14px;}</style>
         adminNote: String(adminNote || "").trim() || null,
         reviewedBy: String((req as any).session?.adminId || (req as any).session?.admin?.id || "admin"),
         reviewedAt: new Date(),
+        ...(decision === "approve" ? { kycEvidenceExpiresAt: new Date(new Date().setMonth(new Date().getMonth() + 6)) } : {}),
       }).where(and(eq(accountDeletionRequests.id, request.id), eq(accountDeletionRequests.status, "pending")))
         .returning();
       if (!reviewed) return res.status(409).json({ message: "This request was reviewed by another admin." });
