@@ -28,7 +28,7 @@ export default function BottomNavigation() {
   const { isAuthenticated } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  const { wallets } = useWallets();
+  const { wallets, defaultWallet, isLoading: walletsLoading, isError: walletsError } = useWallets();
   const { data: rateData, isLoading: ratesLoading } = useQuery<any>({
     queryKey: ["/api/exchange-rates", "USD", "bottom-menu"],
     queryFn: async () => (await apiRequest("GET", "/api/exchange-rates/USD")).json(),
@@ -54,6 +54,7 @@ export default function BottomNavigation() {
     location.startsWith('/dashboard') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||
+    location.startsWith('/merchant-pay') ||
     location.startsWith('/auth/virtual-card-purchase') ||
     location.startsWith('/virtual-accounts') ||
     location.startsWith('/support') ||
@@ -212,6 +213,26 @@ export default function BottomNavigation() {
             </div>
           </DrawerHeader>
           <div className="space-y-2 px-4 pb-4">
+            <section aria-label="Quick actions">
+              <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Quick actions</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Wallets", path: "/dashboard", Icon: WalletCards },
+                  { label: "Send money", path: "/send-money", Icon: Send },
+                  { label: "Virtual card", path: "/virtual-card", Icon: CreditCard },
+                  { label: "Transactions", path: "/transactions", Icon: ClipboardList },
+                ].map(({ label, path, Icon }) => (
+                  <button
+                    key={path}
+                    onClick={() => { setMenuOpen(false); setLocation(path); }}
+                    className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-left text-sm font-medium transition-colors hover:bg-muted"
+                  >
+                    <Icon className="h-4 w-4 shrink-0 text-primary" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </section>
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -221,7 +242,13 @@ export default function BottomNavigation() {
                   <div>
                     <p className="text-xs text-muted-foreground">Wallet balance</p>
                     <p className="text-sm font-semibold text-foreground">
-                      {wallets.length ? `${wallets[0].currency} ${Number(wallets[0].availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "Loading wallet"}
+                      {walletsLoading
+                        ? "Loading wallet"
+                        : walletsError
+                          ? "Temporarily unavailable"
+                          : defaultWallet
+                            ? `${defaultWallet.currency} ${Number(defaultWallet.availableBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : "No wallet yet"}
                     </p>
                   </div>
                 </div>

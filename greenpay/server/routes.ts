@@ -3701,6 +3701,39 @@ p{color:#6b7280;font-size:14px;}</style>
           console.error("[Card Payment Options] Bank transfer exchange rate is unavailable:", error);
         }
       }
+      const [globalDepositSetting, cryptoDepositSetting] = await Promise.all([
+        storage.getSystemSetting("deposit_methods", "global_enabled"),
+        storage.getSystemSetting("deposit_methods", "crypto_enabled"),
+      ]);
+      const cryptoEnabled =
+        settingEnabled(globalDepositSetting?.value, false) &&
+        settingEnabled(cryptoDepositSetting?.value, false);
+      let configuredCryptoAddresses: Array<{ coin: string; network: string }> = [];
+      if (db && cryptoEnabled) {
+        try {
+          configuredCryptoAddresses = await db.select({
+            coin: cryptoDepositAddresses.coin,
+            network: cryptoDepositAddresses.network,
+          })
+            .from(cryptoDepositAddresses)
+            .where(eq(cryptoDepositAddresses.isActive, true));
+        } catch (error) {
+          console.error("[Card Payment Options] Crypto receiving addresses are unavailable:", error);
+        }
+      }
+      const expectedNetworkByCoin: Record<string, string> = {
+        BTC: "bitcoin",
+        ETH: "ethereum",
+        USDT: "tron",
+        USDC: "ethereum",
+      };
+      const cryptoCoins = Array.from(new Set(
+        configuredCryptoAddresses
+          .filter((address: any) =>
+            expectedNetworkByCoin[String(address.coin).toUpperCase()] === String(address.network).toLowerCase(),
+          )
+          .map((address: any) => String(address.coin).toUpperCase()),
+      ));
       res.json({
         isKenya: readiness.isKenya,
         countryPaymentCurrency: readiness.countryPaymentCurrency,
@@ -3710,6 +3743,8 @@ p{color:#6b7280;font-size:14px;}</style>
         bankTransferConfigured,
         bankTransferDetails,
         usdToBankCurrencyRate,
+        cryptoEnabled,
+        cryptoCoins,
       });
     } catch (error) {
       console.error("[Card Payment Options] Unable to load payment options:", error);
@@ -4904,6 +4939,13 @@ p{color:#6b7280;font-size:14px;}</style>
 
   // Payment callback handler for Paystack
   app.get("/api/payment-callback", async (req, res) => {
+    const callbackType = String(req.query.type || "");
+    const cardPurchaseReturn = (reference: string, status: "success" | "failed", error?: string) => {
+      const params = new URLSearchParams({ status });
+      if (reference) params.set("reference", reference);
+      if (error) params.set("error", error);
+      return res.redirect(`/auth/virtual-card-purchase?${params.toString()}`);
+    };
     try {
       const { reference, trxref, type } = req.query;
       const actualReference = reference || trxref;
@@ -4919,6 +4961,9 @@ p{color:#6b7280;font-size:14px;}</style>
       
       if (!verificationResult.status) {
         console.error('Callback payment verification failed:', verificationResult.message);
+        if (callbackType === "virtual-card") {
+          return cardPurchaseReturn(String(actualReference), "failed", "payment-verification-failed");
+        }
         return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-verification-failed`);
       }
 
@@ -4933,6 +4978,9 @@ p{color:#6b7280;font-size:14px;}</style>
         });
         const expectedType = type === "virtual-card" ? "card_purchase" : "deposit";
         if (!transaction || transaction.type !== expectedType) {
+          if (type === "virtual-card") {
+            return cardPurchaseReturn(String(actualReference), "failed", "transaction-not-found");
+          }
           return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=transaction-not-found`);
         }
         if (
@@ -4947,6 +4995,9 @@ p{color:#6b7280;font-size:14px;}</style>
           console.error("[Paystack callback] Payment amount or currency did not match:", {
             transactionId: transaction.id,
           });
+          if (type === "virtual-card") {
+            return cardPurchaseReturn(String(actualReference), "failed", "payment-details-review");
+          }
           return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-details-review`);
         }
         if (transaction.type === "card_purchase") {
@@ -4958,18 +5009,25 @@ p{color:#6b7280;font-size:14px;}</style>
         } else {
           await completeWalletDeposit(transaction);
         }
-        // Payment successful - redirect to success page
+        // Return card buyers to the purchase screen; it verifies the reference
+        // and displays the card without requiring a separate success-page action.
         if (type === 'virtual-card') {
-          return res.redirect(`/payment-success?reference=${actualReference}&type=virtual-card`);
+          return cardPurchaseReturn(String(actualReference), "success");
         } else {
           return res.redirect(`/payment-success?reference=${actualReference}&type=deposit`);
         }
       } else {
         // Payment failed - redirect to failure page
+        if (type === "virtual-card") {
+          return cardPurchaseReturn(String(actualReference), "failed", "payment-failed");
+        }
         return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-failed`);
       }
     } catch (error) {
       console.error('Payment callback error:', error);
+      if (callbackType === "virtual-card") {
+        return cardPurchaseReturn("", "failed", "payment-verification-failed");
+      }
       return res.redirect(`/payment-failed?error=${encodeURIComponent('Payment verification failed')}`);
     }
   });
@@ -15374,34 +15432,66 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const userId = (req.session as any).userId;
       const { coin, pin, authenticatorCode } = req.body;
       if (!coin) return res.status(400).json({ message: "coin required" });
+      const normalizedCoin = String(coin).trim().toUpperCase();
+      const network = CRYPTO_NETWORKS[normalizedCoin];
+      if (!network) return res.status(400).json({ message: "Unsupported coin" });
+      if (!db) return res.status(503).json({ message: "Crypto card payments are unavailable right now." });
+      const [globalDepositSetting, cryptoDepositSetting] = await Promise.all([
+        storage.getSystemSetting("deposit_methods", "global_enabled"),
+        storage.getSystemSetting("deposit_methods", "crypto_enabled"),
+      ]);
+      if (
+        !settingEnabled(globalDepositSetting?.value, false) ||
+        !settingEnabled(cryptoDepositSetting?.value, false)
+      ) {
+        return res.status(403).json({ message: "Crypto payments are currently disabled by the administrator." });
+      }
       const security = await verifyTransactionSecurity(userId, { pin, authenticatorCode });
       if (!security.ok) return res.status(security.status || 400).json(security);
 
-      const rate = await getCryptoPrice(String(coin));
+      const rate = await getCryptoPrice(normalizedCoin);
       if (!rate) return res.status(400).json({ message: "Unsupported coin" });
+
+      const configuredAddresses = await db.select().from(cryptoDepositAddresses)
+        .where(eq(cryptoDepositAddresses.coin, normalizedCoin));
+      const chosenAddress = configuredAddresses.find((address: any) =>
+        address.isActive && String(address.network).toLowerCase() === network,
+      );
+      if (!chosenAddress) {
+        return res.status(503).json({
+          message: `Crypto card payments in ${normalizedCoin} are not configured yet. Please choose another method.`,
+        });
+      }
 
       // Get card price
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
       const cardPriceUSD = parseFloat(cardPriceSetting?.value || "60.00");
+      if (!Number.isFinite(cardPriceUSD) || cardPriceUSD <= 0) {
+        return res.status(503).json({ message: "Virtual card pricing is temporarily unavailable." });
+      }
       const cryptoAmount = (cardPriceUSD / rate);
 
       const [cryptoTx] = await db.insert(cryptoTransactions).values({
         userId,
         type: "card_purchase",
-        coin,
-        network: CRYPTO_NETWORKS[coin] || "unknown",
+        coin: normalizedCoin,
+        network,
         amount: cryptoAmount.toFixed(8),
         usdValue: cardPriceUSD.toFixed(2),
+        toAddress: chosenAddress.address,
         status: "pending",
-        requiredConfirmations: coin === "BTC" ? 3 : 12,
+        requiredConfirmations: normalizedCoin === "BTC" ? 3 : normalizedCoin === "USDT" ? 20 : 12,
       }).returning();
 
       res.json({
         cryptoTransaction: cryptoTx,
         cryptoAmount: cryptoAmount.toFixed(8),
-        coin,
+        coin: normalizedCoin,
         usdValue: cardPriceUSD,
-        message: `Send exactly ${cryptoAmount.toFixed(8)} ${coin} to receive your virtual card after confirmation.`
+        depositAddress: chosenAddress.address,
+        memo: chosenAddress.memo || null,
+        networkLabel: chosenAddress.networkLabel,
+        message: `Send exactly ${cryptoAmount.toFixed(8)} ${normalizedCoin} on ${chosenAddress.networkLabel}. Your card will be activated after the payment is confirmed.`
       });
     } catch (error) {
       console.error("Crypto buy card error:", error);
@@ -15467,6 +15557,19 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const [cryptoTx] = await db.select().from(cryptoTransactions)
         .where(eq(cryptoTransactions.id, req.params.id));
       if (!cryptoTx) return res.status(404).json({ message: "Crypto transaction not found" });
+      if (status === "completed" && cryptoTx.type === "card_purchase" && cryptoTx.status !== "completed") {
+        const verifiedHash = String(txHash || cryptoTx.txHash || "").trim();
+        const verifiedConfirmations = Number(confirmations ?? cryptoTx.confirmations ?? 0);
+        if (
+          !verifiedHash ||
+          !Number.isFinite(verifiedConfirmations) ||
+          verifiedConfirmations < Number(cryptoTx.requiredConfirmations || 0)
+        ) {
+          return res.status(400).json({
+            message: `Add the transaction hash and verify at least ${cryptoTx.requiredConfirmations} confirmations before completing this card purchase.`,
+          });
+        }
+      }
 
       // Only settle a crypto transaction once. This prevents repeated admin clicks
       // from crediting a deposit wallet more than once.
@@ -15486,16 +15589,30 @@ Sitemap: https://geepay.us/sitemap.xml`;
           });
         }
         if (cryptoTx.type === "card_purchase") {
-          await db.insert(transactions).values({
-            userId: cryptoTx.userId,
-            type: "card_purchase",
-            amount: cryptoTx.amount,
-            currency: cryptoTx.coin,
-            status: "completed",
-            description: `Virtual card purchase via ${cryptoTx.coin}`,
-            reference: cryptoTx.id,
-            completedAt: new Date(),
-          });
+          const [existingPurchase] = await db.select().from(transactions)
+            .where(eq(transactions.reference, cryptoTx.id));
+          const [purchase] = existingPurchase
+            ? [existingPurchase]
+            : await db.insert(transactions).values({
+                userId: cryptoTx.userId,
+                type: "card_purchase",
+                amount: cryptoTx.usdValue,
+                currency: "USD",
+                status: "pending",
+                description: `Virtual card purchase via ${cryptoTx.coin}`,
+                reference: cryptoTx.id,
+                metadata: {
+                  gateway: "crypto",
+                  paymentMethod: "crypto",
+                  cardPrice: String(cryptoTx.usdValue),
+                  cryptoTransactionId: cryptoTx.id,
+                },
+              }).returning();
+          await completeCardPurchase(
+            purchase,
+            cryptoTx.id,
+            "Crypto payment confirmed by administrator",
+          );
         }
       } else if (status === "failed" && cryptoTx.status !== "failed") {
         if (cryptoTx.type === "withdrawal") {

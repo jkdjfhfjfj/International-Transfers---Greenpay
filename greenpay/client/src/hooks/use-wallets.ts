@@ -41,14 +41,19 @@ export function useWallets() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, refetch } = useQuery<{ wallets: Wallet[] }>({
+  const { data, isLoading, isError, error, refetch } = useQuery<{ wallets: Wallet[] }>({
     // Scope the cache to the authenticated user. Without the user id, a query
     // that mounted while auth was resolving could keep an empty/stale wallet
     // list until the next login.
     queryKey: ["/api/wallets", user?.id],
     queryFn: async () => {
       const r = await apiRequest("GET", "/api/wallets");
-      return r.json();
+      const payload = await r.json();
+      const rows = Array.isArray(payload) ? payload : payload?.wallets;
+      if (!Array.isArray(rows)) {
+        throw new Error("Wallet data was not returned in the expected format.");
+      }
+      return { wallets: rows };
     },
     enabled: !!user?.id,
     refetchOnMount: "always",
@@ -80,6 +85,8 @@ export function useWallets() {
     activeWallets,
     defaultWallet,
     isLoading,
+    isError,
+    error,
     refetch,
     setDefault: setDefaultMutation.mutate,
     isSettingDefault: setDefaultMutation.isPending,

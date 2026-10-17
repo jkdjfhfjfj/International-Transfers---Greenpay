@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, AlertCircle, KeyRound } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -59,10 +60,9 @@ export default function ForgotPasswordPage() {
     <div className="min-h-screen flex flex-col bg-background">
       <WavyHeader
         size="sm"
-        onBack={() => setLocation("/login")}
       />
 
-      <div className="flex-1 p-6">
+      <div className="flex-1 p-6 pb-28">
         <motion.div
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,7 +108,7 @@ export default function ForgotPasswordPage() {
           )}
 
           {!success && (
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form id="forgot-password-form" onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <label htmlFor="contact" className="text-sm font-medium">
                   Phone Number or Email
@@ -132,33 +132,23 @@ export default function ForgotPasswordPage() {
                 </p>
               </div>
 
-              <motion.button
-                type="submit"
-                disabled={loading || !contact.trim()}
-                whileTap={{ scale: 0.97 }}
-                className="w-full py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-50"
-                 style={{ background: 'var(--gp-brand)' }}
-              >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Sending…
-                  </span>
-                ) : (
-                  "Send Reset Code"
-                )}
-              </motion.button>
             </form>
           )}
-
-          <button
-            onClick={() => setLocation("/login")}
-            className="w-full mt-4 py-3 rounded-xl text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-          >
-            ← Back to Login
-          </button>
         </motion.div>
       </div>
+
+      {!success && (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+          <div className="mx-auto grid max-w-sm grid-cols-[1fr_auto] gap-3 p-4">
+            <Button type="submit" form="forgot-password-form" className="h-12 w-full" disabled={loading || !contact.trim()}>
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</> : "Send Reset Code"}
+            </Button>
+            <Button type="button" variant="outline" className="h-12 px-5" onClick={() => setLocation("/login")}>
+              Back
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

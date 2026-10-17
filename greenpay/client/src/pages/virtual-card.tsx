@@ -86,6 +86,9 @@ export default function VirtualCardPage() {
   const showDiscount = discountEnabled && discountPct > 0;
   const { wallets: userWallets } = useWallets();
   const realTimeBalance = userWallets.find((wallet) => wallet.currency === "USD")?.availableBalance || 0;
+  const cryptoConfigured = paymentOptions?.cryptoEnabled === true &&
+    Array.isArray(paymentOptions?.cryptoCoins) &&
+    paymentOptions.cryptoCoins.length > 0;
   const isBlocked = card?.status === 'blocked';
   const isFrozen = card?.status === 'frozen';
   const isExpired = card?.status === 'expired';
@@ -94,25 +97,15 @@ export default function VirtualCardPage() {
 
   useEffect(() => {
     if (!paymentOptions) return;
-    const methodAvailable = paymentMethod === "mobile_money"
-      ? paymentOptions.mobileMoney === true
-      : paymentMethod === "card"
-        ? paymentOptions.card === true
-        : paymentMethod === "manual"
-          ? manualPaymentEnabled
-          : true;
-    if (!methodAvailable) {
-      setPaymentMethod(
-        paymentOptions.mobileMoney
-          ? "mobile_money"
-          : paymentOptions.card
-            ? "card"
-            : manualPaymentEnabled
-              ? "manual"
-              : "crypto",
-      );
+    const availableMethods: Array<typeof paymentMethod> = [];
+    if (paymentOptions.mobileMoney) availableMethods.push("mobile_money");
+    if (paymentOptions.card) availableMethods.push("card");
+    if (manualPaymentEnabled) availableMethods.push("manual");
+    if (cryptoConfigured) availableMethods.push("crypto");
+    if (!availableMethods.includes(paymentMethod)) {
+      setPaymentMethod(availableMethods[0] || "mobile_money");
     }
-  }, [paymentMethod, paymentOptions, manualPaymentEnabled]);
+  }, [paymentMethod, paymentOptions, manualPaymentEnabled, cryptoConfigured]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -328,45 +321,62 @@ export default function VirtualCardPage() {
               </div>
 
               <div className="flex rounded-xl overflow-hidden border border-border">
-                {paymentOptions?.mobileMoney && <button onClick={() => setPaymentMethod('mobile_money')}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                    paymentMethod === 'mobile_money' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                <button
+                  onClick={() => setPaymentMethod("mobile_money")}
+                  disabled={!paymentOptions?.mobileMoney}
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    paymentMethod === "mobile_money" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
                   }`} data-testid="button-payment-mobile-money"
                 >
                   Mobile money
-                  {paymentMethod === 'mobile_money' && <span className="text-[9px] bg-white/20 text-primary-foreground px-1 py-0.5 rounded-full">Phone prompt</span>}
-                </button>}
-                {paymentOptions?.card && (
-                  <button onClick={() => setPaymentMethod("card")}
-                    className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "card" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                    }`} data-testid="button-payment-card"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    Card
-                  </button>
-                )}
-                {manualPaymentEnabled && (
-                  <button
-                    onClick={() => setPaymentMethod("manual")}
-                    className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                      paymentMethod === "manual" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                    }`}
-                    data-testid="button-payment-manual"
-                  >
-                    Paybill / Till
-                    {paymentMethod === "manual" && <span className="text-[9px] text-primary-foreground/80">Paybill</span>}
-                  </button>
-                )}
-                <button onClick={() => setPaymentMethod('crypto')}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 ${
-                    paymentMethod === 'crypto' ? 'bg-primary text-primary-foreground' : 'bg-background text-muted-foreground hover:bg-muted'
+                  <span className="text-[9px]">{paymentOptions?.mobileMoney ? "Phone prompt" : "Not enabled"}</span>
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("card")}
+                  disabled={!paymentOptions?.card}
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    paymentMethod === "card" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                  }`} data-testid="button-payment-card"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  Card
+                  <span className="text-[9px]">{paymentOptions?.card ? "Secure checkout" : "Not enabled"}</span>
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("manual")}
+                  disabled={!manualPaymentEnabled}
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    paymentMethod === "manual" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
+                  }`}
+                  data-testid="button-payment-manual"
+                >
+                  Paybill / Till
+                  <span className="text-[9px]">{manualPaymentEnabled ? "Instructions" : "Not enabled"}</span>
+                </button>
+                <button
+                  onClick={() => setPaymentMethod("crypto")}
+                  disabled={!cryptoConfigured}
+                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
+                    paymentMethod === "crypto" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
                   }`} data-testid="button-payment-crypto"
                 >
                   Crypto
-                  {paymentMethod === 'crypto' && <span className="text-[9px] text-primary-foreground/80">₿ ETH USDT</span>}
+                  <span className="text-[9px]">{cryptoConfigured ? "BTC ETH USDT" : "Not enabled"}</span>
                 </button>
               </div>
+
+              {paymentOptions && !paymentOptions.mobileMoney && paymentMethod === "mobile_money" && (
+                <p className="text-xs text-muted-foreground" role="status">Mobile money is unavailable for your country or is not configured by the administrator.</p>
+              )}
+              {paymentOptions && !paymentOptions.card && paymentMethod === "card" && (
+                <p className="text-xs text-muted-foreground" role="status">Card checkout is unavailable for your country or is not configured by the administrator.</p>
+              )}
+              {!manualPaymentEnabled && paymentMethod === "manual" && (
+                <p className="text-xs text-muted-foreground" role="status">Paybill / Till instructions are disabled by the administrator.</p>
+              )}
+              {!cryptoConfigured && paymentMethod === "crypto" && (
+                <p className="text-xs text-muted-foreground" role="status">Crypto payments are disabled or no receiving address is configured by the administrator.</p>
+              )}
 
               {paymentMethod === "manual" && manualPaymentEnabled ? (
                 <div className="space-y-3 text-left" data-testid="panel-manual-payment">
@@ -422,7 +432,7 @@ export default function VirtualCardPage() {
                       ? `Pay with card · $${currentCardPrice}`
                       : `Pay with mobile money · $${currentCardPrice}`}
                 </Button>
-              ) : paymentMethod === "crypto" ? (
+              ) : paymentMethod === "crypto" && cryptoConfigured ? (
                 <div className="space-y-3 text-left">
                   <div className="bg-primary/5 dark:bg-primary/10 border border-primary/20 p-4 rounded-xl space-y-3">
                     <p className="text-sm font-semibold text-primary">Pay with Crypto</p>

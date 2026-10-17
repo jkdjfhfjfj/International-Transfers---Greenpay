@@ -32,6 +32,7 @@ function CryptoManagement() {
   const [filterType, setFilterType] = useState("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<Record<string, string>>({});
+  const [confirmations, setConfirmations] = useState<Record<string, number>>({});
   const [adminNotes, setAdminNotes] = useState<Record<string, string>>({});
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -46,11 +47,18 @@ function CryptoManagement() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, status, hash, notes }: { id: string; status: string; hash?: string; notes?: string }) => {
+    mutationFn: async ({ id, status, hash, notes, confirmationCount }: {
+      id: string;
+      status: string;
+      hash?: string;
+      notes?: string;
+      confirmationCount?: number;
+    }) => {
       const res = await apiRequest("PATCH", `/api/admin/crypto/transactions/${id}`, {
         status,
         txHash: hash || undefined,
         adminNotes: notes || undefined,
+        confirmations: confirmationCount,
       });
       return res.json();
     },
@@ -59,8 +67,8 @@ function CryptoManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/crypto/transactions"] });
       setExpandedId(null);
     },
-    onError: () => {
-      toast({ title: "Error", description: "Failed to update transaction", variant: "destructive" });
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to update transaction", variant: "destructive" });
     },
   });
 
@@ -195,6 +203,21 @@ function CryptoManagement() {
                   </div>
 
                   <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase">Verified confirmations</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={confirmations[tx.id] ?? tx.confirmations ?? 0}
+                      onChange={e => setConfirmations(prev => ({ ...prev, [tx.id]: Number(e.target.value) }))}
+                      className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-background"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Card purchases require the transaction hash and {tx.requiredConfirmations} confirmations before completion.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <label className="text-xs font-semibold text-muted-foreground uppercase">Admin Notes</label>
                     <textarea
                       rows={2}
@@ -214,6 +237,7 @@ function CryptoManagement() {
                           status: s,
                           hash: txHash[tx.id] || undefined,
                           notes: adminNotes[tx.id] || undefined,
+                          confirmationCount: confirmations[tx.id] ?? Number(tx.confirmations || 0),
                         })}
                         disabled={updateMutation.isPending || tx.status === s}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium disabled:opacity-40 transition-colors ${

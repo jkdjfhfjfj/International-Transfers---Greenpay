@@ -22,6 +22,7 @@ type CardPaymentOptions = {
   card: boolean;
   bankTransfer: boolean;
   bankTransferConfigured: boolean;
+  cryptoCoins: string[];
   bankTransferDetails: {
     bankName: string;
     accountName: string;
@@ -81,6 +82,8 @@ export default function VirtualCardPurchasePage() {
     coin: string;
     transactionId: string;
     network: string;
+    address: string;
+    memo: string | null;
   } | null>(null);
   const verificationStarted = useRef(false);
   const initializePayment = useInitializeCardPayment();
@@ -144,7 +147,9 @@ export default function VirtualCardPurchasePage() {
         amount: String(data.cryptoAmount || ""),
         coin: String(data.coin || cryptoCoin),
         transactionId: String(data.cryptoTransaction?.id || ""),
-        network: String(data.cryptoTransaction?.network || ""),
+        network: String(data.networkLabel || data.cryptoTransaction?.network || ""),
+        address: String(data.depositAddress || ""),
+        memo: data.memo ? String(data.memo) : null,
       });
       toast({
         title: "Crypto payment awaiting confirmation",
@@ -156,6 +161,29 @@ export default function VirtualCardPurchasePage() {
       toast({ title: "Crypto payment failed", description: error.message, variant: "destructive" });
     },
   });
+
+  const { data: cryptoTransactionsData } = useQuery({
+    queryKey: ["/api/crypto/transactions", user?.id, cryptoPaymentDetails?.transactionId],
+    queryFn: async () => (await apiRequest("GET", "/api/crypto/transactions")).json(),
+    enabled: !!user?.id && !!cryptoPaymentDetails?.transactionId,
+    refetchInterval: 10_000,
+  });
+
+  useEffect(() => {
+    const transaction = ((cryptoTransactionsData as any)?.transactions || []).find(
+      (item: any) => item.id === cryptoPaymentDetails?.transactionId,
+    );
+    if (transaction?.status === "completed") {
+      setPaymentResult("success");
+      setPaymentFeedbackMessage("Crypto payment confirmed. Your virtual card is active.");
+      const timer = window.setTimeout(() => setLocation("/virtual-card"), 1800);
+      return () => window.clearTimeout(timer);
+    }
+    if (transaction?.status === "failed") {
+      setPaymentResult("failed");
+      setPaymentFeedbackMessage("Crypto payment was not confirmed. Your card has not been activated.");
+    }
+  }, [cryptoPaymentDetails?.transactionId, cryptoTransactionsData, setLocation]);
 
   const currentCardPrice = String((settingsData as any)?.price || "60.00");
   const currentCardPriceNumber = Number(currentCardPrice);
@@ -172,6 +200,7 @@ export default function VirtualCardPurchasePage() {
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
+  const cryptoConfigured = Boolean(paymentOptions?.cryptoCoins?.includes(cryptoCoin));
   const paymentMethodOptions: CardPaymentOption[] = [
     {
       id: "mobile_money",
@@ -212,7 +241,9 @@ export default function VirtualCardPurchasePage() {
     {
       id: "crypto",
       title: "Cryptocurrency",
-      detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+      detail: cryptoConfigured
+        ? "Pay the live quoted amount to GreenPay's configured receiving address."
+        : "Shown while a receiving address is being configured for your selected coin.",
       icon: Bitcoin,
       testId: "option-crypto-payment",
     },
@@ -918,10 +949,15 @@ export default function VirtualCardPurchasePage() {
                   <span className="text-muted-foreground">GreenPay fee</span>
                   <span className="font-semibold">{cryptoCoin} 0</span>
                 </div>
+                {!cryptoConfigured && (
+                  <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+                    Crypto is listed, but there is no active receiving address for {cryptoCoin}. Choose another coin or payment method.
+                  </p>
+                )}
                 <Button
                   onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full bg-primary hover:bg-primary/90"
-                  disabled={!cryptoRate || cryptoCardPurchase.isPending}
+                  disabled={!cryptoRate || !cryptoConfigured || cryptoCardPurchase.isPending}
                 >
                   {cryptoCardPurchase.isPending ? "Preparing..." : `Start ${cryptoCoin} payment`}
                 </Button>
@@ -932,8 +968,21 @@ export default function VirtualCardPurchasePage() {
                       <div className="space-y-1">
                         <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">Payment request created</p>
                         <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-300">
-                          The confirmed amount is {cryptoPaymentDetails.amount} {cryptoPaymentDetails.coin}{cryptoPaymentDetails.network ? ` on ${cryptoPaymentDetails.network}` : ""}. Contact support for the payment address before sending. Your card stays inactive until the required confirmations are verified.
+                          Send exactly {cryptoPaymentDetails.amount} {cryptoPaymentDetails.coin}{cryptoPaymentDetails.network ? ` on ${cryptoPaymentDetails.network}` : ""} to the address below. Your card stays inactive until the payment is confirmed.
                         </p>
+                        <div className="flex items-center justify-between gap-2 rounded-lg bg-white/70 p-2 dark:bg-black/20">
+                          <span className="break-all font-mono text-[11px]">{cryptoPaymentDetails.address}</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => void copyBankDetail(cryptoPaymentDetails.address, "Crypto address")}
+                          >
+                            <Copy className="mr-1 h-3.5 w-3.5" /> Copy
+                          </Button>
+                        </div>
+                        {cryptoPaymentDetails.memo && <p className="text-xs">Memo / tag: <span className="font-mono">{cryptoPaymentDetails.memo}</span></p>}
                         {cryptoPaymentDetails.transactionId && (
                           <p className="break-all font-mono text-[11px] text-amber-800 dark:text-amber-300">Request ID: {cryptoPaymentDetails.transactionId}</p>
                         )}

@@ -42,7 +42,27 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
   const queryClient = useQueryClient();
-  const { wallets: userWallets, isLoading: walletsLoading } = useWallets();
+  const { wallets: userWallets, isLoading: walletsLoading, isError: walletsError, refetch: refetchWallets } = useWallets();
+  const { data: currencyData } = useQuery<{
+    currencies: Array<{ code: string; flag?: string; name?: string }>;
+    enabled?: string[];
+  }>({
+    queryKey: ["/api/currencies"],
+    queryFn: async () => (await apiRequest("GET", "/api/currencies")).json(),
+  });
+  const enabledCurrencyCodes = new Set(currencyData?.enabled || []);
+  const availableWalletCurrencies = (currencyData?.currencies || []).filter(
+    currency => enabledCurrencyCodes.has(currency.code) && !userWallets.some(wallet => wallet.currency === currency.code),
+  );
+
+  useEffect(() => {
+    if (
+      availableWalletCurrencies.length > 0 &&
+      !availableWalletCurrencies.some(currency => currency.code === addWalletCurrency)
+    ) {
+      setAddWalletCurrency(availableWalletCurrencies[0].code);
+    }
+  }, [addWalletCurrency, availableWalletCurrencies]);
 
   useEffect(() => {
     const openRates = () => {
@@ -518,6 +538,14 @@ export default function DashboardPage() {
             <div className="bg-white/10 rounded-2xl p-4 text-center">
               <div className="w-6 h-6 border-2 border-white/40 border-t-white rounded-full animate-spin mx-auto mb-2" />
               <p className="text-white/60 text-sm">Loading wallets...</p>
+            </div>
+          ) : walletsError ? (
+            <div className="rounded-2xl border border-white/20 bg-white/10 p-5 text-center">
+              <p className="text-sm font-medium text-white">Wallets could not be loaded</p>
+              <p className="mt-1 text-xs text-white/65">Your balances are unchanged. Try loading them again.</p>
+              <Button size="sm" variant="secondary" className="mt-3" onClick={() => refetchWallets()}>
+                Retry
+              </Button>
             </div>
           ) : userWallets.length > 0 ? (
             <WalletCards
@@ -995,23 +1023,9 @@ export default function DashboardPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {[
-                    { code: "UGX", flag: "🇺🇬", name: "Ugandan Shilling" },
-                    { code: "GHS", flag: "🇬🇭", name: "Ghanaian Cedi" },
-                    { code: "NGN", flag: "🇳🇬", name: "Nigerian Naira" },
-                    { code: "ZAR", flag: "🇿🇦", name: "South African Rand" },
-                    { code: "TZS", flag: "🇹🇿", name: "Tanzanian Shilling" },
-                    { code: "XOF", flag: "🌍", name: "West African CFA" },
-                    { code: "CDF", flag: "🇨🇩", name: "Congolese Franc" },
-                    { code: "XAF", flag: "🌍", name: "Central African CFA" },
-                    { code: "RWF", flag: "🇷🇼", name: "Rwandan Franc" },
-                    { code: "SLE", flag: "🇸🇱", name: "Sierra Leonean Leone" },
-                    { code: "ZMW", flag: "🇿🇲", name: "Zambian Kwacha" },
-                    { code: "EUR", flag: "🇪🇺", name: "Euro" },
-                    { code: "GBP", flag: "🇬🇧", name: "British Pound" },
-                  ].filter(c => !userWallets.some(w => w.currency === c.code)).map(c => (
+                  {availableWalletCurrencies.map(c => (
                     <SelectItem key={c.code} value={c.code}>
-                      {c.flag} {c.code} — {c.name}
+                      {c.flag || "💱"} {c.code} — {c.name || c.code}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -1022,7 +1036,7 @@ export default function DashboardPage() {
               <Button
                 className="flex-1"
                 onClick={() => addWalletMutation.mutate(addWalletCurrency)}
-                disabled={addWalletMutation.isPending}
+                disabled={addWalletMutation.isPending || availableWalletCurrencies.length === 0}
               >
                 {addWalletMutation.isPending ? (
                   <><span className="animate-spin mr-2">⟳</span> Adding...</>

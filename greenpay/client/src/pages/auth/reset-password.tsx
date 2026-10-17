@@ -107,7 +107,7 @@ export default function ResetPasswordPage() {
         size="sm"
       />
 
-      <div className="flex-1 p-6 pb-36 overflow-y-auto">
+      <div className="flex-1 p-6 pb-32 overflow-y-auto">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -208,22 +208,25 @@ export default function ResetPasswordPage() {
               />
 
             </form>
+            <Button
+              type="button"
+              variant="link"
+              className="mt-2 h-auto p-0 text-sm"
+              onClick={() => resendCodeMutation.mutate()}
+              disabled={resendCodeMutation.isPending || resetPasswordMutation.isPending}
+              data-testid="button-resend-reset-code"
+            >
+              {resendCodeMutation.isPending ? "Sending code…" : "Resend code"}
+            </Button>
           </Form>
         </motion.div>
       </div>
 
       {/* Fixed bottom action matches the sign-up flow and stays reachable on mobile. */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="max-w-sm mx-auto flex flex-col gap-2 p-4">
-          <Button
-            type="button"
-            variant="ghost"
-            className="w-full"
-            onClick={() => resendCodeMutation.mutate()}
-            disabled={resendCodeMutation.isPending || resetPasswordMutation.isPending}
-            data-testid="button-resend-reset-code"
-          >
-            {resendCodeMutation.isPending ? "Sending code..." : "Resend code"}
+        <div className="max-w-sm mx-auto grid grid-cols-[auto_1fr] gap-3 p-4">
+          <Button type="button" variant="outline" className="h-[52px] px-6" onClick={() => setLocation("/auth/forgot-password")}>
+            Back
           </Button>
           <Button
             type="button"
@@ -233,7 +236,7 @@ export default function ResetPasswordPage() {
             disabled={resetPasswordMutation.isPending || resendCodeMutation.isPending}
             data-testid="button-reset-password"
           >
-            {resetPasswordMutation.isPending ? "Resetting Password..." : "Reset Password"}
+            {resetPasswordMutation.isPending ? "Resetting…" : "Reset"}
           </Button>
         </div>
       </div>

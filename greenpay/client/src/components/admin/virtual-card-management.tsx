@@ -81,7 +81,7 @@ export default function VirtualCardManagement() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: cardsData, isLoading } = useQuery<VirtualCardsResponse>({
+  const { data: cardsData, isLoading, isError, refetch } = useQuery<VirtualCardsResponse>({
     queryKey: ["/api/admin/virtual-cards", { search }],
     queryFn: async () => {
       const params = new URLSearchParams({ ...(search && { search }) });
@@ -180,6 +180,18 @@ export default function VirtualCardManagement() {
       <Card>
         <CardContent className="p-6 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="font-medium text-foreground">Virtual cards could not be loaded</p>
+          <p className="mt-1 text-sm text-muted-foreground">Retry the request to reload card records.</p>
+          <Button className="mt-3" variant="outline" onClick={() => refetch()}>Retry</Button>
         </CardContent>
       </Card>
     );
