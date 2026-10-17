@@ -59,12 +59,56 @@ import { depositBonusMatchesMethod } from "../shared/deposit-bonus-methods";
 
 const cloudinaryStorage = new CloudinaryStorageService();
 const LOCAL_PREVIEW_TEST_EMAIL = "preview.tester@greenpay.local";
-let localPreviewTestPassword: string | undefined;
 
 function isLocalPreviewTestAccount(user: { email?: string } | null | undefined): boolean {
   return process.env.NODE_ENV === "development" &&
     !process.env.DATABASE_URL &&
     user?.email?.toLowerCase() === LOCAL_PREVIEW_TEST_EMAIL;
+}
+
+function getLocalPreviewTestPassword(): string {
+  const sessionSecret = String(process.env.SESSION_SECRET || "").trim();
+  if (sessionSecret.length < 32) {
+    throw new Error("SESSION_SECRET must be configured before creating a preview test account.");
+  }
+  return `${crypto.createHmac("sha256", sessionSecret)
+    .update("greenpay:local-preview-test-account:v1")
+    .digest("base64url")}!aA9`;
+}
+
+async function ensureLocalPreviewTestAccount() {
+  const password = getLocalPreviewTestPassword();
+  const existing = await storage.getUserByEmail(LOCAL_PREVIEW_TEST_EMAIL);
+  const passwordHash = await bcrypt.hash(password, 10);
+  if (existing) {
+    const user = await storage.updateUser(existing.id, {
+      password: passwordHash,
+      isEmailVerified: true,
+      isPhoneVerified: true,
+      twoFactorEnabled: false,
+      twoFactorSecret: null,
+    });
+    if (!user) throw new Error("Preview test account could not be refreshed.");
+    return { user, password, created: false };
+  }
+
+  const user = await storage.createUser({
+    fullName: "Preview Test Account",
+    email: LOCAL_PREVIEW_TEST_EMAIL,
+    phone: `+2547${crypto.randomInt(10_000_000, 99_999_999)}`,
+    country: "Kenya",
+    password: passwordHash,
+    defaultCurrency: "KES",
+    twoFactorEnabled: false,
+    twoFactorSecret: null,
+  });
+  await storage.updateUser(user.id, {
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    twoFactorEnabled: false,
+    twoFactorSecret: null,
+  });
+  return { user, password, created: true };
 }
 
 const normalizeCurrency = (currency: unknown) => String(currency || "").trim().toUpperCase();
@@ -1103,6 +1147,13 @@ const transferSchema = z.object({
 
 export async function registerRoutes(app: Express): Promise<Server> {
   await hydratePaymentEncryptionKey();
+  if (process.env.NODE_ENV === "development" && !process.env.DATABASE_URL) {
+    try {
+      await ensureLocalPreviewTestAccount();
+    } catch (error) {
+      console.error("[Preview test account] Could not provision local account.");
+    }
+  }
   // Maintenance mode middleware - APPLIED AT END
   const checkMaintenanceMode = async (req: any, res: any, next: any) => {
     try {
@@ -1737,35 +1788,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.status(404).json({ message: "Not found" });
     }
     try {
-      const existing = await storage.getUserByEmail(LOCAL_PREVIEW_TEST_EMAIL);
-      if (existing) {
-        if (!localPreviewTestPassword) {
-          return res.status(409).json({ message: "Preview test account already exists; restart the preview to recreate it." });
-        }
-        return res.json({ email: LOCAL_PREVIEW_TEST_EMAIL, password: localPreviewTestPassword });
-      }
-
-      localPreviewTestPassword ??= crypto.randomBytes(24).toString("base64url");
-      const user = await storage.createUser({
-        fullName: "Preview Test Account",
+      const account = await ensureLocalPreviewTestAccount();
+      res.status(account.created ? 201 : 200).json({
         email: LOCAL_PREVIEW_TEST_EMAIL,
-        phone: `+2547${crypto.randomInt(10_000_000, 99_999_999)}`,
-        country: "Kenya",
-        password: await bcrypt.hash(localPreviewTestPassword, 10),
-        defaultCurrency: "KES",
-        twoFactorEnabled: false,
-        twoFactorSecret: null,
+        password: account.password,
       });
-      await storage.updateUser(user.id, {
-        isEmailVerified: true,
-        isPhoneVerified: true,
-        twoFactorEnabled: false,
-        twoFactorSecret: null,
-      });
-      res.status(201).json({ email: LOCAL_PREVIEW_TEST_EMAIL, password: localPreviewTestPassword });
     } catch (error) {
-      localPreviewTestPassword = undefined;
-      console.error("[Preview test account] Could not create local test account:", error);
+      console.error("[Preview test account] Could not provision local test account.");
       res.status(500).json({ message: "Could not create the preview test account." });
     }
   });
