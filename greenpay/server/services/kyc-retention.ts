@@ -21,10 +21,10 @@ export async function purgeExpiredKycEvidence() {
         db.select().from(advancedKycDocuments).where(eq(advancedKycDocuments.userId, request.userId)),
       ]);
       const files = [
-        ...basic.flatMap(row => [row.frontImageUrl, row.backImageUrl, row.selfieUrl]),
-        ...advanced.flatMap(row => [row.facialPhotoUrl, row.addressProofUrl]),
+        ...basic.flatMap((row: any) => [row.frontImageUrl, row.backImageUrl, row.selfieUrl]),
+        ...advanced.flatMap((row: any) => [row.facialPhotoUrl, row.addressProofUrl]),
       ].filter((url): url is string => Boolean(url) && String(url).includes("cloudinary.com"));
-      for (const url of [...new Set(files)]) await cloudinaryStorage.deleteFile(url);
+      for (const url of Array.from(new Set(files))) await cloudinaryStorage.deleteFile(url);
 
       await db.delete(kycDocuments).where(eq(kycDocuments.userId, request.userId));
       await db.delete(advancedKycDocuments).where(eq(advancedKycDocuments.userId, request.userId));
@@ -44,7 +44,9 @@ let retentionTimerStarted = false;
 export function startKycRetentionPurge() {
   if (retentionTimerStarted) return;
   retentionTimerStarted = true;
-  void purgeExpiredKycEvidence();
-  const timer = setInterval(() => void purgeExpiredKycEvidence(), 24 * 60 * 60 * 1000);
+  void purgeExpiredKycEvidence().catch(error => console.error("[KYC retention] Startup purge failed:", error));
+  const timer = setInterval(() => {
+    void purgeExpiredKycEvidence().catch(error => console.error("[KYC retention] Scheduled purge failed:", error));
+  }, 24 * 60 * 60 * 1000);
   timer.unref?.();
 }

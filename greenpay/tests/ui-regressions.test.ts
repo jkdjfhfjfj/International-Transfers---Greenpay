@@ -147,6 +147,8 @@ test("device settings list active sessions and support revoking an individual de
   assert.match(settings, /device\.current/);
   assert.match(serverRoutes, /app\.delete\("\/api\/users\/me\/devices\/:sessionId", requireAuth/);
   assert.match(serverRoutes, /SELECT sid, expire FROM user_sessions/);
+  assert.match(serverRoutes, /session\?\.id \|\| \(req as any\)\.sessionID/);
+  assert.match(serverRoutes, /persistent session store is unavailable/);
 });
 
 test("account deletion requires reauthentication and admin approval", () => {
@@ -154,10 +156,28 @@ test("account deletion requires reauthentication and admin approval", () => {
   const adminPage = readFileSync(new URL("src/pages/admin-account-deletions.tsx", root), "utf8");
   assert.match(settings, /DELETE MY ACCOUNT/);
   assert.match(settings, /currentPassword: deletionPassword/);
+  assert.match(settings, /verificationCode: deletionCode/);
   assert.match(adminPage, /Approve and redact/);
+  assert.match(adminPage, /six months after approval/);
   assert.match(serverRoutes, /app\.post\("\/api\/users\/me\/account-deletion", requireAuth/);
   assert.match(serverRoutes, /app\.post\("\/api\/admin\/account-deletion-requests\/:id\/review", requireAdminAuth/);
   assert.match(serverRoutes, /Resolve remaining balances and pending transactions/);
+  assert.match(serverRoutes, /confirmationAttempts: 0/);
+  assert.match(serverRoutes, /setMonth\(new Date\(\)\.getMonth\(\) \+ 6\)/);
+  const retentionService = readFileSync(new URL("../server/services/kyc-retention.ts", import.meta.url), "utf8");
+  assert.match(retentionService, /deleteFile\(url\)/);
+  assert.match(retentionService, /delete\(kycDocuments\)/);
+  assert.match(retentionService, /delete\(advancedKycDocuments\)/);
+});
+
+test("card price is drawn from the same live setting across card payment methods", () => {
+  assert.match(cardPurchase, /queryKey: \["\/api\/system-settings\/card-price"\]/);
+  assert.match(cardPurchase, /usdAmount: currentCardPrice/);
+  assert.match(cardPurchase, /currentCardPriceNumber \* bankTransferRate/);
+  assert.match(cardPurchase, /currentCardPriceNumber \/ cryptoRate/);
+  assert.match(serverRoutes, /getSystemSetting\("virtual_card", "price"\)/);
+  assert.match(serverRoutes, /amount: usdAmount\.toString\(\)/);
+  assert.match(serverRoutes, /usdValue: cardPriceUSD\.toFixed\(2\)/);
 });
 
 test("wavy header retains its original teal gradient and accents", () => {

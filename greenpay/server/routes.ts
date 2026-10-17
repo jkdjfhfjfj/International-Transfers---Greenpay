@@ -356,7 +356,14 @@ async function sendAccountDeletionCode(user: any, code: string) {
   }
   if (!deliveries.length) throw new Error("Verify an email address or phone number before requesting account deletion.");
   const results = await Promise.allSettled(deliveries);
-  if (!results.some(result => result.status === "fulfilled" && result.value)) {
+  const delivered = results.some(result => {
+    if (result.status !== "fulfilled") return false;
+    const value: any = result.value;
+    return typeof value === "object" && value !== null
+      ? Boolean(value.sms || value.whatsapp || value.email)
+      : Boolean(value);
+  });
+  if (!delivered) {
     throw new Error("Could not send a verification code to your verified contact methods.");
   }
 }
@@ -9823,7 +9830,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const currentSid = session?.id || (req as any).sessionID;
       const userAgent = String(req.headers["user-agent"] || "");
       if (!db) {
-        return res.json({ devices: [{ id: currentSid, current: true, browser: userAgent || "This device", deviceType: /mobile/i.test(userAgent) ? "mobile" : "desktop" }] });
+        return res.status(503).json({ message: "The persistent session store is unavailable." });
       }
       const result = await db.execute(sql`
         SELECT sid, expire FROM user_sessions
@@ -9871,7 +9878,8 @@ p{color:#6b7280;font-size:14px;}</style>
   app.post("/api/users/me/revoke-all-sessions", requireAuth, async (req, res) => {
     try {
       const userId = (req as any).session?.userId;
-      const currentSid = (req as any).session?.id;
+      const currentSid = (req as any).session?.id || (req as any).sessionID;
+      if (!db) return res.status(503).json({ message: "The persistent session store is unavailable." });
       // Delete all sessions for this user from user_sessions table except the current one
       await db.execute(
         sql`DELETE FROM user_sessions WHERE sess->>'userId' = ${userId} AND sid != ${currentSid}`
@@ -9887,7 +9895,16 @@ p{color:#6b7280;font-size:14px;}</style>
     try {
       if (!db) return res.status(503).json({ message: "Account request storage is unavailable." });
       const userId = (req as any).session?.userId;
-      const [request] = await db.select().from(accountDeletionRequests)
+      const [request] = await db.select({
+        id: accountDeletionRequests.id,
+        reason: accountDeletionRequests.reason,
+        status: accountDeletionRequests.status,
+        adminNote: accountDeletionRequests.adminNote,
+        requestedAt: accountDeletionRequests.requestedAt,
+        reviewedAt: accountDeletionRequests.reviewedAt,
+        kycEvidenceExpiresAt: accountDeletionRequests.kycEvidenceExpiresAt,
+        kycEvidenceDeletedAt: accountDeletionRequests.kycEvidenceDeletedAt,
+      }).from(accountDeletionRequests)
         .where(eq(accountDeletionRequests.userId, userId))
         .orderBy(desc(accountDeletionRequests.requestedAt)).limit(1);
       res.json({ request: request || null });
@@ -9920,10 +9937,9 @@ p{color:#6b7280;font-size:14px;}</style>
             return res.status(410).json({ message: "That confirmation code has expired. Request a new code." });
           }
           const suppliedHash = hashDeletionCode(userId, String(verificationCode).trim());
-          if (!awaiting.confirmationCodeHash || !crypto.timingSafeEqual(
-            Buffer.from(suppliedHash, "hex"),
-            Buffer.from(awaiting.confirmationCodeHash, "hex"),
-          )) {
+          const suppliedBytes = Buffer.from(suppliedHash, "hex");
+          const expectedBytes = Buffer.from(awaiting.confirmationCodeHash || "", "hex");
+          if (suppliedBytes.length !== expectedBytes.length || !crypto.timingSafeEqual(suppliedBytes, expectedBytes)) {
             await db.update(accountDeletionRequests)
               .set({ confirmationAttempts: awaiting.confirmationAttempts + 1 })
               .where(eq(accountDeletionRequests.id, awaiting.id));
@@ -9939,13 +9955,13 @@ p{color:#6b7280;font-size:14px;}</style>
             eq(accountDeletionRequests.status, "awaiting_confirmation"),
           )).returning();
           if (!confirmed) return res.status(409).json({ message: "This request has already changed." });
-          return res.status(201).json({ request: confirmed, message: "Your account deletion request was submitted for review." });
+          return res.status(201).json({
+            request: { id: confirmed.id, reason: confirmed.reason, status: confirmed.status, requestedAt: confirmed.requestedAt },
+            message: "Your account deletion request was submitted for review.",
+          });
         }
         if (awaiting?.confirmationSentAt && Date.now() - awaiting.confirmationSentAt.getTime() < 60_000) {
           return res.status(429).json({ message: "Wait a minute before requesting another confirmation code." });
-        }
-        if (awaiting && awaiting.confirmationAttempts >= 5) {
-          return res.status(429).json({ message: "Too many code attempts. Wait a minute and request a new code." });
         }
         const [pending] = await db.select().from(accountDeletionRequests)
           .where(and(eq(accountDeletionRequests.userId, userId), eq(accountDeletionRequests.status, "pending")))
@@ -9964,7 +9980,11 @@ p{color:#6b7280;font-size:14px;}</style>
         const [request] = awaiting
           ? await db.update(accountDeletionRequests).set(values).where(eq(accountDeletionRequests.id, awaiting.id)).returning()
           : await db.insert(accountDeletionRequests).values({ userId, ...values }).returning();
-        return res.json({ request, requiresCode: true, message: "A confirmation code was sent to your verified contact method." });
+        return res.json({
+          request: { id: request.id, reason: request.reason, status: request.status, requestedAt: request.requestedAt },
+          requiresCode: true,
+          message: "A confirmation code was sent to your verified contact method.",
+        });
       }
       if (!currentPassword || !(await bcrypt.compare(currentPassword, user.password))) {
         return res.status(403).json({ message: "Enter your current password to submit this request." });

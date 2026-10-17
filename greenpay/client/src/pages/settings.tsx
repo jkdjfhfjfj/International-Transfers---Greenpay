@@ -35,6 +35,8 @@ export default function SettingsPage() {
   const [deletionReason, setDeletionReason] = useState("");
   const [deletionPassword, setDeletionPassword] = useState("");
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
+  const [deletionCode, setDeletionCode] = useState("");
+  const [awaitingDeletionCode, setAwaitingDeletionCode] = useState(false);
 
   // Keep the edit form in sync when Didit webhook data refreshes the user.
   // Do not reset fields while the user is actively typing.
@@ -512,7 +514,7 @@ export default function SettingsPage() {
     queryKey: ["/api/app-downloads"],
   });
 
-  const { data: devicesData, refetch: refetchDevices } = useQuery({
+  const { data: devicesData, refetch: refetchDevices, isError: devicesFailed } = useQuery({
     queryKey: ["/api/users/me/devices"],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -550,21 +552,40 @@ export default function SettingsPage() {
   const { data: deletionData, refetch: refetchDeletionRequest } = useQuery({
     queryKey: ["/api/users/me/account-deletion"],
     enabled: !!user?.id,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
   const deletionRequest = (deletionData as any)?.request;
+  useEffect(() => {
+    if (deletionRequest?.status === "awaiting_confirmation") {
+      setDeletionReason(deletionRequest.reason || "");
+      setAwaitingDeletionCode(true);
+    }
+  }, [deletionRequest?.id, deletionRequest?.status]);
   const accountDeletionMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest("POST", "/api/users/me/account-deletion", {
         reason: deletionReason,
-        currentPassword: deletionPassword,
         confirmation: deletionConfirmation,
+        ...(user?.passwordSet === false
+          ? (awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation")
+            ? { verificationCode: deletionCode }
+            : {}
+          : { currentPassword: deletionPassword }),
       });
       return response.json();
     },
-    onSuccess: async () => {
+    onSuccess: async (result: any) => {
+      if (result.requiresCode) {
+        setAwaitingDeletionCode(true);
+        toast({ title: "Check your verified contact", description: result.message });
+        return;
+      }
       setDeletionReason("");
       setDeletionPassword("");
       setDeletionConfirmation("");
+      setDeletionCode("");
+      setAwaitingDeletionCode(false);
       await refetchDeletionRequest();
       toast({ title: "Request sent", description: "An administrator must review your account deletion request." });
     },
@@ -1495,7 +1516,11 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {devices.length === 0 ? (
+          {devicesFailed ? (
+            <div className="bg-card p-4 rounded-xl border border-amber-300 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              Active devices cannot be verified because the persistent session store is unavailable. Sign-out controls are disabled until it is available.
+            </div>
+          ) : devices.length === 0 ? (
             <div className="bg-card p-4 rounded-xl border border-border text-sm text-muted-foreground text-center elevation-1">
               No active sessions were found.
             </div>
@@ -1556,7 +1581,7 @@ export default function SettingsPage() {
             <div>
               <h3 className="font-semibold text-destructive">Danger Zone · Delete account</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Requests require your current password, a reason, and admin approval. Approval disables sign-in and redacts profile identifiers. Financial and KYC records may be retained for audit or legal requirements.
+                Requests require a reason and secure confirmation. Approval disables sign-in and redacts profile identifiers. Financial records may be retained; KYC evidence is deleted six months after approval.
               </p>
             </div>
           </div>
@@ -1579,10 +1604,19 @@ export default function SettingsPage() {
                 <Label htmlFor="deletion-reason">Reason (required)</Label>
                 <textarea id="deletion-reason" value={deletionReason} onChange={(e) => setDeletionReason(e.target.value)} minLength={20} maxLength={1000} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Tell us why you want to delete your account" />
               </div>
-              <div className="space-y-1">
-                <Label htmlFor="deletion-password">Current password</Label>
-                <Input id="deletion-password" type="password" autoComplete="current-password" value={deletionPassword} onChange={(e) => setDeletionPassword(e.target.value)} />
-              </div>
+              {user?.passwordSet === false ? (
+                <div className="space-y-1">
+                  <Label htmlFor="deletion-code">{awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation" ? "Verification code" : "Confirm with a one-time code"}</Label>
+                  {awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation"
+                    ? <Input id="deletion-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={deletionCode} onChange={(e) => setDeletionCode(e.target.value.replace(/\D/g, ""))} />
+                    : <p className="text-xs text-muted-foreground">We’ll send a code to a verified email address or phone number.</p>}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label htmlFor="deletion-password">Current password</Label>
+                  <Input id="deletion-password" type="password" autoComplete="current-password" value={deletionPassword} onChange={(e) => setDeletionPassword(e.target.value)} />
+                </div>
+              )}
               <div className="space-y-1">
                 <Label htmlFor="deletion-confirmation">Type DELETE MY ACCOUNT</Label>
                 <Input id="deletion-confirmation" value={deletionConfirmation} onChange={(e) => setDeletionConfirmation(e.target.value)} autoComplete="off" />
@@ -1590,10 +1624,10 @@ export default function SettingsPage() {
               <Button
                 type="button"
                 variant="destructive"
-                disabled={accountDeletionMutation.isPending || deletionReason.trim().length < 20 || !deletionPassword || deletionConfirmation !== "DELETE MY ACCOUNT"}
+                disabled={accountDeletionMutation.isPending || deletionReason.trim().length < 20 || (user?.passwordSet === false ? (deletionCode.length > 0 && deletionCode.length !== 6) : !deletionPassword) || deletionConfirmation !== "DELETE MY ACCOUNT"}
                 onClick={() => accountDeletionMutation.mutate()}
               >
-                {accountDeletionMutation.isPending ? "Submitting…" : "Request account deletion"}
+                {accountDeletionMutation.isPending ? "Submitting…" : (awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation") ? (deletionCode ? "Confirm request" : "Resend code") : "Request account deletion"}
               </Button>
             </div>
           )}

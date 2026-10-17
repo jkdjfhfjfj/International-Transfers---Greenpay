@@ -47,7 +47,7 @@ export default function AdminAccountDeletionsPage() {
         <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 dark:bg-amber-950/30 dark:text-amber-100">
           <div className="flex gap-3">
             <AlertTriangle className="h-5 w-5 shrink-0" />
-          <p>Approval disables account access and redacts identifying profile fields. Financial and KYC audit records may be retained. Requests cannot be approved while the account has funds or pending transactions.</p>
+          <p>Approval disables account access and redacts identifying profile fields. KYC evidence is retained for six months after approval, then purged. Financial audit records remain. Requests cannot be approved while the account has funds or pending transactions.</p>
           </div>
         </div>
         {isLoading ? <p className="text-sm text-muted-foreground">Loading requests…</p>

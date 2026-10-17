@@ -108,6 +108,9 @@ export default function VirtualCardPurchasePage() {
   // Fetch card price settings
   const { data: settingsData } = useQuery({
     queryKey: ["/api/system-settings/card-price"],
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const { data: discountData } = useQuery({
