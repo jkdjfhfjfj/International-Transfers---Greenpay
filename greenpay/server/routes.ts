@@ -1802,7 +1802,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes with real WhatsApp integration
   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
     try {
-      const userData = insertUserSchema.parse(req.body);
+      const userData = insertUserSchema.parse({
+        ...req.body,
+        email: typeof req.body?.email === "string"
+          ? req.body.email.trim().toLowerCase()
+          : req.body?.email,
+      });
       
       // Format phone number consistently (+254XXXXXXXXX)
       const { messagingService } = await import('./services/messaging');
@@ -15741,29 +15746,31 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const userId = (req.session as any).userId;
       const currencyMeta = Object.fromEntries(NEXUSPAY_CURRENCIES.map(c => [c.code, c]));
-      let userWallets = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      let userWallets = await storage.getWalletsByUserId(userId);
 
       // Ensure the configured default and KES wallets exist in the first
       // response, so a new user never has to sign out and back in to see KES.
       try {
-        const userRecord = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-        const defCurrencyResult = await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`);
+        const userRecord = await storage.getUser(userId);
+        const defCurrencyResult = db
+          ? await pool.query(`SELECT value FROM system_settings WHERE key = 'default_currency' LIMIT 1`)
+          : { rows: [] };
         const rawDefault = defCurrencyResult.rows[0]?.value;
         const configuredDefault = String(typeof rawDefault === "object" ? rawDefault?.value || "" : rawDefault || "")
           .replace(/['"]/g, "").trim().toUpperCase();
         const desiredCurrencies = Array.from(new Set([
-          configuredDefault || userRecord[0]?.defaultCurrency || "USD",
+          configuredDefault || userRecord?.defaultCurrency || "USD",
           "KES",
         ]));
         const enabled = await getEnabledCurrencyCodes();
         for (const currency of desiredCurrencies) {
           if (!enabled.includes(currency) || userWallets.some(wallet => normalizeCurrency(wallet.currency) === currency)) continue;
-          const [newWallet] = await db.insert(wallets).values({
+          const newWallet = await storage.createWallet({
             userId,
             currency,
             isDefault: userWallets.length === 0,
             isActive: true,
-          }).returning();
+          });
           userWallets.push(newWallet);
         }
       } catch (autoCreateErr) {
@@ -15771,7 +15778,9 @@ Sitemap: https://geepay.us/sitemap.xml`;
       }
 
       const enriched = await Promise.all(userWallets.map(async w => {
-        const ledgerBalance = await getLedgerBalance({ walletId: w.id }, Number(w.balance || 0));
+        const ledgerBalance = db
+          ? await getLedgerBalance({ walletId: w.id }, Number(w.balance || 0))
+          : Number(w.balance || 0);
         return {
           ...w,
           balance: ledgerBalance.toString(),
@@ -15795,10 +15804,10 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const normalizedCurrency = normalizeCurrency(currency);
       const knownCodes = await getEnabledCurrencyCodes();
       if (!knownCodes.includes(normalizedCurrency)) return res.status(400).json({ message: `${normalizedCurrency} is not an enabled currency` });
-      const existing = await db.select().from(wallets).where(eq(wallets.userId, userId));
+      const existing = await storage.getWalletsByUserId(userId);
       if (existing.some(w => normalizeCurrency(w.currency) === normalizedCurrency)) return res.status(400).json({ message: `You already have a ${normalizedCurrency} wallet` });
       const isDefault = existing.length === 0;
-      const [newWallet] = await db.insert(wallets).values({ userId, currency: normalizedCurrency, isDefault, isActive: true }).returning();
+      const newWallet = await storage.createWallet({ userId, currency: normalizedCurrency, isDefault, isActive: true });
       res.json({ wallet: newWallet });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -15807,8 +15816,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
     try {
       const userId = (req.session as any).userId;
       const { id } = req.params;
-      await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
-      await db.update(wallets).set({ isDefault: true, updatedAt: new Date() }).where(eq(wallets.id, id));
+      const updated = await storage.setDefaultWallet(userId, id);
+      if (!updated) return res.status(404).json({ message: "Wallet not found" });
       res.json({ success: true });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });

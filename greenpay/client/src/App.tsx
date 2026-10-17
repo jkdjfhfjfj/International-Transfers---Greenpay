@@ -108,16 +108,18 @@ import { Smartphone } from "lucide-react";
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const [, setLocation] = useLocation();
   const { isAuthenticated, isLoading, user } = useAuth();
-  
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) setLocation("/login");
+  }, [isAuthenticated, isLoading, setLocation]);
+
   // Show loading screen while checking authentication
   if (isLoading) {
     return <LoadingScreen />;
   }
   
   if (!isAuthenticated) {
-    // Redirect to login if not authenticated
-    setLocation("/login");
-    return null;
+    return <LoadingScreen />;
   }
   
   return <Component />;

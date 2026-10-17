@@ -50,14 +50,11 @@ export default function BottomNavigation() {
     setIsDark(nextIsDark);
   };
 
-  // Replit previews are embedded in an iframe; that should not suppress
-  // navigation. Only hide it in an OAuth popup window.
-  const isAuthPopup = window.opener !== null;
-
-  const showBottomNav = !isAuthPopup && isAuthenticated && (
+  const showBottomNav = isAuthenticated && (
     location.startsWith('/dashboard') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||
+    location.startsWith('/auth/virtual-card-purchase') ||
     location.startsWith('/virtual-accounts') ||
     location.startsWith('/support') ||
     location.startsWith('/settings') ||

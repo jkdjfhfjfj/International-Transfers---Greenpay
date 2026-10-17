@@ -1,6 +1,8 @@
 import {
   type User,
   type InsertUser,
+  type Wallet,
+  type InsertWallet,
   type KycDocument,
   type InsertKycDocument,
   type VirtualCard,
@@ -96,6 +98,11 @@ export interface IStorage {
   updateUserOtp(id: string, otpCode: string | null, otpExpiry: Date | null): Promise<User | undefined>;
   verifyUserOtp(id: string, otpCode: string): Promise<boolean>;
   updateUserPassword(id: string, hashedPassword: string): Promise<User | undefined>;
+
+  // Multi-currency wallet operations
+  getWalletsByUserId(userId: string): Promise<Wallet[]>;
+  createWallet(wallet: InsertWallet): Promise<Wallet>;
+  setDefaultWallet(userId: string, walletId: string): Promise<boolean>;
 
   // KYC operations
   createKycDocument(kyc: InsertKycDocument): Promise<KycDocument>;
@@ -267,6 +274,7 @@ export interface IStorage {
 
 export class MemStorage implements IStorage {
   private users: Map<string, User> = new Map();
+  private wallets: Map<string, Wallet> = new Map();
   private kycDocuments: Map<string, KycDocument> = new Map();
   private virtualCards: Map<string, VirtualCard> = new Map();
   private transactions: Map<string, Transaction> = new Map();
@@ -478,7 +486,8 @@ export class MemStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(user => user.email === email);
+    const normalizedEmail = email.trim().toLowerCase();
+    return Array.from(this.users.values()).find(user => user.email.trim().toLowerCase() === normalizedEmail);
   }
 
   async getUserByPhone(phone: string): Promise<User | undefined> {
@@ -487,8 +496,16 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = randomUUID();
+    // Signup submits a plaintext password, while the local preview test-account
+    // provisioner already supplies a bcrypt hash. Preserve hashes and hash raw
+    // passwords so either creation path can authenticate consistently.
+    const password = /^\$2[aby]\$\d{2}\$/.test(insertUser.password)
+      ? insertUser.password
+      : await bcrypt.hash(insertUser.password, 10);
     const user: User = {
       ...insertUser,
+      email: insertUser.email.trim().toLowerCase(),
+      password,
       id,
       isEmailVerified: false,
       isPhoneVerified: false,
@@ -1175,6 +1192,47 @@ export class MemStorage implements IStorage {
     }
     return undefined;
   }
+
+  async getWalletsByUserId(userId: string): Promise<Wallet[]> {
+    return Array.from(this.wallets.values()).filter(wallet => wallet.userId === userId);
+  }
+
+  async createWallet(wallet: InsertWallet): Promise<Wallet> {
+    const now = new Date();
+    const created: Wallet = {
+      ...wallet,
+      id: randomUUID(),
+      label: wallet.label ?? null,
+      balance: wallet.balance ?? "0.0000",
+      holdAmount: wallet.holdAmount ?? "0.0000",
+      withdrawalHoldAmount: wallet.withdrawalHoldAmount ?? "0.0000",
+      isDefault: wallet.isDefault ?? false,
+      isActive: wallet.isActive ?? true,
+      isSuspended: wallet.isSuspended ?? false,
+      suspendReason: wallet.suspendReason ?? null,
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.wallets.set(created.id, created);
+    return created;
+  }
+
+  async setDefaultWallet(userId: string, walletId: string): Promise<boolean> {
+    const wallet = this.wallets.get(walletId);
+    if (!wallet || wallet.userId !== userId) return false;
+    const now = new Date();
+    for (const current of this.wallets.values()) {
+      if (current.userId === userId) {
+        this.wallets.set(current.id, {
+          ...current,
+          isDefault: current.id === walletId,
+          updatedAt: now,
+        });
+      }
+    }
+    return true;
+  }
+
   async getPaymentRequest(id: string): Promise<PaymentRequest | undefined> { return this.paymentRequests.get(id); }
 
   // Savings Goals operations (stubs for MemStorage)
@@ -1222,7 +1280,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const normalizedEmail = email.trim().toLowerCase();
+    const [user] = await db.select().from(users).where(sql`lower(${users.email}) = ${normalizedEmail}`);
     return user || undefined;
   }
 
@@ -1235,7 +1294,7 @@ export class DatabaseStorage implements IStorage {
     const hashedPassword = await bcrypt.hash(insertUser.password, 10);
     const [user] = await db
       .insert(users)
-      .values({ ...insertUser, password: hashedPassword })
+      .values({ ...insertUser, email: insertUser.email.trim().toLowerCase(), password: hashedPassword })
       .returning();
     return user;
   }
@@ -1285,6 +1344,25 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id))
       .returning();
     return user || undefined;
+  }
+
+  async getWalletsByUserId(userId: string): Promise<Wallet[]> {
+    return db.select().from(wallets).where(eq(wallets.userId, userId));
+  }
+
+  async createWallet(wallet: InsertWallet): Promise<Wallet> {
+    const [created] = await db.insert(wallets).values(wallet).returning();
+    return created;
+  }
+
+  async setDefaultWallet(userId: string, walletId: string): Promise<boolean> {
+    const [ownedWallet] = await db.select().from(wallets)
+      .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId))).limit(1);
+    if (!ownedWallet) return false;
+    await db.update(wallets).set({ isDefault: false }).where(eq(wallets.userId, userId));
+    await db.update(wallets).set({ isDefault: true, updatedAt: new Date() })
+      .where(and(eq(wallets.id, walletId), eq(wallets.userId, userId)));
+    return true;
   }
 
   async deleteUser(id: string): Promise<void> {

@@ -9,6 +9,7 @@ const desktopTopbar = readFileSync(new URL("src/components/desktop-topbar.tsx", 
 const notifications = readFileSync(new URL("src/components/notifications.tsx", root), "utf8");
 const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.tsx", root), "utf8");
 const merchantPay = readFileSync(new URL("src/pages/merchant-pay.tsx", root), "utf8");
+const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
 
 test("pre-React startup shell fills mobile viewport without a default white frame", () => {
   assert.match(html, /html,\s*body,\s*#root\s*\{[^}]*margin:\s*0/s);
@@ -16,9 +17,11 @@ test("pre-React startup shell fills mobile viewport without a default white fram
 });
 
 test("authenticated bottom navigation remains visible inside the preview iframe", () => {
-  assert.match(bottomNavigation, /const isAuthPopup = window\.opener !== null/);
   assert.doesNotMatch(bottomNavigation, /window\.parent !== window/);
-  assert.match(bottomNavigation, /!isAuthPopup && isAuthenticated/);
+  assert.match(bottomNavigation, /const showBottomNav = isAuthenticated &&/);
+  assert.ok(bottomNavigation.includes("location.startsWith('/auth/virtual-card-purchase')"));
+  assert.match(bottomNavigation, /addEventListener\("open-bottom-menu", openMenu\)/);
+  assert.match(dashboard, /dispatchEvent\(new CustomEvent\("open-bottom-menu"\)\)/);
 });
 
 test("desktop notifications control opens the notification panel", () => {
@@ -28,10 +31,13 @@ test("desktop notifications control opens the notification panel", () => {
 });
 
 test("Kenyan card purchase keeps each supported funding option visible", () => {
-  assert.match(cardPurchase, /id: "mobile_money"[\s\S]*?disabled: !paymentOptions\.mobileMoney/);
-  assert.match(cardPurchase, /id: "card"[\s\S]*?disabled: !paymentOptions\.card/);
+  assert.match(cardPurchase, /id: "mobile_money"[\s\S]*?testId: "option-mobile-money"/);
+  assert.match(cardPurchase, /id: "card"[\s\S]*?testId: "option-card-payment"/);
   assert.match(cardPurchase, /id: "manual"[\s\S]*?testId: "option-manual-payment"/);
+  assert.match(cardPurchase, /id: "bank_transfer"[\s\S]*?testId: "option-bank-transfer"/);
   assert.match(cardPurchase, /id: "crypto"/);
+  assert.doesNotMatch(cardPurchase, /disabled=\{option\.disabled\}/);
+  assert.match(cardPurchase, /paymentOptionsLoading &&/);
 });
 
 test("Paybill and Till directions appear in card purchase, not merchant pay", () => {

@@ -41,7 +41,6 @@ type CardPaymentOption = {
   detail: string;
   icon: typeof Smartphone;
   testId: string;
-  disabled?: boolean;
 };
 
 function formatCurrencyAmount(amount: number, currency: string): string {
@@ -168,79 +167,56 @@ export default function VirtualCardPurchasePage() {
     : 0;
   const showDiscount = discountEnabled && hasDiscount;
   const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
+  const isKenyaCardPurchase = paymentOptions?.isKenya ??
+    String(user?.country || "").trim().toLowerCase() === "kenya";
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
-  const paymentMethodOptions: CardPaymentOption[] = paymentOptions
-    ? paymentOptions.isKenya
-      ? [
-          {
-            id: "mobile_money" as const,
-            title: "Mobile money",
-            detail: paymentOptions.mobileMoney
-              ? "Get a payment prompt on your registered phone."
-              : "Temporarily unavailable until the mobile-money provider is configured.",
-            icon: Smartphone,
-            testId: "option-mobile-money",
-            disabled: !paymentOptions.mobileMoney,
-          },
-          {
-            id: "card" as const,
-            title: "Debit or credit card",
-            detail: paymentOptions.card
-              ? "Pay through secure card checkout."
-              : "Temporarily unavailable until card checkout is configured.",
-            icon: CreditCard,
-            testId: "option-card-payment",
-            disabled: !paymentOptions.card,
-          },
-          {
-            id: "manual" as const,
-            title: "Paybill / Till",
-            detail: manualPaymentEnabled
-              ? "Pay using the current Greenpay.co.ke details, then share the transaction code for review."
-              : "View card-purchase instructions; confirm the current number on Greenpay.co.ke before paying.",
-            icon: CircleDollarSign,
-            testId: "option-manual-payment",
-          },
-          {
-            id: "crypto",
-            title: "Cryptocurrency",
-            detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
-            icon: Bitcoin,
-            testId: "option-crypto-payment",
-          },
-        ]
-      : [
-          {
-            id: "bank_transfer",
-            title: "Bank transfer",
-            detail: paymentOptions.bankTransfer
-              ? `Send to the configured ${paymentOptions.bankTransferDetails?.currency || "USD"} bank account.`
-              : paymentOptions.bankTransferConfigured
-                ? "Not available for this account's country."
-                : "Not configured yet. Contact support for help.",
-            icon: Building2,
-            testId: "option-bank-transfer",
-            disabled: !paymentOptions.bankTransfer,
-          },
-          {
-            id: "crypto",
-            title: "Cryptocurrency",
-            detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
-            icon: Bitcoin,
-            testId: "option-crypto-payment",
-          },
-        ]
-    : [
-        {
-          id: "crypto",
-          title: "Cryptocurrency",
-          detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
-          icon: Bitcoin,
-          testId: "option-crypto-payment",
-        },
-      ];
+  const paymentMethodOptions: CardPaymentOption[] = [
+    {
+      id: "mobile_money",
+      title: "Mobile money",
+      detail: paymentOptions?.mobileMoney
+        ? "Get a payment prompt on your registered phone."
+        : "Shown while provider setup is pending; payment starts when mobile-money processing is configured.",
+      icon: Smartphone,
+      testId: "option-mobile-money",
+    },
+    {
+      id: "card",
+      title: "Debit or credit card",
+      detail: paymentOptions?.card
+        ? "Pay through secure card checkout."
+        : "Shown while setup is pending; checkout starts when card processing is configured.",
+      icon: CreditCard,
+      testId: "option-card-payment",
+    },
+    {
+      id: "manual",
+      title: "Paybill / Till",
+      detail: manualPaymentEnabled
+        ? "Pay using the current Greenpay.co.ke details, then share the transaction code for review."
+        : "Card-purchase instructions. Confirm current details on Greenpay.co.ke before paying.",
+      icon: CircleDollarSign,
+      testId: "option-manual-payment",
+    },
+    {
+      id: "bank_transfer",
+      title: "Bank transfer",
+      detail: paymentOptions?.bankTransfer
+        ? `Send to the configured ${paymentOptions.bankTransferDetails?.currency || "USD"} bank account.`
+        : "Shown while bank details and country availability are being configured.",
+      icon: Building2,
+      testId: "option-bank-transfer",
+    },
+    {
+      id: "crypto",
+      title: "Cryptocurrency",
+      detail: "Pay the live quoted amount in BTC, ETH, USDT, or USDC.",
+      icon: Bitcoin,
+      testId: "option-crypto-payment",
+    },
+  ];
   const bankTransferDetails = paymentOptions?.bankTransferDetails ?? null;
   const bankTransferCurrency = bankTransferDetails?.currency || "USD";
   const bankTransferRate = Number(paymentOptions?.usdToBankCurrencyRate || 0);
@@ -270,21 +246,21 @@ export default function VirtualCardPurchasePage() {
       if (!response.ok) throw new Error(data.message || "Card price conversion is unavailable");
       return data;
     },
-    enabled: paymentOptions?.isKenya === true && Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
+    enabled: isKenyaCardPurchase && Number.isFinite(currentCardPriceNumber) && currentCardPriceNumber > 0,
     staleTime: 60_000,
   });
   const confirmationCurrency = paymentMethod === "crypto"
     ? cryptoCoin
     : paymentMethod === "bank_transfer"
       ? bankTransferCurrency
-      : paymentOptions?.isKenya
+      : isKenyaCardPurchase
         ? "KES"
         : paymentOptions?.countryPaymentCurrency || "USD";
   const confirmationAmount = paymentMethod === "crypto"
     ? cryptoCardAmount > 0 ? cryptoCardAmount : null
     : paymentMethod === "bank_transfer"
       ? bankTransferAmount
-      : paymentOptions?.isKenya
+      : isKenyaCardPurchase
         ? kesCardQuote && !kesQuoteError ? Number(kesCardQuote.kesAmount) : null
         : currentCardPriceNumber;
   const confirmationAmountLabel = confirmationAmount === null
@@ -292,27 +268,6 @@ export default function VirtualCardPurchasePage() {
     : paymentMethod === "crypto"
       ? `${confirmationAmount.toFixed(8)} ${confirmationCurrency}`
       : formatCurrencyAmount(confirmationAmount, confirmationCurrency);
-
-  useEffect(() => {
-    if (!paymentOptions) {
-      if (paymentOptionsError && paymentMethod !== "crypto") setPaymentMethod("crypto");
-      return;
-    }
-    const availableMethods: CardPaymentMethod[] = paymentOptions.isKenya
-      ? [
-          ...(paymentOptions.mobileMoney ? ["mobile_money" as const] : []),
-          ...(paymentOptions.card ? ["card" as const] : []),
-          "manual",
-          "crypto",
-        ]
-      : [
-          ...(paymentOptions.bankTransfer ? ["bank_transfer" as const] : []),
-          "crypto",
-        ];
-    if (!availableMethods.includes(paymentMethod)) {
-      setPaymentMethod(availableMethods[0] || "crypto");
-    }
-  }, [paymentMethod, paymentOptions, manualPaymentEnabled, paymentOptionsError]);
 
   useEffect(() => {
     if (verificationStarted.current) return;
@@ -505,7 +460,7 @@ export default function VirtualCardPurchasePage() {
                 The current card price applies to all payment methods available for your country.
               </p>
             )}
-            {paymentOptions?.isKenya && (
+            {isKenyaCardPurchase && (
               <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.04] p-3 space-y-2 text-left">
               <div className="flex items-center justify-between gap-3 text-xs">
                 <span className="text-muted-foreground">KES equivalent</span>
@@ -636,12 +591,12 @@ export default function VirtualCardPurchasePage() {
                 <div>
                   <h3 className="font-semibold text-sm">Choose how to pay</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {paymentOptions?.isKenya
+                    {isKenyaCardPurchase
                       ? "Payment options available for your KES account."
                       : paymentOptions
                         ? `International checkout · ${paymentOptions.countryPaymentCurrency || "currency unavailable"}`
                         : paymentOptionsError
-                          ? "Crypto is available while we retry your account options."
+                          ? "All payment methods remain listed while we retry your account options."
                           : "Checking payment options for your account."}
                   </p>
                 </div>
@@ -652,22 +607,21 @@ export default function VirtualCardPurchasePage() {
                 )}
               </div>
 
-              {paymentOptionsLoading ? (
+              {paymentOptionsLoading && (
                 <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground" role="status">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  Checking payment methods…
+                  Checking provider readiness. All payment methods are shown below.
                 </div>
-              ) : (
-                <>
-                  {paymentOptionsError && (
-                    <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
-                      <span>We could not confirm your account currency. Cryptocurrency is available; retry to load the other eligible methods.</span>
-                      <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={() => void refetchPaymentOptions()}>
-                        Retry
-                      </Button>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3" data-testid="card-payment-method-options">
+              )}
+              {paymentOptionsError && (
+                <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+                  <span>We could not confirm which providers are ready. All payment methods remain visible; retry to refresh availability.</span>
+                  <Button variant="outline" size="sm" className="h-8 shrink-0" onClick={() => void refetchPaymentOptions()}>
+                    Retry
+                  </Button>
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 sm:gap-3" data-testid="card-payment-method-options">
                     {paymentMethodOptions.map((option) => {
                       const OptionIcon = option.icon;
                       const isSelected = paymentMethod === option.id;
@@ -685,10 +639,8 @@ export default function VirtualCardPurchasePage() {
                           key={option.id}
                           type="button"
                           aria-pressed={isSelected}
-                          aria-disabled={option.disabled}
-                          disabled={option.disabled}
                           onClick={() => setPaymentMethod(option.id)}
-                          className={`relative min-h-[112px] rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[132px] sm:p-3 ${
+                          className={`relative min-h-[112px] rounded-2xl border p-3.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 sm:min-h-[132px] sm:p-3 ${
                             isSelected
                               ? "border-primary bg-primary/[0.055] shadow-sm"
                               : "border-border bg-card hover:border-primary/40"
@@ -713,19 +665,22 @@ export default function VirtualCardPurchasePage() {
                         </button>
                       );
                     })}
-                  </div>
-                </>
-              )}
+              </div>
             </div>
 
             {/* Auto Payment Details & Button */}
-            {((paymentMethod === 'mobile_money' && paymentOptions?.mobileMoney) ||
-              (paymentMethod === 'card' && paymentOptions?.card)) && (
+            {(paymentMethod === "mobile_money" || paymentMethod === "card") && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="space-y-3"
               >
+                {((paymentMethod === "mobile_money" && !paymentOptions?.mobileMoney) ||
+                  (paymentMethod === "card" && !paymentOptions?.card)) && (
+                  <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+                    This method is listed and selectable, but payment cannot start until its provider is configured.
+                  </p>
+                )}
                 <Button
                   onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full ripple"
@@ -749,6 +704,12 @@ export default function VirtualCardPurchasePage() {
                     : "Approve the mobile-money prompt. Your card activates only after payment is confirmed."}
                 </p>
               </motion.div>
+            )}
+
+            {paymentMethod === "bank_transfer" && (!paymentOptions?.bankTransfer || !bankTransferDetails) && (
+              <p className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="status">
+                Bank transfer is listed, but payment instructions will appear after bank details and country support are configured.
+              </p>
             )}
 
             {paymentMethod === "bank_transfer" && paymentOptions?.bankTransfer && bankTransferDetails && (
@@ -828,7 +789,7 @@ export default function VirtualCardPurchasePage() {
               </motion.div>
             )}
 
-            {paymentMethod === "manual" && paymentOptions?.isKenya && (
+            {paymentMethod === "manual" && isKenyaCardPurchase && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}

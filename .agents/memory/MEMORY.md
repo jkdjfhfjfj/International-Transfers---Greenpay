@@ -1,5 +1,6 @@
 - [GreenPay virtual-account scope](greenpay-virtual-account-scope.md) — Keep EUR, USD, and GBP visible together on the account overview.
 - [GreenPay payment copy](greenpay-payment-copy.md) — Keep payment-integration names out of visible payment text while preserving internal routing.
+- [GreenPay card payment options](greenpay-card-payment-options.md) — Keep every supported card-purchase method visible when provider setup is incomplete; explain readiness without hiding it.
 - [GreenPay card requirement copy](greenpay-card-requirement-copy.md) — Keep active-card notices focused on the user’s next step, not settings controls.
 - [GreenPay payment settlement](greenpay-payment-settlement.md) — Verify provider, charge amount, and currency before settlement; report success only after idempotent credit or card activation.
 - [GreenPay card bank transfers](greenpay-payment-settlement.md) — Non-KES card transfers reuse configured bank details and stay pending until support verifies payment.
