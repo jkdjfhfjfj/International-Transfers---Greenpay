@@ -224,10 +224,7 @@ export default function ResetPasswordPage() {
 
       {/* Fixed bottom action matches the sign-up flow and stays reachable on mobile. */}
       <div className="fixed bottom-0 left-0 right-0 z-40 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-        <div className="max-w-sm mx-auto grid grid-cols-[auto_1fr] gap-3 p-4">
-          <Button type="button" variant="outline" className="h-[52px] px-6" onClick={() => setLocation("/auth/forgot-password")}>
-            Back
-          </Button>
+        <div className="max-w-sm mx-auto p-4">
           <Button
             type="button"
             onClick={form.handleSubmit(onSubmit)}

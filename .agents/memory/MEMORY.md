@@ -8,4 +8,5 @@
 - [GreenPay action labels](greenpay-action-labels.md) — Keep the dashboard “Send” action distinct from wallet-account “Transfer”.
 - [GreenPay preview isolation](greenpay-preview-isolation.md) — Run local previews without shared DB variables; configured startup can apply migrations when the schema appears fresh.
 - [GreenPay preview reload prevention](greenpay-preview-reload.md) — Avoid automatic cache-clearing or reloads when the app root is slow to mount; proxy startup delays can create refresh loops.
+- [GreenPay screenshot layout feedback](greenpay-screenshot-layout-feedback.md) — Treat screenshot whitespace reports as visual layout requests; fix the visible gap without reframing them as startup diagnosis.
 - [GreenPay account deletion](greenpay-account-deletion.md) — Require current-password confirmation, a reason, and admin review; redact identity while retaining audit and financial records.

@@ -1,109 +1,114 @@
 import { Switch, Route, useLocation } from "wouter";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { TalkToUs } from "@/components/talk-to-us";
-import NotFound from "@/pages/not-found";
 import DesktopSidebar from "@/components/desktop-sidebar";
 import DesktopTopbar from "@/components/desktop-topbar";
-import SplashPage from "@/pages/splash";
-import LoginPage from "@/pages/auth/login";
-import SignupPage from "@/pages/auth/signup";
-import OtpVerificationPage from "@/pages/auth/otp-verification";
-import GoogleCompletePage from "@/pages/auth/google-complete";
-import KycVerificationPage from "@/pages/auth/kyc-verification";
-import VirtualCardPurchasePage from "@/pages/auth/virtual-card-purchase";
-import ForgotPasswordPage from "@/pages/auth/forgot-password";
-import ResetPasswordPage from "@/pages/auth/reset-password";
-import DashboardPage from "@/pages/dashboard";
-import SendMoneyPage from "@/pages/send-money";
-import SendAmountPage from "@/pages/send-amount";
-import SendConfirmPage from "@/pages/send-confirm";
-import ReceiveMoneyPage from "@/pages/receive-money";
-import PaymentRequestsPage from "@/pages/payment-requests";
-import TransactionsPage from "@/pages/transactions";
-import VirtualCardPage from "@/pages/virtual-card";
-import VirtualAccountsPage from "@/pages/virtual-accounts";
-import WalletAccountPage from "@/pages/wallet-account";
-import SettingsPage from "@/pages/settings";
-import SupportPage from "@/pages/support";
-import LiveChatPage from "@/pages/live-chat";
-import DepositPage from "@/pages/deposit";
-import WithdrawPage from "@/pages/withdraw";
-import ExchangePage from "@/pages/exchange";
-import KycPage from "@/pages/kyc";
-import AirtimePage from "@/pages/airtime";
-import BillsPage from "@/pages/bills";
-import MerchantPayPage from "@/pages/merchant-pay";
-import StatusPage from "@/pages/status";
-import MaintenancePage from "@/pages/maintenance";
-import OfflinePage from "@/pages/offline";
 import LoadingScreen from "@/components/loading-screen";
 import BottomNavigation from "@/components/bottom-navigation";
 import { PWAInstallPrompt } from "@/components/pwa-install";
 import { OfflineIndicator } from "@/components/offline-indicator";
-import PaymentCallbackPage from "@/pages/payment-callback";
-import PaymentSuccessPage from "@/pages/payment-success";
-import PaymentFailedPage from "@/pages/payment-failed";
-import PaymentProcessingPage from "@/pages/payment-processing";
-import AdminLogin from "@/pages/admin-login";
-import AdminDashboard from "@/pages/admin-dashboard-new";
-import AdminDashboardPage from "@/pages/admin-dashboard";
-import AdminUsersPage from "@/pages/admin-users";
-import AdminKycPage from "@/pages/admin-kyc";
-import AdminAccountDeletionsPage from "@/pages/admin-account-deletions";
-import AdminAdvancedKycPage from "@/pages/admin-advanced-kyc";
-import AdminRisksPage from "@/pages/admin-risks";
-import AdminTransactionsPage from "@/pages/admin-transactions";
-import AdminWithdrawalsPage from "@/pages/admin-withdrawals";
-import AdminCardsPage from "@/pages/admin-cards";
-import AdminPricingPage from "@/pages/admin-pricing";
-import AdminNotificationsPage from "@/pages/admin-notifications";
-import AdminMailPage from "@/pages/admin-mail";
-import AdminWhatsAppPage from "@/pages/admin-whatsapp";
-import AdminSupportPage from "@/pages/admin-support";
-import AdminTicketsPage from "@/pages/admin-tickets";
-import AdminLogsPage from "@/pages/admin-logs";
-import AdminTemplatesPage from "@/pages/admin-templates";
-import AdminActivityPage from "@/pages/admin-activity";
-import AdminDatabasePage from "@/pages/admin-database";
-import AdminAnalyticsPage from "@/pages/admin-analytics";
-import AdminSystemSettingsPage from "@/pages/admin-system-settings";
-import AdminManualPaymentSettingsPage from "@/pages/admin-manual-payment-settings";
-import AdminPayHeroSettingsPage from "@/pages/admin-payhero-fresh";
-import AdminMessagingSMSPage from "@/pages/admin-messaging-sms";
-import AdminAnnouncementsDBPage from "@/pages/admin-announcements-db";
-import AdminProfilePage from "@/pages/admin-profile";
-import LandingPage from "@/pages/landing/index";
-import SendMoneyLanding from "@/pages/landing/send-money";
-import VirtualCardsLanding from "@/pages/landing/virtual-cards";
-import ExchangeLanding from "@/pages/landing/exchange";
-import HelpLanding from "@/pages/landing/help";
-import AirtimeLanding from "@/pages/landing/airtime";
-import AboutLanding from "@/pages/landing/about";
-import PricingLanding from "@/pages/landing/pricing";
-import SecurityLanding from "@/pages/landing/security";
-import ContactLanding from "@/pages/landing/contact";
-import TermsAndConditionsPage from "@/pages/terms-and-conditions";
-import PrivacyPolicyPage from "@/pages/privacy-policy";
-import UserSupportTickets from "@/pages/user-support-tickets";
-import CryptoPage from "@/pages/crypto";
-import TransferPage from "@/pages/transfer";
-import AnalyticsPage from "@/pages/analytics";
-import AdminDisputesPage from "@/pages/admin-disputes";
-import AdminCryptoPage from "@/pages/admin-crypto";
-import AdminDepositSettingsPage from "@/pages/admin-deposit-settings";
-import AdminWalletsPage from "@/pages/admin-wallets";
-import AdminVirtualAccountsPage from "@/pages/admin-virtual-accounts";
-import AdminBlogsPage from "@/pages/admin-blogs";
-import BlogPage from "@/pages/blog";
 import { useFCM } from "@/hooks/use-fcm";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import { useMaintenanceState } from "@/hooks/use-maintenance";
 import { Smartphone } from "lucide-react";
+
+const lazyPage = (
+  loader: () => Promise<{ default: React.ComponentType<any> }>,
+) => lazy(loader) as unknown as React.ComponentType<any>;
+
+const NotFound = lazyPage(() => import("@/pages/not-found"));
+const SplashPage = lazyPage(() => import("@/pages/splash"));
+const LoginPage = lazyPage(() => import("@/pages/auth/login"));
+const SignupPage = lazyPage(() => import("@/pages/auth/signup"));
+const OtpVerificationPage = lazyPage(() => import("@/pages/auth/otp-verification"));
+const GoogleCompletePage = lazyPage(() => import("@/pages/auth/google-complete"));
+const KycVerificationPage = lazyPage(() => import("@/pages/auth/kyc-verification"));
+const VirtualCardPurchasePage = lazyPage(() => import("@/pages/auth/virtual-card-purchase"));
+const ForgotPasswordPage = lazyPage(() => import("@/pages/auth/forgot-password"));
+const ResetPasswordPage = lazyPage(() => import("@/pages/auth/reset-password"));
+const DashboardPage = lazyPage(() => import("@/pages/dashboard"));
+const SendMoneyPage = lazyPage(() => import("@/pages/send-money"));
+const SendAmountPage = lazyPage(() => import("@/pages/send-amount"));
+const SendConfirmPage = lazyPage(() => import("@/pages/send-confirm"));
+const ReceiveMoneyPage = lazyPage(() => import("@/pages/receive-money"));
+const PaymentRequestsPage = lazyPage(() => import("@/pages/payment-requests"));
+const TransactionsPage = lazyPage(() => import("@/pages/transactions"));
+const VirtualCardPage = lazyPage(() => import("@/pages/virtual-card"));
+const VirtualAccountsPage = lazyPage(() => import("@/pages/virtual-accounts"));
+const WalletAccountPage = lazyPage(() => import("@/pages/wallet-account"));
+const SettingsPage = lazyPage(() => import("@/pages/settings"));
+const SupportPage = lazyPage(() => import("@/pages/support"));
+const LiveChatPage = lazyPage(() => import("@/pages/live-chat"));
+const DepositPage = lazyPage(() => import("@/pages/deposit"));
+const WithdrawPage = lazyPage(() => import("@/pages/withdraw"));
+const ExchangePage = lazyPage(() => import("@/pages/exchange"));
+const KycPage = lazyPage(() => import("@/pages/kyc"));
+const AirtimePage = lazyPage(() => import("@/pages/airtime"));
+const BillsPage = lazyPage(() => import("@/pages/bills"));
+const MerchantPayPage = lazyPage(() => import("@/pages/merchant-pay"));
+const StatusPage = lazyPage(() => import("@/pages/status"));
+const MaintenancePage = lazyPage(() => import("@/pages/maintenance"));
+const OfflinePage = lazyPage(() => import("@/pages/offline"));
+const PaymentCallbackPage = lazyPage(() => import("@/pages/payment-callback"));
+const PaymentSuccessPage = lazyPage(() => import("@/pages/payment-success"));
+const PaymentFailedPage = lazyPage(() => import("@/pages/payment-failed"));
+const PaymentProcessingPage = lazyPage(() => import("@/pages/payment-processing"));
+const AdminLogin = lazyPage(() => import("@/pages/admin-login"));
+const AdminDashboard = lazyPage(() => import("@/pages/admin-dashboard-new"));
+const AdminDashboardPage = lazyPage(() => import("@/pages/admin-dashboard"));
+const AdminUsersPage = lazyPage(() => import("@/pages/admin-users"));
+const AdminKycPage = lazyPage(() => import("@/pages/admin-kyc"));
+const AdminAccountDeletionsPage = lazyPage(() => import("@/pages/admin-account-deletions"));
+const AdminAdvancedKycPage = lazyPage(() => import("@/pages/admin-advanced-kyc"));
+const AdminRisksPage = lazyPage(() => import("@/pages/admin-risks"));
+const AdminTransactionsPage = lazyPage(() => import("@/pages/admin-transactions"));
+const AdminWithdrawalsPage = lazyPage(() => import("@/pages/admin-withdrawals"));
+const AdminCardsPage = lazyPage(() => import("@/pages/admin-cards"));
+const AdminPricingPage = lazyPage(() => import("@/pages/admin-pricing"));
+const AdminNotificationsPage = lazyPage(() => import("@/pages/admin-notifications"));
+const AdminMailPage = lazyPage(() => import("@/pages/admin-mail"));
+const AdminWhatsAppPage = lazyPage(() => import("@/pages/admin-whatsapp"));
+const AdminSupportPage = lazyPage(() => import("@/pages/admin-support"));
+const AdminTicketsPage = lazyPage(() => import("@/pages/admin-tickets"));
+const AdminLogsPage = lazyPage(() => import("@/pages/admin-logs"));
+const AdminTemplatesPage = lazyPage(() => import("@/pages/admin-templates"));
+const AdminActivityPage = lazyPage(() => import("@/pages/admin-activity"));
+const AdminDatabasePage = lazyPage(() => import("@/pages/admin-database"));
+const AdminAnalyticsPage = lazyPage(() => import("@/pages/admin-analytics"));
+const AdminSystemSettingsPage = lazyPage(() => import("@/pages/admin-system-settings"));
+const AdminManualPaymentSettingsPage = lazyPage(() => import("@/pages/admin-manual-payment-settings"));
+const AdminPayHeroSettingsPage = lazyPage(() => import("@/pages/admin-payhero-fresh"));
+const AdminMessagingSMSPage = lazyPage(() => import("@/pages/admin-messaging-sms"));
+const AdminAnnouncementsDBPage = lazyPage(() => import("@/pages/admin-announcements-db"));
+const AdminProfilePage = lazyPage(() => import("@/pages/admin-profile"));
+const LandingPage = lazyPage(() => import("@/pages/landing/index"));
+const SendMoneyLanding = lazyPage(() => import("@/pages/landing/send-money"));
+const VirtualCardsLanding = lazyPage(() => import("@/pages/landing/virtual-cards"));
+const ExchangeLanding = lazyPage(() => import("@/pages/landing/exchange"));
+const HelpLanding = lazyPage(() => import("@/pages/landing/help"));
+const AirtimeLanding = lazyPage(() => import("@/pages/landing/airtime"));
+const AboutLanding = lazyPage(() => import("@/pages/landing/about"));
+const PricingLanding = lazyPage(() => import("@/pages/landing/pricing"));
+const SecurityLanding = lazyPage(() => import("@/pages/landing/security"));
+const ContactLanding = lazyPage(() => import("@/pages/landing/contact"));
+const TermsAndConditionsPage = lazyPage(() => import("@/pages/terms-and-conditions"));
+const PrivacyPolicyPage = lazyPage(() => import("@/pages/privacy-policy"));
+const UserSupportTickets = lazyPage(() => import("@/pages/user-support-tickets"));
+const CryptoPage = lazyPage(() => import("@/pages/crypto"));
+const TransferPage = lazyPage(() => import("@/pages/transfer"));
+const AnalyticsPage = lazyPage(() => import("@/pages/analytics"));
+const AdminDisputesPage = lazyPage(() => import("@/pages/admin-disputes"));
+const AdminCryptoPage = lazyPage(() => import("@/pages/admin-crypto"));
+const AdminDepositSettingsPage = lazyPage(() => import("@/pages/admin-deposit-settings"));
+const AdminWalletsPage = lazyPage(() => import("@/pages/admin-wallets"));
+const AdminVirtualAccountsPage = lazyPage(() => import("@/pages/admin-virtual-accounts"));
+const AdminBlogsPage = lazyPage(() => import("@/pages/admin-blogs"));
+const BlogPage = lazyPage(() => import("@/pages/blog"));
 
 // User Route Guard Component
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
@@ -129,6 +134,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
 
 function Router() {
   return (
+    <Suspense fallback={<LoadingScreen />}>
     <Switch>
       <Route path="/" component={SplashPage} />
       <Route path="/login" component={LoginPage} />
@@ -252,6 +258,7 @@ function Router() {
       <Route path="/admin/blogs" component={AdminBlogsPage} />
       <Route component={NotFound} />
     </Switch>
+    </Suspense>
   );
 }
 

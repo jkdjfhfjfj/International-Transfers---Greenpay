@@ -7,13 +7,19 @@ import * as schema from "@shared/schema";
 
 neonConfig.webSocketConstructor = ws;
 
-// Resolve the connection string — prefer DATABASE_URL, fall back to individual PG* vars
-function resolveConnectionString(): string | null {
-  if (process.env.DATABASE_URL) {
-    return process.env.DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
+// Resolve the connection string — prefer DATABASE_URL, then the production
+// Render secret, and finally individual PG* vars. Never use the Render secret
+// for development previews, which must stay isolated from shared data.
+export function resolveConnectionString(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (env.DATABASE_URL) {
+    return env.DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
   }
 
-  const { PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT } = process.env;
+  if (env.NODE_ENV === "production" && env.RENDER_DATABASE_URL) {
+    return env.RENDER_DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
+  }
+
+  const { PGHOST, PGUSER, PGPASSWORD, PGDATABASE, PGPORT } = env;
   if (PGHOST && PGUSER && PGPASSWORD && PGDATABASE) {
     const port = PGPORT || '5432';
     return `postgresql://${PGUSER}:${encodeURIComponent(PGPASSWORD)}@${PGHOST}:${port}/${PGDATABASE}?sslmode=require`;
@@ -22,7 +28,7 @@ function resolveConnectionString(): string | null {
   return null;
 }
 
-const connectionString = resolveConnectionString();
+export const connectionString = resolveConnectionString();
 
 export const pool = connectionString ? new Pool({ connectionString }) : null as any;
 export const db = connectionString ? drizzle({ client: pool, schema }) : null as any;

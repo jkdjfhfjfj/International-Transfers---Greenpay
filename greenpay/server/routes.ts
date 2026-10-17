@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import path from "path";
 import crypto from "crypto";
 import { storage } from "./storage";
-import { db, pool } from "./db";
+import { connectionString, db, pool } from "./db";
 import { insertUserSchema, insertKycDocumentSchema, insertTransactionSchema, insertPaymentRequestSchema, insertRecipientSchema, insertSupportTicketSchema, insertConversationSchema, insertMessageSchema, insertAnnouncementSchema, insertBlogSchema, users, systemLogs, admins, kycDocuments, virtualCards, recipients, transactions, paymentRequests, chatMessages, notifications, supportTickets, conversations, messages, adminLogs, systemSettings, apiConfigurations, transactionDisputes, cryptoWallets, cryptoTransactions, cryptoDepositAddresses, depositBonuses, wallets, loginHistory, accountDeletionRequests, virtualAccountSettings, virtualAccountApplications, virtualAccounts, ledgerEntries, withdrawalEvents, announcementDismissals, blogs } from "@shared/schema";
 import { nexusPayService, NEXUSPAY_CURRENCIES } from "./services/nexuspay";
 import {
@@ -63,7 +63,7 @@ const LOCAL_PREVIEW_TEST_EMAIL = "preview.tester@greenpay.local";
 
 function isLocalPreviewTestAccount(user: { email?: string } | null | undefined): boolean {
   return process.env.NODE_ENV === "development" &&
-    !process.env.DATABASE_URL &&
+    !connectionString &&
     user?.email?.toLowerCase() === LOCAL_PREVIEW_TEST_EMAIL;
 }
 
@@ -1192,7 +1192,7 @@ const transferSchema = z.object({
 export async function registerRoutes(app: Express): Promise<Server> {
   startKycRetentionPurge();
   await hydratePaymentEncryptionKey();
-  if (process.env.NODE_ENV === "development" && !process.env.DATABASE_URL) {
+  if (process.env.NODE_ENV === "development" && !connectionString) {
     try {
       await ensureLocalPreviewTestAccount();
     } catch (error) {
@@ -1829,7 +1829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Never create an account with credentials embedded in source code.
   // Disposable account for private, memory-only development previews.
   app.post("/api/dev/test-account", async (_req, res) => {
-    if (process.env.NODE_ENV !== "development" || process.env.DATABASE_URL) {
+    if (process.env.NODE_ENV !== "development" || connectionString) {
       return res.status(404).json({ message: "Not found" });
     }
     try {

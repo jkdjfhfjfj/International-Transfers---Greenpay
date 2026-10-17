@@ -146,11 +146,22 @@ test("password reset actions stay fixed at the bottom with short Android-style l
   const forgotPassword = readFileSync(new URL("src/pages/auth/forgot-password.tsx", root), "utf8");
   const resetPassword = readFileSync(new URL("src/pages/auth/reset-password.tsx", root), "utf8");
   assert.match(forgotPassword, /fixed inset-x-0 bottom-0/);
-  assert.match(forgotPassword, /Send Reset Code/);
-  assert.match(forgotPassword, />\s*Back\s*</);
+  assert.match(forgotPassword, /: "Send"\}/);
+  assert.doesNotMatch(forgotPassword, />\s*Back\s*</);
   assert.match(resetPassword, /fixed bottom-0 left-0 right-0/);
   assert.match(resetPassword, /: "Reset"\}/);
-  assert.match(resetPassword, />\s*Back\s*</);
+  assert.match(resetPassword, /style=\{\{ height: 52 \}\}/);
+  assert.doesNotMatch(resetPassword, />\s*Back\s*</);
+});
+
+test("production auth and sessions use the Render database while previews stay isolated", () => {
+  const database = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
+  const storage = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
+  const server = readFileSync(new URL("../server/index.ts", import.meta.url), "utf8");
+  assert.match(database, /env\.NODE_ENV === "production" && env\.RENDER_DATABASE_URL/);
+  assert.match(storage, /connectionString \? new DatabaseStorage\(\) : new MemStorage\(\)/);
+  assert.match(server, /if \(connectionString\)/);
+  assert.match(server, /A production database URL is required/);
 });
 
 test("card purchase methods stay visible while unavailable actions obey admin readiness", () => {

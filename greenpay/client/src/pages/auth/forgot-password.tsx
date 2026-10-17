@@ -139,12 +139,9 @@ export default function ForgotPasswordPage() {
 
       {!success && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-          <div className="mx-auto grid max-w-sm grid-cols-[1fr_auto] gap-3 p-4">
+          <div className="mx-auto max-w-sm p-4">
             <Button type="submit" form="forgot-password-form" className="h-12 w-full" disabled={loading || !contact.trim()}>
-              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</> : "Send Reset Code"}
-            </Button>
-            <Button type="button" variant="outline" className="h-12 px-5" onClick={() => setLocation("/login")}>
-              Back
+              {loading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</> : "Send"}
             </Button>
           </div>
         </div>

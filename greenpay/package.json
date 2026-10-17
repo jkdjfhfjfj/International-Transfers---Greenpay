@@ -10,6 +10,7 @@
     "check": "tsc",
     "test:all": "tsx --test tests/*.test.ts",
     "test:manual-mpesa": "tsx --test tests/manual-mpesa.test.ts",
+    "test:payza-sandbox": "tsx scripts/payza-sandbox-smoke.ts",
     "test:money-movement": "tsx --test tests/money-movement.test.ts tests/payhero-format.test.ts tests/payzaapi-webhook.test.ts tests/payment-routing.test.ts tests/payment-credential-crypto.test.ts tests/deposit-bonus-methods.test.ts",
     "db:push": "drizzle-kit push"
   },

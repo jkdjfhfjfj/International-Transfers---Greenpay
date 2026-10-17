@@ -4,6 +4,7 @@ import {
   randomBytes,
   scryptSync,
 } from "node:crypto";
+import { connectionString } from "../db";
 import { storage } from "../storage";
 import { decryptPaymentCredentialWithRotation } from "./payment-credential-crypto";
 
@@ -76,7 +77,7 @@ export async function getPaymentEncryptionKeyStatus() {
     databaseKeyConfigured,
     databaseKeyReadable,
     wrappingKeyAvailable: String(process.env.SESSION_SECRET || "").trim().length >= MIN_KEY_LENGTH,
-    persistentStorageAvailable: Boolean(process.env.DATABASE_URL),
+    persistentStorageAvailable: Boolean(connectionString),
   } as const;
 }
 

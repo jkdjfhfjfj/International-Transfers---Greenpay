@@ -1,10 +1,14 @@
-import fetch from "node-fetch";
+import fetchPayza from "node-fetch";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { getPaymentCredential } from "./payment-credentials";
 
 const PAYZA_BASE_URL = "https://payzaapi.co.ke";
 
 type PayzaKeys = { publicKey: string; secretKey: string };
+type PayzaServiceOptions = {
+  credentials?: PayzaKeys;
+  fetcher?: typeof fetchPayza;
+};
 
 export const PAYZA_API_CURRENCIES = [
   { code: "KES", providerCode: "KES", name: "Kenyan Shilling", countryOrRegion: "Kenya" },
@@ -126,7 +130,16 @@ export function verifyPayzaWebhookSignature(
 }
 
 export class PayzaApiService {
+  private readonly testCredentials?: PayzaKeys;
+  private readonly fetcher: typeof fetchPayza;
+
+  constructor(options: PayzaServiceOptions = {}) {
+    this.testCredentials = options.credentials;
+    this.fetcher = options.fetcher || fetchPayza;
+  }
+
   private async getKeys(): Promise<PayzaKeys | null> {
+    if (this.testCredentials) return this.testCredentials;
     const [publicKey, secretKey] = await Promise.all([
       getPaymentCredential("PAYZA_PUBLIC_KEY"),
       getPaymentCredential("PAYZA_SECRET_KEY"),
@@ -163,7 +176,7 @@ export class PayzaApiService {
     const stkPush = params.stkPush ?? params.currency === "KES";
     const keys = await this.getKeys();
     if (!keys) throw new Error("PayzaAPI is not configured");
-    const response = await fetch(`${PAYZA_BASE_URL}/api/v1/pay`, {
+    const response = await this.fetcher(`${PAYZA_BASE_URL}/api/v1/pay`, {
       method: "POST",
       headers: this.headers(keys),
       body: JSON.stringify({
@@ -218,7 +231,7 @@ export class PayzaApiService {
   async verifyPayment(reference: string) {
     const keys = await this.getKeys();
     if (!keys) throw new Error("PayzaAPI is not configured");
-    const response = await fetch(`${PAYZA_BASE_URL}/api/v1/verify/${encodeURIComponent(reference)}`, {
+    const response = await this.fetcher(`${PAYZA_BASE_URL}/api/v1/verify/${encodeURIComponent(reference)}`, {
       headers: this.headers(keys),
     });
     const body = await response.json() as any;

@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { systemLogger } from "./services/system-logger";
-import { ensureSchema } from "./db";
+import { connectionString, ensureSchema } from "./db";
 
 // Ensure NODE_ENV is set for deployment
 if (!process.env.NODE_ENV) {
@@ -34,8 +34,7 @@ const pgSession = ConnectPgSimple(session);
 
 // Create PostgreSQL connection pool
 let sessionStore;
-if (process.env.DATABASE_URL) {
-  const connectionString = process.env.DATABASE_URL.replace(/^"(.*)"$/, '$1').trim();
+if (connectionString) {
   const pgPool = new Pool({
     connectionString,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
@@ -49,7 +48,10 @@ if (process.env.DATABASE_URL) {
   
   console.log('Using PostgreSQL session store for production');
 } else {
-  console.warn('DATABASE_URL not found - falling back to MemoryStore (not recommended for production)');
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("A production database URL is required. Configure DATABASE_URL or RENDER_DATABASE_URL.");
+  }
+  console.warn('DATABASE_URL not found - falling back to MemoryStore (development preview only)');
 }
 
 // Session configuration for better security

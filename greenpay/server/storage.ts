@@ -84,7 +84,7 @@ import {
   announcements,
 } from "@shared/schema";
 import { randomUUID } from "crypto";
-import { db } from "./db";
+import { connectionString, db } from "./db";
 import { eq, desc, count, sum, or, isNull, gte, lt, and, sql, asc } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
@@ -2426,7 +2426,7 @@ export class DatabaseStorage implements IStorage {
 }
 
 // Use DatabaseStorage when database is configured, otherwise fall back to MemStorage
-export const storage: IStorage = process.env.DATABASE_URL ? new DatabaseStorage() : new MemStorage();
+export const storage: IStorage = connectionString ? new DatabaseStorage() : new MemStorage();
 
 // Keep MemStorage for fallback if needed
 export const memStorage = new MemStorage();
