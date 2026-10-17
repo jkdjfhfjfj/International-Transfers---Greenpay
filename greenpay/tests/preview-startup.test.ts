@@ -14,9 +14,11 @@ test("development preview removes stale worker caches before importing React", (
 
 test("startup shell stays visible while React loads and recovery is manual", () => {
   assert.match(html, /data-boot-shell/);
-  assert.match(html, /setTimeout\(showPreviewBootFailure, 30000\)/);
-  assert.match(html, /setTimeout\(resolve, 800\)/);
+  assert.match(html, /setTimeout\(showPreviewBootFailure, 15000\)/);
+  assert.match(html, /setTimeout\(resolve, 1500\)/);
   assert.match(html, /Clear stale preview cache and start GreenPay/);
+  assert.match(html, /window\.location\.replace\(retryUrl\.toString\(\)\)/);
+  assert.match(html, /gp_preview_recovery/);
   assert.doesNotMatch(html, /localStorage\.clear|sessionStorage\.clear|Clear-Site-Data/);
   assert.doesNotMatch(html, /window\.location\.reload\(\)/);
 });
