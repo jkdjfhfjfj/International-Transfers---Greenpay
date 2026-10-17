@@ -175,14 +175,15 @@ export class PayHeroService {
       const cleanPhone = formatPayHeroPhone(phoneNumber);
       if (!cleanPhone) {
         console.error('PayHero phone validation failed:', {
-          original: phoneNumber,
+          inputType: typeof phoneNumber,
           expected: '10 digits starting with 07 or 01',
         });
         return {
           success: false,
           status: 'INVALID_PHONE_NUMBER',
           reference: '',
-          CheckoutRequestID: ''
+          CheckoutRequestID: '',
+          message: 'Enter a valid Kenyan mobile number starting with 07 or 01.',
         };
       }
 

@@ -26,6 +26,7 @@ import { fileTypeFromBuffer } from 'file-type';
 import { whatsappService } from "./services/whatsapp";
 import { createExchangeRateService } from "./services/exchange-rate";
 import { payHeroService } from "./services/payhero";
+import { formatPayHeroPhone } from "./services/payhero-format";
 import { getWithdrawalFee, getWithdrawalTotals } from "./services/money-movement";
 import { paystackService } from "./services/paystack";
 import { twoFactorService } from "./services/2fa";
@@ -3747,6 +3748,14 @@ p{color:#6b7280;font-size:14px;}</style>
     }
   });
 
+  const normalizeCryptoNetwork = (value: unknown): string => {
+    const network = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (["btc", "bitcoin", "bitcoinmainnet"].includes(network)) return "bitcoin";
+    if (["eth", "ethereum", "erc20", "ethereumerc20"].includes(network)) return "ethereum";
+    if (["tron", "trx", "trc20", "trontrc20"].includes(network)) return "tron";
+    return network;
+  };
+
   // Virtual Card routes with Paystack integration
   app.get("/api/virtual-card/payment-options", requireAuth, async (req, res) => {
     try {
@@ -3849,18 +3858,24 @@ p{color:#6b7280;font-size:14px;}</style>
       const cryptoCoins = Array.from(new Set(
         configuredCryptoAddresses
           .filter((address: any) =>
-            expectedNetworkByCoin[String(address.coin).toUpperCase()] === String(address.network).toLowerCase(),
+            expectedNetworkByCoin[String(address.coin).toUpperCase()] === normalizeCryptoNetwork(address.network),
           )
           .map((address: any) => String(address.coin).toUpperCase()),
       ));
+      const usdToCountryCurrencyRate = readiness.countryPaymentCurrency
+        ? readiness.countryPaymentCurrency === "USD"
+          ? 1
+          : await createExchangeRateService(storage).getExchangeRate("USD", readiness.countryPaymentCurrency).catch(() => null)
+        : null;
       res.json({
         isKenya: readiness.isKenya,
         countryPaymentCurrency: readiness.countryPaymentCurrency,
-        mobileMoney: readiness.isKenya && readiness.mobileMoney && Boolean(String(user.phone || "").trim()),
+        mobileMoneyGateway: readiness.isKenya ? await resolveKenyanMobileMoneyGateway() : null,
+        mobileMoney: readiness.isKenya && readiness.mobileMoney,
         mobileMoneyReason: !readiness.isKenya
           ? "Mobile money is available for Kenyan accounts."
           : !String(user.phone || "").trim()
-            ? "Add a phone number to your profile to use mobile money."
+            ? "Enter a Kenyan phone number for this payment."
             : !readiness.mobileMoney
               ? "No configured Kenyan mobile-money provider is ready."
               : null,
@@ -3878,6 +3893,7 @@ p{color:#6b7280;font-size:14px;}</style>
         bankTransferConfigured,
         bankTransferDetails,
         usdToBankCurrencyRate,
+        usdToCountryCurrencyRate,
         cryptoEnabled,
         cryptoCoins,
       });
@@ -3948,9 +3964,17 @@ p{color:#6b7280;font-size:14px;}</style>
         ? Number(usdAmount.toFixed(2))
         : Math.max(1, Math.round(usdAmount * exchangeRate));
       const reference = payHeroService.generateReference();
+      const requestedPhone = req.body?.phoneNumber ?? user.phone;
+      const payHeroPhone = gateway === "payhero" ? formatPayHeroPhone(requestedPhone) : null;
 
       if (requestedMethod === "mobile_money" && (gateway === "payhero" || gateway === "nexuspay" || gateway === "payzaapi")) {
-        if (!user.phone) {
+        if (gateway === "payhero" && !payHeroPhone) {
+          return res.status(400).json({
+            message: "Enter a valid Kenyan phone number starting with 07 or 01.",
+            status: "INVALID_PHONE_NUMBER",
+          });
+        }
+        if (gateway !== "payhero" && !requestedPhone) {
           return res.status(400).json({ message: "A phone number is required for this payment method. Please update your profile." });
         }
       }
@@ -3981,10 +4005,14 @@ p{color:#6b7280;font-size:14px;}</style>
         status: "pending",
         reference,
         paystackReference: reference,
-        description: "Virtual Card Purchase",
+        description: requestedMethod === "mobile_money" && gateway === "payhero" && payHeroPhone
+          ? `Virtual Card Purchase — M-PESA to ${payHeroPhone}`
+          : "Virtual Card Purchase",
         exchangeRate: exchangeRate.toString(),
         metadata: {
-          phoneNumber: user.phone,
+          phoneNumber: gateway === "payhero"
+            ? payHeroPhone
+            : typeof requestedPhone === "string" ? requestedPhone : "",
           gateway,
           gatewayAmount: gatewayAmount.toString(),
           gatewayCurrency,
@@ -4001,7 +4029,7 @@ p{color:#6b7280;font-size:14px;}</style>
           amount: gatewayAmount,
           currency: gatewayCurrency,
           channel: "mobile_money",
-          phone: user.phone,
+          phone: typeof requestedPhone === "string" ? requestedPhone : user.phone,
           email: user.email,
           description: "Virtual card purchase",
         });
@@ -4099,7 +4127,7 @@ p{color:#6b7280;font-size:14px;}</style>
         }
         const payment = await payHeroService.initiateMpesaPayment(
           gatewayAmount,
-          user.phone,
+          payHeroPhone!,
           reference,
           user.fullName,
           callbackUrl,
@@ -15976,7 +16004,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       const configuredAddresses = await db.select().from(cryptoDepositAddresses)
         .where(eq(cryptoDepositAddresses.coin, normalizedCoin));
       const chosenAddress = configuredAddresses.find((address: any) =>
-        address.isActive && String(address.network).toLowerCase() === network,
+        address.isActive && normalizeCryptoNetwork(address.network) === normalizeCryptoNetwork(network),
       );
       if (!chosenAddress) {
         return res.status(503).json({

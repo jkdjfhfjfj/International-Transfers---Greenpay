@@ -1,5 +1,9 @@
 import fetch from 'node-fetch';
 import { getPaymentCredential } from './payment-credentials';
+import { storage } from '../storage';
+
+const PAYSTACK_KEY_STATUS_CATEGORY = "payment_health";
+const PAYSTACK_KEY_REJECTED_AT = "paystack_key_rejected_at";
 
 export interface PaystackResponse {
   status: boolean;
@@ -10,10 +14,30 @@ export interface PaystackResponse {
 export class PaystackService {
   private baseUrl = 'https://api.paystack.co';
 
+  private async recordKeyRejection(rejected: boolean): Promise<void> {
+    try {
+      await storage.setSystemSetting({
+        category: PAYSTACK_KEY_STATUS_CATEGORY,
+        key: PAYSTACK_KEY_REJECTED_AT,
+        value: rejected ? new Date().toISOString() : "",
+        description: "Latest Paystack invalid-key status; no credential values stored",
+      });
+    } catch {
+      console.error("[Paystack] Could not save the provider key status.");
+    }
+  }
+
+  private async getSecretKeyCandidates(currency?: string): Promise<string[]> {
+    const [kesKey, generalKey] = await Promise.all([
+      getPaymentCredential("PAYSTACK_SECRET_KEY_KES"),
+      getPaymentCredential("PAYSTACK_SECRET_KEY"),
+    ]);
+    const candidates = currency === "KES" ? [kesKey, generalKey] : [generalKey, kesKey];
+    return Array.from(new Set(candidates.map(key => String(key || "").trim()).filter(Boolean)));
+  }
+
   private async getSecretKey(): Promise<string> {
-    const kesKey = await getPaymentCredential("PAYSTACK_SECRET_KEY_KES");
-    if (kesKey) return kesKey;
-    return (await getPaymentCredential("PAYSTACK_SECRET_KEY")) || "";
+    return (await this.getSecretKeyCandidates("KES"))[0] || "";
   }
 
   private async readResponse(response: any): Promise<PaystackResponse> {
@@ -38,7 +62,7 @@ export class PaystackService {
 
   async isConfigured(): Promise<boolean> {
     try {
-      return Boolean(await this.getSecretKey());
+      return (await this.getSecretKeyCandidates()).length > 0;
     } catch {
       return false;
     }
@@ -54,8 +78,8 @@ export class PaystackService {
     metadata?: Record<string, any>,
     channels?: string[],
   ): Promise<PaystackResponse> {
-    const secretKey = await this.getSecretKey();
-    if (!secretKey) {
+    const secretKeys = await this.getSecretKeyCandidates(currency);
+    if (!secretKeys.length) {
       return {
         status: false,
         message: 'Payment service is not configured.'
@@ -92,16 +116,25 @@ export class PaystackService {
         payload.metadata = { custom_fields: Object.entries(metadata).map(([key, value]) => ({ display_name: key, variable_name: key, value })) };
       }
 
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${secretKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      return await this.readResponse(response);
+      let lastResult: PaystackResponse = { status: false, message: "Payment initialization failed" };
+      for (const secretKey of secretKeys) {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${secretKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+        lastResult = await this.readResponse(response);
+        if (lastResult.status) {
+          await this.recordKeyRejection(false);
+          return lastResult;
+        }
+        if (!/invalid\s+(?:api\s+)?key/i.test(lastResult.message)) return lastResult;
+      }
+      if (/invalid\s+(?:api\s+)?key/i.test(lastResult.message)) await this.recordKeyRejection(true);
+      return lastResult;
     } catch (error) {
       console.error('Paystack initialization error:', error);
       return {

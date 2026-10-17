@@ -9,6 +9,7 @@ const desktopTopbar = readFileSync(new URL("src/components/desktop-topbar.tsx", 
 const notifications = readFileSync(new URL("src/components/notifications.tsx", root), "utf8");
 const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.tsx", root), "utf8");
 const serverRoutes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
+const paystackService = readFileSync(new URL("../server/services/paystack.ts", import.meta.url), "utf8");
 const storageSource = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
 const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
 const messagingService = readFileSync(new URL("../server/services/messaging.ts", import.meta.url), "utf8");
@@ -41,6 +42,8 @@ test("authenticated bottom navigation remains visible inside the preview iframe"
 test("airtime and bills show coming soon outside Kenya and reject non-Kenyan API requests", () => {
   assert.match(airtimePage, /Airtime is currently available in Kenya/);
   assert.match(billsPage, /Bill payments are currently available in Kenya/);
+  assert.match(billsPage, /<div className="min-h-screen bg-background pb-24">[\s\S]*?<WavyHeader size="sm" \/>/);
+  assert.match(billsPage, /<div className="min-h-screen bg-background pb-24">[\s\S]*?<WavyHeader size="sm" \/>[\s\S]*?KES wallet/);
   assert.match(serverRoutes, /Airtime is coming soon for your country/);
   assert.match(serverRoutes, /Bill payments are coming soon for your country/);
 });
@@ -83,6 +86,33 @@ test("Kenyan card purchase keeps each supported funding option visible", () => {
   assert.match(cardPurchase, /Pending purchase reopened/);
   assert.match(cardPurchase, /We're checking your purchase/);
   assert.doesNotMatch(cardPurchase, /purchase.{0,40}admin|admin.{0,40}purchase/i);
+});
+
+test("PayHero mobile money normalizes registered phones, accepts a replacement, and records it", () => {
+  assert.match(cardPurchase, /formatKenyanPhone\(user\?\.phone\)/);
+  assert.match(cardPurchase, /input-payhero-alternate-phone/);
+  assert.match(cardPurchase, /phoneNumber: paymentPhone/);
+  assert.match(serverRoutes, /formatPayHeroPhone\(requestedPhone\)/);
+  assert.match(serverRoutes, /Virtual Card Purchase — M-PESA to \$\{payHeroPhone\}/);
+  assert.match(serverRoutes, /phoneNumber: gateway === "payhero"/);
+});
+
+test("card payment retries the configured fallback key only when Paystack rejects a key", () => {
+  assert.match(paystackService, /getSecretKeyCandidates/);
+  assert.match(paystackService, /invalid\\s\+\(\?:api\\s\+\)\?key/i);
+});
+
+test("manual card transfers show a country-currency estimate and copy action", () => {
+  assert.match(serverRoutes, /usdToCountryCurrencyRate/);
+  assert.match(cardPurchase, /Estimated amount in your country currency/);
+  assert.match(cardPurchase, /button-copy-user-currency-amount/);
+  assert.match(cardPurchase, /Rate: 1 USD =/);
+});
+
+test("crypto availability is country-independent and bills retain the shared wavy header", () => {
+  assert.match(serverRoutes, /mobileMoneyGateway: readiness\.isKenya[\s\S]*?cryptoEnabled,[\s\S]*?cryptoCoins/);
+  assert.match(serverRoutes, /normalizeCryptoNetwork\(address\.network\)/);
+  assert.match(billsPage, /<WavyHeader size="sm" \/>/);
 });
 
 test("card payment returns show the purchase result without a generic success or failure page", () => {

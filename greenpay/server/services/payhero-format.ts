@@ -1,5 +1,15 @@
 export function formatPayHeroPhone(value: unknown): string | null {
-  const digits = String(value ?? "").replace(/\D/g, "");
+  const extractPhone = (input: unknown, depth = 0): unknown => {
+    if (typeof input === "string" || typeof input === "number") return input;
+    if (!input || typeof input !== "object" || depth >= 3) return null;
+    for (const key of ["phoneNumber", "phone", "number", "value", "nationalNumber"]) {
+      const candidate = extractPhone((input as Record<string, unknown>)[key], depth + 1);
+      if (candidate !== null) return candidate;
+    }
+    return null;
+  };
+  const phoneValue = extractPhone(value);
+  const digits = String(phoneValue ?? "").replace(/\D/g, "");
   let phone = digits;
 
   if (phone.startsWith("254")) {

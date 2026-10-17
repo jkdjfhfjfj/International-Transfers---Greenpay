@@ -208,7 +208,7 @@ export default function BillsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-muted/30 pb-24">
+    <div className="min-h-screen bg-background pb-24">
       <WavyHeader size="sm" />
       <main className="mx-auto max-w-4xl space-y-6 p-4 md:p-6">
         <motion.section

@@ -6,6 +6,8 @@ test("formats PayHero phone numbers as Kenyan local numbers", () => {
   assert.equal(formatPayHeroPhone("+254 787 677 676"), "0787677676");
   assert.equal(formatPayHeroPhone("787677676"), "0787677676");
   assert.equal(formatPayHeroPhone("0787677676"), "0787677676");
+  assert.equal(formatPayHeroPhone({ phoneNumber: "+254 787 677 676" }), "0787677676");
+  assert.equal(formatPayHeroPhone({ phone: { number: "0787677676" } }), "0787677676");
 });
 
 test("rejects phone numbers that do not match PayHero's documented format", () => {

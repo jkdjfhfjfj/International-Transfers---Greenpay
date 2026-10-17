@@ -3,10 +3,12 @@ import { useLocation } from "wouter";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useInitializeCardPayment, useVerifyCardPayment } from "@/hooks/use-paystack";
 import { apiRequest } from "@/lib/queryClient";
+import { isCryptoAvailableForCountry } from "@shared/crypto-availability";
 import { WavyHeader } from "@/components/wavy-header";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArrowRight, Bitcoin, Building2, Check, CheckCircle2, CircleDollarSign, Clock, Copy, CreditCard, ExternalLink, Info, Loader2, Smartphone, XCircle } from "lucide-react";
@@ -17,12 +19,14 @@ type CardPaymentMethod = "mobile_money" | "card" | "crypto" | "manual" | "bank_t
 
 type CardPaymentOptions = {
   isKenya: boolean;
+  mobileMoneyGateway?: string;
   countryPaymentCurrency: string | null;
   mobileMoney: boolean;
   card: boolean;
   bankTransfer: boolean;
   bankTransferConfigured: boolean;
   cryptoCoins: string[];
+  cryptoEnabled?: boolean;
   bankTransferDetails: {
     bankName: string;
     accountName: string;
@@ -34,6 +38,7 @@ type CardPaymentOptions = {
     additionalInfo: string;
   } | null;
   usdToBankCurrencyRate: number | null;
+  usdToCountryCurrencyRate?: number | null;
 };
 
 type CardPaymentOption = {
@@ -65,6 +70,24 @@ function getCurrencyFractionDigits(currency: string): number {
   }
 }
 
+function extractPhoneValue(value: unknown, depth = 0): unknown {
+  if (typeof value === "string" || typeof value === "number") return value;
+  if (!value || typeof value !== "object" || depth >= 3) return null;
+  for (const key of ["phoneNumber", "phone", "number", "value", "nationalNumber"]) {
+    const candidate = extractPhoneValue((value as Record<string, unknown>)[key], depth + 1);
+    if (candidate !== null) return candidate;
+  }
+  return null;
+}
+
+function formatKenyanPhone(value: unknown): string | null {
+  const phoneValue = extractPhoneValue(value);
+  let digits = String(phoneValue ?? "").replace(/\D/g, "");
+  if (digits.startsWith("254")) digits = `0${digits.slice(3)}`;
+  else if (digits.startsWith("7") || digits.startsWith("1")) digits = `0${digits}`;
+  return /^0[17]\d{8}$/.test(digits) ? digits : null;
+}
+
 export default function VirtualCardPurchasePage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -73,6 +96,7 @@ export default function VirtualCardPurchasePage() {
 
   const [paymentReference, setPaymentReference] = useState<string | null>(null);
   const [paymentMethod, setPaymentMethod] = useState<CardPaymentMethod>("mobile_money");
+  const [alternatePhone, setAlternatePhone] = useState("");
   const [cryptoCoin, setCryptoCoin] = useState("USDT");
   const [paymentResult, setPaymentResult] = useState<"verifying" | "success" | "failed" | null>(null);
   const [paymentFeedbackMessage, setPaymentFeedbackMessage] = useState("");
@@ -226,6 +250,12 @@ export default function VirtualCardPurchasePage() {
   const manualPaymentEnabled = Boolean((manualPaymentData as any)?.enabled);
   const isKenyaCardPurchase = paymentOptions?.isKenya ??
     ["ke", "ken", "kenya", "republic of kenya"].includes(String(user?.country || "").trim().toLowerCase());
+  const isPayHeroMobileMoney = paymentOptions?.mobileMoneyGateway === "payhero";
+  const registeredPhone = formatKenyanPhone(user?.phone);
+  const rawRegisteredPhone = extractPhoneValue(user?.phone);
+  const paymentPhone = isPayHeroMobileMoney
+    ? registeredPhone || formatKenyanPhone(alternatePhone)
+    : String(rawRegisteredPhone || "");
   useEffect(() => {
     if (!isKenyaCardPurchase && (paymentMethod === "mobile_money" || paymentMethod === "manual")) {
       setPaymentMethod("card");
@@ -234,7 +264,12 @@ export default function VirtualCardPurchasePage() {
   const cryptoPrices = (cryptoPricesData as any)?.prices || {};
   const cryptoRate = Number(cryptoPrices[cryptoCoin] || 0);
   const cryptoCardAmount = cryptoRate > 0 ? currentCardPriceNumber / cryptoRate : 0;
-  const cryptoConfigured = Boolean(paymentOptions?.cryptoCoins?.includes(cryptoCoin));
+  const cryptoConfigured = isCryptoAvailableForCountry(
+    user?.country,
+    Boolean(paymentOptions?.cryptoEnabled),
+    true,
+    Boolean(paymentOptions?.cryptoCoins?.includes(cryptoCoin)),
+  );
   const paymentMethodOptions: CardPaymentOption[] = [
     {
       id: "mobile_money",
@@ -287,6 +322,11 @@ export default function VirtualCardPurchasePage() {
   const bankTransferRate = Number(paymentOptions?.usdToBankCurrencyRate || 0);
   const bankTransferAmount = bankTransferRate > 0 && Number.isFinite(currentCardPriceNumber)
     ? Number((currentCardPriceNumber * bankTransferRate).toFixed(getCurrencyFractionDigits(bankTransferCurrency)))
+    : null;
+  const userPaymentCurrency = paymentOptions?.countryPaymentCurrency || "USD";
+  const usdToUserCurrencyRate = Number(paymentOptions?.usdToCountryCurrencyRate || 0);
+  const userCurrencyAmount = usdToUserCurrencyRate > 0 && Number.isFinite(currentCardPriceNumber)
+    ? Number((currentCardPriceNumber * usdToUserCurrencyRate).toFixed(getCurrencyFractionDigits(userPaymentCurrency)))
     : null;
   const transferReference = String((user as any)?.accountNumber || "").trim();
   const bankDetailRows = bankTransferDetails
@@ -371,10 +411,21 @@ export default function VirtualCardPurchasePage() {
   }, [setLocation, verifyPayment]);
 
   const handlePurchase = () => {
+    if (paymentMethod === "mobile_money" && isPayHeroMobileMoney && !paymentPhone) {
+      toast({
+        title: "Enter a valid Kenyan phone number",
+        description: "Your registered number isn’t in a supported format. Enter a number beginning with 07 or 01.",
+        variant: "destructive",
+      });
+      return;
+    }
     setCheckoutStarted(true);
     setPaymentResult(null);
     setPaymentFeedbackMessage("");
-    initializePayment.mutate(paymentMethod === "card" ? "card" : "mobile_money", {
+    initializePayment.mutate({
+      paymentMethod: paymentMethod === "card" ? "card" : "mobile_money",
+      ...(paymentMethod === "mobile_money" && paymentPhone ? { phoneNumber: paymentPhone } : {}),
+    }, {
       onSuccess: (data) => {
         const redirectUrl = data.redirectUrl || data.authorization_url;
         if (redirectUrl) {
@@ -748,6 +799,30 @@ export default function VirtualCardPurchasePage() {
                     This method is listed and selectable, but payment cannot start until its provider is configured.
                   </p>
                 )}
+                {paymentMethod === "mobile_money" && isPayHeroMobileMoney && !registeredPhone && (
+                  <div className="space-y-2 rounded-xl border border-border bg-card p-3 text-left">
+                    <label htmlFor="payhero-alternate-phone" className="text-sm font-medium">Phone number for M-PESA</label>
+                    <Input
+                      id="payhero-alternate-phone"
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      value={alternatePhone}
+                      onChange={(event) => setAlternatePhone(event.target.value)}
+                      placeholder="07XX XXX XXX"
+                      data-testid="input-payhero-alternate-phone"
+                    />
+                    <p className="text-xs text-muted-foreground">Your registered number isn’t in a supported Kenyan format. Enter a number beginning with 07 or 01.</p>
+                    {alternatePhone && !formatKenyanPhone(alternatePhone) && (
+                      <p className="text-xs text-destructive" role="alert">Enter a valid Kenyan number beginning with 07 or 01.</p>
+                    )}
+                  </div>
+                )}
+                {paymentMethod === "mobile_money" && isPayHeroMobileMoney && registeredPhone && (
+                  <p className="text-xs text-muted-foreground" data-testid="text-payhero-registered-phone">
+                    M-PESA prompt will use your registered number: <span className="font-medium text-foreground">{registeredPhone}</span>
+                  </p>
+                )}
                 <Button
                   onClick={() => setPurchaseConfirmOpen(true)}
                   className="w-full ripple"
@@ -755,7 +830,8 @@ export default function VirtualCardPurchasePage() {
                     initializePayment.isPending ||
                     checkoutStarted ||
                     (paymentMethod === "mobile_money" && !paymentOptions?.mobileMoney) ||
-                    (paymentMethod === "card" && !paymentOptions?.card)
+                    (paymentMethod === "card" && !paymentOptions?.card) ||
+                    (paymentMethod === "mobile_money" && isPayHeroMobileMoney && !paymentPhone)
                   }
                   data-testid="button-purchase-card"
                 >
@@ -797,15 +873,55 @@ export default function VirtualCardPurchasePage() {
                 <div className="rounded-xl border border-primary/15 bg-primary/[0.04] p-3">
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <span className="text-muted-foreground">Amount to transfer</span>
-                    <span className="font-bold text-primary" data-testid="text-bank-transfer-amount">
-                      {bankTransferAmount === null
-                        ? `Confirm ${bankTransferCurrency} amount with support`
-                        : formatCurrencyAmount(bankTransferAmount, bankTransferCurrency)}
+                    <span className="flex items-center gap-2">
+                      <span className="font-bold text-primary" data-testid="text-bank-transfer-amount">
+                        {bankTransferAmount === null
+                          ? `Confirm ${bankTransferCurrency} amount with support`
+                          : formatCurrencyAmount(bankTransferAmount, bankTransferCurrency)}
+                      </span>
+                      {bankTransferAmount !== null && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void copyBankDetail(bankTransferAmount.toFixed(getCurrencyFractionDigits(bankTransferCurrency)), `${bankTransferCurrency} transfer amount`)}
+                          data-testid="button-copy-bank-transfer-amount"
+                        >
+                          <Copy className="mr-1 h-4 w-4" /> Copy
+                        </Button>
+                      )}
                     </span>
                   </div>
                   <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                     Card price: USD {currentCardPriceNumber.toFixed(2)}. Bank or intermediary fees may be charged separately.
                   </p>
+                  {bankTransferRate > 0 && (
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Rate: 1 USD = {Number(bankTransferRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {bankTransferCurrency}.
+                    </p>
+                  )}
+                  {userCurrencyAmount !== null && userPaymentCurrency !== bankTransferCurrency && (
+                    <div className="mt-3 flex items-center justify-between gap-3 border-t border-border pt-3">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Estimated amount in your country currency</p>
+                        <p className="font-semibold" data-testid="text-bank-transfer-user-currency-amount">
+                          {formatCurrencyAmount(userCurrencyAmount, userPaymentCurrency)}
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          Rate: 1 USD = {Number(usdToUserCurrencyRate).toLocaleString(undefined, { maximumFractionDigits: 6 })} {userPaymentCurrency}. Pay the bank-account currency amount above.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void copyBankDetail(userCurrencyAmount.toFixed(getCurrencyFractionDigits(userPaymentCurrency)), `${userPaymentCurrency} estimate`)}
+                        data-testid="button-copy-user-currency-amount"
+                      >
+                        <Copy className="mr-1 h-4 w-4" /> Copy
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

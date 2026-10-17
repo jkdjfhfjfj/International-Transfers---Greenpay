@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { isCryptoAvailableForCountry } from "@shared/crypto-availability";
 import { formatNumber, getCurrencySymbol } from "@/lib/formatters";
 import { WavyHeader } from "@/components/wavy-header";
 import {
@@ -241,7 +242,9 @@ export default function DepositPage() {
       config.paymentReadiness?.card === true &&
       hasUsdToPaymentCurrencyRate
     ) enabledMethods.push("card");
-    if (isEnabled("crypto") && availableCryptoCoins.length > 0) enabledMethods.push("crypto");
+    if (isCryptoAvailableForCountry(user?.country, depositsEnabled, isEnabled("crypto"), availableCryptoCoins.length > 0)) {
+      enabledMethods.push("crypto");
+    }
     if (isEnabled("bank_transfer") && bankTransferConfigured) enabledMethods.push("bank_transfer");
   }
   // Wallet deposits are controlled by the same master switch enforced by the server.
