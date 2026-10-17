@@ -10,6 +10,7 @@ const notifications = readFileSync(new URL("src/components/notifications.tsx", r
 const cardPurchase = readFileSync(new URL("src/pages/auth/virtual-card-purchase.tsx", root), "utf8");
 const serverRoutes = readFileSync(new URL("../server/routes.ts", import.meta.url), "utf8");
 const paystackService = readFileSync(new URL("../server/services/paystack.ts", import.meta.url), "utf8");
+const adminPaymentSettings = readFileSync(new URL("src/pages/admin-payhero-fresh.tsx", root), "utf8");
 const storageSource = readFileSync(new URL("../server/storage.ts", import.meta.url), "utf8");
 const databaseBootstrap = readFileSync(new URL("../server/db.ts", import.meta.url), "utf8");
 const messagingService = readFileSync(new URL("../server/services/messaging.ts", import.meta.url), "utf8");
@@ -112,7 +113,18 @@ test("manual card transfers show a country-currency estimate and copy action", (
 test("crypto availability is country-independent and bills retain the shared wavy header", () => {
   assert.match(serverRoutes, /mobileMoneyGateway: readiness\.isKenya[\s\S]*?cryptoEnabled,[\s\S]*?cryptoCoins/);
   assert.match(serverRoutes, /normalizeCryptoNetwork\(address\.network\)/);
+  assert.match(depositPage, /isCryptoAvailableForCountry\(user\?\.country, depositsEnabled/);
+  assert.match(cardPurchase, /isCryptoAvailableForCountry\([\s\S]*?user\?\.country/);
+  assert.match(serverRoutes, /isCryptoAvailableForCountry\(\s*user\.country/);
   assert.match(billsPage, /<WavyHeader size="sm" \/>/);
+});
+
+test("Paystack rejected-key status is stored without secrets and shown only in admin payment setup", () => {
+  assert.match(paystackService, /paystack_key_rejected_at/);
+  assert.match(paystackService, /Latest Paystack invalid-key status; no credential values stored/);
+  assert.match(serverRoutes, /paystackKeyRejectedAt: settingText\(paystackKeyRejectedSetting\?\.value\)/);
+  assert.match(adminPaymentSettings, /Paystack rejected the configured secret key/);
+  assert.match(adminPaymentSettings, /data-testid="alert-paystack-key-rejected"/);
 });
 
 test("card payment returns show the purchase result without a generic success or failure page", () => {

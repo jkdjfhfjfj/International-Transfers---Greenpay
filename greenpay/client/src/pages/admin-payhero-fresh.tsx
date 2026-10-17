@@ -19,6 +19,7 @@ interface PayHeroData {
   nexuspayConfigured?: boolean;
   payzaConfigured?: boolean;
   paystackConfigured?: boolean;
+  paystackKeyRejectedAt?: string;
   cardPrice?: string;
   encryptionKeyConfigured?: boolean;
   encryptionKeyStatus?: {
@@ -87,6 +88,7 @@ export default function AdminPayHeroSettingsPage() {
       const r = await apiRequest("GET", "/api/admin/payhero-settings");
       return r.json();
     },
+    refetchInterval: 30_000,
   });
 
   useEffect(() => {
@@ -263,6 +265,13 @@ export default function AdminPayHeroSettingsPage() {
   return (
     <AdminShell title="Payment Setup & Keys">
       <div className="max-w-2xl space-y-6">
+        {data?.paystackKeyRejectedAt && (
+          <div className="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900 dark:border-red-900 dark:bg-red-950/30 dark:text-red-200" role="alert" data-testid="alert-paystack-key-rejected">
+            <p className="font-semibold">Paystack rejected the configured secret key.</p>
+            <p className="mt-1">Check that the active KES and general keys are secret keys for the correct Paystack environment. No key values are shown here.</p>
+            <p className="mt-1 text-xs">Last reported: {new Date(data.paystackKeyRejectedAt).toLocaleString()}</p>
+          </div>
+        )}
         <Card className="rounded-2xl border-0 shadow-sm">
           <CardHeader>
             <div className="flex items-center gap-3">

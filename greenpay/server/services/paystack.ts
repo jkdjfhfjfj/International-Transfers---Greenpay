@@ -131,7 +131,10 @@ export class PaystackService {
           await this.recordKeyRejection(false);
           return lastResult;
         }
-        if (!/invalid\s+(?:api\s+)?key/i.test(lastResult.message)) return lastResult;
+        if (!/invalid\s+(?:api\s+)?key/i.test(lastResult.message)) {
+          await this.recordKeyRejection(false);
+          return lastResult;
+        }
       }
       if (/invalid\s+(?:api\s+)?key/i.test(lastResult.message)) await this.recordKeyRejection(true);
       return lastResult;
@@ -157,7 +160,10 @@ export class PaystackService {
         },
       });
 
-      return await this.readResponse(response);
+      const result = await this.readResponse(response);
+      if (result.status) await this.recordKeyRejection(false);
+      else if (/invalid\s+(?:api\s+)?key/i.test(result.message)) await this.recordKeyRejection(true);
+      return result;
     } catch (error) {
       console.error('Paystack verification error:', error);
       return {

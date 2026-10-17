@@ -27,6 +27,7 @@ import { whatsappService } from "./services/whatsapp";
 import { createExchangeRateService } from "./services/exchange-rate";
 import { payHeroService } from "./services/payhero";
 import { formatPayHeroPhone } from "./services/payhero-format";
+import { isCryptoAvailableForCountry } from "@shared/crypto-availability";
 import { getWithdrawalFee, getWithdrawalTotals } from "./services/money-movement";
 import { paystackService } from "./services/paystack";
 import { twoFactorService } from "./services/2fa";
@@ -3833,9 +3834,12 @@ p{color:#6b7280;font-size:14px;}</style>
         storage.getSystemSetting("deposit_methods", "global_enabled"),
         storage.getSystemSetting("deposit_methods", "crypto_enabled"),
       ]);
-      const cryptoEnabled =
-        settingEnabled(globalDepositSetting?.value, false) &&
-        settingEnabled(cryptoDepositSetting?.value, false);
+      const cryptoEnabled = isCryptoAvailableForCountry(
+        user.country,
+        settingEnabled(globalDepositSetting?.value, false),
+        settingEnabled(cryptoDepositSetting?.value, false),
+        true,
+      );
       let configuredCryptoAddresses: Array<{ coin: string; network: string }> = [];
       if (db && cryptoEnabled) {
         try {
@@ -10678,6 +10682,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const cardGatewaySetting = await storage.getSystemSetting("payment", "virtual_card_gateway");
       const mobileGatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
+      const paystackKeyRejectedSetting = await storage.getSystemSetting("payment_health", "paystack_key_rejected_at");
       const readiness = await payHeroService.getReadiness();
       const rawMobileGateway = settingText(
         mobileGatewaySetting?.value,
@@ -10695,6 +10700,7 @@ p{color:#6b7280;font-size:14px;}</style>
         nexuspayConfigured: await nexusPayService.isConfigured(),
         payzaConfigured: await payzaApiService.isConfigured(),
         paystackConfigured: await paystackService.isConfigured(),
+        paystackKeyRejectedAt: settingText(paystackKeyRejectedSetting?.value),
         payheroConfigured: readiness.configured,
         payheroUsernameConfigured: readiness.usernameConfigured,
         payheroPasswordConfigured: readiness.passwordConfigured,
