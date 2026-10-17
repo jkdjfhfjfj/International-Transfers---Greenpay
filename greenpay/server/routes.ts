@@ -219,16 +219,7 @@ async function getCountryPaymentReadiness(user: any) {
   }
 
   if (isKenya) {
-    const configuredGateway = settingText(
-      (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
-      settingText(
-        (await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value,
-        "payhero",
-      ),
-    ).toLowerCase();
-    const mobileGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
-      ? "nexuspay"
-      : "payhero";
+    const mobileGateway = await resolveKenyanMobileMoneyGateway();
     const [mobileMoney, card] = await Promise.all([
       mobileGateway === "nexuspay"
         ? nexusPayService.isConfigured()
@@ -258,6 +249,28 @@ async function getCountryPaymentReadiness(user: any) {
     card: hostedCheckout,
     hostedCheckout,
   };
+}
+
+async function resolveKenyanMobileMoneyGateway(): Promise<"payhero" | "nexuspay"> {
+  const configuredGateway = settingText(
+    (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
+    settingText(
+      (await storage.getSystemSetting("payment", "virtual_card_gateway"))?.value,
+      "payhero",
+    ),
+  ).toLowerCase();
+  const preferred: "payhero" | "nexuspay" = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
+    ? "nexuspay"
+    : "payhero";
+  const fallback: "payhero" | "nexuspay" = preferred === "payhero" ? "nexuspay" : "payhero";
+  const [payheroReady, nexusReady] = await Promise.all([
+    payHeroService.getReadiness().then(readiness => readiness.configured),
+    nexusPayService.isConfigured(),
+  ]);
+  const isReady = preferred === "payhero" ? payheroReady : nexusReady;
+  if (isReady) return preferred;
+  const fallbackReady = fallback === "payhero" ? payheroReady : nexusReady;
+  return fallbackReady ? fallback : preferred;
 }
 
 async function getLoginSecondFactors(user: any) {
@@ -3776,7 +3789,21 @@ p{color:#6b7280;font-size:14px;}</style>
         isKenya: readiness.isKenya,
         countryPaymentCurrency: readiness.countryPaymentCurrency,
         mobileMoney: readiness.isKenya && readiness.mobileMoney && Boolean(String(user.phone || "").trim()),
+        mobileMoneyReason: !readiness.isKenya
+          ? "Mobile money is available for Kenyan accounts."
+          : !String(user.phone || "").trim()
+            ? "Add a phone number to your profile to use mobile money."
+            : !readiness.mobileMoney
+              ? "No configured Kenyan mobile-money provider is ready."
+              : null,
         card: readiness.isKenya && readiness.card,
+        cardReason: !readiness.isKenya
+          ? "Card checkout is available for Kenyan accounts."
+          : !String(user.email || "").includes("@")
+            ? "Add a valid email address to your profile to use card checkout."
+            : !readiness.card
+              ? "Card checkout is not configured yet."
+              : null,
         bankTransfer,
         bankTransferConfigured,
         bankTransferDetails,
@@ -3816,21 +3843,13 @@ p{color:#6b7280;font-size:14px;}</style>
 
       // Get current card price from system settings
       const cardPriceSetting = await storage.getSystemSetting("virtual_card", "price");
-      const usdAmount = parseFloat(cardPriceSetting?.value || "60.00");
+      const usdAmount = parseFloat(String(cardPriceSetting?.value || "60.00"));
       const isKenya = isKenyanCountry(user.country);
       const requestedMethod = String(req.body?.paymentMethod || "mobile_money").trim().toLowerCase();
       if (!["mobile_money", "card"].includes(requestedMethod)) {
         return res.status(400).json({ message: "Choose mobile money or card." });
       }
-      const mobileGatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
-      const legacyCardGatewaySetting = await storage.getSystemSetting("payment", "virtual_card_gateway");
-      const configuredMobileGateway = settingText(
-        mobileGatewaySetting?.value,
-        settingText(legacyCardGatewaySetting?.value, "payhero"),
-      ).toLowerCase();
-      const mobileGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredMobileGateway)
-        ? "nexuspay"
-        : "payhero";
+      const mobileGateway = await resolveKenyanMobileMoneyGateway();
       const gateway = !isKenya
         ? "payzaapi"
         : requestedMethod === "card"
@@ -4220,11 +4239,13 @@ p{color:#6b7280;font-size:14px;}</style>
       const phoneToUse = phone || user.phone;
       if (!phoneToUse) return res.status(400).json({ message: "A phone number is required for mobile-money payment." });
 
-      const gatewaySetting = await storage.getSystemSetting("payment", "kenya_mobile_money_gateway");
-      const configuredGateway = settingText(gatewaySetting?.value, "payhero").toLowerCase();
-      const gateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
-        ? "nexuspay"
-        : configuredGateway;
+      const gateway = await resolveKenyanMobileMoneyGateway();
+      if (gateway === "nexuspay" && !(await nexusPayService.isConfigured())) {
+        return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
+      }
+      if (gateway === "payhero" && !(await payHeroService.getReadiness()).configured) {
+        return res.status(503).json({ message: "Mobile-money deposits are temporarily unavailable. Please try again later." });
+      }
       const usdAmount = parseFloat(amount);
       const exchangeRate = await getUsdToKesRate();
       const kesAmount = Math.max(1, Math.round(usdAmount * exchangeRate));
@@ -16326,13 +16347,7 @@ Sitemap: https://geepay.us/sitemap.xml`;
       } else if (requestedMethod === "card") {
         selectedGateway = "paystack";
       } else {
-        const configuredGateway = settingText(
-          (await storage.getSystemSetting("payment", "kenya_mobile_money_gateway"))?.value,
-          settingText((await storage.getSystemSetting("payment", "default_gateway"))?.value, "payhero"),
-        ).toLowerCase();
-        selectedGateway = ["nexuspay", "makamesco", "makamescopay"].includes(configuredGateway)
-          ? "nexuspay"
-          : "payhero";
+        selectedGateway = await resolveKenyanMobileMoneyGateway();
       }
       if (
         (selectedGateway === "payzaapi" || selectedGateway === "paystack") &&

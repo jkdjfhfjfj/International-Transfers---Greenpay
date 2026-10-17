@@ -51,6 +51,7 @@ export default function BottomNavigation() {
 
   const showBottomNav = isAuthenticated && (
     location.startsWith('/dashboard') ||
+    location.startsWith('/merchant-pay') ||
     location.startsWith('/transactions') ||
     location.startsWith('/virtual-card') ||
     location.startsWith('/auth/virtual-card-purchase') ||
@@ -200,7 +201,7 @@ export default function BottomNavigation() {
           <DrawerHeader className="text-left">
             <div className="flex items-center justify-between">
               <div>
-                <DrawerTitle>App menu</DrawerTitle>
+                <DrawerTitle className="sr-only">Quick menu</DrawerTitle>
               </div>
               <DrawerClose asChild>
                 <button className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close app menu">

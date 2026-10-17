@@ -1280,7 +1280,7 @@ export default function SettingsPage() {
             setVerificationCode('');
           }
         }}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="w-[calc(100%-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border-border/80 bg-gradient-to-b from-background to-muted/30 p-5 shadow-2xl sm:max-w-md sm:p-6">
             <DialogHeader>
               <DialogTitle>
                 {twoFAStep === 'qr' && 'Setup Two-Factor Authentication'}
@@ -1589,15 +1589,15 @@ export default function SettingsPage() {
               <DialogDescription>Information recorded for this sign-in session.</DialogDescription>
             </DialogHeader>
             {selectedDevice && (
-              <dl className="grid gap-3 text-sm">
-                <div><dt className="text-xs text-muted-foreground">Device</dt><dd className="font-medium">{selectedDevice.browser}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Type</dt><dd className="font-medium capitalize">{selectedDevice.deviceType}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">IP address</dt><dd className="font-medium break-all">{selectedDevice.ipAddress}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Approximate location</dt><dd className="font-medium">{selectedDevice.location}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Session reference</dt><dd className="font-mono">••••{selectedDevice.idSuffix}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Expires</dt><dd className="font-medium">{selectedDevice.expiresAt ? new Date(selectedDevice.expiresAt).toLocaleString() : "Not recorded"}</dd></div>
-                <div><dt className="text-xs text-muted-foreground">Browser details</dt><dd className="break-all text-xs">{selectedDevice.userAgent}</dd></div>
-                {selectedDevice.current && <p className="rounded-lg bg-primary/5 p-3 text-xs text-muted-foreground">This is the session you are using now.</p>}
+              <dl className="grid gap-2 text-sm">
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">Device</dt><dd className="mt-1 break-words font-medium">{selectedDevice.browser || "Not recorded"}</dd></div>
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">Type</dt><dd className="mt-1 font-medium capitalize">{selectedDevice.deviceType || "Not recorded"}</dd></div>
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">IP address</dt><dd className="mt-1 break-all font-medium">{selectedDevice.ipAddress || "Not recorded"}</dd></div>
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">Approximate location</dt><dd className="mt-1 break-words font-medium">{selectedDevice.location || "Not recorded"}</dd></div>
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">Session reference</dt><dd className="mt-1 break-all font-mono">••••{selectedDevice.idSuffix || "—"}</dd></div>
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-3"><dt className="text-xs text-muted-foreground">Session expires</dt><dd className="mt-1 font-semibold">{selectedDevice.expiresAt && !Number.isNaN(new Date(selectedDevice.expiresAt).getTime()) ? new Date(selectedDevice.expiresAt).toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" }) : "Not recorded"}</dd></div>
+                <div className="rounded-xl border border-border bg-background/80 p-3"><dt className="text-xs text-muted-foreground">Browser details</dt><dd className="mt-1 break-all text-xs">{selectedDevice.userAgent || "Not recorded"}</dd></div>
+                {selectedDevice.current && <p className="rounded-xl bg-primary/5 p-3 text-xs text-muted-foreground">This is the session you are using now.</p>}
               </dl>
             )}
           </DialogContent>
@@ -1808,18 +1808,6 @@ export default function SettingsPage() {
             <ChevronRight className="w-5 h-5" />
           </motion.button>
 
-          <motion.button
-            whileHover={{ scale: 1.01 }}
-            whileTap={{ scale: 0.99 }}
-            onClick={handleLogout}
-            className="w-full bg-destructive/10 p-4 rounded-xl border border-destructive/20 flex items-center justify-between hover:bg-destructive/20 transition-colors elevation-1"
-            data-testid="button-logout"
-          >
-            <div className="flex items-center">
-              <LogOut className="w-5 h-5 text-destructive mr-3" />
-              <span className="font-medium text-destructive">Sign Out</span>
-            </div>
-          </motion.button>
         </motion.div>
 
         {/* Account deletion follows Help & Support */}
@@ -1885,6 +1873,19 @@ export default function SettingsPage() {
             </div>
           )}
         </motion.section>
+
+        <motion.button
+          whileHover={{ scale: 1.01 }}
+          whileTap={{ scale: 0.99 }}
+          onClick={handleLogout}
+          className="w-full rounded-xl border border-destructive/20 bg-destructive/10 p-4 text-left transition-colors hover:bg-destructive/20"
+          data-testid="button-logout"
+        >
+          <span className="flex items-center font-medium text-destructive">
+            <LogOut className="mr-3 h-5 w-5" />
+            Sign Out
+          </span>
+        </motion.button>
 
         <div className="text-center pt-6 pb-4">
           <p className="text-sm text-muted-foreground">Geepay v2.1.0</p>

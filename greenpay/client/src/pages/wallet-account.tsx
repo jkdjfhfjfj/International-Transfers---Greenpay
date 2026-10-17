@@ -135,22 +135,28 @@ export default function WalletAccountPage() {
           <Button variant="ghost" size="icon" aria-label="Back to dashboard" onClick={() => setLocation("/dashboard")}>
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-primary">Wallets</p>
-            <h2 className="text-lg font-bold tracking-tight">Account details</h2>
-          </div>
         </div>
-        <section className="rounded-3xl bg-gradient-to-br from-primary to-emerald-600 p-5 text-white shadow-lg">
-          <div className="flex items-start justify-between">
-            <div><p className="text-sm text-white/75">{wallet.label || "Wallet account"}</p><h1 className="text-2xl font-bold mt-1">{walletCurrency} account</h1></div>
-            <Badge className="bg-white/15 text-white border-white/20">{walletSuspended ? "Suspended" : "Active"}</Badge>
+        <section className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-emerald-800 via-primary to-emerald-600 p-5 text-white shadow-lg sm:p-6">
+          <div className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-2xl" />
+          <div className="relative">
+          <div className="flex min-w-0 items-start justify-between gap-3">
+            <div className="min-w-0"><p className="truncate text-sm text-white/75">{wallet.label || "Wallet account"}</p><h1 className="mt-1 text-xl font-bold sm:text-2xl">{walletCurrency} account</h1></div>
+            <Badge className="shrink-0 border-white/20 bg-white/15 text-white">{walletSuspended ? "Suspended" : "Active"}</Badge>
           </div>
-          <p className="text-xs text-white/70 mt-7">Available balance</p>
-          <p className="text-4xl font-bold mt-1">{symbol}{formatNumber(available, 2)}</p>
-          <div className="grid grid-cols-3 gap-3 mt-5 text-sm">
-            <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">Total balance</p><p className="font-semibold">{symbol}{formatNumber(balance, 2)}</p></div>
-            <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">On hold</p><p className="font-semibold">{symbol}{formatNumber(hold, 2)}</p></div>
-            <div className="rounded-2xl bg-white/10 p-3"><p className="text-xs text-white/65">Withdrawal hold</p><p className="font-semibold">{symbol}{formatNumber(withdrawalHold, 2)}</p></div>
+          <p className="mt-7 text-xs text-white/70">Available balance</p>
+          <p className="mt-1 break-all text-3xl font-bold tabular-nums sm:text-4xl">{symbol}{formatNumber(available, 2)}</p>
+          <div className="mt-5 grid grid-cols-1 gap-2 text-sm sm:grid-cols-3">
+            {[
+              { label: "Total balance", amount: balance },
+              { label: "On hold", amount: hold },
+              { label: "Withdrawal hold", amount: withdrawalHold },
+            ].map(({ label, amount }) => (
+              <div key={label} className="min-w-0 rounded-2xl bg-white/10 p-3">
+                <p className="text-xs text-white/65">{label}</p>
+                <p className="mt-1 break-all font-semibold tabular-nums">{symbol}{formatNumber(amount, 2)}</p>
+              </div>
+            ))}
+          </div>
           </div>
         </section>
 

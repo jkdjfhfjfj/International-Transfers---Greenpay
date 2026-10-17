@@ -468,50 +468,70 @@ export default function TransactionsPage() {
       </div>
 
       <div className="p-3 md:p-6">
-        {/* Monthly Summary - Per currency */}
-        <motion.div
+        {/* Monthly summary - compact currency cards */}
+        <motion.section
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-card p-3 md:p-4 rounded-xl border border-border mb-4 md:mb-6 elevation-1"
+          className="mb-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:mb-6 md:p-5"
         >
-          <div className="text-center">
-            <p className="text-sm text-muted-foreground mb-3">This Month</p>
-            {/* Per-currency totals */}
-            {(() => {
-              const currencies = Array.from(new Set<string>(transactions.map((txn: any) => String(txn.currency?.toUpperCase() || 'USD'))));
-              return currencies.map((cur) => {
-                const curTxns = transactions.filter((txn: any) => (txn.currency?.toUpperCase() || 'USD') === cur);
-                const total = curTxns.filter((txn: any) => txn.status === 'completed').reduce((sum: number, txn: any) => sum + parseFloat(txn.amount), 0);
-                const sent = curTxns.filter((txn: any) => (txn.type === 'send' || txn.type === 'withdraw' || txn.type === 'card_purchase') && txn.status === 'completed').reduce((sum: number, txn: any) => sum + parseFloat(txn.amount), 0);
-                const received = curTxns.filter((txn: any) => (txn.type === 'receive' || txn.type === 'deposit') && txn.status === 'completed').reduce((sum: number, txn: any) => sum + parseFloat(txn.amount), 0);
-                const sym = getCurrencySymbol(cur);
-                return (
-                  <div key={cur} className="mb-4 last:mb-0">
-                    <p className="text-xl font-bold text-primary" data-testid={`text-monthly-total-${cur.toLowerCase()}`}>
-                      {sym}{formatNumber(total)}
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-2">{cur}</p>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Sent</p>
-                        <p className="font-semibold text-destructive text-sm" data-testid={`text-monthly-sent-${cur.toLowerCase()}`}>
-                          {sym}{formatNumber(sent)}
-                        </p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">Received</p>
-                        <p className="font-semibold text-primary text-sm" data-testid={`text-monthly-received-${cur.toLowerCase()}`}>
-                          {sym}{formatNumber(received)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              });
-            })()}
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold">This month</h2>
+              <p className="text-xs text-muted-foreground">Completed activity by currency</p>
+            </div>
+            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+              {new Date().toLocaleDateString(undefined, { month: "long" })}
+            </span>
           </div>
-        </motion.div>
+          {(() => {
+            const now = new Date();
+            const monthTxns = transactions.filter((txn: any) => {
+              const date = new Date(txn.createdAt);
+              return !Number.isNaN(date.getTime()) && date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth();
+            });
+            const currencies = Array.from(new Set<string>(monthTxns
+              .filter((txn: any) => txn.status === "completed")
+              .map((txn: any) => String(txn.currency?.toUpperCase() || "USD"))));
+            return currencies.length === 0 ? (
+              <p className="rounded-xl bg-muted/50 px-4 py-6 text-center text-sm text-muted-foreground">No completed activity this month yet.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {currencies.map((cur) => {
+                  const curTxns = monthTxns.filter((txn: any) => (txn.currency?.toUpperCase() || "USD") === cur && txn.status === "completed");
+                  const sum = (types: string[]) => curTxns
+                    .filter((txn: any) => types.includes(txn.type))
+                    .reduce((total: number, txn: any) => total + (Number.parseFloat(txn.amount) || 0), 0);
+                  const total = curTxns.reduce((amount: number, txn: any) => amount + (Number.parseFloat(txn.amount) || 0), 0);
+                  const sent = sum(["send", "withdraw", "card_purchase"]);
+                  const received = sum(["receive", "deposit"]);
+                  const sym = getCurrencySymbol(cur);
+                  return (
+                    <article key={cur} className="min-w-0 rounded-2xl border border-border bg-background p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <span className="rounded-lg bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">{cur}</span>
+                        <div className="min-w-0 text-right">
+                          <p className="text-[11px] text-muted-foreground">Total movement</p>
+                          <p className="break-all text-lg font-bold leading-tight tabular-nums text-foreground" data-testid={`text-monthly-total-${cur.toLowerCase()}`}>{sym}{formatNumber(total)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 border-t border-border pt-3">
+                        <div className="min-w-0">
+                          <p className="text-xs text-muted-foreground">Sent</p>
+                          <p className="mt-1 break-all text-sm font-semibold tabular-nums text-destructive" data-testid={`text-monthly-sent-${cur.toLowerCase()}`}>{sym}{formatNumber(sent)}</p>
+                        </div>
+                        <div className="min-w-0 text-right">
+                          <p className="text-xs text-muted-foreground">Received</p>
+                          <p className="mt-1 break-all text-sm font-semibold tabular-nums text-primary" data-testid={`text-monthly-received-${cur.toLowerCase()}`}>{sym}{formatNumber(received)}</p>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </motion.section>
 
         {/* Transaction List */}
         <motion.div

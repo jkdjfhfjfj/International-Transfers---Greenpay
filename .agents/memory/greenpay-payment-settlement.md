@@ -9,6 +9,12 @@ For GreenPay, use the configured provider for the customer's authenticated profi
 
 **How to apply:** Apply these checks to every payment callback, status poll, and customer verification route. Never treat client-supplied country, amount, or currency as authoritative.
 
+For Kenyan mobile-money deposits and virtual-card purchases, try the admin-selected provider first and use the other provider only when it is fully configured and ready. If neither is ready, report the method unavailable; never route to an unconfigured provider.
+
+**Why:** The user asked for provider fallbacks when environment credentials are missing, while keeping payment availability and routing accurate.
+
+**How to apply:** Use the same readiness-based selection for customer availability and payment initialization so the UI cannot promise a route the server will reject.
+
 For pending crypto card purchases that need manual verification, tell customers “We’re checking your purchase” or equivalent. Do not mention internal admin review in customer-facing status copy. Reopen the saved pending purchase details when the customer returns.
 
 **Why:** The user explicitly requested neutral customer-facing review language and a way to reopen pending crypto purchases.

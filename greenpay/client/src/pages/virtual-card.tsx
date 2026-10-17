@@ -345,7 +345,12 @@ export default function VirtualCardPage() {
                           ? "Checking availability…"
                           : (id === "manual" ? manualPaymentError : paymentOptionsError)
                             ? "Could not check"
-                            : ready ? "Available now" : "Unavailable right now"}
+                          : ready ? "Available now"
+                            : id === "mobile_money" && paymentOptions?.mobileMoneyReason
+                              ? paymentOptions.mobileMoneyReason
+                              : id === "card" && paymentOptions?.cardReason
+                                ? paymentOptions.cardReason
+                                : "Unavailable right now"}
                       </span>
                     </button>
                   );

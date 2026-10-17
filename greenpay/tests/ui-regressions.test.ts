@@ -100,14 +100,14 @@ test("Paybill and Till directions appear in card purchase, not merchant pay", ()
   assert.doesNotMatch(merchantPay, /PAYMENT_STEPS|Lipa na M-PESA|Buy Goods and Services/);
 });
 
-test("Merchant Pay stays focused on merchant instructions and has no back button", () => {
+test("Merchant Pay stays focused on merchant instructions and uses the global bottom bar", () => {
   assert.doesNotMatch(merchantPay, /virtual.?card/i);
   assert.doesNotMatch(merchantPay, /Store|ShieldCheck|title="Merchant Pay"|subtitle="Payment guidance/);
   assert.match(merchantPay, /<WavyHeader\s+size="md"\s*\/>/);
   assert.match(merchantPay, /<main className="mx-auto mt-5/);
   assert.match(merchantPay, /button-open-merchant-guidance/);
-  assert.doesNotMatch(bottomNavigation, /location\.startsWith\('\/merchant-pay'\)/);
-  assert.match(merchantPay, /<BottomNavigation\s*\/>/);
+  assert.match(bottomNavigation, /location\.startsWith\('\/merchant-pay'\)/);
+  assert.doesNotMatch(merchantPay, /<BottomNavigation\s*\/>/);
 });
 
 test("password reset actions stay fixed at the bottom with short Android-style labels", () => {
