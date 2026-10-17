@@ -10,7 +10,6 @@ import {
   Drawer,
   DrawerClose,
   DrawerContent,
-  DrawerDescription,
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
@@ -202,7 +201,6 @@ export default function BottomNavigation() {
             <div className="flex items-center justify-between">
               <div>
                 <DrawerTitle>App menu</DrawerTitle>
-                <DrawerDescription>Quick access to app preferences</DrawerDescription>
               </div>
               <DrawerClose asChild>
                 <button className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close app menu">

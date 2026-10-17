@@ -516,7 +516,7 @@ export default function VirtualCardPurchasePage() {
               </div>
             </div>
             {showDiscount && (
-              <p className="mb-3 text-xs text-muted-foreground">
+              <p className="mb-3 text-xs text-white">
                 The current card price applies to all payment methods available for your country.
               </p>
             )}

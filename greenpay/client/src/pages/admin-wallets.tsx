@@ -68,8 +68,11 @@ export default function AdminWalletsPage() {
   const [fallbackRates, setFallbackRates] = useState<Record<string, string>>({});
   const [enabledCurrencies, setEnabledCurrencies] = useState<string[]>([]);
 
-  const { data: walletsData, isLoading } = useQuery<{ wallets: WalletRecord[]; grouped: Record<string, WalletRecord[]> }>({
+  const { data: walletsData, isLoading, isError, refetch } = useQuery<{ wallets: WalletRecord[]; grouped: Record<string, WalletRecord[]> }>({
     queryKey: ["/api/admin/wallets", search],
+    retry: 2,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       const r = await apiRequest("GET", `/api/admin/wallets?search=${encodeURIComponent(search)}`);
       return r.json();
@@ -326,6 +329,14 @@ export default function AdminWalletsPage() {
             <div className="p-8 text-center">
               <Loader2 className="w-6 h-6 animate-spin text-green-600 mx-auto mb-2" />
               <p className="text-sm text-gray-500">Loading wallets...</p>
+            </div>
+          ) : isError ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50 p-6 text-center dark:bg-amber-950/30">
+              <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Wallets could not be loaded</p>
+              <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">No balances were changed. Retry to reload the wallet list.</p>
+              <Button variant="outline" className="mt-3" onClick={() => refetch()}>
+                <RefreshCw className="mr-2 h-4 w-4" /> Retry
+              </Button>
             </div>
           ) : userIds.length === 0 ? (
             <div className="p-8 text-center">

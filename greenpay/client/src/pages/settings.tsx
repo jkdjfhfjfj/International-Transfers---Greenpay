@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useCurrencies } from "@/hooks/use-wallets";
@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const [deletionConfirmation, setDeletionConfirmation] = useState("");
   const [deletionCode, setDeletionCode] = useState("");
   const [awaitingDeletionCode, setAwaitingDeletionCode] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<any | null>(null);
 
   // Keep the edit form in sync when Didit webhook data refreshes the user.
   // Do not reset fields while the user is actively typing.
@@ -1530,7 +1531,17 @@ export default function SettingsPage() {
                 <motion.div
                   key={device.id || i}
                   whileHover={{ scale: 1.01 }}
-                  className="bg-card p-3.5 rounded-xl border border-border elevation-1"
+                  className="bg-card p-3.5 rounded-xl border border-border elevation-1 cursor-pointer hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`View details for ${device.browser || "active device"}`}
+                  onClick={() => setSelectedDevice(device)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedDevice(device);
+                    }
+                  }}
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center shrink-0 mt-0.5">
@@ -1557,7 +1568,10 @@ export default function SettingsPage() {
                         size="sm"
                         className="text-destructive"
                         disabled={revokeDeviceMutation.isPending}
-                        onClick={() => revokeDeviceMutation.mutate(device.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          revokeDeviceMutation.mutate(device.id);
+                        }}
                       >
                         Sign out
                       </Button>
@@ -1568,70 +1582,26 @@ export default function SettingsPage() {
             </div>
           )}
         </motion.div>
-
-        {/* Danger Zone */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/[0.03] p-4"
-          data-testid="account-deletion-danger-zone"
-        >
-          <div className="flex items-start gap-3">
-            <Trash2 className="mt-0.5 h-5 w-5 text-destructive" />
-            <div>
-              <h3 className="font-semibold text-destructive">Danger Zone · Delete account</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Requests require a reason and secure confirmation. Approval disables sign-in and redacts profile identifiers. Financial records may be retained; KYC evidence is deleted six months after approval.
-              </p>
-            </div>
-          </div>
-          {deletionRequest?.status === "pending" ? (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-              Your request is awaiting admin review. Reason: {deletionRequest.reason}
-            </div>
-          ) : deletionRequest?.status === "approved" ? (
-            <div className="rounded-lg border border-border bg-muted p-3 text-sm">
-              Your account deletion was approved. Your personal profile has been redacted and access disabled.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {deletionRequest?.status === "rejected" && (
-                <div className="rounded-lg border border-border bg-card p-3 text-sm">
-                  Previous request rejected: {deletionRequest.adminNote || "Contact support for details."} You can submit a new request below.
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label htmlFor="deletion-reason">Reason (required)</Label>
-                <textarea id="deletion-reason" value={deletionReason} onChange={(e) => setDeletionReason(e.target.value)} minLength={20} maxLength={1000} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Tell us why you want to delete your account" />
-              </div>
-              {user?.passwordSet === false ? (
-                <div className="space-y-1">
-                  <Label htmlFor="deletion-code">{awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation" ? "Verification code" : "Confirm with a one-time code"}</Label>
-                  {awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation"
-                    ? <Input id="deletion-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={deletionCode} onChange={(e) => setDeletionCode(e.target.value.replace(/\D/g, ""))} />
-                    : <p className="text-xs text-muted-foreground">We’ll send a code to a verified email address or phone number.</p>}
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Label htmlFor="deletion-password">Current password</Label>
-                  <Input id="deletion-password" type="password" autoComplete="current-password" value={deletionPassword} onChange={(e) => setDeletionPassword(e.target.value)} />
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label htmlFor="deletion-confirmation">Type DELETE MY ACCOUNT</Label>
-                <Input id="deletion-confirmation" value={deletionConfirmation} onChange={(e) => setDeletionConfirmation(e.target.value)} autoComplete="off" />
-              </div>
-              <Button
-                type="button"
-                variant="destructive"
-                disabled={accountDeletionMutation.isPending || deletionReason.trim().length < 20 || (user?.passwordSet === false ? (deletionCode.length > 0 && deletionCode.length !== 6) : !deletionPassword) || deletionConfirmation !== "DELETE MY ACCOUNT"}
-                onClick={() => accountDeletionMutation.mutate()}
-              >
-                {accountDeletionMutation.isPending ? "Submitting…" : (awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation") ? (deletionCode ? "Confirm request" : "Resend code") : "Request account deletion"}
-              </Button>
-            </div>
-          )}
-        </motion.section>
+        <Dialog open={!!selectedDevice} onOpenChange={(open) => !open && setSelectedDevice(null)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Session details</DialogTitle>
+              <DialogDescription>Information recorded for this sign-in session.</DialogDescription>
+            </DialogHeader>
+            {selectedDevice && (
+              <dl className="grid gap-3 text-sm">
+                <div><dt className="text-xs text-muted-foreground">Device</dt><dd className="font-medium">{selectedDevice.browser}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Type</dt><dd className="font-medium capitalize">{selectedDevice.deviceType}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">IP address</dt><dd className="font-medium break-all">{selectedDevice.ipAddress}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Approximate location</dt><dd className="font-medium">{selectedDevice.location}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Session reference</dt><dd className="font-mono">••••{selectedDevice.idSuffix}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Expires</dt><dd className="font-medium">{selectedDevice.expiresAt ? new Date(selectedDevice.expiresAt).toLocaleString() : "Not recorded"}</dd></div>
+                <div><dt className="text-xs text-muted-foreground">Browser details</dt><dd className="break-all text-xs">{selectedDevice.userAgent}</dd></div>
+                {selectedDevice.current && <p className="rounded-lg bg-primary/5 p-3 text-xs text-muted-foreground">This is the session you are using now.</p>}
+              </dl>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Notifications */}
         <motion.div
@@ -1851,6 +1821,70 @@ export default function SettingsPage() {
             </div>
           </motion.button>
         </motion.div>
+
+        {/* Account deletion follows Help & Support */}
+        <motion.section
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-3 rounded-xl border border-destructive/30 bg-destructive/[0.03] p-4"
+          data-testid="account-deletion-danger-zone"
+        >
+          <div className="flex items-start gap-3">
+            <Trash2 className="mt-0.5 h-5 w-5 text-destructive" />
+            <div>
+              <h3 className="font-semibold text-destructive">Danger Zone · Delete account</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Requests require a reason and secure confirmation. Approval disables sign-in and redacts profile identifiers. Financial records may be retained; KYC evidence is deleted six months after approval.
+              </p>
+            </div>
+          </div>
+          {deletionRequest?.status === "pending" ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+              Your request is awaiting admin review. Reason: {deletionRequest.reason}
+            </div>
+          ) : deletionRequest?.status === "approved" ? (
+            <div className="rounded-lg border border-border bg-muted p-3 text-sm">
+              Your account deletion was approved. Your personal profile has been redacted and access disabled.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {deletionRequest?.status === "rejected" && (
+                <div className="rounded-lg border border-border bg-card p-3 text-sm">
+                  Previous request rejected: {deletionRequest.adminNote || "Contact support for details."} You can submit a new request below.
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="deletion-reason">Reason (required)</Label>
+                <textarea id="deletion-reason" value={deletionReason} onChange={(e) => setDeletionReason(e.target.value)} minLength={20} maxLength={1000} rows={3} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Tell us why you want to delete your account" />
+              </div>
+              {user?.passwordSet === false ? (
+                <div className="space-y-1">
+                  <Label htmlFor="deletion-code">{awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation" ? "Verification code" : "Confirm with a one-time code"}</Label>
+                  {awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation"
+                    ? <Input id="deletion-code" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={deletionCode} onChange={(e) => setDeletionCode(e.target.value.replace(/\D/g, ""))} />
+                    : <p className="text-xs text-muted-foreground">We’ll send a code to a verified email address or phone number.</p>}
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <Label htmlFor="deletion-password">Current password</Label>
+                  <Input id="deletion-password" type="password" autoComplete="current-password" value={deletionPassword} onChange={(e) => setDeletionPassword(e.target.value)} />
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label htmlFor="deletion-confirmation">Type DELETE MY ACCOUNT</Label>
+                <Input id="deletion-confirmation" value={deletionConfirmation} onChange={(e) => setDeletionConfirmation(e.target.value)} autoComplete="off" />
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={accountDeletionMutation.isPending || deletionReason.trim().length < 20 || (user?.passwordSet === false ? (deletionCode.length > 0 && deletionCode.length !== 6) : !deletionPassword) || deletionConfirmation !== "DELETE MY ACCOUNT"}
+                onClick={() => accountDeletionMutation.mutate()}
+              >
+                {accountDeletionMutation.isPending ? "Submitting…" : (awaitingDeletionCode || deletionRequest?.status === "awaiting_confirmation") ? (deletionCode ? "Confirm request" : "Resend code") : "Request account deletion"}
+              </Button>
+            </div>
+          )}
+        </motion.section>
 
         <div className="text-center pt-6 pb-4">
           <p className="text-sm text-muted-foreground">Geepay v2.1.0</p>

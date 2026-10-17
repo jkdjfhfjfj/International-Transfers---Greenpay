@@ -9,6 +9,12 @@ For GreenPay, keep payment-integration names out of customer-facing payment copy
 
 **How to apply:** Use generic language in customer UI, transaction descriptions, and public API errors. Keep internal service identifiers intact. In admin-only setup UI, accept provider values only through the encrypted credential flow, show source/readiness without returning saved values, and keep non-secret settings separate. Do not rotate the encryption key without re-encrypting saved credentials.
 
+Do not mention administrator configuration in customer-facing payment availability copy. Explain whether an option can be used now, or that availability could not be checked, without referring users to internal controls.
+
+**Why:** The user asked to remove administrator references from the customer payment flow.
+
+**How to apply:** Keep admin setup language in admin-only screens; use neutral readiness language on card and wallet payment screens.
+
 For card-purchase payment instructions, identify the merchant as **Greenpay.co.ke** and call the payment method **Paybill / Till**, not “manual.” Keep these directions in the virtual-card purchase flow, not on the merchant-payment page.
 
 **Why:** The user clarified that Paybill / Till instructions are for card purchase, not merchant payments, and specified the merchant identity and customer-facing label.

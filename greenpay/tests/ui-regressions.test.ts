@@ -121,14 +121,16 @@ test("password reset actions stay fixed at the bottom with short Android-style l
 
 test("card purchase methods stay visible while unavailable actions obey admin readiness", () => {
   const virtualCard = readFileSync(new URL("src/pages/virtual-card.tsx", root), "utf8");
-  assert.match(virtualCard, /data-testid="button-payment-mobile-money"/);
-  assert.match(virtualCard, /data-testid="button-payment-card"/);
-  assert.match(virtualCard, /data-testid="button-payment-manual"/);
-  assert.match(virtualCard, /data-testid="button-payment-crypto"/);
-  assert.match(virtualCard, /disabled=\{!paymentOptions\?\.mobileMoney\}/);
-  assert.match(virtualCard, /disabled=\{!paymentOptions\?\.card\}/);
-  assert.match(virtualCard, /disabled=\{!manualPaymentEnabled\}/);
-  assert.match(virtualCard, /disabled=\{!cryptoConfigured\}/);
+  assert.match(virtualCard, /testId: "button-payment-mobile-money"/);
+  assert.match(virtualCard, /testId: "button-payment-card"/);
+  assert.match(virtualCard, /testId: "button-payment-manual"/);
+  assert.match(virtualCard, /testId: "button-payment-crypto"/);
+  assert.match(virtualCard, /aria-pressed=\{selected\}/);
+  assert.match(virtualCard, /Checking availability/);
+  assert.doesNotMatch(virtualCard, /Not enabled/);
+  assert.doesNotMatch(virtualCard, /configured by the administrator|disabled by the administrator/);
+  assert.match(virtualCard, /paymentMethod === "crypto"/);
+  assert.match(virtualCard, /text-white/);
 });
 
 test("KYC identity data is fetched into the form without overwriting residence country", () => {
@@ -146,9 +148,31 @@ test("device settings list active sessions and support revoking an individual de
   assert.match(settings, /DELETE.*\/api\/users\/me\/devices/);
   assert.match(settings, /device\.current/);
   assert.match(serverRoutes, /app\.delete\("\/api\/users\/me\/devices\/:sessionId", requireAuth/);
-  assert.match(serverRoutes, /SELECT sid, expire FROM user_sessions/);
+  assert.match(serverRoutes, /SELECT sid, expire, sess FROM user_sessions/);
   assert.match(serverRoutes, /session\?\.id \|\| \(req as any\)\.sessionID/);
   assert.match(serverRoutes, /persistent session store is unavailable/);
+  assert.match(serverRoutes, /SELECT sid, expire, sess FROM user_sessions/);
+  assert.match(settings, /DialogTitle>Session details/);
+  assert.match(settings, /selectedDevice\.ipAddress/);
+});
+
+test("settings put account deletion after support and omit the app-menu helper text", () => {
+  const settings = readFileSync(new URL("src/pages/settings.tsx", root), "utf8");
+  assert.ok(settings.indexOf("Support & Legal") < settings.indexOf("Account deletion follows Help & Support"));
+  assert.ok(settings.indexOf("Account deletion follows Help & Support") < settings.indexOf("Geepay v2.1.0"));
+  assert.doesNotMatch(bottomNavigation, /Quick access to app preferences/);
+});
+
+test("wallet lists retry in user and admin views, with an explicit admin error state", () => {
+  const walletsHook = readFileSync(new URL("src/hooks/use-wallets.ts", root), "utf8");
+  const dashboard = readFileSync(new URL("src/pages/dashboard.tsx", root), "utf8");
+  const adminWallets = readFileSync(new URL("src/pages/admin-wallets.tsx", root), "utf8");
+  assert.match(walletsHook, /retry: 2/);
+  assert.match(dashboard, /Wallets could not be loaded/);
+  assert.match(dashboard, /refetchWallets/);
+  assert.match(adminWallets, /Wallets could not be loaded/);
+  assert.match(adminWallets, /onClick=\{\(\) => refetch\(\)\}/);
+  assert.match(serverRoutes, /if \(!db\) \{\s+const \{ users: matchingUsers \} = await storage\.getAllUsers/);
 });
 
 test("account deletion requires reauthentication and admin approval", () => {

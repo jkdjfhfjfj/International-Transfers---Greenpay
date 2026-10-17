@@ -56,6 +56,8 @@ export function useWallets() {
       return { wallets: rows };
     },
     enabled: !!user?.id,
+    retry: 2,
+    refetchOnReconnect: true,
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
   });

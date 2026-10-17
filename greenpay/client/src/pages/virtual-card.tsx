@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLeft, ChevronLeft, ChevronRight, CreditCard } from "lucide-react";
+import { Sparkles, Eye, EyeOff, Copy, Check, ShieldOff, Snowflake, ArrowRightLeft, ChevronLeft, ChevronRight, CreditCard, Smartphone, Bitcoin, CircleDollarSign, CheckCircle2 } from "lucide-react";
 import ncbaLogo from "@assets/images_(9)_1767703865615.png";
 import mastercardLogo from "@assets/images_(8)_1766711928429.png";
 import visaLogo from "@assets/images_(7)_1766711307308.png";
@@ -42,9 +42,13 @@ export default function VirtualCardPage() {
     },
   });
 
-  const { data: paymentOptions } = useQuery<any>({
+  const { data: paymentOptions, isLoading: paymentOptionsLoading, isError: paymentOptionsError } = useQuery<any>({
     queryKey: ["/api/virtual-card/payment-options", user?.id],
     enabled: !!user?.id,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 30_000,
+    staleTime: 0,
     queryFn: async () => {
       const response = await apiRequest("GET", "/api/virtual-card/payment-options");
       return response.json();
@@ -55,7 +59,7 @@ export default function VirtualCardPage() {
     queryKey: ["/api/system-settings/card-price"],
   });
 
-  const { data: manualPaymentData } = useQuery({
+  const { data: manualPaymentData, isLoading: manualPaymentLoading, isError: manualPaymentError } = useQuery({
     queryKey: ["/api/manual-payment-settings"],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -63,6 +67,9 @@ export default function VirtualCardPage() {
       return response.json();
     },
     refetchInterval: 60_000,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    staleTime: 0,
   });
 
   const { data: discountData } = useQuery({
@@ -94,18 +101,6 @@ export default function VirtualCardPage() {
   const isExpired = card?.status === 'expired';
   const isActive = card?.status === 'active';
   const userFrozen = isFrozen && card?.freezeReason === 'Frozen by cardholder';
-
-  useEffect(() => {
-    if (!paymentOptions) return;
-    const availableMethods: Array<typeof paymentMethod> = [];
-    if (paymentOptions.mobileMoney) availableMethods.push("mobile_money");
-    if (paymentOptions.card) availableMethods.push("card");
-    if (manualPaymentEnabled) availableMethods.push("manual");
-    if (cryptoConfigured) availableMethods.push("crypto");
-    if (!availableMethods.includes(paymentMethod)) {
-      setPaymentMethod(availableMethods[0] || "mobile_money");
-    }
-  }, [paymentMethod, paymentOptions, manualPaymentEnabled, cryptoConfigured]);
 
   const copyToClipboard = (text: string, field: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -250,7 +245,7 @@ export default function VirtualCardPage() {
                   </div>
                 </div>
                 {showDiscount && (
-                  <p className="mt-2 text-xs text-muted-foreground">
+                  <p className="mt-2 text-xs text-white">
                     The current card price applies to all payment methods available for your country.
                   </p>
                 )}
@@ -320,62 +315,59 @@ export default function VirtualCardPage() {
                 </div>
               </div>
 
-              <div className="flex rounded-xl overflow-hidden border border-border">
-                <button
-                  onClick={() => setPaymentMethod("mobile_money")}
-                  disabled={!paymentOptions?.mobileMoney}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    paymentMethod === "mobile_money" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                  }`} data-testid="button-payment-mobile-money"
-                >
-                  Mobile money
-                  <span className="text-[9px]">{paymentOptions?.mobileMoney ? "Phone prompt" : "Not enabled"}</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("card")}
-                  disabled={!paymentOptions?.card}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    paymentMethod === "card" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                  }`} data-testid="button-payment-card"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  Card
-                  <span className="text-[9px]">{paymentOptions?.card ? "Secure checkout" : "Not enabled"}</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("manual")}
-                  disabled={!manualPaymentEnabled}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    paymentMethod === "manual" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                  }`}
-                  data-testid="button-payment-manual"
-                >
-                  Paybill / Till
-                  <span className="text-[9px]">{manualPaymentEnabled ? "Instructions" : "Not enabled"}</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod("crypto")}
-                  disabled={!cryptoConfigured}
-                  className={`flex-1 py-3 text-xs font-medium transition-colors flex flex-col items-center justify-center gap-0.5 disabled:cursor-not-allowed disabled:opacity-50 ${
-                    paymentMethod === "crypto" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"
-                  }`} data-testid="button-payment-crypto"
-                >
-                  Crypto
-                  <span className="text-[9px]">{cryptoConfigured ? "BTC ETH USDT" : "Not enabled"}</span>
-                </button>
+              <div className="grid grid-cols-2 gap-3 text-left">
+                {[
+                  { id: "mobile_money", title: "Mobile money", detail: "Pay from your registered phone.", Icon: Smartphone, ready: Boolean(paymentOptions?.mobileMoney), testId: "button-payment-mobile-money" },
+                  { id: "card", title: "Debit or credit card", detail: "Pay through secure checkout.", Icon: CreditCard, ready: Boolean(paymentOptions?.card), testId: "button-payment-card" },
+                  { id: "manual", title: "Paybill / Till", detail: "Follow the payment instructions.", Icon: CircleDollarSign, ready: manualPaymentEnabled, testId: "button-payment-manual" },
+                  { id: "crypto", title: "Crypto", detail: "Pay with a supported coin.", Icon: Bitcoin, ready: cryptoConfigured, testId: "button-payment-crypto" },
+                ].map(({ id, title, detail, Icon, ready, testId }) => {
+                  const selected = paymentMethod === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={selected}
+                      onClick={() => setPaymentMethod(id as typeof paymentMethod)}
+                      className={`min-h-24 rounded-xl border p-3 text-left transition-all hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                        selected ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-border bg-background"
+                      }`}
+                      data-testid={testId}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary"><Icon className="h-4 w-4" /></span>
+                        {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                      </div>
+                      <span className="mt-2 block text-sm font-semibold">{title}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{detail}</span>
+                      <span className="mt-2 block text-[10px] font-medium text-muted-foreground">
+                        {(id === "manual" ? manualPaymentLoading : paymentOptionsLoading)
+                          ? "Checking availability…"
+                          : (id === "manual" ? manualPaymentError : paymentOptionsError)
+                            ? "Could not check"
+                            : ready ? "Available now" : "Unavailable right now"}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
 
-              {paymentOptions && !paymentOptions.mobileMoney && paymentMethod === "mobile_money" && (
-                <p className="text-xs text-muted-foreground" role="status">Mobile money is unavailable for your country or is not configured by the administrator.</p>
+              {(paymentOptionsError || manualPaymentError) && (
+                <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:bg-amber-950/30 dark:text-amber-100" role="status">
+                  Payment availability could not be checked. The options are still visible; try again shortly.
+                </p>
               )}
-              {paymentOptions && !paymentOptions.card && paymentMethod === "card" && (
-                <p className="text-xs text-muted-foreground" role="status">Card checkout is unavailable for your country or is not configured by the administrator.</p>
+              {!paymentOptionsLoading && !paymentOptionsError && paymentOptions && !paymentOptions.mobileMoney && paymentMethod === "mobile_money" && (
+                <p className="text-xs text-muted-foreground" role="status">Mobile money can’t start right now. Choose another payment option.</p>
               )}
-              {!manualPaymentEnabled && paymentMethod === "manual" && (
-                <p className="text-xs text-muted-foreground" role="status">Paybill / Till instructions are disabled by the administrator.</p>
+              {!paymentOptionsLoading && !paymentOptionsError && paymentOptions && !paymentOptions.card && paymentMethod === "card" && (
+                <p className="text-xs text-muted-foreground" role="status">Card checkout can’t start right now. Choose another payment option.</p>
               )}
-              {!cryptoConfigured && paymentMethod === "crypto" && (
-                <p className="text-xs text-muted-foreground" role="status">Crypto payments are disabled or no receiving address is configured by the administrator.</p>
+              {!manualPaymentLoading && !manualPaymentEnabled && paymentMethod === "manual" && (
+                <p className="text-xs text-muted-foreground" role="status">Paybill / Till can’t accept a card purchase right now. Choose another option.</p>
+              )}
+              {!paymentOptionsLoading && !paymentOptionsError && !cryptoConfigured && paymentMethod === "crypto" && (
+                <p className="text-xs text-muted-foreground" role="status">Crypto is unavailable for this coin right now. Choose another option.</p>
               )}
 
               {paymentMethod === "manual" && manualPaymentEnabled ? (

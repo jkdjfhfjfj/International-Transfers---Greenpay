@@ -303,6 +303,7 @@ async function savePendingLogin(req: any, user: any) {
   req.session.pendingLoginUserId = user.id;
   req.session.loginIp = req.ip || req.headers["x-forwarded-for"] || req.socket?.remoteAddress;
   req.session.loginLocation = req.headers["cf-ipcountry"] || "Unknown Location";
+  req.session.userAgent = String(req.headers["user-agent"] || "");
   await new Promise<void>((resolve, reject) => {
     req.session.save((error: Error | null) => error ? reject(error) : resolve());
   });
@@ -2364,6 +2365,7 @@ p{color:#6b7280;font-size:14px;}</style>
           (req.session as any).pendingLoginUserId = user.id;
           (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
           (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
+          (req.session as any).userAgent = String(req.headers["user-agent"] || "");
           await new Promise<void>((resolve, reject) => {
             req.session.save((saveErr) => saveErr ? reject(saveErr) : resolve());
           });
@@ -2412,6 +2414,7 @@ p{color:#6b7280;font-size:14px;}</style>
           (req.session as any).pendingLoginUserId = user.id;
           (req.session as any).loginIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress;
           (req.session as any).loginLocation = req.headers['cf-ipcountry'] || 'Unknown Location';
+          (req.session as any).userAgent = String(req.headers["user-agent"] || "");
 
           req.session.save((saveErr) => {
             if (saveErr) {
@@ -9833,19 +9836,32 @@ p{color:#6b7280;font-size:14px;}</style>
         return res.status(503).json({ message: "The persistent session store is unavailable." });
       }
       const result = await db.execute(sql`
-        SELECT sid, expire FROM user_sessions
+        SELECT sid, expire, sess FROM user_sessions
         WHERE sess->>'userId' = ${userId} AND expire > NOW()
         ORDER BY expire DESC
       `);
       const rows = (result as any).rows || result || [];
       res.json({
-        devices: rows.map((row: any) => ({
-          id: row.sid,
-          current: row.sid === currentSid,
-          browser: row.sid === currentSid ? (userAgent || "This device") : "Other active device",
-          deviceType: row.sid === currentSid && /mobile/i.test(userAgent) ? "mobile" : "desktop",
-          expiresAt: row.expire,
-        })),
+        devices: rows.map((row: any) => {
+          let details: any = {};
+          try {
+            details = typeof row.sess === "string" ? JSON.parse(row.sess) : row.sess || {};
+          } catch {
+            details = {};
+          }
+          const sessionUserAgent = String(details.userAgent || (row.sid === currentSid ? userAgent : ""));
+          return {
+            id: row.sid,
+            idSuffix: String(row.sid).slice(-6),
+            current: row.sid === currentSid,
+            browser: sessionUserAgent || "Device details unavailable",
+            userAgent: sessionUserAgent || "Not recorded",
+            deviceType: details.deviceType || (/mobile/i.test(sessionUserAgent) ? "mobile" : "desktop"),
+            ipAddress: String(details.loginIp || "Not recorded"),
+            location: String(details.loginLocation || "Not recorded"),
+            expiresAt: row.expire,
+          };
+        }),
       });
     } catch (error) {
       res.status(500).json({ error: "Failed to retrieve devices" });
@@ -16705,6 +16721,55 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.get("/api/admin/wallets", requireAdminAuth, async (req, res) => {
     try {
       const search = ((req.query.search as string) || "").toLowerCase();
+      if (!db) {
+        const { users: matchingUsers } = await storage.getAllUsers({ search, page: 1, limit: 1000 });
+        const grouped: Record<string, any[]> = {};
+        const walletRows = (await Promise.all(matchingUsers.map(async user => {
+          const userWallets = await storage.getWalletsByUserId(user.id);
+          return userWallets.map(wallet => {
+            const balance = Number(wallet.balance || 0);
+            const availableBalance = walletAvailableBalance({
+              balance: String(balance),
+              holdAmount: wallet.holdAmount,
+              withdrawalHoldAmount: wallet.withdrawalHoldAmount,
+            });
+            const groupedWallet = {
+              id: wallet.id,
+              userId: wallet.userId,
+              currency: wallet.currency,
+              label: wallet.label,
+              balance: String(balance),
+              availableBalance,
+              holdAmount: wallet.holdAmount,
+              withdrawalHoldAmount: wallet.withdrawalHoldAmount,
+              isDefault: wallet.isDefault,
+              isActive: wallet.isActive,
+              isSuspended: wallet.isSuspended,
+              suspendReason: wallet.suspendReason,
+              createdAt: wallet.createdAt,
+              user: { fullName: user.fullName, email: user.email, phone: user.phone },
+            };
+            if (!grouped[wallet.userId]) grouped[wallet.userId] = [];
+            grouped[wallet.userId].push(groupedWallet);
+            return {
+              ...groupedWallet,
+              user_id: wallet.userId,
+              hold_amount: wallet.holdAmount,
+              withdrawal_hold_amount: wallet.withdrawalHoldAmount,
+              is_default: wallet.isDefault,
+              is_active: wallet.isActive,
+              is_suspended: wallet.isSuspended,
+              suspend_reason: wallet.suspendReason,
+              created_at: wallet.createdAt,
+              available_balance: availableBalance,
+              full_name: user.fullName,
+              email: user.email,
+              phone: user.phone,
+            };
+          });
+        }))).flat();
+        return res.json({ wallets: walletRows, grouped });
+      }
       const allWallets = await pool.query(`
         SELECT w.*, u.full_name, u.email, u.phone
         FROM wallets w JOIN users u ON w.user_id = u.id
