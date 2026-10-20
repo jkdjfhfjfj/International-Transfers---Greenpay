@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
@@ -11,11 +11,11 @@ import colors from "@/constants/colors";
 type Options={isKenya:boolean;mobileMoney:boolean;card:boolean;mobileMoneyReason?:string;cardReason?:string};
 type Price={price?:string|number;cardPrice?:string|number};
 export default function CardPurchaseScreen(){
- const {user}=useAuth();const router=useRouter();const [phone,setPhone]=useState("");const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");
+ const {user}=useAuth();const router=useRouter();const queryClient=useQueryClient();const [phone,setPhone]=useState("");const [busy,setBusy]=useState(false);const [message,setMessage]=useState("");
  const options=useQuery({queryKey:["card-payment-options",user?.id],queryFn:()=>api<Options>("/api/virtual-card/payment-options"),enabled:!!user});
  const price=useQuery({queryKey:["card-price"],queryFn:()=>api<Price>("/api/system-settings/card-price"),enabled:!!user});
  if(!user)return <Redirect href="/sign-in"/>;
- const buy=async(method:"mobile_money"|"card")=>{setBusy(true);setMessage("");try{const data=await api<{redirectUrl?:string;reference?:string;message?:string}>("/api/virtual-card/initialize-payment",{method:"POST",body:JSON.stringify({paymentMethod:method,...(phone?{phoneNumber:phone}:{})})});if(data.redirectUrl)await WebBrowser.openBrowserAsync(data.redirectUrl);setMessage(data.message||"Payment started. Your card activates only after the provider confirms payment.");}catch(e){setMessage(e instanceof Error?e.message:"Card purchase could not be started.");}finally{setBusy(false)}};
+ const buy=async(method:"mobile_money"|"card")=>{setBusy(true);setMessage("");try{const data=await api<{redirectUrl?:string;reference?:string;message?:string}>("/api/virtual-card/initialize-payment",{method:"POST",body:JSON.stringify({paymentMethod:method,...(phone?{phoneNumber:phone}:{})})});if(data.redirectUrl){await WebBrowser.openBrowserAsync(data.redirectUrl);await queryClient.invalidateQueries();}setMessage(data.message||"Payment started. Your card activates only after the provider confirms payment.");}catch(e){setMessage(e instanceof Error?e.message:"Card purchase could not be started.");}finally{setBusy(false)}};
  return <SafeAreaView style={s.safe} edges={["top"]}><View style={s.page}><Pressable onPress={()=>router.back()}><Text style={s.back}>‹  Back</Text></Pressable><Text style={s.title}>Get a virtual card</Text><Text style={s.sub}>Price: {price.data?.price??price.data?.cardPrice??"—"} USD. Payment and activation are confirmed by GreenPay’s server.</Text>{options.isLoading&&<ActivityIndicator color={colors.light.primary}/>}
  {options.isError&&<Text style={s.error}>Payment methods couldn’t load.</Text>}
  {options.data?.isKenya&&<><Text style={s.label}>M-Pesa phone (if different from your profile)</Text><TextInput style={s.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} placeholder="07… or +254…"/><Button label="Buy with M-Pesa" disabled={busy||!options.data.mobileMoney} onPress={()=>void buy("mobile_money")}/>{!options.data.mobileMoney&&<Text style={s.note}>{options.data.mobileMoneyReason||"Mobile money is unavailable."}</Text>}</>}

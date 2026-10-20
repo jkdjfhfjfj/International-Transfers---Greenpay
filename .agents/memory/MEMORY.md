@@ -6,6 +6,7 @@
 - [GreenPay card bank transfers](greenpay-payment-settlement.md) — Non-KES card transfers reuse configured bank details and stay pending until support verifies payment.
 - [GreenPay deposit eligibility](greenpay-deposit-eligibility.md) — Show only deposit methods enabled and configured for the authenticated user's country.
 - [GreenPay action labels](greenpay-action-labels.md) — Keep the dashboard “Send” action distinct from wallet-account “Transfer”.
+- [GreenPay mobile onboarding](greenpay-mobile-onboarding.md) — Start mobile users on public getting-started content, with skip to sign-in and account creation available later.
 - [GreenPay preview isolation](greenpay-preview-isolation.md) — Run local previews without shared DB variables; configured startup can apply migrations when the schema appears fresh.
 - [GreenPay preview reload prevention](greenpay-preview-reload.md) — Avoid automatic cache-clearing or reloads when the app root is slow to mount; proxy startup delays can create refresh loops.
 - [GreenPay screenshot layout feedback](greenpay-screenshot-layout-feedback.md) — Treat screenshot whitespace reports as visual layout requests; fix the visible gap without reframing them as startup diagnosis.

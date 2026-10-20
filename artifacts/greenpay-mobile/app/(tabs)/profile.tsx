@@ -2,11 +2,13 @@ import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
+  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const name = user?.fullName || [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "GreenPay user";
   return (
@@ -19,6 +21,11 @@ export default function ProfileScreen() {
           <Text style={styles.name}>{name}</Text>
           <Text style={styles.email}>{user?.email || "Signed-in account"}</Text>
         </View>
+        <Pressable onPress={() => router.push("/kyc")} style={styles.kycButton}>
+          <Feather name="shield" size={18} color={colors.light.primary} />
+          <Text style={styles.kycText}>Identity verification</Text>
+          <Feather name="chevron-right" size={18} color={colors.light.mutedForeground} />
+        </Pressable>
         <View style={styles.infoRow}><Text style={styles.label}>Account status</Text><Text style={styles.value}>Secure session</Text></View>
         <Text style={styles.note}>Financial features may depend on local availability and applicable regulations.</Text>
         <Pressable testID="signout-button" onPress={async () => { setBusy(true); try { await logout(); } finally { setBusy(false); } }} style={({ pressed }) => [styles.signout, pressed && { opacity: 0.75 }]} disabled={busy}>
@@ -36,6 +43,8 @@ const styles = StyleSheet.create({
   kicker: { color: colors.light.primary, fontSize: 10, fontWeight: "700", letterSpacing: 1.6, marginTop: 14 },
   title: { color: colors.light.foreground, fontSize: 28, fontWeight: "700", marginTop: 5, marginBottom: 22 },
   profileCard: { backgroundColor: colors.light.card, padding: 22, borderRadius: 20, borderWidth: 1, borderColor: colors.light.border, alignItems: "center" },
+  kycButton: { flexDirection: "row", alignItems: "center", gap: 11, marginTop: 18, padding: 16, borderRadius: 15, borderWidth: 1, borderColor: colors.light.border, backgroundColor: colors.light.card },
+  kycText: { flex: 1, color: colors.light.foreground, fontWeight: "600", fontSize: 14 },
   avatar: { width: 58, height: 58, borderRadius: 20, backgroundColor: colors.light.primary, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   name: { color: colors.light.foreground, fontSize: 18, fontWeight: "700" },
   email: { color: colors.light.mutedForeground, fontSize: 13, marginTop: 5 },

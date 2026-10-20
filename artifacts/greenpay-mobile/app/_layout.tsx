@@ -1,10 +1,11 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, Platform, StatusBar, View, useColorScheme } from "react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
+import * as NavigationBar from "expo-navigation-bar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider, useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
@@ -18,15 +19,38 @@ const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { loading } = useAuth();
-  if (loading) return <View style={{ flex: 1, backgroundColor: colors.light.background, alignItems: "center", justifyContent: "center" }}><ActivityIndicator color={colors.light.primary} /></View>;
+  const scheme = useColorScheme();
+  const theme = scheme === "dark" ? colors.dark : colors.light;
+  const pathname = usePathname();
+  const isGettingStarted = pathname.endsWith("/get-started");
+  const systemBarColor = isGettingStarted ? "#062a2a" : theme.background;
+
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      NavigationBar.setStyle(isGettingStarted || scheme === "dark" ? "dark" : "light");
+    }
+  }, [isGettingStarted, scheme, systemBarColor]);
+
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="index" />
-      <Stack.Screen name="sign-in" />
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="deposit" />
-      <Stack.Screen name="card-purchase" />
-    </Stack>
+    <>
+      <StatusBar barStyle={isGettingStarted || scheme === "dark" ? "light-content" : "dark-content"} backgroundColor={systemBarColor} />
+      {loading ? (
+        <View style={{ flex: 1, backgroundColor: systemBarColor, alignItems: "center", justifyContent: "center" }}>
+          <ActivityIndicator color={theme.primary} />
+        </View>
+      ) : (
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.background } }}>
+          <Stack.Screen name="index" />
+          <Stack.Screen name="get-started" />
+          <Stack.Screen name="sign-up" />
+          <Stack.Screen name="sign-in" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="deposit" />
+          <Stack.Screen name="card-purchase" />
+          <Stack.Screen name="kyc" />
+        </Stack>
+      )}
+    </>
   );
 }
 

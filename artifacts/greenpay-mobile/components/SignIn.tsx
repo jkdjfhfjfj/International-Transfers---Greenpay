@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/auth";
@@ -8,10 +10,21 @@ import colors from "@/constants/colors";
 export function SignIn() {
   const insets = useSafeAreaInsets();
   const auth = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [browserBusy, setBrowserBusy] = useState(false);
+  const continueWithWebAuth = async () => {
+    setBrowserBusy(true);
+    try {
+      await WebBrowser.openBrowserAsync("https://geepay.us/login?source=mobile");
+      await auth.refresh();
+    } finally {
+      setBrowserBusy(false);
+    }
+  };
   const submit = async () => {
     setBusy(true);
     try {
@@ -44,7 +57,19 @@ export function SignIn() {
       <Pressable testID="signin-submit" disabled={busy || (!auth.pendingOtp && (!email.trim() || !password)) || (auth.pendingOtp && !code.trim())} onPress={submit} style={({ pressed }) => [styles.button, pressed && styles.pressed, (busy || (!auth.pendingOtp && (!email.trim() || !password)) || (auth.pendingOtp && !code.trim())) && styles.disabled]}>
         {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{auth.pendingOtp ? "Verify and continue" : "Sign in"}</Text>}
       </Pressable>
-      <Text style={styles.legal}>By continuing, you agree to GreenPay’s terms and privacy policy. Use of financial features depends on availability and local rules.</Text>
+      {!auth.pendingOtp && (
+        <>
+          <View style={styles.separator}><View style={styles.separatorLine} /><Text style={styles.separatorText}>OR</Text><View style={styles.separatorLine} /></View>
+          <Pressable onPress={continueWithWebAuth} disabled={browserBusy} style={({ pressed }) => [styles.webAuthButton, pressed && styles.pressed, browserBusy && styles.disabled]}>
+            {browserBusy ? <ActivityIndicator color={colors.light.primary} /> : <Text style={styles.webAuthText}>Continue with Google or passkey</Text>}
+          </Pressable>
+          <Text style={styles.webAuthNote}>Opens Geepay’s secure sign-in page. Passkey availability depends on your browser and device.</Text>
+          <Pressable onPress={() => router.push("/sign-up")} style={styles.signupLink}>
+            <Text style={styles.signupText}>New to Geepay? <Text style={styles.signupAccent}>Create an account</Text></Text>
+          </Pressable>
+        </>
+      )}
+      <Text style={styles.legal}>By continuing, you agree to Geepay’s terms and privacy policy. Use of financial features depends on availability and local rules.</Text>
     </KeyboardAwareScrollViewCompat>
   );
 }
@@ -61,6 +86,15 @@ const styles = StyleSheet.create({
   error: { color: colors.light.destructive, fontSize: 13, marginBottom: 12 },
   button: { height: 54, borderRadius: 16, backgroundColor: colors.light.primary, alignItems: "center", justifyContent: "center", marginTop: 8 },
   buttonText: { color: colors.light.primaryForeground, fontWeight: "700", fontSize: 15 },
+  separator: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 19, marginBottom: 13 },
+  separatorLine: { flex: 1, height: 1, backgroundColor: colors.light.border },
+  separatorText: { color: colors.light.mutedForeground, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
+  webAuthButton: { height: 52, borderRadius: 14, borderWidth: 1, borderColor: colors.light.border, backgroundColor: colors.light.card, alignItems: "center", justifyContent: "center" },
+  webAuthText: { color: colors.light.foreground, fontSize: 14, fontWeight: "700" },
+  webAuthNote: { color: colors.light.mutedForeground, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 9 },
+  signupLink: { alignItems: "center", paddingTop: 16 },
+  signupText: { color: colors.light.mutedForeground, fontSize: 13 },
+  signupAccent: { color: colors.light.primary, fontWeight: "700" },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.55 },
   legal: { color: colors.light.mutedForeground, fontSize: 11, lineHeight: 17, textAlign: "center", marginTop: 24 },

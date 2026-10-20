@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 import { Redirect, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
@@ -14,6 +14,7 @@ const on = (v?: string) => String(v || "").replace(/['"]/g,"").toLowerCase() ===
 
 export default function DepositScreen() {
   const { user } = useAuth(); const router = useRouter();
+  const queryClient = useQueryClient();
   const [amount,setAmount]=useState(""); const [phone,setPhone]=useState(""); const [reference,setReference]=useState(""); const [busy,setBusy]=useState(false); const [message,setMessage]=useState("");
   const config=useQuery({queryKey:["deposit-config",user?.id],queryFn:()=>api<Config>("/api/deposit/config"),enabled:!!user});
   const wallets=useQuery({queryKey:["mobile-wallets",user?.id],queryFn:()=>api<{wallets:Wallet[]}>("/api/wallets"),enabled:!!user});
@@ -33,10 +34,10 @@ export default function DepositScreen() {
         setMessage(`Deposit submitted and remains pending verification. Reference: ${r.transactionReference||"submitted"}`);
       }else if(method==="mobile_money"){
         const r=await api<{redirectUrl?:string;message?:string;reference?:string}>("/api/deposit/nexuspay",{method:"POST",body:JSON.stringify({walletId:wallet.id,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency,paymentMethod:"mobile_money",amount,phone,email:user.email})});
-        if(r.redirectUrl) await WebBrowser.openBrowserAsync(r.redirectUrl); else setMessage(r.message||"Check your phone for the payment prompt.");
+        if(r.redirectUrl) { await WebBrowser.openBrowserAsync(r.redirectUrl); await queryClient.invalidateQueries(); } else setMessage(r.message||"Check your phone for the payment prompt.");
       }else{
         const r=await api<{authorizationUrl?:string}>("/api/deposit/paystack",{method:"POST",body:JSON.stringify({walletId:wallet.id,amount,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency})});
-        if(r.authorizationUrl) await WebBrowser.openBrowserAsync(r.authorizationUrl); else setMessage("Secure checkout was not returned. Contact support before retrying.");
+        if(r.authorizationUrl) { await WebBrowser.openBrowserAsync(r.authorizationUrl); await queryClient.invalidateQueries(); } else setMessage("Secure checkout was not returned. Contact support before retrying.");
       }
     }catch(e){setMessage(e instanceof Error?e.message:"Deposit could not be started.");}finally{setBusy(false)}
   };
