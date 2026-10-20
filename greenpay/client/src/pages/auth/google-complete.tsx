@@ -79,13 +79,14 @@ export default function GoogleCompletePage() {
         fullName: fullName.trim(),
         phone: fullPhone,
         country,
+        agreeToTerms: agreedToTerms,
       });
       const data = await r.json();
       if (!data.success) throw new Error(data.message || "Failed to create account");
       return data;
     },
     onSuccess: async (data) => {
-      if (data.requiresOtp || data.requiresPin || data.requiresAuthenticator) {
+      if (data.requiresOtp || data.requiresPin || data.requiresAuthenticator || data.requiresBiometric) {
         if (data.requiresOtp && !data.requiresPin && !data.requiresAuthenticator) {
           localStorage.setItem("otpUserId", data.userId);
           localStorage.setItem("otpPhone", data.phone || "");

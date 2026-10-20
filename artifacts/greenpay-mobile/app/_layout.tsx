@@ -29,7 +29,8 @@ function AppRoutes() {
 
   useEffect(() => {
     if (Platform.OS === "android") {
-      NavigationBar.setStyle(isGettingStarted || scheme === "dark" ? "dark" : "light");
+      const systemDark = isGettingStarted || scheme === "dark";
+      NavigationBar.setStyle(systemDark ? "dark" : "light");
     }
   }, [isGettingStarted, scheme, systemBarColor]);
 

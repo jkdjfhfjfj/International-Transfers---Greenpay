@@ -302,39 +302,13 @@ function getStoredBiometricCredential(user: any) {
 }
 
 async function getLoginSecondFactors(user: any) {
-  const [
-    enableOtpSetting,
-    smsApiKeySetting,
-    smsAppIdSetting,
-    smsSenderIdSetting,
-    whatsappTokenSetting,
-    whatsappPhoneSetting,
-    mailtrapApiKeySetting,
-  ] = await Promise.all([
+  const [enableOtpSetting, otpMethods] = await Promise.all([
     storage.getSystemSetting("messaging", "enable_otp_messages"),
-    storage.getSystemSetting("messaging", "sms_api_key"),
-    storage.getSystemSetting("messaging", "sms_app_id"),
-    storage.getSystemSetting("messaging", "sms_sender_id"),
-    storage.getSystemSetting("messaging", "whatsapp_access_token"),
-    storage.getSystemSetting("messaging", "whatsapp_phone_number_id"),
-    storage.getSystemSetting("email", "mailtrap_api_key"),
+    getAvailableLoginOtpMethods(user),
   ]);
 
-  const smsConfigured = Boolean(
-    (smsApiKeySetting?.value || process.env.SMS_API_KEY) &&
-    (smsAppIdSetting?.value || process.env.SMS_APP_ID) &&
-    (smsSenderIdSetting?.value || process.env.SMS_SENDER_ID),
-  );
-  const whatsappConfigured = Boolean(
-    (whatsappTokenSetting?.value || process.env.WHATSAPP_ACCESS_TOKEN) &&
-    (whatsappPhoneSetting?.value || process.env.WHATSAPP_PHONE_NUMBER_ID),
-  );
-  const emailConfigured = Boolean(
-    user?.email && (mailtrapApiKeySetting?.value || process.env.MAILTRAP_API_KEY),
-  );
-
   return {
-    requiresOtp: settingEnabled(enableOtpSetting?.value, true) && (smsConfigured || whatsappConfigured || emailConfigured),
+    requiresOtp: settingEnabled(enableOtpSetting?.value, true) && otpMethods.length > 0,
     requiresPin: Boolean(user?.pinEnabled && user?.pinCode),
     requiresAuthenticator: Boolean(user?.twoFactorEnabled && user?.twoFactorSecret),
     requiresBiometric: Boolean(getStoredBiometricCredential(user)),
@@ -354,6 +328,7 @@ async function savePendingLogin(req: any, user: any) {
 async function getAvailableLoginOtpMethods(user: any) {
   const [
     smsApiKey, smsAppId, smsSenderId, whatsappToken, whatsappPhoneId, mailtrapApiKey,
+    smsEnabledSetting, whatsappEnabledSetting, emailEnabledSetting,
   ] = await Promise.all([
     storage.getSystemSetting("messaging", "sms_api_key"),
     storage.getSystemSetting("messaging", "sms_app_id"),
@@ -361,19 +336,22 @@ async function getAvailableLoginOtpMethods(user: any) {
     storage.getSystemSetting("messaging", "whatsapp_access_token"),
     storage.getSystemSetting("messaging", "whatsapp_phone_number_id"),
     storage.getSystemSetting("email", "mailtrap_api_key"),
+    storage.getSystemSetting("messaging", "otp_sms_enabled"),
+    storage.getSystemSetting("messaging", "otp_whatsapp_enabled"),
+    storage.getSystemSetting("messaging", "otp_email_enabled"),
   ]);
   const methods: Array<{ id: "sms" | "whatsapp" | "email"; label: string }> = [];
   const verifiedPhone = Boolean(user?.phone && user?.isPhoneVerified);
-  if (verifiedPhone && (smsApiKey?.value || process.env.SMS_API_KEY) &&
+  if (settingEnabled(smsEnabledSetting?.value, true) && verifiedPhone && (smsApiKey?.value || process.env.SMS_API_KEY) &&
     (smsAppId?.value || process.env.SMS_APP_ID) &&
     (smsSenderId?.value || process.env.SMS_SENDER_ID)) {
     methods.push({ id: "sms", label: "SMS" });
   }
-  if (verifiedPhone && (whatsappToken?.value || process.env.WHATSAPP_ACCESS_TOKEN) &&
+  if (settingEnabled(whatsappEnabledSetting?.value, true) && verifiedPhone && (whatsappToken?.value || process.env.WHATSAPP_ACCESS_TOKEN) &&
     (whatsappPhoneId?.value || process.env.WHATSAPP_PHONE_NUMBER_ID)) {
     methods.push({ id: "whatsapp", label: "WhatsApp" });
   }
-  if (user?.email && user?.isEmailVerified && (mailtrapApiKey?.value || process.env.MAILTRAP_API_KEY)) {
+  if (settingEnabled(emailEnabledSetting?.value, true) && user?.email && user?.isEmailVerified && (mailtrapApiKey?.value || process.env.MAILTRAP_API_KEY)) {
     methods.push({ id: "email", label: "Email" });
   }
   return methods;
@@ -2172,6 +2150,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
     try {
+      if (req.body?.agreeToTerms !== true) {
+        return res.status(400).json({ message: "Accept the Terms of Service and Privacy Policy to continue." });
+      }
       const userData = insertUserSchema.parse({
         ...req.body,
         email: typeof req.body?.email === "string"
@@ -2264,10 +2245,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Uses in-memory state map (avoids session persistence issues through cross-origin redirects)
   // Uses popup window approach (avoids "desktop mode" by keeping the parent app in the iframe)
 
-  const googleOAuthStates = new Map<string, number>(); // state → expiry timestamp
+  const googleOAuthStates = new Map<string, { expiresAt: number; mobileRedirectUri?: string }>();
   setInterval(() => {
     const now = Date.now();
-    for (const [k, v] of googleOAuthStates) { if (now > v) googleOAuthStates.delete(k); }
+    for (const [k, v] of googleOAuthStates) { if (now > v.expiresAt) googleOAuthStates.delete(k); }
   }, 60_000);
 
   function getGoogleRedirectUri(req: any): string {
@@ -2277,7 +2258,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return `${req.protocol}://${req.get('host')}/auth/google/callback`;
   }
 
-  function googlePopupHtml(result: string, message: string): string {
+  function googlePopupHtml(result: string, message: string, fallbackOverride?: string): string {
     const redirectMap: Record<string, string> = {
       login: '/dashboard',
       mfa_required: '/login?verification=required',
@@ -2286,7 +2267,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       suspended: '/login',
       error: '/login',
     };
-    const fallback = redirectMap[result] || '/login';
+    const fallback = fallbackOverride || redirectMap[result] || '/login';
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GreenPay</title>
@@ -2318,8 +2299,16 @@ p{color:#6b7280;font-size:14px;}</style>
   app.get("/auth/google", (req, res) => {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     if (!clientId) return res.send(googlePopupHtml("error", "Google sign-in is not configured."));
+    const isMobile = req.query.source === "mobile";
+    const mobileRedirectUri = isMobile ? req.query.mobile_redirect_uri : undefined;
+    if (isMobile && !isAllowedMobileAuthRedirect(mobileRedirectUri)) {
+      return res.status(400).send("This mobile sign-in return link is not allowed. Start sign-in from the app.");
+    }
     const state = Math.random().toString(36).substring(2, 18);
-    googleOAuthStates.set(state, Date.now() + 10 * 60 * 1000);
+    googleOAuthStates.set(state, {
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      ...(typeof mobileRedirectUri === "string" ? { mobileRedirectUri } : {}),
+    });
     const redirectUri = getGoogleRedirectUri(req);
     const params = new URLSearchParams({
       client_id: clientId, redirect_uri: redirectUri,
@@ -2331,10 +2320,14 @@ p{color:#6b7280;font-size:14px;}</style>
 
   app.get("/auth/google/callback", async (req, res) => {
     const { code, state, error } = req.query as Record<string, string>;
-    if (error || !code) return res.send(googlePopupHtml("cancelled", "Sign-in was cancelled."));
+    const stateInfo = googleOAuthStates.get(state);
+    const mobileRedirectUri = stateInfo?.mobileRedirectUri;
+    const mobileErrorFallback = mobileRedirectUri
+      ? `${mobileRedirectUri}${mobileRedirectUri.includes("?") ? "&" : "?"}error=google_sign_in_failed`
+      : undefined;
+    if (error || !code) return res.send(googlePopupHtml("cancelled", "Sign-in was cancelled.", mobileErrorFallback));
 
-    const expiry = googleOAuthStates.get(state);
-    if (!expiry || Date.now() > expiry) return res.send(googlePopupHtml("error", "Session expired, please try again."));
+    if (!stateInfo || Date.now() > stateInfo.expiresAt) return res.send(googlePopupHtml("error", "Session expired, please try again."));
     googleOAuthStates.delete(state);
 
     try {
@@ -2350,7 +2343,7 @@ p{color:#6b7280;font-size:14px;}</style>
       const tokenData = await tokenRes.json() as any;
       if (!tokenData.access_token) {
         console.error("[Google OAuth] Token exchange failed:", tokenData);
-        return res.send(googlePopupHtml("error", "Could not authenticate with Google."));
+        return res.send(googlePopupHtml("error", "Could not authenticate with Google.", mobileErrorFallback));
       }
 
       const userInfoRes = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
@@ -2360,7 +2353,7 @@ p{color:#6b7280;font-size:14px;}</style>
 
       const existingUser = await storage.getUserByEmail(profile.email);
       if (existingUser) {
-        if ((existingUser as any).isSuspended) return res.send(googlePopupHtml("suspended", "This account has been suspended."));
+        if ((existingUser as any).isSuspended) return res.send(googlePopupHtml("suspended", "This account has been suspended.", mobileErrorFallback));
         if (!(existingUser as any).googleId) {
           await storage.updateUser(existingUser.id, { googleId: profile.id } as any);
         }
@@ -2371,11 +2364,14 @@ p{color:#6b7280;font-size:14px;}</style>
           verification = await beginLoginVerification(req, existingUser);
         } catch (verificationError: any) {
           console.error("[Google OAuth] Verification setup failed:", verificationError);
-          return res.send(googlePopupHtml("error", verificationError?.message || "Unable to start login verification."));
+          return res.send(googlePopupHtml("error", verificationError?.message || "Unable to start login verification.", mobileErrorFallback));
         }
 
         if (verification.needsVerification) {
-          return res.send(googlePopupHtml("mfa_required", "Verify your identity to finish signing in."));
+          const fallback = mobileRedirectUri
+            ? `/login?verification=required&source=mobile&mobile_redirect_uri=${encodeURIComponent(mobileRedirectUri)}`
+            : undefined;
+          return res.send(googlePopupHtml("mfa_required", "Verify your identity to finish signing in.", fallback));
         }
 
         (req.session as any).userId = existingUser.id;
@@ -2393,6 +2389,12 @@ p{color:#6b7280;font-size:14px;}</style>
           });
         } catch (_) {}
         await new Promise<void>(r => req.session.save(() => r()));
+        if (mobileRedirectUri) {
+          const mobileCode = await issueMobileAuthCode(existingUser.id);
+          const callback = new URL(mobileRedirectUri);
+          callback.searchParams.set("code", mobileCode);
+          return res.send(googlePopupHtml("login", "Signed in! Returning to GreenPay...", callback.toString()));
+        }
         return res.send(googlePopupHtml("login", "Signed in! Redirecting..."));
       } else {
         (req.session as any).googlePending = {
@@ -2400,11 +2402,14 @@ p{color:#6b7280;font-size:14px;}</style>
           fullName: profile.name, profilePhotoUrl: profile.picture,
         };
         await new Promise<void>(r => req.session.save(() => r()));
-        return res.send(googlePopupHtml("new_user", "Almost there! Setting up your account..."));
+        const fallback = mobileRedirectUri
+          ? `/auth/google/complete?source=mobile&mobile_redirect_uri=${encodeURIComponent(mobileRedirectUri)}`
+          : undefined;
+        return res.send(googlePopupHtml("new_user", "Almost there! Setting up your account...", fallback));
       }
     } catch (err) {
       console.error("[Google OAuth] Callback error:", err);
-      return res.send(googlePopupHtml("error", "Something went wrong. Please try again."));
+      return res.send(googlePopupHtml("error", "Something went wrong. Please try again.", mobileErrorFallback));
     }
   });
 
@@ -2451,8 +2456,9 @@ p{color:#6b7280;font-size:14px;}</style>
     const pending = (req.session as any).googlePending;
     if (!pending) return res.status(400).json({ message: "Session expired. Please sign in with Google again." });
 
-    const { fullName, phone, country } = req.body;
+    const { fullName, phone, country, agreeToTerms } = req.body;
     if (!fullName || !phone || !country) return res.status(400).json({ message: "Full name, phone and country are required" });
+    if (agreeToTerms !== true) return res.status(400).json({ message: "Accept the Terms of Service and Privacy Policy to continue." });
 
     try {
       const { messagingService } = await import('./services/messaging');

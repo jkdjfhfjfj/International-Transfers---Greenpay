@@ -57,22 +57,15 @@ function stripProtocol(domain) {
 }
 
 function getDeploymentDomain() {
-  if (process.env.REPLIT_INTERNAL_APP_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_INTERNAL_APP_DOMAIN);
+  const configured = process.env.GREENPAY_PRODUCTION_URL;
+  if (!configured) {
+    throw new Error('Set GREENPAY_PRODUCTION_URL to the confirmed production host before building.');
   }
-
-  if (process.env.REPLIT_DEV_DOMAIN) {
-    return stripProtocol(process.env.REPLIT_DEV_DOMAIN);
+  const host = stripProtocol(configured);
+  if (/(\.replit\.dev|\.replit\.app|replit\.com)$/i.test(host)) {
+    throw new Error('Production builds cannot use a Replit preview or workspace domain.');
   }
-
-  if (process.env.EXPO_PUBLIC_DOMAIN) {
-    return stripProtocol(process.env.EXPO_PUBLIC_DOMAIN);
-  }
-
-  console.error(
-    'ERROR: No deployment domain found. Set REPLIT_INTERNAL_APP_DOMAIN, REPLIT_DEV_DOMAIN, or EXPO_PUBLIC_DOMAIN',
-  );
-  process.exit(1);
+  return host;
 }
 
 function prepareDirectories(timestamp) {
@@ -522,7 +515,7 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
 }
 
 async function main() {
-  console.log('Building static Expo Go deployment...');
+  console.log('Building the production GreenPay mobile bundle...');
 
   setupSignalHandlers();
 

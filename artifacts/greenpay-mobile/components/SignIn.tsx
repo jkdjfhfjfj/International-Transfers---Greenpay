@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import * as Linking from "expo-linking";
@@ -20,17 +21,16 @@ export function SignIn() {
   const [busy, setBusy] = useState(false);
   const [browserBusy, setBrowserBusy] = useState(false);
   const [browserError, setBrowserError] = useState("");
-  const continueWithWebAuth = async () => {
+  const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN;
+  const webOrigin = configuredDomain ? (configuredDomain.startsWith("http") ? configuredDomain : `https://${configuredDomain}`) : "";
+  const continueWithWebAuth = async (provider: "google" | "passkey") => {
     setBrowserBusy(true);
     setBrowserError("");
     try {
-      const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN;
-      const webOrigin = configuredDomain
-        ? `${configuredDomain.startsWith("http") ? "" : "https://"}${configuredDomain}`
-        : "https://geepay.us";
+      if (!webOrigin) throw new Error("GreenPay server is not configured for this build.");
       // Expo Go uses its own exp:// link; installed builds use greenpay-mobile://.
       const redirectUrl = Linking.createURL("auth/callback");
-      const loginUrl = new URL("/login", webOrigin);
+      const loginUrl = new URL(provider === "google" ? "/auth/google" : "/login", webOrigin);
       loginUrl.searchParams.set("source", "mobile");
       loginUrl.searchParams.set("mobile_redirect_uri", redirectUrl);
       const result = await WebBrowser.openAuthSessionAsync(
@@ -38,7 +38,9 @@ export function SignIn() {
         redirectUrl,
       );
       if (result.type !== "success" || !result.url) return;
-      const code = new URL(result.url).searchParams.get("code");
+      const returned = new URL(result.url);
+      if (returned.searchParams.has("error")) throw new Error("Google or passkey sign-in was cancelled or could not be completed.");
+      const code = returned.searchParams.get("code");
       if (!code) throw new Error("The secure sign-in returned without an app code. Please try again.");
       router.replace({ pathname: "/auth/callback", params: { code } });
     } catch (error) {
@@ -66,9 +68,10 @@ export function SignIn() {
   };
 
   return (
+    <KeyboardAvoidingView behavior="padding" style={styles.page}>
     <KeyboardAwareScrollViewCompat
-      style={styles.page}
-      contentContainerStyle={[styles.content, { paddingTop: insets.top + 30, paddingBottom: insets.bottom + 28 }]}
+      style={styles.scroll}
+      contentContainerStyle={[styles.content, { paddingTop: insets.top + 26, paddingBottom: insets.bottom + 164 }]}
       bottomOffset={24}
       keyboardShouldPersistTaps="handled"
     >
@@ -100,8 +103,8 @@ export function SignIn() {
             </Pressable>
           )}
           {auth.challenge.requiresBiometric && (
-          <Pressable onPress={() => void continueWithWebAuth()} style={styles.methodButton}>
-              <Text style={styles.methodTitle}>Use passkey</Text><Text style={styles.methodDetail}>Verify in Geepay, then securely return to the app</Text>
+          <Pressable onPress={() => void continueWithWebAuth("passkey")} style={styles.methodButton}>
+              <Text style={styles.methodTitle}>Use passkey</Text><Text style={styles.methodDetail}>Verify securely, then return to the app</Text>
             </Pressable>
           )}
         </View>
@@ -112,35 +115,42 @@ export function SignIn() {
       )}
       {!!auth.error && <Text accessibilityRole="alert" style={styles.error}>{auth.error}</Text>}
       {!!browserError && <Text accessibilityRole="alert" style={styles.error}>{browserError}</Text>}
-      {(!auth.challenge || challengeMethod) && (
-        <Pressable testID="signin-submit" disabled={busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())} onPress={submit} style={({ pressed }) => [styles.button, pressed && styles.pressed, (busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())) && styles.disabled]}>
-          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{challengeMethod ? "Verify and continue" : "Sign in"}</Text>}
-        </Pressable>
-      )}
-      {challengeMethod && (
-        <Pressable onPress={() => { setChallengeMethod(null); setCode(""); setPin(""); auth.clearError(); }} style={styles.backLink}>
-          <Text style={styles.signupAccent}>Choose another verification method</Text>
-        </Pressable>
-      )}
       {!auth.challenge && (
         <>
           <View style={styles.separator}><View style={styles.separatorLine} /><Text style={styles.separatorText}>OR</Text><View style={styles.separatorLine} /></View>
-          <Pressable onPress={continueWithWebAuth} disabled={browserBusy} style={({ pressed }) => [styles.webAuthButton, pressed && styles.pressed, browserBusy && styles.disabled]}>
-            {browserBusy ? <ActivityIndicator color={colors.light.primary} /> : <Text style={styles.webAuthText}>Continue with Google or passkey</Text>}
+          <Pressable onPress={() => void continueWithWebAuth("google")} disabled={browserBusy} style={({ pressed }) => [styles.webAuthButton, pressed && styles.pressed, browserBusy && styles.disabled]}>
+            {browserBusy ? <ActivityIndicator color={colors.light.primary} /> : <Text style={styles.webAuthText}>Continue with Google</Text>}
           </Pressable>
-          <Text style={styles.webAuthNote}>Sign-in opens securely and returns to GreenPay without leaving a stale session.</Text>
-          <Pressable onPress={() => router.push("/sign-up")} style={styles.signupLink}>
-            <Text style={styles.signupText}>New to Geepay? <Text style={styles.signupAccent}>Create an account</Text></Text>
+          <Pressable onPress={() => void continueWithWebAuth("passkey")} disabled={browserBusy} style={styles.passkeyLink}>
+            <Text style={styles.signupAccent}>Use a passkey</Text>
           </Pressable>
         </>
       )}
-      <Text style={styles.legal}>By continuing, you agree to Geepay’s terms and privacy policy. Use of financial features depends on availability and local rules.</Text>
+      <Text style={styles.legal}>By signing in, you agree to our <Text onPress={() => void WebBrowser.openBrowserAsync(new URL("/terms", webOrigin).toString())} style={styles.signupAccent}>Terms of Service</Text> and <Text onPress={() => void WebBrowser.openBrowserAsync(new URL("/privacy", webOrigin).toString())} style={styles.signupAccent}>Privacy Policy</Text>.</Text>
     </KeyboardAwareScrollViewCompat>
+    <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 14) }]}>
+      {(!auth.challenge || challengeMethod) && (
+        <Pressable testID="signin-submit" disabled={busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())} onPress={submit} style={({ pressed }) => [styles.button, pressed && styles.pressed, (busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())) && styles.disabled]}>
+          {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{challengeMethod ? "Verify and sign in" : "Sign in"}</Text>}
+        </Pressable>
+      )}
+      {auth.challenge && challengeMethod ? (
+        <Pressable onPress={() => { setChallengeMethod(null); setCode(""); setPin(""); auth.clearError(); }} style={styles.switchLink}>
+          <Text style={styles.signupAccent}>Choose another sign-in method</Text>
+        </Pressable>
+      ) : !auth.challenge ? (
+        <Pressable onPress={() => router.push("/sign-up")} style={styles.switchLink}>
+          <Text style={styles.signupText}>New to Geepay? <Text style={styles.signupAccent}>Sign up</Text></Text>
+        </Pressable>
+      ) : null}
+    </View>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.light.background },
+  scroll: { flex: 1, backgroundColor: colors.light.background },
   content: { flexGrow: 1, justifyContent: "center", paddingHorizontal: 26 },
   brandMark: { width: 62, height: 62, borderRadius: 18, marginBottom: 20 },
   eyebrow: { color: colors.light.primary, fontSize: 11, letterSpacing: 2, fontWeight: "700" },
@@ -154,14 +164,14 @@ const styles = StyleSheet.create({
   methodButton: { borderRadius: 14, padding: 15, borderWidth: 1, borderColor: colors.light.border, backgroundColor: colors.light.card },
   methodTitle: { color: colors.light.foreground, fontWeight: "700", fontSize: 14 },
   methodDetail: { color: colors.light.mutedForeground, fontSize: 12, marginTop: 4 },
-  backLink: { alignItems: "center", paddingVertical: 14 },
+  passkeyLink: { alignItems: "center", paddingVertical: 14 },
   separator: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 19, marginBottom: 13 },
   separatorLine: { flex: 1, height: 1, backgroundColor: colors.light.border },
   separatorText: { color: colors.light.mutedForeground, fontSize: 11, fontWeight: "700", letterSpacing: 1 },
   webAuthButton: { height: 52, borderRadius: 14, borderWidth: 1, borderColor: colors.light.border, backgroundColor: colors.light.card, alignItems: "center", justifyContent: "center" },
   webAuthText: { color: colors.light.foreground, fontSize: 14, fontWeight: "700" },
-  webAuthNote: { color: colors.light.mutedForeground, fontSize: 11, lineHeight: 16, textAlign: "center", marginTop: 9 },
-  signupLink: { alignItems: "center", paddingTop: 16 },
+  footer: { paddingHorizontal: 22, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.light.border, backgroundColor: colors.light.background },
+  switchLink: { alignItems: "center", paddingTop: 13 },
   signupText: { color: colors.light.mutedForeground, fontSize: 13 },
   signupAccent: { color: colors.light.primary, fontWeight: "700" },
   pressed: { opacity: 0.85 },

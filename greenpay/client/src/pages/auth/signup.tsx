@@ -58,7 +58,7 @@ export default function SignupPage() {
   });
 
   const signupMutation = useMutation({
-    mutationFn: async (data: Omit<SignupForm, "confirmPassword" | "agreeToTerms" | "phoneCountryCode">) => {
+    mutationFn: async (data: Omit<SignupForm, "confirmPassword" | "phoneCountryCode">) => {
       const response = await apiRequest("POST", "/api/auth/signup", data);
       return response.json();
     },
@@ -81,7 +81,7 @@ export default function SignupPage() {
   });
 
   const onSubmit = (data: SignupForm) => {
-    const { confirmPassword, agreeToTerms, phoneCountryCode, ...signupData } = data;
+    const { confirmPassword, phoneCountryCode, ...signupData } = data;
     // Accept local national formats for every selected country code.
     const localPhone = signupData.phone.replace(/\D/g, "").replace(/^0+/, "");
     const fullPhone = phoneCountryCode + localPhone;
@@ -333,6 +333,15 @@ export default function SignupPage() {
               variant="outline"
               className="w-full flex items-center justify-center gap-3 h-11"
               onClick={() => {
+                const mobileReturn = window.sessionStorage.getItem("geepay-mobile-auth-return") === "1";
+                if (mobileReturn) {
+                  const googleUrl = new URL("/auth/google", window.location.origin);
+                  googleUrl.searchParams.set("source", "mobile");
+                  const requested = new URLSearchParams(window.location.search).get("mobile_redirect_uri");
+                  if (requested) googleUrl.searchParams.set("mobile_redirect_uri", requested);
+                  window.location.assign(googleUrl.toString());
+                  return;
+                }
                 let popup: Window | null = null;
                 let popupTimer: number | undefined;
                 const handler = (e: MessageEvent) => {
@@ -355,7 +364,6 @@ export default function SignupPage() {
                   }
                 };
                 window.addEventListener("message", handler);
-                const mobileReturn = window.sessionStorage.getItem("geepay-mobile-auth-return") === "1";
                 popup = window.open(`/auth/google${mobileReturn ? "?source=mobile" : ""}`, "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
                 if (!popup) {
                   window.removeEventListener("message", handler);
