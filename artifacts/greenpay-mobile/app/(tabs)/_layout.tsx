@@ -1,7 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
-import { Feather } from "@expo/vector-icons";
 import { useAuth } from "@/context/auth";
-import colors from "@/constants/colors";
+import { FloatingTabBar } from "@/components/FloatingTabBar";
 
 export default function TabLayout() {
   const { user, loading } = useAuth();
@@ -9,18 +8,14 @@ export default function TabLayout() {
   if (!user) return <Redirect href="/sign-in" />;
 
   return (
-    <Tabs screenOptions={{
-      headerShown: false,
-      tabBarActiveTintColor: colors.light.primary,
-      tabBarInactiveTintColor: colors.light.mutedForeground,
-      tabBarStyle: { height: 78, paddingTop: 8, paddingBottom: 18, backgroundColor: colors.light.card, borderTopColor: colors.light.border },
-      tabBarLabelStyle: { fontSize: 10, fontWeight: "600" },
-    }}>
-      <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color, size }) => <Feather name="home" color={color} size={size} /> }} />
-      <Tabs.Screen name="wallets" options={{ title: "Wallets", tabBarIcon: ({ color, size }) => <Feather name="briefcase" color={color} size={size} /> }} />
-      <Tabs.Screen name="send" options={{ title: "Send", tabBarIcon: ({ color, size }) => <Feather name="send" color={color} size={size} /> }} />
-      <Tabs.Screen name="activity" options={{ title: "History", tabBarIcon: ({ color, size }) => <Feather name="list" color={color} size={size} /> }} />
-      <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Feather name="grid" color={color} size={size} /> }} />
+    <Tabs tabBar={(props) => <FloatingTabBar {...props} />} screenOptions={{ headerShown: false, tabBarStyle: { position: "absolute", backgroundColor: "transparent", borderTopWidth: 0 } }}>
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="card" />
+      <Tabs.Screen name="send" />
+      <Tabs.Screen name="activity" />
+      <Tabs.Screen name="settings" />
+      <Tabs.Screen name="wallets" options={{ href: null }} />
+      <Tabs.Screen name="more" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
     </Tabs>
   );

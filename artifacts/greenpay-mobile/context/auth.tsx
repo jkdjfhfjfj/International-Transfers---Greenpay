@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { AppState, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as LocalAuthentication from "expo-local-authentication";
 import { api } from "@/lib/api";
 
 type User = {
@@ -26,6 +29,10 @@ type AuthContextValue = {
   pendingOtp: boolean;
   challenge: LoginChallenge | null;
   error: string | null;
+  biometricEnabled: boolean;
+  appLocked: boolean;
+  setBiometricEnabled: (enabled: boolean) => Promise<void>;
+  unlockWithBiometrics: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   requestOtp: (method: string) => Promise<void>;
   verifyOtp: (code: string) => Promise<void>;
@@ -45,19 +52,81 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const [pendingOtp, setPendingOtp] = useState(false);
   const [challenge, setChallenge] = useState<LoginChallenge | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [biometricEnabled, setBiometricEnabledState] = useState(false);
+  const [appLocked, setAppLocked] = useState(false);
 
   const refresh = async () => {
     try {
       const result = await api<{ user: User }>("/api/auth/me");
       setUser(result.user);
-    } catch {
-      setUser(null);
+    } catch (cause) {
+      const statusMatch = cause instanceof Error ? cause.message.match(/HTTP (\d{3})/) : null;
+      const status = statusMatch ? Number(statusMatch[1]) : 0;
+      // A timeout, network error, or 5xx is not proof that the user signed out.
+      // Only discard local auth state when the server explicitly rejects it.
+      if (status === 401 || status === 403) {
+        setUser(null);
+        setAppLocked(false);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { void refresh(); }, []);
+  const setBiometricEnabled = async (enabled: boolean) => {
+    if (Platform.OS === "web") throw new Error("Device biometrics are only available in the native app.");
+    if (enabled) {
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const enrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHardware || !enrolled) throw new Error("Set up Face ID or fingerprint authentication in your device settings first.");
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: "Enable GreenPay biometric unlock",
+        fallbackLabel: "Use device passcode",
+      });
+      if (!result.success) throw new Error("Biometric verification was cancelled or unsuccessful.");
+      await AsyncStorage.setItem("greenpay-native-biometric-lock", "enabled");
+      setBiometricEnabledState(true);
+      return;
+    }
+    await AsyncStorage.removeItem("greenpay-native-biometric-lock");
+    setBiometricEnabledState(false);
+    setAppLocked(false);
+  };
+
+  const unlockWithBiometrics = async () => {
+    const result = await LocalAuthentication.authenticateAsync({
+      promptMessage: "Unlock GreenPay",
+      fallbackLabel: "Use device passcode",
+    });
+    if (!result.success) throw new Error("Biometric verification was not successful.");
+    setAppLocked(false);
+  };
+
+  const appState = useRef(AppState.currentState);
+  useEffect(() => {
+    let mounted = true;
+    void (async () => {
+      try {
+        const enabled = await AsyncStorage.getItem("greenpay-native-biometric-lock") === "enabled";
+        if (mounted) {
+          setBiometricEnabledState(enabled);
+          if (enabled) setAppLocked(true);
+        }
+      } finally {
+        if (mounted) await refresh();
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (appState.current === "active" && nextState !== "active" && user && biometricEnabled) setAppLocked(true);
+      if (appState.current !== "active" && nextState === "active") void refresh();
+      appState.current = nextState;
+    });
+    return () => subscription.remove();
+  }, [user, biometricEnabled]);
 
   const login = async (email: string, password: string) => {
     setError(null);
@@ -163,13 +232,15 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
       setUser(null);
       setPendingOtp(false);
       setChallenge(null);
+      setAppLocked(false);
     }
   };
 
   const value = useMemo(() => ({
-    user, loading, pendingOtp, challenge, error, login, requestOtp, verifyOtp, verifyPin, verifyAuthenticator, completeExternalLogin, logout, refresh,
+    user, loading, pendingOtp, challenge, error, biometricEnabled, appLocked, setBiometricEnabled, unlockWithBiometrics,
+    login, requestOtp, verifyOtp, verifyPin, verifyAuthenticator, completeExternalLogin, logout, refresh,
     clearError: () => setError(null),
-  }), [user, loading, pendingOtp, challenge, error]);
+  }), [user, loading, pendingOtp, challenge, error, biometricEnabled, appLocked]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

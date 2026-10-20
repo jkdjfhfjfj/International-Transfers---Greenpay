@@ -18,11 +18,27 @@ export function SignIn() {
   const [challengeMethod, setChallengeMethod] = useState<"otp" | "pin" | "authenticator" | null>(null);
   const [busy, setBusy] = useState(false);
   const [browserBusy, setBrowserBusy] = useState(false);
+  const [browserError, setBrowserError] = useState("");
   const continueWithWebAuth = async () => {
     setBrowserBusy(true);
+    setBrowserError("");
     try {
-      await WebBrowser.openBrowserAsync("https://geepay.us/login?source=mobile");
-      await auth.refresh();
+      const configuredDomain = process.env.EXPO_PUBLIC_DOMAIN;
+      const webOrigin = configuredDomain
+        ? `${configuredDomain.startsWith("http") ? "" : "https://"}${configuredDomain}`
+        : "https://geepay.us";
+      const redirectUrl = "greenpay-mobile://auth/callback";
+      const result = await WebBrowser.openAuthSessionAsync(
+        `${webOrigin}/login?source=mobile`,
+        redirectUrl,
+      );
+      if (result.type !== "success" || !result.url) return;
+      const code = new URL(result.url).searchParams.get("code");
+      if (!code) throw new Error("The secure sign-in returned without an app code. Please try again.");
+      await auth.completeExternalLogin(code);
+      router.replace("/(tabs)");
+    } catch (error) {
+      setBrowserError(error instanceof Error ? error.message : "Secure sign-in could not be completed.");
     } finally {
       setBrowserBusy(false);
     }
@@ -80,8 +96,8 @@ export function SignIn() {
             </Pressable>
           )}
           {auth.challenge.requiresBiometric && (
-            <Pressable onPress={() => void continueWithWebAuth()} style={styles.methodButton}>
-              <Text style={styles.methodTitle}>Use passkey</Text><Text style={styles.methodDetail}>Continue in Geepay’s secure sign-in page</Text>
+          <Pressable onPress={() => void continueWithWebAuth()} style={styles.methodButton}>
+              <Text style={styles.methodTitle}>Use passkey</Text><Text style={styles.methodDetail}>Verify in Geepay, then securely return to the app</Text>
             </Pressable>
           )}
         </View>
@@ -91,6 +107,7 @@ export function SignIn() {
         <TextInput testID={challengeMethod === "otp" ? "signin-otp" : "signin-authenticator"} style={styles.input} value={code} onChangeText={setCode} placeholder={challengeMethod === "otp" ? "Verification code" : "Authenticator code"} placeholderTextColor="#64748b" keyboardType="number-pad" autoComplete={challengeMethod === "otp" ? "one-time-code" : "off"} maxLength={8} />
       )}
       {!!auth.error && <Text accessibilityRole="alert" style={styles.error}>{auth.error}</Text>}
+      {!!browserError && <Text accessibilityRole="alert" style={styles.error}>{browserError}</Text>}
       {(!auth.challenge || challengeMethod) && (
         <Pressable testID="signin-submit" disabled={busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())} onPress={submit} style={({ pressed }) => [styles.button, pressed && styles.pressed, (busy || (!auth.challenge && (!email.trim() || !password)) || (challengeMethod === "pin" && !pin.trim()) || ((challengeMethod === "otp" || challengeMethod === "authenticator") && !code.trim())) && styles.disabled]}>
           {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{challengeMethod ? "Verify and continue" : "Sign in"}</Text>}
@@ -107,7 +124,7 @@ export function SignIn() {
           <Pressable onPress={continueWithWebAuth} disabled={browserBusy} style={({ pressed }) => [styles.webAuthButton, pressed && styles.pressed, browserBusy && styles.disabled]}>
             {browserBusy ? <ActivityIndicator color={colors.light.primary} /> : <Text style={styles.webAuthText}>Continue with Google or passkey</Text>}
           </Pressable>
-          <Text style={styles.webAuthNote}>Opens Geepay’s secure sign-in page. Passkey availability depends on your browser and device.</Text>
+          <Text style={styles.webAuthNote}>Sign-in opens securely and returns to GreenPay without leaving a stale session.</Text>
           <Pressable onPress={() => router.push("/sign-up")} style={styles.signupLink}>
             <Text style={styles.signupText}>New to Geepay? <Text style={styles.signupAccent}>Create an account</Text></Text>
           </Pressable>

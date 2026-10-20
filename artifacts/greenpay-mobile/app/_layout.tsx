@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, Platform, StatusBar, View, useColorScheme } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StatusBar, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -18,7 +19,8 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { loading } = useAuth();
+  const { loading, user, appLocked, unlockWithBiometrics } = useAuth();
+  const [unlockError, setUnlockError] = React.useState("");
   const scheme = useColorScheme();
   const theme = scheme === "dark" ? colors.dark : colors.light;
   const pathname = usePathname();
@@ -38,6 +40,16 @@ function AppRoutes() {
         <View style={{ flex: 1, backgroundColor: systemBarColor, alignItems: "center", justifyContent: "center" }}>
           <ActivityIndicator color={theme.primary} />
         </View>
+      ) : appLocked && user ? (
+        <View style={lockStyles.page}>
+          <View style={lockStyles.mark}><Feather name="shield" size={30} color={theme.primary} /></View>
+          <Text style={lockStyles.title}>GreenPay is locked</Text>
+          <Text style={lockStyles.detail}>Verify with Face ID or fingerprint to continue.</Text>
+          {!!unlockError && <Text accessibilityRole="alert" style={lockStyles.error}>{unlockError}</Text>}
+          <Pressable onPress={() => { setUnlockError(""); void unlockWithBiometrics().catch((error) => setUnlockError(error instanceof Error ? error.message : "Biometric unlock failed.")); }} style={lockStyles.button}>
+            <Feather name="unlock" size={18} color="#fff" /><Text style={lockStyles.buttonText}>Unlock with biometrics</Text>
+          </Pressable>
+        </View>
       ) : (
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.background } }}>
           <Stack.Screen name="index" />
@@ -56,6 +68,16 @@ function AppRoutes() {
     </>
   );
 }
+
+const lockStyles = StyleSheet.create({
+  page: { flex: 1, backgroundColor: colors.light.background, alignItems: "center", justifyContent: "center", paddingHorizontal: 30 },
+  mark: { width: 72, height: 72, borderRadius: 24, backgroundColor: colors.light.muted, alignItems: "center", justifyContent: "center", marginBottom: 20 },
+  title: { color: colors.light.foreground, fontSize: 24, fontWeight: "800" },
+  detail: { color: colors.light.mutedForeground, fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 8 },
+  error: { color: colors.light.destructive, fontSize: 12, textAlign: "center", marginTop: 14 },
+  button: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, width: "100%", minHeight: 52, borderRadius: 15, backgroundColor: colors.light.primary, marginTop: 26 },
+  buttonText: { color: "#fff", fontSize: 14, fontWeight: "800" },
+});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold });

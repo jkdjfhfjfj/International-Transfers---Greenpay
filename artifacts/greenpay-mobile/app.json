@@ -40,7 +40,10 @@
     "web": {
       "favicon": "./assets/images/icon.png"
     },
-    "plugins": ["expo-router"],
+    "plugins": [
+      "expo-router",
+      ["expo-local-authentication", { "faceIDPermission": "Allow GreenPay to use Face ID to unlock the app." }]
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
