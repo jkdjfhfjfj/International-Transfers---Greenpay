@@ -18,6 +18,7 @@ export default function TabLayout() {
     }}>
       <Tabs.Screen name="index" options={{ title: "Home", tabBarIcon: ({ color, size }) => <Feather name="home" color={color} size={size} /> }} />
       <Tabs.Screen name="wallets" options={{ title: "Wallets", tabBarIcon: ({ color, size }) => <Feather name="briefcase" color={color} size={size} /> }} />
+      <Tabs.Screen name="send" options={{ title: "Send", tabBarIcon: ({ color, size }) => <Feather name="send" color={color} size={size} /> }} />
       <Tabs.Screen name="activity" options={{ title: "History", tabBarIcon: ({ color, size }) => <Feather name="list" color={color} size={size} /> }} />
       <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Feather name="grid" color={color} size={size} /> }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
