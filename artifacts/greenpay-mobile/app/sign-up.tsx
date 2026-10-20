@@ -7,7 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import colors from "@/constants/colors";
 import { useAuth } from "@/context/auth";
 
-const SIGNUP_URL = "https://geepay.us/signup";
+const SIGNUP_URL = "https://geepay.us/signup?source=mobile";
 
 export default function SignUpScreen() {
   const router = useRouter();

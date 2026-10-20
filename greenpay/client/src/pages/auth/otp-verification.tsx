@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { returnToMobileAppAfterAuth } from "@/lib/mobile-auth-handoff";
 import { WavyHeader } from "@/components/wavy-header";
 import { Input } from "@/components/ui/input";
 import { verifyBiometric } from "@/lib/webauthn";
@@ -90,9 +91,10 @@ export default function OtpVerificationPage() {
       .forEach((key) => localStorage.removeItem(key));
   };
 
-  const finishLogin = (data: any) => {
+  const finishLogin = async (data: any) => {
     clearChallengeStorage();
     login(data.user);
+    if (await returnToMobileAppAfterAuth()) return;
     toast({ title: "Login successful!", description: "You have been successfully verified and logged in." });
     setTimeout(() => setLocation("/dashboard"), 100);
   };

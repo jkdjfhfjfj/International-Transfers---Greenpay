@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useSystemSettings } from "@/hooks/use-system-settings";
 import { apiRequest } from "@/lib/queryClient";
 import { verifyBiometric } from "@/lib/webauthn";
+import { rememberMobileAuthReturn, returnToMobileAppAfterAuth } from "@/lib/mobile-auth-handoff";
 import { WavyHeader } from "@/components/wavy-header";
 
 const loginSchema = z.object({
@@ -37,6 +38,10 @@ export default function LoginPage() {
   const { toast } = useToast();
   const { login } = useAuth();
   const { getMaintenanceMode, getMaintenanceMessage } = useSystemSettings();
+
+  useEffect(() => {
+    rememberMobileAuthReturn();
+  }, []);
 
   const handleGoogleSignIn = () => {
     let popup: Window | null = null;
@@ -68,6 +73,7 @@ export default function LoginPage() {
         cleanup();
         popup?.close();
         login(data.user);
+        if (await returnToMobileAppAfterAuth()) return true;
         window.location.assign("/dashboard");
         return true;
       } catch {
@@ -96,10 +102,10 @@ export default function LoginPage() {
       cleanup();
       switch (result) {
         case "new_user":
-          window.location.assign("/auth/google/complete");
+          window.location.assign(`/auth/google/complete${new URLSearchParams(window.location.search).get("source") === "mobile" ? "?source=mobile" : ""}`);
           break;
         case "mfa_required":
-          window.location.assign("/login?verification=required");
+          window.location.assign(`/login?verification=required${new URLSearchParams(window.location.search).get("source") === "mobile" ? "&source=mobile" : ""}`);
           break;
         case "suspended":
           toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
@@ -115,7 +121,7 @@ export default function LoginPage() {
     // Listen before opening the popup so a fast OAuth redirect cannot beat the listener.
     window.addEventListener("message", handleMessage);
     popup = window.open(
-      "/auth/google",
+      `/auth/google${new URLSearchParams(window.location.search).get("source") === "mobile" ? "?source=mobile" : ""}`,
       "GoogleAuth",
       "width=520,height=620,scrollbars=yes,resizable=yes,left=" +
         Math.round((screen.width - 520) / 2) +
@@ -298,7 +304,7 @@ export default function LoginPage() {
       });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (handlePendingChallenge(data)) {
         if (data.requiresOtp && !data.requiresPin && !data.requiresAuthenticator) {
           toast({
@@ -317,6 +323,7 @@ export default function LoginPage() {
         // Direct login
         clearPendingLogin();
         login(data.user);
+        if (await returnToMobileAppAfterAuth()) return;
         toast({
           title: "Welcome back!",
           description: "You have been successfully logged in.",
@@ -351,8 +358,9 @@ export default function LoginPage() {
       });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       login(data.user);
+      if (await returnToMobileAppAfterAuth()) return;
       clearPendingLogin();
       toast({
         title: "Welcome back!",
@@ -379,8 +387,9 @@ export default function LoginPage() {
       });
       return response.json();
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       login(data.user);
+      if (await returnToMobileAppAfterAuth()) return;
       clearPendingLogin();
       toast({
         title: "Welcome back!",
@@ -425,9 +434,10 @@ export default function LoginPage() {
         throw error;
       }
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.user) {
         login(data.user);
+        if (await returnToMobileAppAfterAuth()) return;
         clearPendingLogin();
         toast({
           title: "Biometric Login Success",

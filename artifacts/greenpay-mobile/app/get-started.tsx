@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
@@ -49,7 +49,7 @@ export default function GetStartedScreen() {
       <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
         <View style={styles.header}>
           <View style={styles.brand}>
-            <View style={styles.brandMark}><Text style={styles.brandLetter}>G</Text></View>
+            <Image source={require("../assets/images/icon.png")} style={styles.brandMark} />
             <Text style={styles.brandName}>Geepay</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel="Skip getting started" onPress={() => router.replace("/sign-in")}>
@@ -58,9 +58,13 @@ export default function GetStartedScreen() {
         </View>
 
         <View style={styles.content}>
-          <LinearGradient colors={slide.colors} style={styles.iconCard}>
-            <Ionicons name={slide.icon} size={66} color="#fff" />
-          </LinearGradient>
+          {index === 0 ? (
+            <Image source={require("../assets/images/icon.png")} style={styles.heroLogo} />
+          ) : (
+            <LinearGradient colors={slide.colors} style={styles.iconCard}>
+              <Ionicons name={slide.icon} size={66} color="#fff" />
+            </LinearGradient>
+          )}
           <Text style={styles.title}>{slide.title}</Text>
           <Text style={styles.description}>{slide.description}</Text>
         </View>
@@ -108,12 +112,12 @@ const styles = StyleSheet.create({
   glowBottom: { position: "absolute", bottom: 80, left: -140, width: 300, height: 300, borderRadius: 150, backgroundColor: "#06b6d4", opacity: 0.1 },
   header: { minHeight: 62, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   brand: { flexDirection: "row", alignItems: "center", gap: 10 },
-  brandMark: { width: 34, height: 34, borderRadius: 12, backgroundColor: "#0f766e", alignItems: "center", justifyContent: "center" },
-  brandLetter: { color: "#fff", fontSize: 18, fontWeight: "800" },
+  brandMark: { width: 40, height: 40, borderRadius: 13 },
   brandName: { color: "#fff", fontSize: 19, fontWeight: "700" },
   skip: { color: "#e2e8f0", fontSize: 15, fontWeight: "600", padding: 10 },
   content: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 8, paddingBottom: 20 },
   iconCard: { width: 148, height: 148, borderRadius: 36, alignItems: "center", justifyContent: "center", marginBottom: 34, shadowColor: "#000", shadowOpacity: 0.25, shadowRadius: 24, shadowOffset: { width: 0, height: 14 }, elevation: 10 },
+  heroLogo: { width: 154, height: 154, borderRadius: 36, marginBottom: 31 },
   title: { color: "#fff", fontSize: 30, lineHeight: 38, fontWeight: "800", textAlign: "center", marginBottom: 14 },
   description: { color: "#cbd5e1", fontSize: 16, lineHeight: 25, textAlign: "center", maxWidth: 340 },
   footer: { paddingBottom: 8 },

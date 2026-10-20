@@ -44,6 +44,9 @@ function AppRoutes() {
           <Stack.Screen name="get-started" />
           <Stack.Screen name="sign-up" />
           <Stack.Screen name="sign-in" />
+          <Stack.Screen name="auth/callback" />
+          <Stack.Screen name="kyc-return" />
+          <Stack.Screen name="payment-return" />
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="deposit" />
           <Stack.Screen name="card-purchase" />

@@ -1319,6 +1319,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  const inMemoryMobileAuthCodes = new Map<string, { userId: string; expiresAt: number }>();
+  const issueMobileAuthCode = async (userId: string) => {
+    const code = crypto.randomBytes(32).toString("base64url");
+    const hash = crypto.createHash("sha256").update(code).digest("hex");
+    const expiresAt = new Date(Date.now() + 2 * 60 * 1000);
+    if (pool) {
+      await pool.query(
+        `INSERT INTO user_sessions (sid, sess, expire) VALUES ($1, $2::json, $3)`,
+        [`mobile-auth-ticket:${hash}`, JSON.stringify({ mobileAuthUserId: userId }), expiresAt],
+      );
+    } else {
+      inMemoryMobileAuthCodes.set(hash, { userId, expiresAt: expiresAt.getTime() });
+    }
+    return code;
+  };
+  const consumeMobileAuthCode = async (code: unknown): Promise<string | null> => {
+    if (typeof code !== "string" || !/^[A-Za-z0-9_-]{40,60}$/.test(code)) return null;
+    const hash = crypto.createHash("sha256").update(code).digest("hex");
+    if (pool) {
+      const result = await pool.query(
+        `DELETE FROM user_sessions WHERE sid = $1 AND expire > NOW() RETURNING sess`,
+        [`mobile-auth-ticket:${hash}`],
+      );
+      const session = result.rows[0]?.sess;
+      return typeof session?.mobileAuthUserId === "string" ? session.mobileAuthUserId : null;
+    }
+    const entry = inMemoryMobileAuthCodes.get(hash);
+    inMemoryMobileAuthCodes.delete(hash);
+    return entry && entry.expiresAt > Date.now() ? entry.userId : null;
+  };
+
+  app.post("/api/auth/mobile/callback-code", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Sign in before requesting an app callback." });
+      const code = await issueMobileAuthCode(userId);
+      res.json({ code, expiresInSeconds: 120 });
+    } catch (error) {
+      console.error("[Mobile auth] Could not issue callback code:", error);
+      res.status(500).json({ message: "Could not return to the mobile app. Please try again." });
+    }
+  });
+
+  app.post("/api/auth/mobile/exchange", async (req: any, res) => {
+    try {
+      const userId = await consumeMobileAuthCode(req.body?.code);
+      if (!userId) return res.status(401).json({ message: "This sign-in link has expired or was already used. Start sign-in again." });
+      const user = await storage.getUser(userId);
+      if (!user || (user as any).isSuspended === true) {
+        return res.status(403).json({ message: "This account cannot sign in." });
+      }
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((error: Error | null) => error ? reject(error) : resolve());
+      });
+      req.session.userId = user.id;
+      req.session.user = { id: user.id, email: user.email };
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((error: Error | null) => error ? reject(error) : resolve());
+      });
+      const { password, ...userResponse } = user as any;
+      res.json({ user: userResponse });
+    } catch (error) {
+      console.error("[Mobile auth] Code exchange failed:", error);
+      res.status(500).json({ message: "Could not complete mobile sign-in. Please try again." });
+    }
+  });
+
   // User logout — destroy session
   app.post("/api/auth/logout", (req: any, res) => {
     if (req.session?.admin && req.session?.impersonating) {
@@ -4022,6 +4089,7 @@ p{color:#6b7280;font-size:14px;}</style>
           gatewayCurrency,
           paymentCurrency: gatewayCurrency,
           paymentMethod: requestedMethod,
+          mobileReturn: req.body?.returnToApp === true,
           cardPrice: usdAmount.toFixed(2),
           status_reason: "Awaiting payment confirmation.",
         },
@@ -4585,6 +4653,7 @@ p{color:#6b7280;font-size:14px;}</style>
           gateway: "paystack",
           paymentCurrency: chargeCurrency,
           paymentAmount: chargeAmount,
+          mobileReturn: req.body?.returnToApp === true,
         } as any,
       }).returning();
       pendingTransactionId = transaction.id;
@@ -5087,7 +5156,14 @@ p{color:#6b7280;font-size:14px;}</style>
   // Payment callback handler for Paystack
   app.get("/api/payment-callback", async (req, res) => {
     const callbackType = String(req.query.type || "");
+    let callbackTransaction: any = null;
     const cardPurchaseReturn = (reference: string, status: "success" | "failed", error?: string) => {
+      if (callbackTransaction?.metadata?.mobileReturn === true) {
+        const params = new URLSearchParams({ type: "virtual-card", status });
+        if (reference) params.set("reference", reference);
+        if (error) params.set("error", error);
+        return res.redirect(`greenpay-mobile://payment-return?${params.toString()}`);
+      }
       const params = new URLSearchParams({ status });
       if (reference) params.set("reference", reference);
       if (error) params.set("error", error);
@@ -5102,6 +5178,12 @@ p{color:#6b7280;font-size:14px;}</style>
       if (!actualReference) {
         return res.status(400).json({ message: "Payment reference is required" });
       }
+      callbackTransaction = await db.query.transactions.findFirst({
+        where: or(
+          eq(transactions.reference, String(actualReference)),
+          eq(transactions.paystackReference, String(actualReference)),
+        ),
+      });
 
       // Verify the payment with Paystack
       const verificationResult = await paystackService.verifyPayment(actualReference as string);
@@ -5110,6 +5192,9 @@ p{color:#6b7280;font-size:14px;}</style>
         console.error('Callback payment verification failed:', verificationResult.message);
         if (callbackType === "virtual-card") {
           return cardPurchaseReturn(String(actualReference), "failed", "payment-verification-failed");
+        }
+        if (callbackTransaction?.metadata?.mobileReturn === true) {
+          return res.redirect(`greenpay-mobile://payment-return?type=deposit&status=failed&reference=${encodeURIComponent(String(actualReference))}`);
         }
         return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-verification-failed`);
       }
@@ -5161,12 +5246,18 @@ p{color:#6b7280;font-size:14px;}</style>
         if (type === 'virtual-card') {
           return cardPurchaseReturn(String(actualReference), "success");
         } else {
+          if ((transaction.metadata as any)?.mobileReturn === true) {
+            return res.redirect(`greenpay-mobile://payment-return?type=deposit&status=success&reference=${encodeURIComponent(String(actualReference))}`);
+          }
           return res.redirect(`/payment-success?reference=${actualReference}&type=deposit`);
         }
       } else {
         // Payment failed - redirect to failure page
         if (type === "virtual-card") {
           return cardPurchaseReturn(String(actualReference), "failed", "payment-failed");
+        }
+        if (callbackTransaction?.metadata?.mobileReturn === true) {
+          return res.redirect(`greenpay-mobile://payment-return?type=deposit&status=failed&reference=${encodeURIComponent(String(actualReference))}`);
         }
         return res.redirect(`/payment-failed?reference=${encodeURIComponent(String(actualReference))}&error=payment-failed`);
       }

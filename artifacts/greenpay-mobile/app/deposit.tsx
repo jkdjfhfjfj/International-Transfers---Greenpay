@@ -33,10 +33,10 @@ export default function DepositScreen() {
         const r=await api<{success:boolean;transactionReference?:string;message?:string}>("/api/deposit/manual-mpesa",{method:"POST",body:JSON.stringify({walletId:wallet.id,amount,paymentReference:reference})});
         setMessage(`Deposit submitted and remains pending verification. Reference: ${r.transactionReference||"submitted"}`);
       }else if(method==="mobile_money"){
-        const r=await api<{redirectUrl?:string;message?:string;reference?:string}>("/api/deposit/nexuspay",{method:"POST",body:JSON.stringify({walletId:wallet.id,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency,paymentMethod:"mobile_money",amount,phone,email:user.email})});
+        const r=await api<{redirectUrl?:string;message?:string;reference?:string}>("/api/deposit/nexuspay",{method:"POST",body:JSON.stringify({walletId:wallet.id,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency,paymentMethod:"mobile_money",amount,phone,email:user.email,returnToApp:true})});
         if(r.redirectUrl) { await WebBrowser.openBrowserAsync(r.redirectUrl); await queryClient.invalidateQueries(); } else setMessage(r.message||"Check your phone for the payment prompt.");
       }else{
-        const r=await api<{authorizationUrl?:string}>("/api/deposit/paystack",{method:"POST",body:JSON.stringify({walletId:wallet.id,amount,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency})});
+        const r=await api<{authorizationUrl?:string}>("/api/deposit/paystack",{method:"POST",body:JSON.stringify({walletId:wallet.id,amount,currency:wallet.currency,paymentCurrency:cfg?.countryPaymentCurrency,returnToApp:true})});
         if(r.authorizationUrl) { await WebBrowser.openBrowserAsync(r.authorizationUrl); await queryClient.invalidateQueries(); } else setMessage("Secure checkout was not returned. Contact support before retrying.");
       }
     }catch(e){setMessage(e instanceof Error?e.message:"Deposit could not be started.");}finally{setBusy(false)}

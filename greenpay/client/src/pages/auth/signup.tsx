@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { useForm } from "react-hook-form";
@@ -13,6 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { africanCountries, mockCountries } from "@/lib/mock-data";
 import { WavyHeader } from "@/components/wavy-header";
+import { rememberMobileAuthReturn } from "@/lib/mobile-auth-handoff";
 
 const signupSchema = z.object({
   fullName: z.string().min(2, "Full name must be at least 2 characters"),
@@ -36,6 +38,10 @@ export default function SignupPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { login } = useAuth();
+
+  useEffect(() => {
+    rememberMobileAuthReturn();
+  }, []);
 
   const form = useForm<SignupForm>({
     resolver: zodResolver(signupSchema),
@@ -62,7 +68,8 @@ export default function SignupPage() {
         title: "Account created!",
         description: "Your account has been created successfully. Please log in.",
       });
-      setLocation("/login");
+      const mobileReturn = window.sessionStorage.getItem("geepay-mobile-auth-return") === "1";
+      setLocation(`/login${mobileReturn ? "?source=mobile" : ""}`);
     },
     onError: () => {
       toast({
@@ -336,9 +343,9 @@ export default function SignupPage() {
                   if (r === "login") {
                     window.location.href = "/dashboard";
                   } else if (r === "new_user") {
-                    window.location.href = "/auth/google/complete";
+                    window.location.href = `/auth/google/complete${window.sessionStorage.getItem("geepay-mobile-auth-return") === "1" ? "?source=mobile" : ""}`;
                   } else if (r === "mfa_required") {
-                    window.location.href = "/login?verification=required";
+                    window.location.href = `/login?verification=required${window.sessionStorage.getItem("geepay-mobile-auth-return") === "1" ? "&source=mobile" : ""}`;
                   } else if (r === "suspended") {
                     toast({ title: "Account suspended", description: "Contact support for assistance.", variant: "destructive" });
                   } else if (r === "cancelled") {
@@ -348,7 +355,8 @@ export default function SignupPage() {
                   }
                 };
                 window.addEventListener("message", handler);
-                popup = window.open("/auth/google", "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
+                const mobileReturn = window.sessionStorage.getItem("geepay-mobile-auth-return") === "1";
+                popup = window.open(`/auth/google${mobileReturn ? "?source=mobile" : ""}`, "GoogleAuth", "width=520,height=620,scrollbars=yes,resizable=yes,left=" + Math.round((screen.width - 520) / 2) + ",top=" + Math.round((screen.height - 620) / 2));
                 if (!popup) {
                   window.removeEventListener("message", handler);
                   toast({ title: "Allow pop-ups to sign in", description: "Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.", variant: "destructive" });

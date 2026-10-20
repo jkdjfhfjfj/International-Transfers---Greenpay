@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { WavyHeader } from "@/components/wavy-header";
+import { rememberMobileAuthReturn, returnToMobileAppAfterAuth } from "@/lib/mobile-auth-handoff";
 import { mockCountries } from "@/lib/mock-data";
 import { CheckCircle2, Phone, MapPin, User, Loader2, AlertCircle } from "lucide-react";
 
@@ -56,6 +57,7 @@ export default function GoogleCompletePage() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
 
   useEffect(() => {
+    rememberMobileAuthReturn();
     fetch("/api/auth/google/pending", { credentials: "include" })
       .then(r => r.json())
       .then(d => {
@@ -82,7 +84,7 @@ export default function GoogleCompletePage() {
       if (!data.success) throw new Error(data.message || "Failed to create account");
       return data;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
       if (data.requiresOtp || data.requiresPin || data.requiresAuthenticator) {
         if (data.requiresOtp && !data.requiresPin && !data.requiresAuthenticator) {
           localStorage.setItem("otpUserId", data.userId);
@@ -93,11 +95,12 @@ export default function GoogleCompletePage() {
           localStorage.setItem("otpEmail", data.email || "");
           setLocation("/auth/otp-verification");
         } else {
-          setLocation("/login?verification=required");
+          setLocation(`/login?verification=required${window.sessionStorage.getItem("geepay-mobile-auth-return") === "1" ? "&source=mobile" : ""}`);
         }
         return;
       }
       login(data.user);
+      if (await returnToMobileAppAfterAuth()) return;
       setStep(4);
       setTimeout(() => setLocation("/dashboard"), 1800);
     },

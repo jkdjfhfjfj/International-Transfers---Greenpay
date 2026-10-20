@@ -121,7 +121,11 @@ export default function KycVerificationPage() {
         title: "Documents submitted!",
         description: "Your documents have been submitted for verification.",
       });
-      setLocation("/kyc");
+      if (new URLSearchParams(window.location.search).get("source") === "mobile") {
+        window.location.assign("greenpay-mobile://kyc-return?status=submitted");
+      } else {
+        setLocation("/kyc");
+      }
     },
     onError: (error: Error) => {
       toast({

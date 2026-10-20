@@ -30,6 +30,7 @@ type AuthContextValue = {
   verifyOtp: (code: string) => Promise<void>;
   verifyPin: (pin: string) => Promise<void>;
   verifyAuthenticator: (code: string) => Promise<void>;
+  completeExternalLogin: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -142,6 +143,20 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     }
   };
 
+  const completeExternalLogin = async (code: string) => {
+    setError(null);
+    try {
+      const result = await api<{ user?: User }>("/api/auth/mobile/exchange", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      finishChallenge(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to finish mobile sign-in.");
+      throw cause;
+    }
+  };
+
   const logout = async () => {
     try { await api("/api/auth/logout", { method: "POST" }); } finally {
       setUser(null);
@@ -151,7 +166,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   };
 
   const value = useMemo(() => ({
-    user, loading, pendingOtp, challenge, error, login, requestOtp, verifyOtp, verifyPin, verifyAuthenticator, logout, refresh,
+    user, loading, pendingOtp, challenge, error, login, requestOtp, verifyOtp, verifyPin, verifyAuthenticator, completeExternalLogin, logout, refresh,
     clearError: () => setError(null),
   }), [user, loading, pendingOtp, challenge, error]);
 
