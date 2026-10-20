@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/greenpay-mobile/"
+title = "GreenPay Mobile"
+description = "Android-focused mobile companion for GreenPay, bringing its wallets, deposits, cards, and account tools into a native-feeling experience."
+version = "1.0.0"
+id = "artifacts/greenpay-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/greenpay-mobile/" ]
+localPort = 23385
+
+[services.development]
+run = "pnpm --filter @workspace/greenpay-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/greenpay-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/greenpay-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "23385"
+BASE_PATH = "/greenpay-mobile/"
