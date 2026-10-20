@@ -10,13 +10,26 @@ type User = {
   balance?: string | number | null;
 };
 
+export type OtpMethod = { id: string; label: string };
+export type LoginChallenge = {
+  requiresOtp?: boolean;
+  otpMethods?: OtpMethod[];
+  requiresPin?: boolean;
+  requiresAuthenticator?: boolean;
+  requiresBiometric?: boolean;
+};
+
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
   pendingOtp: boolean;
+  challenge: LoginChallenge | null;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
+  requestOtp: (method: string) => Promise<void>;
   verifyOtp: (code: string) => Promise<void>;
+  verifyPin: (pin: string) => Promise<void>;
+  verifyAuthenticator: (code: string) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
   clearError: () => void;
@@ -28,6 +41,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingOtp, setPendingOtp] = useState(false);
+  const [challenge, setChallenge] = useState<LoginChallenge | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = async () => {
@@ -46,24 +60,44 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const login = async (email: string, password: string) => {
     setError(null);
     try {
-      const result = await api<{ user?: User; requiresOtp?: boolean; requiresPin?: boolean; requiresAuthenticator?: boolean; requiresBiometric?: boolean }>("/api/auth/login", {
+      const result = await api<{ user?: User } & LoginChallenge>("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      if (result.requiresOtp) {
-        setPendingOtp(true);
+      if (result.requiresOtp || result.requiresPin || result.requiresAuthenticator || result.requiresBiometric) {
+        setChallenge(result);
+        setPendingOtp(false);
         return;
-      }
-      if (result.requiresPin || result.requiresAuthenticator || result.requiresBiometric) {
-        throw new Error("This account needs an additional PIN, authenticator, or biometric step. Use GreenPay web sign-in for this account.");
       }
       if (!result.user) throw new Error("Sign-in did not complete. Try again.");
       setUser(result.user);
+      setChallenge(null);
       setPendingOtp(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to sign in.");
       throw cause;
     }
+  };
+
+  const requestOtp = async (method: string) => {
+    setError(null);
+    try {
+      await api("/api/auth/resend-otp", {
+        method: "POST",
+        body: JSON.stringify({ method }),
+      });
+      setPendingOtp(true);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to send a verification code.");
+      throw cause;
+    }
+  };
+
+  const finishChallenge = (result: { user?: User }) => {
+    if (!result.user) throw new Error("Verification did not complete. Try again.");
+    setUser(result.user);
+    setChallenge(null);
+    setPendingOtp(false);
   };
 
   const verifyOtp = async (code: string) => {
@@ -73,11 +107,37 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         method: "POST",
         body: JSON.stringify({ code }),
       });
-      if (!result.user) throw new Error("The verification code was not accepted.");
-      setUser(result.user);
-      setPendingOtp(false);
+      finishChallenge(result);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to verify code.");
+      throw cause;
+    }
+  };
+
+  const verifyPin = async (pin: string) => {
+    setError(null);
+    try {
+      const result = await api<{ user?: User }>("/api/auth/verify-pin", {
+        method: "POST",
+        body: JSON.stringify({ pin }),
+      });
+      finishChallenge(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to verify PIN.");
+      throw cause;
+    }
+  };
+
+  const verifyAuthenticator = async (code: string) => {
+    setError(null);
+    try {
+      const result = await api<{ user?: User }>("/api/auth/verify-authenticator", {
+        method: "POST",
+        body: JSON.stringify({ code }),
+      });
+      finishChallenge(result);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to verify authenticator code.");
       throw cause;
     }
   };
@@ -86,13 +146,14 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
     try { await api("/api/auth/logout", { method: "POST" }); } finally {
       setUser(null);
       setPendingOtp(false);
+      setChallenge(null);
     }
   };
 
   const value = useMemo(() => ({
-    user, loading, pendingOtp, error, login, verifyOtp, logout, refresh,
+    user, loading, pendingOtp, challenge, error, login, requestOtp, verifyOtp, verifyPin, verifyAuthenticator, logout, refresh,
     clearError: () => setError(null),
-  }), [user, loading, pendingOtp, error]);
+  }), [user, loading, pendingOtp, challenge, error]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
