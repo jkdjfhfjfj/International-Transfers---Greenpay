@@ -20,7 +20,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
     const detail = cause instanceof Error ? cause.message : String(cause);
     let server = baseUrl;
     try { server = new URL(baseUrl).host; } catch {}
-    throw new Error(`Could not reach GreenPay at ${server} for ${path}. ${detail}`);
+    const client = typeof window !== "undefined" ? window.location.origin : "native app";
+    throw new Error(`Could not reach GreenPay at ${server} from ${client} for ${path}. ${detail}`);
   }
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {

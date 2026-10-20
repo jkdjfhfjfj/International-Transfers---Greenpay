@@ -41,13 +41,18 @@ if (process.env.NODE_ENV === "development") {
     }
   };
   const allowedOrigins = new Set([
+    normalizeOrigin(process.env.REPLIT_DEV_DOMAIN),
     normalizeOrigin(process.env.REPLIT_EXPO_DEV_DOMAIN),
     normalizeOrigin(process.env.REPLIT_DEV_DOMAIN?.replace(/\.worf\.replit\.dev$/, ".expo.worf.replit.dev")),
   ].filter(Boolean));
 
   app.use("/api", (req, res, next) => {
     const origin = req.get("origin");
-    if (!origin || !allowedOrigins.has(origin)) return next();
+    if (!origin) return next();
+    if (!allowedOrigins.has(origin)) {
+      console.warn(`[API CORS] Rejected origin ${origin} for ${req.method} ${req.path}`);
+      return next();
+    }
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
     res.setHeader("Vary", "Origin");
