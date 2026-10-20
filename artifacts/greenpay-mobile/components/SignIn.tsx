@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ActivityIndicator, Image, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 import { KeyboardAwareScrollViewCompat } from "@/components/KeyboardAwareScrollViewCompat";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/context/auth";
@@ -27,16 +28,19 @@ export function SignIn() {
       const webOrigin = configuredDomain
         ? `${configuredDomain.startsWith("http") ? "" : "https://"}${configuredDomain}`
         : "https://geepay.us";
-      const redirectUrl = "greenpay-mobile://auth/callback";
+      // Expo Go uses its own exp:// link; installed builds use greenpay-mobile://.
+      const redirectUrl = Linking.createURL("auth/callback");
+      const loginUrl = new URL("/login", webOrigin);
+      loginUrl.searchParams.set("source", "mobile");
+      loginUrl.searchParams.set("mobile_redirect_uri", redirectUrl);
       const result = await WebBrowser.openAuthSessionAsync(
-        `${webOrigin}/login?source=mobile`,
+        loginUrl.toString(),
         redirectUrl,
       );
       if (result.type !== "success" || !result.url) return;
       const code = new URL(result.url).searchParams.get("code");
       if (!code) throw new Error("The secure sign-in returned without an app code. Please try again.");
-      await auth.completeExternalLogin(code);
-      router.replace("/(tabs)");
+      router.replace({ pathname: "/auth/callback", params: { code } });
     } catch (error) {
       setBrowserError(error instanceof Error ? error.message : "Secure sign-in could not be completed.");
     } finally {

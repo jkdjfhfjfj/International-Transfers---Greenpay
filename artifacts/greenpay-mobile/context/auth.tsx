@@ -54,6 +54,8 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const [biometricEnabled, setBiometricEnabledState] = useState(false);
   const [appLocked, setAppLocked] = useState(false);
+  const mobileLoginRequests = useRef(new Map<string, Promise<void>>());
+  const completedMobileLoginCodes = useRef(new Set<string>());
 
   const refresh = async () => {
     try {
@@ -214,16 +216,28 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
   };
 
   const completeExternalLogin = async (code: string) => {
+    if (completedMobileLoginCodes.current.has(code)) return;
+    const inFlight = mobileLoginRequests.current.get(code);
+    if (inFlight) return inFlight;
     setError(null);
+    const request = (async () => {
+      try {
+        const result = await api<{ user?: User }>("/api/auth/mobile/exchange", {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        });
+        finishChallenge(result);
+        completedMobileLoginCodes.current.add(code);
+      } catch (cause) {
+        setError(cause instanceof Error ? cause.message : "Unable to finish mobile sign-in.");
+        throw cause;
+      }
+    })();
+    mobileLoginRequests.current.set(code, request);
     try {
-      const result = await api<{ user?: User }>("/api/auth/mobile/exchange", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-      });
-      finishChallenge(result);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Unable to finish mobile sign-in.");
-      throw cause;
+      await request;
+    } finally {
+      mobileLoginRequests.current.delete(code);
     }
   };
 

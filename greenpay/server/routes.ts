@@ -1362,10 +1362,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return entry && entry.expiresAt > Date.now() ? entry.userId : null;
   };
 
+  const isAllowedMobileAuthRedirect = (value: unknown): value is string => {
+    if (typeof value !== "string") return false;
+    try {
+      const uri = new URL(value);
+      if (uri.username || uri.password || uri.search || uri.hash) return false;
+      if (uri.protocol === "greenpay-mobile:" && uri.hostname === "auth" && uri.pathname === "/callback") return true;
+      const expoDomain = process.env.REPLIT_EXPO_DEV_DOMAIN;
+      if (!expoDomain || !["exp:", "exps:"].includes(uri.protocol) || !uri.pathname.endsWith("/auth/callback")) return false;
+      const expectedHost = new URL(expoDomain.startsWith("http") ? expoDomain : `https://${expoDomain}`).hostname;
+      return uri.hostname.toLowerCase() === expectedHost.toLowerCase();
+    } catch {
+      return false;
+    }
+  };
+
   app.post("/api/auth/mobile/callback-code", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session?.userId;
       if (!userId) return res.status(401).json({ message: "Sign in before requesting an app callback." });
+      const redirectUri = req.body?.redirectUri ?? "greenpay-mobile://auth/callback";
+      if (!isAllowedMobileAuthRedirect(redirectUri)) {
+        return res.status(400).json({ message: "This app sign-in return link is not allowed. Start sign-in again." });
+      }
       const code = await issueMobileAuthCode(userId);
       res.json({ code, expiresInSeconds: 120 });
     } catch (error) {
