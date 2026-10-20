@@ -7,7 +7,7 @@
 - [GreenPay deposit eligibility](greenpay-deposit-eligibility.md) — Show only deposit methods enabled and configured for the authenticated user's country.
 - [GreenPay action labels](greenpay-action-labels.md) — Keep the dashboard “Send” action distinct from wallet-account “Transfer”.
 - [GreenPay mobile onboarding](greenpay-mobile-onboarding.md) — Start mobile users on public getting-started content, with skip to sign-in and account creation available later.
-- [GreenPay native UI parity](greenpay-native-ui-parity.md) — Reuse web screens as the source of layout and behavior, adapting them to native components; do not use a feature-screen WebView.
+- [GreenPay mobile screens](greenpay-native-ui-parity.md) — Keep onboarding and sign-in native; show the authenticated GreenPay web app in a WebView.
 - [GreenPay mobile auth redirects](greenpay-mobile-auth-redirect.md) — Build callback links with Expo Linking; Expo Go and installed builds use different schemes.
 - [GreenPay mobile preview API](greenpay-mobile-preview-api.md) — In the web preview, route API calls through Metro on the same origin; keep native and production requests on the configured API host.
 - [GreenPay preview isolation](greenpay-preview-isolation.md) — Run local previews without shared DB variables; configured startup can apply migrations when the schema appears fresh.

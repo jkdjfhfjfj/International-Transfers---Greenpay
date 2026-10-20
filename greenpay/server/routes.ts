@@ -1393,6 +1393,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post("/api/auth/mobile/webview-code", requireAuth, async (req: any, res) => {
+    try {
+      const userId = req.session?.userId;
+      if (!userId) return res.status(401).json({ message: "Sign in before opening GreenPay." });
+      const code = await issueMobileAuthCode(userId);
+      res.set("Cache-Control", "no-store");
+      res.json({ code, expiresInSeconds: 120 });
+    } catch (error) {
+      console.error("[Mobile auth] Could not issue WebView session:", error);
+      res.status(500).json({ message: "Could not securely open GreenPay. Please try again." });
+    }
+  });
+
+  app.get("/api/auth/mobile/web-session", async (req: any, res) => {
+    res.set("Cache-Control", "no-store");
+    res.set("Referrer-Policy", "no-referrer");
+    try {
+      const userId = await consumeMobileAuthCode(req.query?.code);
+      if (!userId) return res.status(401).send("This secure app link expired. Return to GreenPay and try again.");
+      const user = await storage.getUser(userId);
+      if (!user || (user as any).isSuspended === true) {
+        return res.status(403).send("This account cannot sign in.");
+      }
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((error: Error | null) => error ? reject(error) : resolve());
+      });
+      req.session.userId = user.id;
+      req.session.user = { id: user.id, email: user.email };
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((error: Error | null) => error ? reject(error) : resolve());
+      });
+      res.redirect(303, "/");
+    } catch (error) {
+      console.error("[Mobile auth] WebView session exchange failed:", error);
+      res.status(500).send("Could not securely open GreenPay. Return to the app and try again.");
+    }
+  });
+
   app.post("/api/auth/mobile/exchange", async (req: any, res) => {
     try {
       const userId = await consumeMobileAuthCode(req.body?.code);
