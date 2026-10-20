@@ -63,3 +63,9 @@ externalPort = 3001
 [[ports]]
 localPort = 24678
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_DOMAIN = "geepay.us"
+GREENPAY_PRODUCTION_URL = "https://geepay.us"
