@@ -1,10 +1,15 @@
+import { Platform } from "react-native";
+
 const domain = process.env.EXPO_PUBLIC_DOMAIN;
-const baseUrl = domain
+const usePreviewProxy = Platform.OS === "web" && process.env.NODE_ENV === "development";
+const baseUrl = usePreviewProxy
+  ? ""
+  : domain
   ? `${domain.startsWith("http") ? "" : "https://"}${domain}`
   : "";
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  if (!baseUrl) throw new Error("GreenPay server is not configured for this build.");
+  if (!usePreviewProxy && !baseUrl) throw new Error("GreenPay server is not configured for this build.");
   let response: Response;
   try {
     response = await fetch(`${baseUrl}${path}`, {
