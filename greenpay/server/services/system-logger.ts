@@ -1,5 +1,16 @@
 import { storage } from "../storage";
 
+function formatLogArgument(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value instanceof Error) return `${value.name}: ${value.message}${value.stack ? `\n${value.stack}` : ""}`;
+  try {
+    const json = JSON.stringify(value);
+    return json === undefined ? String(value) : json;
+  } catch {
+    try { return String(value); } catch { return "[unserializable log value]"; }
+  }
+}
+
 export class SystemLogger {
   private static instance: SystemLogger;
   private originalConsole: any = {};
@@ -30,8 +41,9 @@ export class SystemLogger {
     };
 
     console.error = (...args) => {
-      this.saveLog('error', args.join(' '));
-      this.originalConsole.error(...args);
+      const message = args.map(formatLogArgument).join(" ");
+      this.saveLog('error', message);
+      this.originalConsole.error(message);
     };
 
     console.info = (...args) => {

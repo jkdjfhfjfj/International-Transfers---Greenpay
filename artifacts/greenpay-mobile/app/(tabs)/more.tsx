@@ -6,9 +6,20 @@ import { useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
 
 const options = [
+  { title: "Send money", detail: "Transfer to another GreenPay account", icon: "send", route: "/(tabs)/send" },
+  { title: "Receive money", detail: "Share your link or request a payment", icon: "download", route: "/receive" },
+  { title: "Exchange", detail: "Convert between your active wallets", icon: "repeat", route: "/exchange" },
+  { title: "Wallet transfer", detail: "Move funds between your own wallets", icon: "shuffle", route: "/transfer" },
+  { title: "Analytics", detail: "Review your money flow and spending", icon: "bar-chart-2", route: "/analytics" },
+  { title: "Withdraw", detail: "Request a bank or mobile-money payout", icon: "corner-up-right", route: "/withdraw" },
+  { title: "Virtual accounts", detail: "Apply for USD, EUR, or GBP account details", icon: "globe", route: "/virtual-accounts" },
+  { title: "Buy airtime", detail: "Top up a Kenyan mobile number", icon: "smartphone", route: "/airtime" },
+  { title: "Pay bills", detail: "Pay electricity, water, and TV bills", icon: "file-text", route: "/bills" },
   { title: "Add money", detail: "Deposit into a GreenPay wallet", icon: "plus-circle", route: "/deposit" },
   { title: "Virtual card", detail: "View card options and purchase", icon: "credit-card", route: "/card-purchase" },
   { title: "Identity verification", detail: "Review your verification status", icon: "shield", route: "/kyc" },
+  { title: "Wallets", detail: "View balances and add currencies", icon: "briefcase", route: "/(tabs)/wallets" },
+  { title: "Transaction history", detail: "Review recent account activity", icon: "list", route: "/(tabs)/activity" },
   { title: "Account profile", detail: "Personal details and sign out", icon: "user", route: "/(tabs)/profile" },
 ] as const;
 

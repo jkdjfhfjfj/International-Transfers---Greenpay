@@ -164,6 +164,10 @@ function safeApiConfiguration(configuration: any) {
 }
 
 async function hasActiveVirtualCard(userId: string): Promise<boolean> {
+  if (!db) {
+    const cards = await storage.getVirtualCardsByUserId(userId);
+    return cards.some((card: any) => card.status === "active");
+  }
   const [card] = await db.select({ id: virtualCards.id }).from(virtualCards)
     .where(and(eq(virtualCards.userId, userId), eq(virtualCards.status, "active")))
     .limit(1);
@@ -1521,6 +1525,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   const defaultVirtualAccountCurrencies = [...VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST];
   const allVirtualAccountCurrencies = [...VIRTUAL_ACCOUNT_CURRENCY_ALLOWLIST];
+  const previewVirtualAccountApplications = new Map<string, any[]>();
 
   async function getVirtualAccountCurrencies() {
     try {
@@ -1537,9 +1542,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/virtual-accounts", requireAuth, async (req: any, res) => {
     try {
       const userId = req.session.userId;
-      const applications = await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.userId, userId));
-      const settings = await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.isActive, true));
-      const accounts = await db.select().from(virtualAccounts).where(eq(virtualAccounts.userId, userId));
+      const applications = db
+        ? await db.select().from(virtualAccountApplications).where(eq(virtualAccountApplications.userId, userId))
+        : previewVirtualAccountApplications.get(userId) || [];
+      const settings = db
+        ? await db.select().from(virtualAccountSettings).where(eq(virtualAccountSettings.isActive, true))
+        : [];
+      const accounts = db
+        ? await db.select().from(virtualAccounts).where(eq(virtualAccounts.userId, userId))
+        : [];
       const supportedCurrencies = await getVirtualAccountCurrencies();
       res.json({
         supportedCurrencies,
@@ -1614,6 +1625,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       if (!Object.values(data.declarations).every(Boolean)) {
         return res.status(400).json({ message: "All compliance declarations must be accepted before submitting." });
+      }
+      if (!db) {
+        const applications = previewVirtualAccountApplications.get(userId) || [];
+        const existing = applications.find((application) => application.currency === data.currency);
+        if (existing && existing.status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
+        const application = {
+          id: crypto.randomUUID(), ...data, userId, status: "pending_review",
+          createdAt: new Date(), updatedAt: new Date(),
+        };
+        previewVirtualAccountApplications.set(userId, [...applications.filter((item) => item.currency !== data.currency), application]);
+        await storage.createNotification({ userId, title: `${data.currency} virtual account application received`, message: "Your application is pending admin review.", type: "info", isGlobal: false });
+        return res.status(201).json(application);
       }
       const existing = await db.select().from(virtualAccountApplications).where(and(eq(virtualAccountApplications.userId, userId), eq(virtualAccountApplications.currency, data.currency)));
       if (existing[0] && existing[0].status !== "rejected") return res.status(409).json({ message: "You already have an application for this currency." });
@@ -4839,8 +4862,9 @@ p{color:#6b7280;font-size:14px;}</style>
         const s = await storage.getSystemSetting("deposit_methods", key);
         if (s) settingsMap[key] = String(s.value);
       }
-      const activeBonuses = await db.select().from(depositBonuses)
-        .where(eq(depositBonuses.isActive, true));
+      const activeBonuses = db
+        ? await db.select().from(depositBonuses).where(eq(depositBonuses.isActive, true))
+        : [];
       const defaultGateway = settingText(
         (await storage.getSystemSetting("payment", "default_gateway"))?.value,
         "payhero",
@@ -13976,6 +14000,16 @@ Sitemap: https://geepay.us/sitemap.xml`;
   const originalConsoleError = console.error;
   const originalConsoleWarn = console.warn;
   const originalConsoleInfo = console.info;
+  const formatConsoleArg = (arg: unknown) => {
+    if (typeof arg === "string") return arg;
+    if (arg instanceof Error) return `${arg.name}: ${arg.message}${arg.stack ? `\n${arg.stack}` : ""}`;
+    try {
+      const value = JSON.stringify(arg);
+      return value === undefined ? String(arg) : value;
+    } catch {
+      try { return String(arg); } catch { return "[unserializable log value]"; }
+    }
+  };
 
   console.log = (...args: any[]) => {
     originalConsoleLog(...args);
@@ -13984,8 +14018,8 @@ Sitemap: https://geepay.us/sitemap.xml`;
   };
 
   console.error = (...args: any[]) => {
-    originalConsoleError(...args);
-    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : String(arg)).join(' ');
+    const message = args.map(formatConsoleArg).join(" ");
+    originalConsoleError(message);
     LogStreamService.broadcast(LogStreamService.createLogEntry('error', message, 'console'));
   };
 
@@ -16566,9 +16600,11 @@ Sitemap: https://geepay.us/sitemap.xml`;
   app.get("/api/analytics/summary", requireAuth, async (req, res) => {
     try {
       const userId = (req.session as any).userId;
-      const allTxns = await db.select().from(transactions)
-        .where(eq(transactions.userId, userId))
-        .orderBy(desc(transactions.createdAt));
+      const allTxns = db
+        ? await db.select().from(transactions)
+            .where(eq(transactions.userId, userId))
+            .orderBy(desc(transactions.createdAt))
+        : await storage.getTransactionsByUserId(userId);
 
       // Build monthly totals for last 6 months
       const now = new Date();

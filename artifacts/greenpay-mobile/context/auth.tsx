@@ -7,6 +7,7 @@ type User = {
   lastName?: string | null;
   fullName?: string | null;
   email?: string | null;
+  country?: string | null;
   balance?: string | number | null;
 };
 
