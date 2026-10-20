@@ -14,3 +14,17 @@ mtime_ms = 1792486417896
 storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:ec41bf83-31df-418c-8d18-55a078f2dd5a/f8f177ca-c391-4a01-8b5a-b3a147822166/ff3c6868-948d-4525-83b2-4bd0e06e5648"
 storage_version_token = "1792486504986146"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "CMC0nxU2q6iUsPgOJqz_K"
+uri = "file://artifacts/greenpay-mobile/android/app/build/outputs/apk/release/app-release.apk"
+type = "unspecified"
+title = "GreenPay Android release APK"
+description = "Production-signed Android APK for https://geepay.us. Supports ARMv7 and ARM64 phones."
+logical_id = "9acca7de-aad7-415e-93b3-e549f226d83b"
+content_hash = "sha256:46923b7b8264e0745cc0ab6e6de44899e9a3a64672a179058b8616c20600db6f"
+size = 70841421
+mtime_ms = 1792536329087
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:ec41bf83-31df-418c-8d18-55a078f2dd5a/9acca7de-aad7-415e-93b3-e549f226d83b/85b48e84-c0f0-46c4-87b4-00221a891486"
+storage_version_token = "1792536563646004"
+content_type = "application/octet-stream"
