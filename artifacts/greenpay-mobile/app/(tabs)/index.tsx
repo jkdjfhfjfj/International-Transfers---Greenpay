@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { Feather } from "@expo/vector-icons";
 import { useCallback } from "react";
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useRouter } from "expo-router";
 import { api } from "@/lib/api";
 import { useAuth } from "@/context/auth";
 import colors from "@/constants/colors";
@@ -17,6 +18,7 @@ const money = (value: string | number, currency: string) => {
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const wallets = useQuery({ queryKey: ["mobile-wallets"], queryFn: () => api<{ wallets: Wallet[] }>("/api/wallets") });
   const activity = useQuery({
     queryKey: ["mobile-transactions", user?.id],
@@ -48,6 +50,10 @@ export default function HomeScreen() {
                 defaultWallet ? <><Text style={styles.balance}>{money(defaultWallet.availableBalance ?? defaultWallet.balance, defaultWallet.currency)}</Text><Text style={styles.whiteBody}>{defaultWallet.currency} available balance</Text></> :
                 <Text style={styles.whiteBody}>No wallet is available yet.</Text>}
               <View style={styles.cardWave}><View style={styles.waveDot} /><View style={styles.waveDot2} /></View>
+            </View>
+            <View style={styles.actions}>
+              <Pressable style={styles.actionButton} onPress={() => router.push("/deposit")}><Feather name="plus-circle" size={18} color={colors.light.primary} /><Text style={styles.actionText}>Deposit</Text></Pressable>
+              <Pressable style={styles.actionButton} onPress={() => router.push("/card-purchase")}><Feather name="credit-card" size={18} color={colors.light.primary} /><Text style={styles.actionText}>Get a card</Text></Pressable>
             </View>
             <View style={styles.sectionHeading}><Text style={styles.sectionTitle}>Your wallets</Text><Text style={styles.count}>{wallets.data?.wallets?.length || 0}</Text></View>
             {wallets.isLoading ? <ActivityIndicator color={colors.light.primary} style={{ margin: 22 }} /> :
@@ -89,6 +95,9 @@ const styles = StyleSheet.create({
   balanceLabel: { color: colors.light.primaryForeground, letterSpacing: 1.4, fontSize: 10, fontWeight: "700" },
   balance: { color: colors.light.primaryForeground, fontSize: 32, fontWeight: "700", marginTop: 15 },
   whiteBody: { color: "#e1fffa", fontSize: 13, marginTop: 6 },
+  actions: { flexDirection: "row", gap: 12, marginTop: 14 },
+  actionButton: { flex: 1, minHeight: 54, flexDirection: "row", gap: 9, alignItems: "center", justifyContent: "center", borderRadius: 15, borderWidth: 1, borderColor: colors.light.border, backgroundColor: colors.light.card },
+  actionText: { color: colors.light.foreground, fontWeight: "600", fontSize: 13 },
   cardWave: { position: "absolute", right: -50, bottom: -100, width: 250, height: 200, borderRadius: 150, borderWidth: 1, borderColor: colors.light.secondary, opacity: 0.24 },
   waveDot: { position: "absolute", right: 18, top: 12, width: 190, height: 190, borderRadius: 110, borderWidth: 1, borderColor: colors.light.secondary, opacity: 0.2 },
   waveDot2: { position: "absolute", right: 45, top: 30, width: 130, height: 130, borderRadius: 80, backgroundColor: colors.light.secondary, opacity: 0.12 },

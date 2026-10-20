@@ -24,6 +24,8 @@ function AppRoutes() {
       <Stack.Screen name="index" />
       <Stack.Screen name="sign-in" />
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="deposit" />
+      <Stack.Screen name="card-purchase" />
     </Stack>
   );
 }
