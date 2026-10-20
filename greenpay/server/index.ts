@@ -29,6 +29,37 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// The Expo web preview is hosted on a sibling Replit subdomain. Allow only
+// this workspace's exact preview origin in development for credentialed API calls.
+if (process.env.NODE_ENV === "development") {
+  const normalizeOrigin = (value?: string) => {
+    if (!value) return "";
+    try {
+      return new URL(value.startsWith("http") ? value : `https://${value}`).origin;
+    } catch {
+      return "";
+    }
+  };
+  const allowedOrigins = new Set([
+    normalizeOrigin(process.env.REPLIT_EXPO_DEV_DOMAIN),
+    normalizeOrigin(process.env.REPLIT_DEV_DOMAIN?.replace(/\.worf\.replit\.dev$/, ".expo.worf.replit.dev")),
+  ].filter(Boolean));
+
+  app.use("/api", (req, res, next) => {
+    const origin = req.get("origin");
+    if (!origin || !allowedOrigins.has(origin)) return next();
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Vary", "Origin");
+    if (req.method === "OPTIONS") {
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+      return res.sendStatus(204);
+    }
+    next();
+  });
+}
+
 // Configure PostgreSQL session store for production
 const pgSession = ConnectPgSimple(session);
 

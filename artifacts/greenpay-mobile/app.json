@@ -10,7 +10,26 @@
     "ios": {
       "supportsTablet": false
     },
-    "android": {},
+    "android": {
+      "package": "com.greenpay.mobile",
+      "versionCode": 1,
+      "targetSdkVersion": 36,
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_SMS",
+        "android.permission.RECEIVE_SMS"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0f766e"
+      }
+    },
+    "splash": {
+      "backgroundColor": "#f8fafc",
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },
