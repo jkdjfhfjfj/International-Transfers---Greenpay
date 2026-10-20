@@ -58,6 +58,7 @@
     "expo": "~57.0.30",
     "expo-navigation-bar": "~57.0.3",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-webview": "13.16.1"
   }
 }
