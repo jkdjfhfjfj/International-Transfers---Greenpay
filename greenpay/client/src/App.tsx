@@ -24,7 +24,6 @@ const lazyPage = (
 const NotFound = lazyPage(() => import("@/pages/not-found"));
 const SplashPage = lazyPage(() => import("@/pages/splash"));
 const LoginPage = lazyPage(() => import("@/pages/auth/login"));
-const MobileHandoffPage = lazyPage(() => import("@/pages/mobile-handoff"));
 const SignupPage = lazyPage(() => import("@/pages/auth/signup"));
 const OtpVerificationPage = lazyPage(() => import("@/pages/auth/otp-verification"));
 const GoogleCompletePage = lazyPage(() => import("@/pages/auth/google-complete"));
@@ -138,7 +137,6 @@ function Router() {
     <Suspense fallback={<LoadingScreen />}>
     <Switch>
       <Route path="/" component={SplashPage} />
-      <Route path="/mobile-handoff" component={MobileHandoffPage} />
       <Route path="/login" component={LoginPage} />
       <Route path="/signup" component={SignupPage} />
       <Route path="/auth/otp-verification" component={OtpVerificationPage} />
