@@ -79,6 +79,12 @@ function getLocalPreviewTestPassword(): string {
     .digest("base64url")}!aA9`;
 }
 
+async function ensureUserWalletRecord(userId: string, currency = "KES") {
+  const walletsForUser = await storage.getWalletsByUserId(userId);
+  if (walletsForUser.length) return;
+  await storage.createWallet({ userId, currency, isDefault: true, isActive: true });
+}
+
 async function ensureLocalPreviewTestAccount() {
   const password = getLocalPreviewTestPassword();
   const existing = await storage.getUserByEmail(LOCAL_PREVIEW_TEST_EMAIL);
@@ -92,6 +98,7 @@ async function ensureLocalPreviewTestAccount() {
       twoFactorSecret: null,
     });
     if (!user) throw new Error("Preview test account could not be refreshed.");
+    await ensureUserWalletRecord(user.id, user.defaultCurrency || "KES");
     return { user, password, created: false };
   }
 
@@ -111,6 +118,7 @@ async function ensureLocalPreviewTestAccount() {
     twoFactorEnabled: false,
     twoFactorSecret: null,
   });
+  await ensureUserWalletRecord(user.id, user.defaultCurrency || "KES");
   return { user, password, created: true };
 }
 
@@ -1950,6 +1958,138 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Authentication routes with real WhatsApp integration
+  app.post("/api/auth/mobile-signup/start", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: "Enter a valid email address." });
+      }
+      if (await storage.getUserByEmail(email)) {
+        return res.status(409).json({ message: "An account with this email already exists. Sign in instead." });
+      }
+      const now = Date.now();
+      const pending = (req.session as any).mobileSignup;
+      if (pending?.email === email && now - Number(pending.sentAt || 0) < 30_000) {
+        return res.status(429).json({ message: "Wait a moment before requesting another code." });
+      }
+      const code = String(crypto.randomInt(100_000, 1_000_000));
+      const secret = String(process.env.SESSION_SECRET || "");
+      if (secret.length < 32) throw new Error("Secure email verification is unavailable.");
+      const codeHash = crypto.createHmac("sha256", secret)
+        .update(`mobile-signup:${req.sessionID}:${email}:${code}`)
+        .digest("hex");
+      (req.session as any).mobileSignup = { email, codeHash, expiresAt: now + 10 * 60_000, attempts: 0, sentAt: now };
+      await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
+
+      const { mailtrapService } = await import("./services/mailtrap");
+      const sent = await mailtrapService.sendOTP(email, "", "", code);
+      if (!sent && !(process.env.NODE_ENV === "development" && !connectionString)) {
+        delete (req.session as any).mobileSignup;
+        await new Promise<void>((resolve) => req.session.save(() => resolve()));
+        return res.status(503).json({ message: "We couldn't send your code right now. Please try again shortly." });
+      }
+      res.json({
+        email,
+        expiresInSeconds: 600,
+        ...(process.env.NODE_ENV === "development" && !connectionString && !sent ? { previewCode: code } : {}),
+      });
+    } catch (error) {
+      console.error("[Mobile signup] Could not start email verification.");
+      res.status(500).json({ message: "Could not start email verification." });
+    }
+  });
+
+  app.post("/api/auth/mobile-signup/verify-email", async (req, res) => {
+    try {
+      const pending = (req.session as any).mobileSignup;
+      const code = String(req.body?.code || "").trim();
+      if (!pending?.email || !pending?.codeHash) {
+        return res.status(400).json({ message: "Request a new verification code first." });
+      }
+      if (Date.now() > Number(pending.expiresAt)) {
+        delete (req.session as any).mobileSignup;
+        return res.status(410).json({ message: "That code expired. Request a new one." });
+      }
+      if (Number(pending.attempts || 0) >= 5) {
+        delete (req.session as any).mobileSignup;
+        return res.status(429).json({ message: "Too many attempts. Request a new code." });
+      }
+      const secret = String(process.env.SESSION_SECRET || "");
+      const candidate = crypto.createHmac("sha256", secret)
+        .update(`mobile-signup:${req.sessionID}:${pending.email}:${code}`)
+        .digest();
+      const expected = Buffer.from(String(pending.codeHash), "hex");
+      if (!/^\d{6}$/.test(code) || candidate.length !== expected.length || !crypto.timingSafeEqual(candidate, expected)) {
+        pending.attempts = Number(pending.attempts || 0) + 1;
+        return res.status(400).json({ message: "That code doesn't match. Check it and try again." });
+      }
+      pending.verified = true;
+      delete pending.codeHash;
+      await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
+      res.json({ verified: true, email: pending.email });
+    } catch {
+      res.status(500).json({ message: "Could not verify that code." });
+    }
+  });
+
+  app.post("/api/auth/mobile-signup/complete", async (req, res) => {
+    try {
+      const pending = (req.session as any).mobileSignup;
+      if (!pending?.verified || !pending?.email) {
+        return res.status(403).json({ message: "Verify your email before continuing." });
+      }
+      const details = req.body || {};
+      if (String(details.fullName || "").trim().length < 2) {
+        return res.status(400).json({ message: "Enter your full name." });
+      }
+      if (String(details.phone || "").replace(/[\s().-]/g, "").length < 6) {
+        return res.status(400).json({ message: "Enter a valid phone number." });
+      }
+      if (String(details.country || "").trim().length < 2) {
+        return res.status(400).json({ message: "Select your country of residence." });
+      }
+      if (String(details.password || "").length < 8) {
+        return res.status(400).json({ message: "Your password must be at least 8 characters." });
+      }
+      if (details.password !== details.confirmPassword) {
+        return res.status(400).json({ message: "Your passwords do not match." });
+      }
+      if (details.agreeToTerms !== true) {
+        return res.status(400).json({ message: "Accept the terms and privacy policy to continue." });
+      }
+      if (await storage.getUserByEmail(pending.email)) {
+        delete (req.session as any).mobileSignup;
+        return res.status(409).json({ message: "An account with this email already exists. Sign in instead." });
+      }
+      const userData = insertUserSchema.parse({
+        ...req.body,
+        email: pending.email,
+        isEmailVerified: true,
+        isPhoneVerified: true,
+      });
+      const { messagingService } = await import("./services/messaging");
+      userData.phone = messagingService.formatPhoneNumber(userData.phone);
+      const user = await storage.createUser(userData);
+      await storage.updateUser(user.id, { isEmailVerified: true, isPhoneVerified: true });
+      try {
+        await ensureUserWalletRecord(user.id, user.defaultCurrency || "KES");
+      } catch {
+        console.warn("[Mobile signup] Default wallet could not be created.");
+      }
+      const { password, ...userResponse } = user;
+      delete (req.session as any).mobileSignup;
+      (req.session as any).userId = user.id;
+      await new Promise<void>((resolve, reject) => req.session.save((error) => error ? reject(error) : resolve()));
+      res.status(201).json({ success: true, user: { ...userResponse, isEmailVerified: true, isPhoneVerified: true } });
+    } catch (error) {
+      console.error("[Mobile signup] Account creation failed.");
+      const message = error instanceof z.ZodError
+        ? error.issues[0]?.message || "Check your details and try again."
+        : "Could not finish creating your account.";
+      res.status(400).json({ message });
+    }
+  });
+
   app.post("/api/auth/signup", optionalApiKey, async (req, res) => {
     try {
       const userData = insertUserSchema.parse({

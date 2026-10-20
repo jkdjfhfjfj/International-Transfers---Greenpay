@@ -1,4 +1,5 @@
 import { useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -40,6 +41,10 @@ export default function GetStartedScreen() {
   const [index, setIndex] = useState(0);
   const slide = slides[index];
   const isLast = index === slides.length - 1;
+  const finishOnboarding = async (destination: "/sign-in" | "/sign-up") => {
+    await AsyncStorage.setItem("geepay-onboarding-complete", "1");
+    router.replace(destination);
+  };
 
   return (
     <View style={styles.root}>
@@ -52,7 +57,7 @@ export default function GetStartedScreen() {
             <Image source={require("../assets/images/icon.png")} style={styles.brandMark} />
             <Text style={styles.brandName}>Geepay</Text>
           </View>
-          <Pressable accessibilityRole="button" accessibilityLabel="Skip getting started" onPress={() => router.replace("/sign-in")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Skip getting started" onPress={() => void finishOnboarding("/sign-in")}>
             <Text style={styles.skip}>Skip</Text>
           </Pressable>
         </View>
@@ -89,14 +94,14 @@ export default function GetStartedScreen() {
             )}
             <Pressable
               accessibilityRole="button"
-              onPress={() => isLast ? router.push("/sign-up") : setIndex(index + 1)}
+              onPress={() => isLast ? void finishOnboarding("/sign-up") : setIndex(index + 1)}
               style={styles.nextButton}
             >
               <Text style={styles.nextText}>{isLast ? "Get started" : "Next"}</Text>
               <Ionicons name="chevron-forward" size={19} color="#fff" />
             </Pressable>
           </View>
-          <Pressable accessibilityRole="button" onPress={() => router.push("/sign-in")} style={styles.signInLink}>
+          <Pressable accessibilityRole="button" onPress={() => void finishOnboarding("/sign-in")} style={styles.signInLink}>
             <Text style={[styles.signInText, { color: palette.text }]}>Already have an account? <Text style={styles.signInAccent}>Sign in</Text></Text>
           </Pressable>
         </View>
