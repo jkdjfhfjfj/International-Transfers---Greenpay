@@ -11,3 +11,4 @@
 - [GreenPay screenshot layout feedback](greenpay-screenshot-layout-feedback.md) — Treat screenshot whitespace reports as visual layout requests; fix the visible gap without reframing them as startup diagnosis.
 - [GreenPay account deletion](greenpay-account-deletion.md) — Require current-password confirmation, a reason, and admin review; redact identity while retaining audit and financial records.
 - [GreenPay support agents](greenpay-support-agents.md) — Base agent presence on authenticated admin heartbeats; stale agents are offline, never trust client-supplied admin claims.
+- [Android build storage](android-build-storage.md) — Keep the SDK, Gradle cache, and temp files in workspace `.local`; `/tmp` is cleared on workspace restart.

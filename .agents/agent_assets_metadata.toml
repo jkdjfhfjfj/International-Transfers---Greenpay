@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KT2J4GvT5n7PBTXDZkk3s"
+uri = "file://generated-artifacts/greenpay-mobile-release-arm64.apk"
+type = "unspecified"
+title = "GreenPay Android APK"
+description = "Standalone release-mode APK with the JavaScript app bundled and production host geepay.us embedded. ARM64 test build, debug-signed; not suitable for Play Store upload."
+logical_id = "f8f177ca-c391-4a01-8b5a-b3a147822166"
+content_hash = "sha256:a4de6bfaf8dbed605fb06b564e242fd58ab4727442fff58e411944f1c344125b"
+size = 52218939
+mtime_ms = 1792486417896
+storage_uri = "gcs://replit-rams-assets-worf/rams/assets/repl:ec41bf83-31df-418c-8d18-55a078f2dd5a/f8f177ca-c391-4a01-8b5a-b3a147822166/ff3c6868-948d-4525-83b2-4bd0e06e5648"
+storage_version_token = "1792486504986146"
+content_type = "application/octet-stream"
